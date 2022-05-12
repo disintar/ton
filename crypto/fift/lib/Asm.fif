@@ -1434,3 +1434,8 @@ Fift definitions Asm
 ' require-asm-fif-version : require-asm-fif-version
 ' require-asm-fif-version>= : require-asm-fif-version>=
 Fift
+
+Fift definitions Asm
+' <{ : <{
+' PROGRAM{ : PROGRAM{
+Fift
