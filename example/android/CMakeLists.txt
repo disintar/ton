@@ -7,7 +7,7 @@ cmake_minimum_required(VERSION 3.4.1 FATAL_ERROR)
 
 option(TONLIB_ENABLE_JNI "Enable JNI-compatible TonLib API" ON)
 
-string(APPEND CMAKE_CXX_FLAGS " -std=c++14 -Wall -Wextra -Wno-unused-parameter -Wno-deprecated-declarations -Wconversion -Wno-sign-conversion -fno-omit-frame-pointer -ffunction-sections -fdata-sections")
+string(APPEND CMAKE_CXX_FLAGS " -std=c++17 -Wall -Wextra -Wno-unused-parameter -Wno-deprecated-declarations -Wconversion -Wno-sign-conversion -fno-omit-frame-pointer -ffunction-sections -fdata-sections")
 string(APPEND CMAKE_SHARED_LINKER_FLAGS " -Wl,--gc-sections -Wl,--exclude-libs,ALL")
 
 # Creates and names a library, sets it as either STATIC
