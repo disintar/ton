@@ -316,6 +316,8 @@ void ValidatorManagerMasterchainStarter::failed_to_get_init_block_id() {
 void ValidatorManagerMasterchainStarter::got_init_block_id(BlockIdExt block_id) {
   block_id_ = block_id;
 
+  LOG(DEBUG) << "Init block seqno: " << block_id.seqno();
+
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<BlockHandle> R) {
     R.ensure();
     td::actor::send_closure(SelfId, &ValidatorManagerMasterchainStarter::got_init_block_handle, R.move_as_ok());

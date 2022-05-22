@@ -99,6 +99,79 @@ class Indexer : public td::actor::Actor {
     auto validator_manager_ =
         ton::validator::ValidatorManagerDiskFactory::create(id, opts_, shard, shard_top, db_root_);
 
+    class Callback : public ValidatorManagerInterface::Callback {
+     public:
+      void initial_read_complete(BlockHandle handle) override {
+        //        td::actor::send_closure(id_, &FullNodeImpl::initial_read_complete, handle);
+      }
+      void add_shard(ShardIdFull shard) override {
+        //        td::actor::send_closure(id_, &FullNodeImpl::add_shard, shard);
+      }
+      void del_shard(ShardIdFull shard) override {
+        //        td::actor::send_closure(id_, &FullNodeImpl::del_shard, shard);
+      }
+      void send_ihr_message(AccountIdPrefixFull dst, td::BufferSlice data) override {
+        //        td::actor::send_closure(id_, &FullNodeImpl::send_ihr_message, dst, std::move(data));
+      }
+      void send_ext_message(AccountIdPrefixFull dst, td::BufferSlice data) override {
+        //        td::actor::send_closure(id_, &FullNodeImpl::send_ext_message, dst, std::move(data));
+      }
+      void send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) override {
+        //        td::actor::send_closure(id_, &FullNodeImpl::send_shard_block_info, block_id, cc_seqno, std::move(data));
+      }
+      void send_broadcast(BlockBroadcast broadcast) override {
+        //        td::actor::send_closure(id_, &FullNodeImpl::send_broadcast, std::move(broadcast));
+      }
+      void download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
+                          td::Promise<ReceivedBlock> promise) override {
+        //        td::actor::send_closure(id_, &FullNodeImpl::download_block, id, priority, timeout, std::move(promise));
+      }
+      void download_zero_state(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
+                               td::Promise<td::BufferSlice> promise) override {
+        //        td::actor::send_closure(id_, &FullNodeImpl::download_zero_state, id, priority, timeout, std::move(promise));
+      }
+      void download_persistent_state(BlockIdExt id, BlockIdExt masterchain_block_id, td::uint32 priority,
+                                     td::Timestamp timeout, td::Promise<td::BufferSlice> promise) override {
+        //        td::actor::send_closure(id_, &FullNodeImpl::download_persistent_state, id, masterchain_block_id, priority,
+        //                                timeout, std::move(promise));
+      }
+      void download_block_proof(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
+                                td::Promise<td::BufferSlice> promise) override {
+        //        td::actor::send_closure(id_, &FullNodeImpl::download_block_proof, block_id, priority, timeout,
+        //                                std::move(promise));
+      }
+      void download_block_proof_link(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
+                                     td::Promise<td::BufferSlice> promise) override {
+        //        td::actor::send_closure(id_, &FullNodeImpl::download_block_proof_link, block_id, priority, timeout,
+        //                                std::move(promise));
+      }
+      void get_next_key_blocks(BlockIdExt block_id, td::Timestamp timeout,
+                               td::Promise<std::vector<BlockIdExt>> promise) override {
+        //        td::actor::send_closure(id_, &FullNodeImpl::get_next_key_blocks, block_id, timeout, std::move(promise));
+      }
+      void download_archive(BlockSeqno masterchain_seqno, std::string tmp_dir, td::Timestamp timeout,
+                            td::Promise<std::string> promise) override {
+        //        td::actor::send_closure(id_, &FullNodeImpl::download_archive, masterchain_seqno, std::move(tmp_dir), timeout,
+        //                                std::move(promise));
+      }
+
+      void new_key_block(BlockHandle handle) override {
+        //        td::actor::send_closure(id_, &FullNodeImpl::new_key_block, std::move(handle));
+      }
+
+      Callback(td::actor::ActorId<Indexer> id) : id_(id) {
+      }
+
+     private:
+      td::actor::ActorId<Indexer> id_;
+    };
+
+    LOG(DEBUG) << "install dummy callback";
+    auto P_cb = td::PromiseCreator::lambda([](td::Unit R) {});
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::install_callback,
+                            std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
+    LOG(DEBUG) << "dummy callback installed";
+
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
       LOG(DEBUG) << "Got Answer!";
 
@@ -108,6 +181,7 @@ class Indexer : public td::actor::Actor {
       LOG(DEBUG) << "Block: Seqno: " << block->id().seqno();
     });
 
+    LOG(DEBUG) << "sending get_block_by_seqno_from_db request";
     auto to_find = BlockId{ton::masterchainId, 0x8000000000000000, 20750618};
     ton::AccountIdPrefixFull pfx{ton::masterchainId, 0x8000000000000000};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
@@ -127,8 +201,8 @@ int main(int argc, char **argv) {
   td::actor::ActorOwn<ton::validator::Indexer> main;
 
   //td::actor::send_closure(main, &Indexer::run);
-
-  td::actor::Scheduler scheduler({7});
+  td::actor::set_debug(true);
+  td::actor::Scheduler scheduler({1});
   scheduler.run_in_context([&] { main = td::actor::create_actor<ton::validator::Indexer>("cool"); });
   scheduler.run_in_context([&] { td::actor::send_closure(main, &ton::validator::Indexer::run); });
   scheduler.run();
