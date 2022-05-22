@@ -178,14 +178,19 @@ class Indexer : public td::actor::Actor {
       R.ensure();
       auto block = R.move_as_ok();
 
-      LOG(DEBUG) << "Block: Seqno: " << block->id().seqno();
+      LOG(DEBUG) << "Block: Seqno: " << block->id().seqno() << " Inited at: " << block->inited_unix_time();
     });
 
     LOG(DEBUG) << "sending get_block_by_seqno_from_db request";
-    auto to_find = BlockId{ton::masterchainId, 0x8000000000000000, 20753341};
     ton::AccountIdPrefixFull pfx{ton::masterchainId, 0x8000000000000000};
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
-                            to_find.seqno, std::move(P));
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20753341,
+                            std::move(P));
+    LOG(DEBUG) << "sending get_block_by_seqno_from_db request";
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20753342,
+                            std::move(P));
+    LOG(DEBUG) << "sending get_block_by_seqno_from_db request";
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20753343,
+                            std::move(P));
   }
 };
 }  // namespace validator
@@ -202,7 +207,7 @@ int main(int argc, char **argv) {
 
   //td::actor::send_closure(main, &Indexer::run);
   td::actor::set_debug(true);
-  td::actor::Scheduler scheduler({1});
+  td::actor::Scheduler scheduler({24});
   scheduler.run_in_context([&] { main = td::actor::create_actor<ton::validator::Indexer>("cool"); });
   scheduler.run_in_context([&] { td::actor::send_closure(main, &ton::validator::Indexer::run); });
   scheduler.run();
