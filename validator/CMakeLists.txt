@@ -98,7 +98,7 @@ set(DISK_VALIDATOR_SOURCE
   validator-full-id.cpp
   validator-group.cpp
   validator-options.cpp
-  
+
   downloaders/wait-block-data-disk.cpp
   downloaders/wait-block-state.cpp
   downloaders/wait-block-state-merge.cpp
@@ -192,7 +192,7 @@ target_include_directories(full-node PUBLIC
 target_link_libraries(validator PRIVATE tdutils tdactor adnl rldp tl_api dht tdfec
   overlay catchain validatorsession ton_crypto ton_block ton_db)
 
-target_link_libraries(validator-disk PRIVATE tdutils tdactor adnl rldp tl_api dht tdfec
+target_link_libraries(validator-disk PRIVATE ton_validator tdutils tdactor adnl rldp tl_api dht tdfec
   overlay catchain validatorsession ton_crypto ton_block ton_db)
 
 target_link_libraries(validator-hardfork PRIVATE tdutils tdactor adnl rldp tl_api dht tdfec
