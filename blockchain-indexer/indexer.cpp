@@ -182,7 +182,7 @@ class Indexer : public td::actor::Actor {
     });
 
     LOG(DEBUG) << "sending get_block_by_seqno_from_db request";
-    auto to_find = BlockId{ton::masterchainId, 0x8000000000000000, 20750618};
+    auto to_find = BlockId{ton::masterchainId, 0x8000000000000000, 20753341};
     ton::AccountIdPrefixFull pfx{ton::masterchainId, 0x8000000000000000};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                             to_find.seqno, std::move(P));
