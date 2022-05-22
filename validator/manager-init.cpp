@@ -294,7 +294,11 @@ void ValidatorManagerMasterchainReiniter::finish() {
 void ValidatorManagerMasterchainStarter::start_up() {
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<BlockIdExt> R) {
     if (R.is_error()) {
-      CHECK(R.error().code() == ErrorCode::notready);
+      if (R.error().code() == ErrorCode::notready) {
+        td::actor::send_closure(SelfId, &ValidatorManagerMasterchainStarter::failed_to_get_init_block_id);
+      } else {
+        LOG(FATAL) << R.error().to_string();
+      }
       td::actor::send_closure(SelfId, &ValidatorManagerMasterchainStarter::failed_to_get_init_block_id);
     } else {
       td::actor::send_closure(SelfId, &ValidatorManagerMasterchainStarter::got_init_block_id, R.move_as_ok());
