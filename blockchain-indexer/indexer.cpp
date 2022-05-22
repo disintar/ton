@@ -181,23 +181,12 @@ class Indexer : public td::actor::Actor {
         auto handle = R.move_as_ok();
         LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
 
-        auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), &handle](td::Result<td::Ref<BlockData>> R) {
+        auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
           if (R.is_error()) {
             LOG(ERROR) << R.move_as_error().to_string();
           } else {
             auto block = R.move_as_ok();
             LOG(DEBUG) << "data was received!";
-
-            CHECK(block.not_null());
-            CHECK(block->block_id() == handle->id());
-            auto block_root = block->root_cell();
-            if (block_root.is_null()) {
-              LOG(FATAL) << "block has no valid root cell";
-              return;
-            }
-
-            LOG(DEBUG) << "block is checked and its good!";
-
           }
         });
 
