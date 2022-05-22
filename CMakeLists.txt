@@ -403,7 +403,7 @@ add_subdirectory(dht-server)
 add_subdirectory(utils)
 add_subdirectory(http)
 add_subdirectory(rldp-http-proxy)
-add_subdirectory(indexer)
+add_subdirectory(blockchain-indexer)
 endif()
 #END internal
 
