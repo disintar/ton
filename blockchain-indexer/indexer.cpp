@@ -24,6 +24,7 @@ class Indexer : public td::actor::Actor {
   std::string db_root_ = "/mnt/ton/ton-node/db/";
   std::string config_path_ = db_root_ + "global-config.json";
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
+  td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
 
   td::Status create_validator_options() {
     TRY_RESULT_PREFIX(conf_data, td::read_file(config_path_), "failed to read: ");
@@ -96,8 +97,7 @@ class Indexer : public td::actor::Actor {
 
     auto id = PublicKeyHash::zero();
 
-    auto validator_manager_ =
-        ton::validator::ValidatorManagerDiskFactory::create(id, opts_, shard, shard_top, db_root_);
+    validator_manager_ = ton::validator::ValidatorManagerDiskFactory::create(id, opts_, shard, shard_top, db_root_);
 
     class Callback : public ValidatorManagerInterface::Callback {
      public:
@@ -172,24 +172,43 @@ class Indexer : public td::actor::Actor {
                             std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
     LOG(DEBUG) << "dummy callback installed";
 
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), this](td::Result<ConstBlockHandle> R) {
       LOG(DEBUG) << "Got Answer!";
 
-      R.ensure();
-      auto block = R.move_as_ok();
+      if (R.is_error()) {
+        LOG(ERROR) << R.move_as_error().to_string();
+      } else {
+        auto handle = R.move_as_ok();
+        LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
 
-      LOG(DEBUG) << "Block: Seqno: " << block->id().seqno() << " Inited at: " << block->inited_unix_time();
+        auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), &handle](td::Result<td::Ref<BlockData>> R) {
+          if (R.is_error()) {
+            LOG(ERROR) << R.move_as_error().to_string();
+          } else {
+            auto block = R.move_as_ok();
+            LOG(DEBUG) << "data was received!";
+
+            CHECK(block.not_null());
+            CHECK(block->block_id() == handle->id());
+            auto block_root = block->root_cell();
+            if (block_root.is_null()) {
+              LOG(FATAL) << "block has no valid root cell";
+              return;
+            }
+
+            LOG(DEBUG) << "block is checked and its good!";
+
+          }
+        });
+
+        td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
+                                      std::move(P));
+      }
     });
 
     LOG(DEBUG) << "sending get_block_by_seqno_from_db request";
     ton::AccountIdPrefixFull pfx{ton::masterchainId, 0x8000000000000000};
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20753341,
-                            std::move(P));
-    LOG(DEBUG) << "sending get_block_by_seqno_from_db request";
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20753342,
-                            std::move(P));
-    LOG(DEBUG) << "sending get_block_by_seqno_from_db request";
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20753343,
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20703341,
                             std::move(P));
   }
 };
