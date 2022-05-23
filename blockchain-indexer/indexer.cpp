@@ -21,8 +21,8 @@ namespace ton {
 namespace validator {
 class Indexer : public td::actor::Actor {
  private:
-  std::string db_root_ = "/mnt/ton/ton-node/db/";
-  std::string config_path_ = db_root_ + "global-config.json";
+  std::string db_root_ = "/mnt/ton/ton-node/db";
+  std::string config_path_ = db_root_ + "/global-config.json";
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
   td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
 
