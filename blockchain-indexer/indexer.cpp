@@ -102,60 +102,75 @@ class Indexer : public td::actor::Actor {
     class Callback : public ValidatorManagerInterface::Callback {
      public:
       void initial_read_complete(BlockHandle handle) override {
+        LOG(DEBUG) << "INITIAL READ COMPLETE";
         //        td::actor::send_closure(id_, &FullNodeImpl::initial_read_complete, handle);
       }
       void add_shard(ShardIdFull shard) override {
+        LOG(DEBUG) << "add_shard";
         //        td::actor::send_closure(id_, &FullNodeImpl::add_shard, shard);
       }
       void del_shard(ShardIdFull shard) override {
+        LOG(DEBUG) << "del_shard";
         //        td::actor::send_closure(id_, &FullNodeImpl::del_shard, shard);
       }
       void send_ihr_message(AccountIdPrefixFull dst, td::BufferSlice data) override {
+        LOG(DEBUG) << "send_ihr_message";
         //        td::actor::send_closure(id_, &FullNodeImpl::send_ihr_message, dst, std::move(data));
       }
       void send_ext_message(AccountIdPrefixFull dst, td::BufferSlice data) override {
+        LOG(DEBUG) << "send_ext_message";
         //        td::actor::send_closure(id_, &FullNodeImpl::send_ext_message, dst, std::move(data));
       }
       void send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) override {
+        LOG(DEBUG) << "send_shard_block_info";
         //        td::actor::send_closure(id_, &FullNodeImpl::send_shard_block_info, block_id, cc_seqno, std::move(data));
       }
       void send_broadcast(BlockBroadcast broadcast) override {
+        LOG(DEBUG) << "send_broadcast";
         //        td::actor::send_closure(id_, &FullNodeImpl::send_broadcast, std::move(broadcast));
       }
       void download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                           td::Promise<ReceivedBlock> promise) override {
+        LOG(DEBUG) << "download_block";
         //        td::actor::send_closure(id_, &FullNodeImpl::download_block, id, priority, timeout, std::move(promise));
       }
       void download_zero_state(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                td::Promise<td::BufferSlice> promise) override {
+        LOG(DEBUG) << "download_zero_state";
         //        td::actor::send_closure(id_, &FullNodeImpl::download_zero_state, id, priority, timeout, std::move(promise));
       }
       void download_persistent_state(BlockIdExt id, BlockIdExt masterchain_block_id, td::uint32 priority,
                                      td::Timestamp timeout, td::Promise<td::BufferSlice> promise) override {
+        LOG(DEBUG) << "download_persistent_state";
         //        td::actor::send_closure(id_, &FullNodeImpl::download_persistent_state, id, masterchain_block_id, priority,
         //                                timeout, std::move(promise));
       }
       void download_block_proof(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
                                 td::Promise<td::BufferSlice> promise) override {
+        LOG(DEBUG) << "download_block_proof";
         //        td::actor::send_closure(id_, &FullNodeImpl::download_block_proof, block_id, priority, timeout,
         //                                std::move(promise));
       }
       void download_block_proof_link(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
                                      td::Promise<td::BufferSlice> promise) override {
+        LOG(DEBUG) << "download_block_proof_link";
         //        td::actor::send_closure(id_, &FullNodeImpl::download_block_proof_link, block_id, priority, timeout,
         //                                std::move(promise));
       }
       void get_next_key_blocks(BlockIdExt block_id, td::Timestamp timeout,
                                td::Promise<std::vector<BlockIdExt>> promise) override {
+        LOG(DEBUG) << "get_next_key_blocks";
         //        td::actor::send_closure(id_, &FullNodeImpl::get_next_key_blocks, block_id, timeout, std::move(promise));
       }
       void download_archive(BlockSeqno masterchain_seqno, std::string tmp_dir, td::Timestamp timeout,
                             td::Promise<std::string> promise) override {
+        LOG(DEBUG) << "download_archive";
         //        td::actor::send_closure(id_, &FullNodeImpl::download_archive, masterchain_seqno, std::move(tmp_dir), timeout,
         //                                std::move(promise));
       }
 
       void new_key_block(BlockHandle handle) override {
+        LOG(DEBUG) << "new_key_block";
         //        td::actor::send_closure(id_, &FullNodeImpl::new_key_block, std::move(handle));
       }
 
