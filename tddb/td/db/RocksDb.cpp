@@ -85,10 +85,7 @@ Result<RocksDb> RocksDb::open(std::string path, bool read_only) {
     column_families.push_back(rocksdb::ColumnFamilyDescriptor(rocksdb::kDefaultColumnFamilyName, cf_options));
     std::vector<rocksdb::ColumnFamilyHandle *> handles;
 
-    LOG(DEBUG) << "Open " << path;
-
     if (read_only) {
-      LOG(DEBUG) << "Open for readonly";
       TRY_STATUS(from_rocksdb(
           rocksdb::OptimisticTransactionDB::OpenForReadOnly(options, std::move(path), column_families, &handles, reinterpret_cast<rocksdb::DB **>(&db))));
     } else {

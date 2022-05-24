@@ -181,11 +181,11 @@ class Indexer : public td::actor::Actor {
       td::actor::ActorId<Indexer> id_;
     };
 
-    LOG(DEBUG) << "install dummy callback";
+    LOG(DEBUG) << "Callback";
     auto P_cb = td::PromiseCreator::lambda([](td::Unit R) {});
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::install_callback,
                             std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
-    LOG(DEBUG) << "dummy callback installed";
+    LOG(DEBUG) << "Callback installed";
 
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), this](td::Result<ConstBlockHandle> R) {
       LOG(DEBUG) << "Got Answer!";
@@ -212,7 +212,7 @@ class Indexer : public td::actor::Actor {
 
     LOG(DEBUG) << "sending get_block_by_seqno_from_db request";
     ton::AccountIdPrefixFull pfx{ton::masterchainId, 0x8000000000000000};
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20703341,
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 2000001,
                             std::move(P));
   }
 };
