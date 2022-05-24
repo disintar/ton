@@ -201,7 +201,7 @@ class Indexer : public td::actor::Actor {
       } else {
         auto handle = R.move_as_ok();
         LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
-        td::actor::send_closure(actor_id(this), &Indexer::got_block_handle, handle);
+        td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle);
       }
     });
 
