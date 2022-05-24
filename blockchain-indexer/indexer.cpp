@@ -210,7 +210,7 @@ class Indexer : public td::actor::Actor {
                             std::move(P));
   }
 
-  void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle) {
+  void got_block_handle(std::shared_ptr<BlockHandleInterface> handle) {
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
