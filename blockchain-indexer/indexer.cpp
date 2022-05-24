@@ -189,8 +189,9 @@ class Indexer : public td::actor::Actor {
     LOG(DEBUG) << "Callback installed";
   }
 
-  void sync_complete(const BlockHandle &handle) {
+  void sync_complete(const BlockHandle& handle){
     LOG(DEBUG) << "Sync complete: " << handle->id().to_str();
+
 
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), this](td::Result<ConstBlockHandle> R) {
       LOG(DEBUG) << "Got Answer!";
@@ -200,30 +201,36 @@ class Indexer : public td::actor::Actor {
       } else {
         auto handle = R.move_as_ok();
         LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
-        td::actor::send_closure(actor_id(this), &Indexer::got_block_handle, std::move(handle));
+        td::actor::send_closure(actor_id(this), &Indexer::got_block_handle, handle);
       }
     });
 
     LOG(DEBUG) << "sending get_block_by_seqno_from_db request";
     ton::AccountIdPrefixFull pfx{ton::masterchainId, 0x8000000000000000};
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 2000041,
-                            std::move(P));
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
+                            2000041, std::move(P));
   }
 
-  void got_block_handle(std::shared_ptr<BlockHandleInterface> handle) {
+  void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle){
+    LOG(DEBUG) << "Returned to Indexer";
+
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
+      LOG(DEBUG) << "GOT!";
+
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
         auto block = R.move_as_ok();
         LOG(DEBUG) << "data was received!";
-        LOG(DEBUG) << block->block_id().to_str();
+        LOG(DEBUG) << block->block_id();
       }
     });
 
-    td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data, handle,
-                                  std::move(P));
+    td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db,
+                                  handle, std::move(P));
   }
+
+
 };
 }  // namespace validator
 }  // namespace ton
