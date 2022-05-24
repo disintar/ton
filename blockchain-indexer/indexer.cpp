@@ -24,7 +24,7 @@ class Indexer : public td::actor::Actor {
   std::string db_root_ = "/mnt/ton/ton-node/db";
   std::string config_path_ = db_root_ + "/global-config.json";
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
-  static td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
+  td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
 
   td::Status create_validator_options() {
     TRY_RESULT_PREFIX(conf_data, td::read_file(config_path_), "failed to read: ");
@@ -97,41 +97,14 @@ class Indexer : public td::actor::Actor {
 
     auto id = PublicKeyHash::zero();
 
-    validator_manager_ = ton::validator::ValidatorManagerDiskFactory::create(id, opts_, shard, shard_top, db_root_, true);
+    validator_manager_ =
+        ton::validator::ValidatorManagerDiskFactory::create(id, opts_, shard, shard_top, db_root_, true);
 
     class Callback : public ValidatorManagerInterface::Callback {
      public:
       void initial_read_complete(BlockHandle handle) override {
         LOG(DEBUG) << "INITIAL READ COMPLETE";
-        //        td::actor::send_closure(id_, &FullNodeImpl::initial_read_complete, handle);
-
-        auto P = td::PromiseCreator::lambda([SelfId = id_, this](td::Result<ConstBlockHandle> R) {
-          LOG(DEBUG) << "Got Answer!";
-
-          if (R.is_error()) {
-            LOG(ERROR) << R.move_as_error().to_string();
-          } else {
-            auto handle = R.move_as_ok();
-            LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
-
-            auto P = td::PromiseCreator::lambda([SelfId =id_](td::Result<td::Ref<BlockData>> R) {
-              if (R.is_error()) {
-                LOG(ERROR) << R.move_as_error().to_string();
-              } else {
-                auto block = R.move_as_ok();
-                LOG(DEBUG) << "data was received!";
-              }
-            });
-
-            td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
-                                          std::move(P));
-          }
-        });
-
-        LOG(DEBUG) << "sending get_block_by_seqno_from_db request";
-        ton::AccountIdPrefixFull pfx{ton::masterchainId, 0x8000000000000000};
-        td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 2000001,
-                                std::move(P));
+        td::actor::send_closure(id_, &Indexer::sync_complete, handle);
       }
       void add_shard(ShardIdFull shard) override {
         LOG(DEBUG) << "add_shard";
@@ -209,6 +182,44 @@ class Indexer : public td::actor::Actor {
       td::actor::ActorId<Indexer> id_;
     };
 
+    LOG(DEBUG) << "Callback";
+    auto P_cb = td::PromiseCreator::lambda([](td::Unit R) {});
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::install_callback,
+                            std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
+    LOG(DEBUG) << "Callback installed";
+  }
+
+  void sync_complete(const BlockHandle& handle){
+    LOG(DEBUG) << "Sync complete: " << handle->id().to_str();
+
+
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), this](td::Result<ConstBlockHandle> R) {
+      LOG(DEBUG) << "Got Answer!";
+
+      if (R.is_error()) {
+        LOG(ERROR) << R.move_as_error().to_string();
+      } else {
+        auto handle = R.move_as_ok();
+        LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
+
+        auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
+          if (R.is_error()) {
+            LOG(ERROR) << R.move_as_error().to_string();
+          } else {
+            auto block = R.move_as_ok();
+            LOG(DEBUG) << "data was received!";
+          }
+        });
+
+        td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db,
+                                      handle, std::move(P));
+      }
+    });
+
+    LOG(DEBUG) << "sending get_block_by_seqno_from_db request";
+    ton::AccountIdPrefixFull pfx{ton::masterchainId, 0x8000000000000000};
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
+                            2000041, std::move(P));
   }
 };
 }  // namespace validator
