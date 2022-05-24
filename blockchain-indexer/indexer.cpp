@@ -36,7 +36,7 @@ class Indexer : public td::actor::Actor {
     auto zero_state = ton::create_block_id(conf.validator_->zero_state_);
     ton::BlockIdExt init_block;
     if (!conf.validator_->init_block_) {
-      LOG(INFO) << "no init block in config. using zero state";
+      LOG(INFO) << "no init block readOnlyin config. using zero state";
       init_block = zero_state;
     } else {
       init_block = ton::create_block_id(conf.validator_->init_block_);
@@ -97,7 +97,7 @@ class Indexer : public td::actor::Actor {
 
     auto id = PublicKeyHash::zero();
 
-    validator_manager_ = ton::validator::ValidatorManagerDiskFactory::create(id, opts_, shard, shard_top, db_root_);
+    validator_manager_ = ton::validator::ValidatorManagerDiskFactory::create(id, opts_, shard, shard_top, db_root_, true);
 
     class Callback : public ValidatorManagerInterface::Callback {
      public:

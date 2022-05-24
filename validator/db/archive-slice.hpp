@@ -73,7 +73,7 @@ class PackageWriter : public td::actor::Actor {
 
 class ArchiveSlice : public td::actor::Actor {
  public:
-  ArchiveSlice(td::uint32 archive_id, bool key_blocks_only, bool temp, bool finalized, std::string db_root);
+  ArchiveSlice(td::uint32 archive_id, bool key_blocks_only, bool temp, bool finalized, std::string db_root, bool read_only=false);
 
   void get_archive_id(BlockSeqno masterchain_seqno, td::Promise<td::uint64> promise);
 
@@ -128,6 +128,7 @@ class ArchiveSlice : public td::actor::Actor {
   td::uint32 slice_size_{100};
 
   std::string db_root_;
+  bool read_only_;
   std::shared_ptr<td::KeyValue> kv_;
 
   struct PackageInfo {

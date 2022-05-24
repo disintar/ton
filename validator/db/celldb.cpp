@@ -28,12 +28,12 @@ namespace ton {
 
 namespace validator {
 
-CellDbIn::CellDbIn(td::actor::ActorId<RootDb> root_db, td::actor::ActorId<CellDb> parent, std::string path)
-    : root_db_(root_db), parent_(parent), path_(std::move(path)) {
+CellDbIn::CellDbIn(td::actor::ActorId<RootDb> root_db, td::actor::ActorId<CellDb> parent, std::string path, bool read_only)
+    : root_db_(root_db), parent_(parent), path_(std::move(path)), read_only_(read_only) {
 }
 
 void CellDbIn::start_up() {
-  cell_db_ = std::make_shared<td::RocksDb>(td::RocksDb::open(path_).move_as_ok());
+  cell_db_ = std::make_shared<td::RocksDb>(td::RocksDb::open(path_, read_only_).move_as_ok());
 
   boc_ = vm::DynamicBagOfCellsDb::create();
   boc_->set_loader(std::make_unique<vm::CellLoader>(cell_db_->snapshot())).ensure();
@@ -266,7 +266,7 @@ void CellDb::store_cell(BlockIdExt block_id, td::Ref<vm::Cell> cell, td::Promise
 
 void CellDb::start_up() {
   boc_ = vm::DynamicBagOfCellsDb::create();
-  cell_db_ = td::actor::create_actor<CellDbIn>("celldbin", root_db_, actor_id(this), path_);
+  cell_db_ = td::actor::create_actor<CellDbIn>("celldbin", root_db_, actor_id(this), path_, read_only_);
 }
 
 CellDbIn::DbEntry::DbEntry(tl_object_ptr<ton_api::db_celldb_value> entry)

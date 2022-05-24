@@ -41,7 +41,7 @@ class CellDbIn : public td::actor::Actor {
   void load_cell(RootHash hash, td::Promise<td::Ref<vm::DataCell>> promise);
   void store_cell(BlockIdExt block_id, td::Ref<vm::Cell> cell, td::Promise<td::Ref<vm::DataCell>> promise);
 
-  CellDbIn(td::actor::ActorId<RootDb> root_db, td::actor::ActorId<CellDb> parent, std::string path);
+  CellDbIn(td::actor::ActorId<RootDb> root_db, td::actor::ActorId<CellDb> parent, std::string path, bool read_only=false);
 
   void start_up() override;
   void alarm() override;
@@ -81,6 +81,7 @@ class CellDbIn : public td::actor::Actor {
   td::actor::ActorId<CellDb> parent_;
 
   std::string path_;
+  bool read_only_;
 
   std::unique_ptr<vm::DynamicBagOfCellsDb> boc_;
   std::shared_ptr<vm::KeyValue> cell_db_;
@@ -97,7 +98,8 @@ class CellDb : public td::actor::Actor {
     boc_->set_loader(std::make_unique<vm::CellLoader>(std::move(snapshot))).ensure();
   }
 
-  CellDb(td::actor::ActorId<RootDb> root_db, std::string path) : root_db_(root_db), path_(path) {
+  CellDb(td::actor::ActorId<RootDb> root_db, std::string path, bool read_only=false)
+      : root_db_(root_db), path_(path), read_only_(read_only) {
   }
 
   void start_up() override;
@@ -105,6 +107,7 @@ class CellDb : public td::actor::Actor {
  private:
   td::actor::ActorId<RootDb> root_db_;
   std::string path_;
+  bool read_only_;
 
   td::actor::ActorOwn<CellDbIn> cell_db_;
 

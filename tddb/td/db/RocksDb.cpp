@@ -59,7 +59,7 @@ RocksDb RocksDb::clone() const {
   return RocksDb{db_, statistics_};
 }
 
-Result<RocksDb> RocksDb::open(std::string path) {
+Result<RocksDb> RocksDb::open(std::string path, bool read_only) {
   rocksdb::OptimisticTransactionDB *db;
   auto statistics = rocksdb::CreateDBStatistics();
   {
@@ -84,8 +84,19 @@ Result<RocksDb> RocksDb::open(std::string path) {
     std::vector<rocksdb::ColumnFamilyDescriptor> column_families;
     column_families.push_back(rocksdb::ColumnFamilyDescriptor(rocksdb::kDefaultColumnFamilyName, cf_options));
     std::vector<rocksdb::ColumnFamilyHandle *> handles;
-    TRY_STATUS(from_rocksdb(
-        rocksdb::OptimisticTransactionDB::Open(options, occ_options, std::move(path), column_families, &handles, &db)));
+
+    LOG(DEBUG) << "Open " << path;
+
+    if (read_only) {
+      LOG(DEBUG) << "Open for readonly";
+      TRY_STATUS(from_rocksdb(
+          rocksdb::OptimisticTransactionDB::OpenForReadOnly(options, std::move(path), column_families, &handles, reinterpret_cast<rocksdb::DB **>(&db))));
+    } else {
+      TRY_STATUS(from_rocksdb(
+          rocksdb::OptimisticTransactionDB::Open(options, occ_options, std::move(path), column_families, &handles, &db)));
+    }
+
+
     CHECK(handles.size() == 1);
     // i can delete the handle since DBImpl is always holding a reference to
     // default column family
