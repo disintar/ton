@@ -268,7 +268,7 @@ class Indexer : public td::actor::Actor {
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle) {
     LOG(DEBUG) << "Returned to Indexer";
 
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), &handle](td::Result<td::Ref<BlockData>> R) {
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
       LOG(DEBUG) << "GOT!";
 
       if (R.is_error()) {
@@ -277,10 +277,9 @@ class Indexer : public td::actor::Actor {
         auto block = R.move_as_ok();
         LOG(DEBUG) << "data was received!";
         LOG(DEBUG) << block->block_id();
-        LOG(DEBUG) << handle->id();
+        auto blkid = block->block_id();
 
         CHECK(block.not_null());
-        CHECK(block->block_id() == handle->id());
 
         auto block_root = block->root_cell();
 
@@ -293,9 +292,9 @@ class Indexer : public td::actor::Actor {
         block::gen::BlockInfo::Record info;
 
         LOG(DEBUG) << " ------------ PARSED BLOCK HEADER ------------";
-        LOG(DEBUG) << "Field: block | Value: " << handle->id().to_str();
-        LOG(DEBUG) << "Field: roothash | Value: " << handle->id().root_hash.to_hex();
-        LOG(DEBUG) << "Field: filehash | Value: " << handle->id().file_hash.to_hex();
+        LOG(DEBUG) << "Field: block | Value: " << blkid.to_str();
+        LOG(DEBUG) << "Field: roothash | Value: " << blkid.root_hash.to_hex();
+        LOG(DEBUG) << "Field: filehash | Value: " << blkid.file_hash.to_hex();
         LOG(DEBUG) << "Field: time | Value: " << info.gen_utime;
         LOG(DEBUG) << "Field: Start LT | Value: " << info.start_lt;
         LOG(DEBUG) << "Field: End LT | Value: " << info.end_lt;
