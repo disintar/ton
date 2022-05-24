@@ -261,7 +261,7 @@ class Indexer : public td::actor::Actor {
 
     LOG(DEBUG) << "sending get_block_by_seqno_from_db request";
     ton::AccountIdPrefixFull pfx{ton::masterchainId, 0x8000000000000000};
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 0,
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20000000,
                             std::move(P));
   }
 
