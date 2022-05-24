@@ -15,6 +15,61 @@
 #include "ton/ton-types.h"
 #include "ton/ton-tl.hpp"
 #include "ton/ton-io.hpp"
+#include "vm/boc.h"
+#include "tl/tlblib.hpp"
+#include "block/block.h"
+#include "block/block-parse.h"
+#include "block/block-auto.h"
+#include "block/check-proof.h"
+#include "vm/dict.h"
+#include "vm/cells/MerkleProof.h"
+#include "vm/vm.h"
+#include "liteserver.hpp"
+#include "td/utils/Slice.h"
+#include "td/utils/common.h"
+#include "td/utils/crypto.h"
+#include "td/utils/overloaded.h"
+#include "auto/tl/lite_api.h"
+#include "auto/tl/lite_api.hpp"
+#include "adnl/utils.hpp"
+#include "ton/lite-tl.hpp"
+#include "tl-utils/lite-utils.hpp"
+#include "td/utils/Random.h"
+#include "vm/boc.h"
+#include "tl/tlblib.hpp"
+#include "block/block.h"
+#include "block/block-parse.h"
+#include "block/block-auto.h"
+#include "block/check-proof.h"
+#include "vm/dict.h"
+#include "vm/cells/MerkleProof.h"
+#include "vm/vm.h"
+#include "vm/memo.h"
+#include "shard.hpp"
+#include "validator-set.hpp"
+using td::Ref;
+static bool visit(Ref<vm::Cell> cell);
+
+static bool visit(const vm::CellSlice &cs) {
+  auto cnt = cs.size_refs();
+  bool res = true;
+  for (unsigned i = 0; i < cnt; i++) {
+    res &= visit(cs.prefetch_ref(i));
+  }
+  return res;
+}
+
+static bool visit(Ref<vm::Cell> cell) {
+  if (cell.is_null()) {
+    return true;
+  }
+  vm::CellSlice cs{vm::NoVm{}, std::move(cell)};
+  return visit(cs);
+}
+
+static bool visit(Ref<vm::CellSlice> cs_ref) {
+  return cs_ref.is_null() || visit(*cs_ref);
+}
 
 namespace ton {
 
@@ -189,9 +244,8 @@ class Indexer : public td::actor::Actor {
     LOG(DEBUG) << "Callback installed";
   }
 
-  void sync_complete(const BlockHandle& handle){
+  void sync_complete(const BlockHandle &handle) {
     LOG(DEBUG) << "Sync complete: " << handle->id().to_str();
-
 
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
       LOG(DEBUG) << "Got Answer!";
@@ -207,14 +261,14 @@ class Indexer : public td::actor::Actor {
 
     LOG(DEBUG) << "sending get_block_by_seqno_from_db request";
     ton::AccountIdPrefixFull pfx{ton::masterchainId, 0x8000000000000000};
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
-                            2000041, std::move(P));
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 0,
+                            std::move(P));
   }
 
-  void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle){
+  void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle) {
     LOG(DEBUG) << "Returned to Indexer";
 
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), &handle](td::Result<td::Ref<BlockData>> R) {
       LOG(DEBUG) << "GOT!";
 
       if (R.is_error()) {
@@ -223,14 +277,60 @@ class Indexer : public td::actor::Actor {
         auto block = R.move_as_ok();
         LOG(DEBUG) << "data was received!";
         LOG(DEBUG) << block->block_id();
+        LOG(DEBUG) << handle->id();
+
+        CHECK(block.not_null());
+        CHECK(block->block_id() == handle->id());
+
+        auto block_root = block->root_cell();
+
+        if (block_root.is_null()) {
+          LOG(ERROR) << "block has no valid root cell";
+          return;
+        }
+        vm::MerkleProofBuilder mpb{block_root};
+        block::gen::Block::Record blk;
+        block::gen::BlockInfo::Record info;
+
+        LOG(DEBUG) << " ------------ PARSED BLOCK HEADER ------------";
+        LOG(DEBUG) << "Field: block | Value: " << handle->id().to_str();
+        LOG(DEBUG) << "Field: roothash | Value: " << handle->id().root_hash.to_hex();
+        LOG(DEBUG) << "Field: filehash | Value: " << handle->id().file_hash.to_hex();
+        LOG(DEBUG) << "Field: time | Value: " << info.gen_utime;
+        LOG(DEBUG) << "Field: Start LT | Value: " << info.start_lt;
+        LOG(DEBUG) << "Field: End LT | Value: " << info.end_lt;
+        LOG(DEBUG) << "Field: Global ID | Value: " << blk.global_id;
+        LOG(DEBUG) << "Field: Version | Value: " << info.version;
+        LOG(DEBUG) << "Field: Flags | Value: " << info.flags;
+        LOG(DEBUG) << "Field: Key block | Value: " << info.key_block;
+        LOG(DEBUG) << "Field: Not master | Value: " << info.not_master;
+        LOG(DEBUG) << "Field: After merge | Value: " << info.after_merge;
+        LOG(DEBUG) << "Field: After split | Value: " << info.after_split;
+        LOG(DEBUG) << "Field: Before split | Value: " << info.before_split;
+        LOG(DEBUG) << "Field: Want merge | Value: " << info.want_merge;
+        LOG(DEBUG) << "Field: Want split | Value: " << info.want_split;
+        LOG(DEBUG) << "Field: validator_list_hash_short | Value: " << info.gen_validator_list_hash_short;
+        LOG(DEBUG) << "Field: catchain_seqno | Value: " << info.gen_catchain_seqno;
+        LOG(DEBUG) << "Field: min_ref_mc_seqno | Value: " << info.min_ref_mc_seqno;
+        LOG(DEBUG) << "Field: vert_seqno | Value: " << info.vert_seq_no;
+        LOG(DEBUG) << "Field: vert_seqno_incr | Value: " << info.vert_seqno_incr;
+        LOG(DEBUG) << "Field: prev_key_block_seqno | Value: "
+                   << ton::BlockId{ton::masterchainId, ton::shardIdAll, info.prev_key_block_seqno};
+        LOG(DEBUG) << " ------------ PARSED BLOCK HEADER ------------";
+
+
+        block::gen::BlockExtra::Record extra;
+        if (!(tlb::unpack_cell(std::move(blk.extra), extra))) {
+          LOG(ERROR) << "Can't unpack extra";
+          return;
+        }
+
       }
     });
 
-    td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db,
-                                  handle, std::move(P));
+    td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
+                                  std::move(P));
   }
-
-
 };
 }  // namespace validator
 }  // namespace ton
