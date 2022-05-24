@@ -193,7 +193,7 @@ class Indexer : public td::actor::Actor {
     LOG(DEBUG) << "Sync complete: " << handle->id().to_str();
 
 
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), this](td::Result<ConstBlockHandle> R) {
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
       LOG(DEBUG) << "Got Answer!";
 
       if (R.is_error()) {
