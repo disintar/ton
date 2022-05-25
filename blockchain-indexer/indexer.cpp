@@ -231,8 +231,6 @@ class Indexer : public td::actor::Actor {
     LOG(DEBUG) << "Returned to Indexer";
 
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
-      LOG(DEBUG) << "GOT!";
-
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
@@ -261,15 +259,14 @@ class Indexer : public td::actor::Actor {
                                      {"shard", blkid.id.shard},
                                  }}};
 
+        LOG(DEBUG) << to_string(answer["BlockIdExt"]);
+
         block::gen::Block::Record blk;
         block::gen::BlockInfo::Record info;
         block::gen::BlockExtra::Record extra;
-        ShardIdFull shard;
-        block::gen::GlobalVersion::Record global_version;
-
-        if (!(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra) &&
-              block::tlb::t_ShardIdent.unpack(info.shard.write(), shard)) &&
-            tlb::unpack(info.gen_software.write(), global_version)) {
+//        ShardIdFull shard;
+//            block::tlb::t_ShardIdent.unpack(info.shard.write(), shard)
+        if (!(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra))) {
           LOG(ERROR) << "cannot unpack Block header";
           return;
         }
@@ -286,44 +283,18 @@ class Indexer : public td::actor::Actor {
                                {"flags", info.flags},
                                {"seq_no", info.seq_no},
                                {"vert_seq_no", info.vert_seq_no},
-                               {"shard", {{"workchain", shard.workchain}, {"shard", shard.shard}}},
+//                               {"shard", {{"workchain", shard.workchain}, {"shard", shard.shard}}},
                                {"gen_utime", info.gen_utime},
                                {"start_lt", info.start_lt},
                                {"end_lt", info.end_lt},
                                {"gen_validator_list_hash_short", info.gen_validator_list_hash_short},
                                {"gen_catchain_seqno", info.gen_catchain_seqno},
                                {"min_ref_mc_seqno", info.min_ref_mc_seqno},
-                               {"prev_key_block_seqno", info.prev_key_block_seqno},
-                               {
-                                   "global_version",
-                                   {{"version", global_version.version, "capabilities", global_version.capabilities}},
-                               }};
+                               {"prev_key_block_seqno", info.prev_key_block_seqno}};
 
         LOG(DEBUG) << to_string(answer);
 
-        LOG(DEBUG) << " ------------ PARSED BLOCK HEADER ------------";
-        LOG(DEBUG) << "Field: block | Value: " << blkid.to_str();
-        LOG(DEBUG) << "Field: roothash | Value: " << blkid.root_hash.to_hex();
-        LOG(DEBUG) << "Field: filehash | Value: " << blkid.file_hash.to_hex();
-        LOG(DEBUG) << "Field: time | Value: " << info.gen_utime;
-        LOG(DEBUG) << "Field: Start LT | Value: " << info.start_lt;
-        LOG(DEBUG) << "Field: End LT | Value: " << info.end_lt;
-        LOG(DEBUG) << "Field: Global ID | Value: " << blk.global_id;
-        LOG(DEBUG) << "Field: Version | Value: " << info.version;
-        LOG(DEBUG) << "Field: Flags | Value: " << info.flags;
-        LOG(DEBUG) << "Field: Key block | Value: " << info.key_block;
-        LOG(DEBUG) << "Field: Not master | Value: " << info.not_master;
-        LOG(DEBUG) << "Field: After merge | Value: " << info.after_merge;
-        LOG(DEBUG) << "Field: After split | Value: " << info.after_split;
-        LOG(DEBUG) << "Field: Before split | Value: " << info.before_split;
-        LOG(DEBUG) << "Field: Want merge | Value: " << info.want_merge;
-        LOG(DEBUG) << "Field: Want split | Value: " << info.want_split;
-        LOG(DEBUG) << "Field: validator_list_hash_short | Value: " << info.gen_validator_list_hash_short;
-        LOG(DEBUG) << "Field: catchain_seqno | Value: " << info.gen_catchain_seqno;
-        LOG(DEBUG) << "Field: min_ref_mc_seqno | Value: " << info.min_ref_mc_seqno;
-        LOG(DEBUG) << "Field: vert_seqno | Value: " << info.vert_seq_no;
-        LOG(DEBUG) << "Field: vert_seqno_incr | Value: " << info.vert_seqno_incr;
-        LOG(DEBUG) << " ------------ PARSED BLOCK HEADER ------------";
+
 
         auto inmsg_cs = vm::load_cell_slice_ref(extra.in_msg_descr);
         auto outmsg_cs = vm::load_cell_slice_ref(extra.out_msg_descr);
