@@ -283,16 +283,10 @@ class Indexer : public td::actor::Actor {
                                      {"shard", blkid.id.shard},
                                  }}};
         LOG(DEBUG) << to_string(answer["BlockIdExt"]);
+
         block::gen::Block::Record blk;
         block::gen::BlockInfo::Record info;
         block::gen::BlockExtra::Record extra;
-        auto value_flow_root = blk.value_flow;
-        block::ValueFlow value_flow;
-        vm::CellSlice cs{vm::NoVmOrd(), value_flow_root};
-        if (!(cs.is_valid() && value_flow.fetch(cs) && cs.empty_ext())) {
-          LOG(ERROR) << "cannot unpack ValueFlow of the new block ";
-          return;
-        }
 
         if (!(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra))) {
           LOG(ERROR) << "cannot unpack Block header";
@@ -320,6 +314,14 @@ class Indexer : public td::actor::Actor {
                                {"prev_key_block_seqno", info.prev_key_block_seqno}};
 
         LOG(DEBUG) << to_string(answer);
+
+        auto value_flow_root = blk.value_flow;
+        block::ValueFlow value_flow;
+        vm::CellSlice cs{vm::NoVmOrd(), value_flow_root};
+        if (!(cs.is_valid() && value_flow.fetch(cs) && cs.empty_ext())) {
+          LOG(ERROR) << "cannot unpack ValueFlow of the new block ";
+          return;
+        }
 
         LOG(DEBUG) << to_string(show_extra(value_flow.from_prev_blk.extra));
 //        answer["ValueFlow"] = {{"from_prev_blk",
