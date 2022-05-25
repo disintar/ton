@@ -231,17 +231,16 @@ class Indexer : public td::actor::Actor {
     LOG(DEBUG) << "Returned to Indexer";
 
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
-      LOG(DEBUG) << "Returned to Indexer";
+      LOG(DEBUG) << "GOT!";
+
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
-        LOG(DEBUG) << "Returned to Indexer";
         auto block = R.move_as_ok();
-        LOG(DEBUG) << "Returned to Indexer";
+        CHECK(block.not_null());
+
         auto blkid = block->block_id();
-        LOG(DEBUG) << "Returned to Indexer";
         auto block_root = block->root_cell();
-        LOG(DEBUG) << "Returned to Indexer";
         if (block_root.is_null()) {
           LOG(ERROR) << "block has no valid root cell";
           return;
@@ -250,9 +249,9 @@ class Indexer : public td::actor::Actor {
         //
         // Parsing
         //
-        LOG(DEBUG) << "Returned to Indexer";
+
         json answer;
-        LOG(DEBUG) << "Returned to Indexer";
+
         answer["BlockIdExt"] = {{"file_hash", blkid.file_hash.to_hex()},
                                 {"root_hash", blkid.root_hash.to_hex()},
                                 {"id",
@@ -262,14 +261,15 @@ class Indexer : public td::actor::Actor {
                                      {"shard", blkid.id.shard},
                                  }}};
 
-        LOG(DEBUG) << to_string(answer["BlockIdExt"]);
-
         block::gen::Block::Record blk;
         block::gen::BlockInfo::Record info;
         block::gen::BlockExtra::Record extra;
-//        ShardIdFull shard;
-//            block::tlb::t_ShardIdent.unpack(info.shard.write(), shard)
-        if (!(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra))) {
+        ShardIdFull shard;
+        block::gen::GlobalVersion::Record global_version;
+
+        if (!(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra) &&
+              block::tlb::t_ShardIdent.unpack(info.shard.write(), shard)) &&
+            tlb::unpack(info.gen_software.write(), global_version)) {
           LOG(ERROR) << "cannot unpack Block header";
           return;
         }
@@ -286,18 +286,20 @@ class Indexer : public td::actor::Actor {
                                {"flags", info.flags},
                                {"seq_no", info.seq_no},
                                {"vert_seq_no", info.vert_seq_no},
-//                               {"shard", {{"workchain", shard.workchain}, {"shard", shard.shard}}},
+                               {"shard", {{"workchain", shard.workchain}, {"shard", shard.shard}}},
                                {"gen_utime", info.gen_utime},
                                {"start_lt", info.start_lt},
                                {"end_lt", info.end_lt},
                                {"gen_validator_list_hash_short", info.gen_validator_list_hash_short},
                                {"gen_catchain_seqno", info.gen_catchain_seqno},
                                {"min_ref_mc_seqno", info.min_ref_mc_seqno},
-                               {"prev_key_block_seqno", info.prev_key_block_seqno}};
+                               {"prev_key_block_seqno", info.prev_key_block_seqno},
+                               {
+                                   "global_version",
+                                   {{"version", global_version.version, "capabilities", global_version.capabilities}},
+                               }};
 
         LOG(DEBUG) << to_string(answer);
-
-
 
         auto inmsg_cs = vm::load_cell_slice_ref(extra.in_msg_descr);
         auto outmsg_cs = vm::load_cell_slice_ref(extra.out_msg_descr);
