@@ -237,37 +237,69 @@ class Indexer : public td::actor::Actor {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
         auto block = R.move_as_ok();
-        json answer;
-
-        auto blkid = block->block_id();
-
-        answer["id"] = {{"file_hash", blkid.file_hash.to_hex()},
-                        {"root_hash", blkid.root_hash.to_hex()},
-                        {"id",
-                         {
-                             {"workchain", blkid.id.workchain},
-                             {"seqno", blkid.id.seqno},
-                             {"shard", blkid.id.shard},
-                         }}};
-
-        LOG(DEBUG) << to_string(answer);
-
         CHECK(block.not_null());
 
+        auto blkid = block->block_id();
         auto block_root = block->root_cell();
         if (block_root.is_null()) {
           LOG(ERROR) << "block has no valid root cell";
           return;
         }
 
+        //
+        // Parsing
+        //
+
+        json answer;
+
+        answer["BlockIdExt"] = {{"file_hash", blkid.file_hash.to_hex()},
+                                {"root_hash", blkid.root_hash.to_hex()},
+                                {"id",
+                                 {
+                                     {"workchain", blkid.id.workchain},
+                                     {"seqno", blkid.id.seqno},
+                                     {"shard", blkid.id.shard},
+                                 }}};
+
         block::gen::Block::Record blk;
         block::gen::BlockInfo::Record info;
         block::gen::BlockExtra::Record extra;
+        ShardIdFull shard;
+        block::gen::GlobalVersion::Record global_version;
 
-        if (!(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra))) {
+        if (!(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra) &&
+              block::tlb::t_ShardIdent.unpack(info.shard.write(), shard)) &&
+            tlb::unpack(info.gen_software.write(), global_version)) {
           LOG(ERROR) << "cannot unpack Block header";
           return;
         }
+        // todo: master_ref, prev_ref, prev_vert_ref
+        answer["BlockInfo"] = {{"version", info.version},
+                               {"not_master", info.not_master},
+                               {"after_merge", info.after_merge},
+                               {"before_split", info.before_split},
+                               {"after_split", info.after_split},
+                               {"want_split", info.want_split},
+                               {"want_merge", info.want_merge},
+                               {"key_block", info.key_block},
+                               {"vert_seqno_incr", info.vert_seqno_incr},
+                               {"flags", info.flags},
+                               {"seq_no", info.seq_no},
+                               {"vert_seq_no", info.vert_seq_no},
+                               {"shard", {{"workchain", shard.workchain}, {"shard", shard.shard}}},
+                               {"gen_utime", info.gen_utime},
+                               {"start_lt", info.start_lt},
+                               {"end_lt", info.end_lt},
+                               {"gen_validator_list_hash_short", info.gen_validator_list_hash_short},
+                               {"gen_catchain_seqno", info.gen_catchain_seqno},
+                               {"min_ref_mc_seqno", info.min_ref_mc_seqno},
+                               {"prev_key_block_seqno", info.prev_key_block_seqno},
+                               {
+                                   "global_version",
+                                   {{"version", global_version.version, "capabilities", global_version.capabilities}},
+                               }};
+
+        LOG(DEBUG) << to_string(answer);
 
         LOG(DEBUG) << " ------------ PARSED BLOCK HEADER ------------";
         LOG(DEBUG) << "Field: block | Value: " << blkid.to_str();
