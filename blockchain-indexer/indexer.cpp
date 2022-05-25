@@ -231,14 +231,17 @@ class Indexer : public td::actor::Actor {
     LOG(DEBUG) << "Returned to Indexer";
 
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
+      LOG(DEBUG) << "Returned to Indexer";
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
+        LOG(DEBUG) << "Returned to Indexer";
         auto block = R.move_as_ok();
-        CHECK(block.not_null());
-
+        LOG(DEBUG) << "Returned to Indexer";
         auto blkid = block->block_id();
+        LOG(DEBUG) << "Returned to Indexer";
         auto block_root = block->root_cell();
+        LOG(DEBUG) << "Returned to Indexer";
         if (block_root.is_null()) {
           LOG(ERROR) << "block has no valid root cell";
           return;
@@ -247,9 +250,9 @@ class Indexer : public td::actor::Actor {
         //
         // Parsing
         //
-
+        LOG(DEBUG) << "Returned to Indexer";
         json answer;
-
+        LOG(DEBUG) << "Returned to Indexer";
         answer["BlockIdExt"] = {{"file_hash", blkid.file_hash.to_hex()},
                                 {"root_hash", blkid.root_hash.to_hex()},
                                 {"id",
