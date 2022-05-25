@@ -5,7 +5,7 @@ if (NOT OPENSSL_FOUND)
     find_package(OpenSSL REQUIRED)
 endif ()
 
-set(INDEXER_SOURCE indexer.cpp)
+set(INDEXER_SOURCE indexer.cpp json.hpp)
 
 add_executable(blockchain-indexer ${INDEXER_SOURCE})
 target_include_directories(blockchain-indexer PUBLIC)

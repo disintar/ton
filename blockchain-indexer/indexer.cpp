@@ -5,7 +5,6 @@
 #include "td/utils/logging.h"
 #include "td/actor/actor.h"
 #include "td/utils/Time.h"
-#include "td/utils/Random.h"
 #include "td/utils/filesystem.h"
 #include "td/utils/JsonBuilder.h"
 #include "auto/tl/ton_api_json.h"
@@ -14,39 +13,24 @@
 #include "validator/manager-disk.h"
 #include "ton/ton-types.h"
 #include "ton/ton-tl.hpp"
-#include "ton/ton-io.hpp"
-#include "vm/boc.h"
 #include "tl/tlblib.hpp"
 #include "block/block.h"
 #include "block/block-parse.h"
 #include "block/block-auto.h"
-#include "block/check-proof.h"
 #include "vm/dict.h"
 #include "vm/cells/MerkleProof.h"
 #include "vm/vm.h"
-#include "liteserver.hpp"
 #include "td/utils/Slice.h"
 #include "td/utils/common.h"
-#include "td/utils/crypto.h"
-#include "td/utils/overloaded.h"
 #include "auto/tl/lite_api.h"
-#include "auto/tl/lite_api.hpp"
 #include "adnl/utils.hpp"
-#include "ton/lite-tl.hpp"
-#include "tl-utils/lite-utils.hpp"
-#include "td/utils/Random.h"
-#include "vm/boc.h"
-#include "tl/tlblib.hpp"
-#include "block/block.h"
-#include "block/block-parse.h"
-#include "block/block-auto.h"
-#include "block/check-proof.h"
-#include "vm/dict.h"
-#include "vm/cells/MerkleProof.h"
-#include "vm/vm.h"
-#include "vm/memo.h"
 #include "shard.hpp"
 #include "validator-set.hpp"
+#include "json.hpp"
+
+// for convenience
+using json = nlohmann::json;
+
 using td::Ref;
 
 namespace ton {
@@ -253,22 +237,33 @@ class Indexer : public td::actor::Actor {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
         auto block = R.move_as_ok();
-        LOG(DEBUG) << "data was received!";
-        LOG(DEBUG) << block->block_id();
+        json answer;
+
         auto blkid = block->block_id();
+
+        answer["id"] = {{"file_hash", blkid.file_hash.to_hex()},
+                        {"root_hash", blkid.root_hash.to_hex()},
+                        {"id",
+                         {
+                             {"workchain", blkid.id.workchain},
+                             {"seqno", blkid.id.seqno},
+                             {"shard", blkid.id.shard},
+                         }}};
+
+        LOG(DEBUG) << to_string(answer);
 
         CHECK(block.not_null());
 
         auto block_root = block->root_cell();
-
         if (block_root.is_null()) {
           LOG(ERROR) << "block has no valid root cell";
           return;
         }
-        vm::MerkleProofBuilder mpb{block_root};
+
         block::gen::Block::Record blk;
         block::gen::BlockInfo::Record info;
         block::gen::BlockExtra::Record extra;
+
         if (!(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra))) {
           LOG(ERROR) << "cannot unpack Block header";
           return;
@@ -296,8 +291,6 @@ class Indexer : public td::actor::Actor {
         LOG(DEBUG) << "Field: min_ref_mc_seqno | Value: " << info.min_ref_mc_seqno;
         LOG(DEBUG) << "Field: vert_seqno | Value: " << info.vert_seq_no;
         LOG(DEBUG) << "Field: vert_seqno_incr | Value: " << info.vert_seqno_incr;
-        LOG(DEBUG) << "Field: prev_key_block_seqno | Value: "
-                   << ton::BlockId{ton::masterchainId, ton::shardIdAll, info.prev_key_block_seqno};
         LOG(DEBUG) << " ------------ PARSED BLOCK HEADER ------------";
 
         auto inmsg_cs = vm::load_cell_slice_ref(extra.in_msg_descr);
