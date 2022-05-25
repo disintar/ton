@@ -260,7 +260,7 @@ class Indexer : public td::actor::Actor {
                                      {"seqno", blkid.id.seqno},
                                      {"shard", blkid.id.shard},
                                  }}};
-
+        LOG(DEBUG) << to_string(answer["BlockIdExt"]);
         block::gen::Block::Record blk;
         block::gen::BlockInfo::Record info;
         block::gen::BlockExtra::Record extra;
@@ -268,8 +268,8 @@ class Indexer : public td::actor::Actor {
         block::gen::GlobalVersion::Record global_version;
 
         if (!(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra) &&
-              block::tlb::t_ShardIdent.unpack(info.shard.write(), shard)) &&
-            tlb::unpack(info.gen_software.write(), global_version)) {
+              block::tlb::t_ShardIdent.unpack(info.shard.write(), shard) &&
+              tlb::unpack(info.gen_software.write(), global_version))) {
           LOG(ERROR) << "cannot unpack Block header";
           return;
         }
