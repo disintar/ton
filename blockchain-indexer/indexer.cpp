@@ -48,28 +48,6 @@
 #include "shard.hpp"
 #include "validator-set.hpp"
 using td::Ref;
-static bool visit(Ref<vm::Cell> cell);
-
-static bool visit(const vm::CellSlice &cs) {
-  auto cnt = cs.size_refs();
-  bool res = true;
-  for (unsigned i = 0; i < cnt; i++) {
-    res &= visit(cs.prefetch_ref(i));
-  }
-  return res;
-}
-
-static bool visit(Ref<vm::Cell> cell) {
-  if (cell.is_null()) {
-    return true;
-  }
-  vm::CellSlice cs{vm::NoVm{}, std::move(cell)};
-  return visit(cs);
-}
-
-static bool visit(Ref<vm::CellSlice> cs_ref) {
-  return cs_ref.is_null() || visit(*cs_ref);
-}
 
 namespace ton {
 
@@ -290,6 +268,11 @@ class Indexer : public td::actor::Actor {
         vm::MerkleProofBuilder mpb{block_root};
         block::gen::Block::Record blk;
         block::gen::BlockInfo::Record info;
+        block::gen::BlockExtra::Record extra;
+        if (!(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra))) {
+          LOG(ERROR) << "cannot unpack Block header";
+          return;
+        }
 
         LOG(DEBUG) << " ------------ PARSED BLOCK HEADER ------------";
         LOG(DEBUG) << "Field: block | Value: " << blkid.to_str();
@@ -317,13 +300,44 @@ class Indexer : public td::actor::Actor {
                    << ton::BlockId{ton::masterchainId, ton::shardIdAll, info.prev_key_block_seqno};
         LOG(DEBUG) << " ------------ PARSED BLOCK HEADER ------------";
 
+        auto inmsg_cs = vm::load_cell_slice_ref(extra.in_msg_descr);
+        auto outmsg_cs = vm::load_cell_slice_ref(extra.out_msg_descr);
 
-        block::gen::BlockExtra::Record extra;
-        if (!(tlb::unpack_cell(std::move(blk.extra), extra))) {
-          LOG(ERROR) << "Can't unpack extra";
+        auto in_msg_dict_ =
+            std::make_unique<vm::AugmentedDictionary>(std::move(inmsg_cs), 256, block::tlb::aug_InMsgDescr);
+        auto out_msg_dict_ =
+            std::make_unique<vm::AugmentedDictionary>(std::move(outmsg_cs), 256, block::tlb::aug_OutMsgDescr);
+        auto account_blocks_dict_ = std::make_unique<vm::AugmentedDictionary>(
+            vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
+
+        LOG(DEBUG) << "validating InMsgDescr";
+        if (!in_msg_dict_->validate_all()) {
+          LOG(ERROR) << "InMsgDescr dictionary is invalid";
+          return;
+        }
+        LOG(DEBUG) << "validating OutMsgDescr";
+        if (!out_msg_dict_->validate_all()) {
+          LOG(ERROR) << "OutMsgDescr dictionary is invalid";
+          return;
+        }
+        LOG(DEBUG) << "validating ShardAccountBlocks";
+        if (!account_blocks_dict_->validate_all()) {
+          LOG(ERROR) << "ShardAccountBlocks dictionary is invalid";
           return;
         }
 
+        auto value_flow_root = blk.value_flow;
+        block::ValueFlow value_flow;
+
+        vm::CellSlice cs{vm::NoVmOrd(), value_flow_root};
+        if (!(cs.is_valid() && value_flow.fetch(cs) && cs.empty_ext())) {
+          LOG(ERROR) << "cannot unpack ValueFlow of the new block ";
+          return;
+        }
+
+        std::ostringstream os;
+        value_flow.show(os);
+        LOG(DEBUG) << "value flow: " << os.str();
       }
     });
 
