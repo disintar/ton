@@ -22,6 +22,8 @@
 #include "vm/vm.h"
 #include "td/utils/Slice.h"
 #include "td/utils/common.h"
+
+#include <utility>
 #include "auto/tl/lite_api.h"
 #include "adnl/utils.hpp"
 #include "shard.hpp"
@@ -32,6 +34,26 @@
 using json = nlohmann::json;
 
 using td::Ref;
+
+nlohmann::basic_json<> show_extra(Ref<vm::Cell> extra) {
+  vm::Dictionary dict{std::move(extra), 32};
+  json extra_json;
+
+  dict.check_for_each([&extra_json](Ref<vm::CellSlice> csr, td::ConstBitPtr key, int n) {
+    CHECK(n == 32);
+    int x = (int)key.get_int(n);
+    auto val = block::tlb::t_VarUIntegerPos_32.as_integer_skip(csr.write());
+    if (val.is_null() || !csr->empty_ext()) {
+      return false;
+    }
+
+    extra_json[x] = val.write().to_long();
+
+    return true;
+  });
+
+  return extra_json;
+}
 
 namespace ton {
 
@@ -264,6 +286,13 @@ class Indexer : public td::actor::Actor {
         block::gen::Block::Record blk;
         block::gen::BlockInfo::Record info;
         block::gen::BlockExtra::Record extra;
+        auto value_flow_root = blk.value_flow;
+        block::ValueFlow value_flow;
+        vm::CellSlice cs{vm::NoVmOrd(), value_flow_root};
+        if (!(cs.is_valid() && value_flow.fetch(cs) && cs.empty_ext())) {
+          LOG(ERROR) << "cannot unpack ValueFlow of the new block ";
+          return;
+        }
 
         if (!(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra))) {
           LOG(ERROR) << "cannot unpack Block header";
@@ -292,6 +321,13 @@ class Indexer : public td::actor::Actor {
 
         LOG(DEBUG) << to_string(answer);
 
+        LOG(DEBUG) << to_string(show_extra(value_flow.from_prev_blk.extra));
+//        answer["ValueFlow"] = {{"from_prev_blk",
+//                                {{"grams", value_flow.from_prev_blk.grams},
+//                                 {
+//                                     "extra", show_extra(value_flow.from_prev_blk.extra)
+//                                 }}}};
+
         auto inmsg_cs = vm::load_cell_slice_ref(extra.in_msg_descr);
         auto outmsg_cs = vm::load_cell_slice_ref(extra.out_msg_descr);
 
@@ -301,31 +337,6 @@ class Indexer : public td::actor::Actor {
             std::make_unique<vm::AugmentedDictionary>(std::move(outmsg_cs), 256, block::tlb::aug_OutMsgDescr);
         auto account_blocks_dict_ = std::make_unique<vm::AugmentedDictionary>(
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
-
-        LOG(DEBUG) << "validating InMsgDescr";
-        if (!in_msg_dict_->validate_all()) {
-          LOG(ERROR) << "InMsgDescr dictionary is invalid";
-          return;
-        }
-        LOG(DEBUG) << "validating OutMsgDescr";
-        if (!out_msg_dict_->validate_all()) {
-          LOG(ERROR) << "OutMsgDescr dictionary is invalid";
-          return;
-        }
-        LOG(DEBUG) << "validating ShardAccountBlocks";
-        if (!account_blocks_dict_->validate_all()) {
-          LOG(ERROR) << "ShardAccountBlocks dictionary is invalid";
-          return;
-        }
-
-        auto value_flow_root = blk.value_flow;
-        block::ValueFlow value_flow;
-
-        vm::CellSlice cs{vm::NoVmOrd(), value_flow_root};
-        if (!(cs.is_valid() && value_flow.fetch(cs) && cs.empty_ext())) {
-          LOG(ERROR) << "cannot unpack ValueFlow of the new block ";
-          return;
-        }
 
         std::ostringstream os;
         value_flow.show(os);
