@@ -376,17 +376,20 @@ class Indexer : public td::actor::Actor {
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
 
         account_blocks_dict->check_for_each_extra(
-            [&account_blocks_dict, &workchain, &now](const Ref<vm::CellSlice> &value, Ref<vm::CellSlice> extra, td::ConstBitPtr key, int key_len) {
+            [&account_blocks_dict, &workchain, &now](const Ref<vm::CellSlice> &value, Ref<vm::CellSlice> extra,
+                                                     td::ConstBitPtr key, int key_len) {
               CHECK(key_len == 256);
               const StdSmcAddress &acc_addr = key;
               LOG(DEBUG) << "Account " << acc_addr;
               auto dict_entry = account_blocks_dict->lookup_extra(key, 256);
 
               auto account = std::move(dict_entry.first);
-              auto account_state = account_blocks_dict->extract_value(std::move(extra));
-              LOG(DEBUG) << "to print";
-              block::gen::t_ShardAccount.print(std::cout, *account_state);
-              LOG(DEBUG) << "printed";
+              block::gen::CurrencyCollection::Record account_cc;
+              CHECK(tlb::unpack(extra.write(), account_cc))
+              LOG(DEBUG) << "Grams: " << account_cc.grams;
+
+              json j_list(parse_extra_currency(account_cc.other->get_base_cell()));
+              LOG(DEBUG) << "Other: " << to_string(j_list);
 
               block::gen::AccountBlock::Record acc_blk;
               CHECK(tlb::csr_unpack(value, acc_blk) && acc_blk.account_addr == acc_addr);
@@ -400,14 +403,14 @@ class Indexer : public td::actor::Actor {
 
               LOG(DEBUG) << "min_trans_lt " << min_trans_lt << " max_trans_lt " << max_trans_lt;
 
-//              auto trans_parser = [min_trans_lt, max_trans_lt](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra,
-//                                                                     td::ConstBitPtr key, int key_len) {
-//                CHECK(key_len == 64);
-//                ton::LogicalTime lt = key.get_uint(64);
-//                extra.clear();
-//                return;
-//              };
-//              trans_dict.check_for_each_extra(trans_parser);
+              //              auto trans_parser = [min_trans_lt, max_trans_lt](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra,
+              //                                                                     td::ConstBitPtr key, int key_len) {
+              //                CHECK(key_len == 64);
+              //                ton::LogicalTime lt = key.get_uint(64);
+              //                extra.clear();
+              //                return;
+              //              };
+              //              trans_dict.check_for_each_extra(trans_parser);
 
               return false;
             });
