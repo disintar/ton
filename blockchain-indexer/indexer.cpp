@@ -374,11 +374,10 @@ class Indexer : public td::actor::Actor {
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
 
         account_blocks_dict->check_for_each_extra(
-            [](const Ref<vm::CellSlice> &value, const Ref<vm::CellSlice>& extra, td::BitPtrGen<const unsigned char> key, int key_len) {
+            [](const Ref<vm::CellSlice> &value, const Ref<vm::CellSlice>& extra, td::ConstBitPtr key, int key_len) {
               CHECK(key_len == 256);
-
-              LOG(DEBUG) << key;
-
+              const StdSmcAddress& acc_addr = key;
+              LOG(DEBUG) << acc_addr;
               return false;
             });
 
