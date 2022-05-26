@@ -376,20 +376,21 @@ class Indexer : public td::actor::Actor {
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
 
         account_blocks_dict->check_for_each_extra(
-            [&account_blocks_dict, &workchain, &now](const Ref<vm::CellSlice> &value, Ref<vm::CellSlice> extra,
-                                                     td::ConstBitPtr key, int key_len) {
+            [&workchain](const Ref<vm::CellSlice> &value, Ref<vm::CellSlice> extra, td::ConstBitPtr key, int key_len) {
+              json account_block_parsed;
               CHECK(key_len == 256);
               const StdSmcAddress &acc_addr = key;
-              LOG(DEBUG) << "Account " << acc_addr;
-              auto dict_entry = account_blocks_dict->lookup_extra(key, 256);
+              account_block_parsed["Address"] = acc_addr.to_hex();
+              account_block_parsed["Workchain"] = workchain;
 
-              auto account = std::move(dict_entry.first);
               block::gen::CurrencyCollection::Record account_cc;
               CHECK(tlb::unpack(extra.write(), account_cc))
-              LOG(DEBUG) << "Grams: " << account_cc.grams;
 
-              json j_list(parse_extra_currency(account_cc.other->prefetch_ref()));
-              LOG(DEBUG) << "Other: " << to_string(j_list);
+              account_block_parsed["CurrencyCollection"] = {
+                  {"gram", block::tlb::t_Grams.as_integer(account_cc.grams)->to_dec_string()},
+                  {"extra", parse_extra_currency(account_cc.other->prefetch_ref())}};
+
+              LOG(DEBUG) << to_string(account_block_parsed);
 
               block::gen::AccountBlock::Record acc_blk;
               CHECK(tlb::csr_unpack(value, acc_blk) && acc_blk.account_addr == acc_addr);
