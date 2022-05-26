@@ -375,22 +375,18 @@ class Indexer : public td::actor::Actor {
         auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
 
-        account_blocks_dict->check_for_each(
-            [&account_blocks_dict, &workchain, &now](const Ref<vm::CellSlice> &value, td::ConstBitPtr key, int key_len) {
+        account_blocks_dict->check_for_each_extra(
+            [&account_blocks_dict, &workchain, &now](const Ref<vm::CellSlice> &value, Ref<vm::CellSlice> extra, td::ConstBitPtr key, int key_len) {
               CHECK(key_len == 256);
               const StdSmcAddress &acc_addr = key;
               LOG(DEBUG) << "Account " << acc_addr;
               auto dict_entry = account_blocks_dict->lookup_extra(key, 256);
 
               auto account = std::move(dict_entry.first);
-              auto extra = std::move(dict_entry.second);
-              auto account_new = std::make_unique<block::Account>(workchain, key);
-
-              // TODO: fix special (validate-query.cpp 4080) + double check now
-              account_new->unpack(std::move(account), std::move(extra), now, false);
-
-              LOG(DEBUG) << "Parsed account " << account_new->addr;
-              LOG(DEBUG) << "Parsed account " << account_new->balance.grams;
+              auto account_state = account_blocks_dict->extract_value(std::move(extra));
+              LOG(DEBUG) << "to print";
+              block::gen::t_ShardAccount.print(std::cout, *account_state);
+              LOG(DEBUG) << "printed";
 
               block::gen::AccountBlock::Record acc_blk;
               CHECK(tlb::csr_unpack(value, acc_blk) && acc_blk.account_addr == acc_addr);
