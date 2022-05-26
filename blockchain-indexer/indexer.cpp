@@ -388,7 +388,7 @@ class Indexer : public td::actor::Actor {
               CHECK(tlb::unpack(extra.write(), account_cc))
               LOG(DEBUG) << "Grams: " << account_cc.grams;
 
-              json j_list(parse_extra_currency(account_cc.other->get_base_cell()));
+              json j_list(parse_extra_currency(account_cc.other->prefetch_ref()));
               LOG(DEBUG) << "Other: " << to_string(j_list);
 
               block::gen::AccountBlock::Record acc_blk;
