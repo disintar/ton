@@ -38,6 +38,29 @@ using td::Ref;
 namespace ton {
 
 namespace validator {
+
+std::list<std::tuple<int, std::string>> parse_extra_currency(const Ref<vm::Cell> &extra) {
+  std::list<std::tuple<int, std::string>> c_list;
+
+  if (extra.not_null()) {
+    vm::Dictionary dict{extra, 32};
+    !dict.check_for_each([&c_list](td::Ref<vm::CellSlice> csr, td::ConstBitPtr key, int n) {
+      CHECK(n == 32);
+      int x = (int)key.get_int(n);
+      auto val = block::tlb::t_VarUIntegerPos_32.as_integer_skip(csr.write());
+      if (val.is_null() || !csr->empty_ext()) {
+        return false;
+      }
+
+      c_list.emplace_back(x, val->to_dec_string());
+
+      return true;
+    });
+  }
+
+  return c_list;
+}
+
 class Indexer : public td::actor::Actor {
  private:
   std::string db_root_ = "/mnt/ton/ton-node/db";
@@ -304,27 +327,49 @@ class Indexer : public td::actor::Actor {
           return;
         }
 
-        std::list<std::tuple<int, std::string>> c_list;
+        answer["ValueFlow"] = {
+            {"from_prev_blk",
+             {"grams", value_flow.from_prev_blk.grams->to_dec_string()},
+             {"extra", parse_extra_currency(value_flow.from_prev_blk.extra)}},
 
-        LOG(DEBUG) << "GRAM: " << value_flow.from_prev_blk.grams;
+            {"to_next_blk",
+             {"grams", value_flow.to_next_blk.grams->to_dec_string()},
+             {"extra", parse_extra_currency(value_flow.to_next_blk.extra)}},
 
-        if (value_flow.from_prev_blk.extra.not_null()) {
-          vm::Dictionary dict{value_flow.from_prev_blk.extra, 32};
-          !dict.check_for_each([&c_list](Ref<vm::CellSlice> csr, td::ConstBitPtr key, int n) {
-            CHECK(n == 32);
-            int x = (int)key.get_int(n);
-            auto val = block::tlb::t_VarUIntegerPos_32.as_integer_skip(csr.write());
-            if (val.is_null() || !csr->empty_ext()) {
-              return false;
-            }
+            {"imported",
+             {"grams", value_flow.imported.grams->to_dec_string()},
+             {"extra", parse_extra_currency(value_flow.imported.extra)}},
 
-            c_list.emplace_back(x, val->to_dec_string());
+            {"exported",
+             {"grams", value_flow.exported.grams->to_dec_string()},
+             {"extra", parse_extra_currency(value_flow.exported.extra)}},
 
-            return true;
-          });
-        }
-        json j_list(c_list);
-        LOG(DEBUG) << "Extra: " << to_string(j_list);
+            {"fees_collected",
+             {"grams", value_flow.fees_collected.grams->to_dec_string()},
+             {"extra", parse_extra_currency(value_flow.fees_collected.extra)}},
+
+            {"fees_collected",
+             {"grams", value_flow.fees_imported.grams->to_dec_string()},
+             {"extra", parse_extra_currency(value_flow.fees_imported.extra)}},
+
+            {"recovered",
+             {"grams", value_flow.recovered.grams->to_dec_string()},
+             {"extra", parse_extra_currency(value_flow.recovered.extra)}},
+
+            {"created",
+             {"grams", value_flow.created.grams->to_dec_string()},
+             {"extra", parse_extra_currency(value_flow.created.extra)}},
+
+            {"minted",
+             {"grams", value_flow.minted.grams->to_dec_string()},
+             {"extra", parse_extra_currency(value_flow.minted.extra)}},
+        };
+
+        LOG(DEBUG) << "ValueFlow: " << to_string(answer["ValueFlow"]);
+
+        //
+        //        json j_list(c_list);
+        //        LOG(DEBUG) << "Extra: " << to_string(j_list);
 
         //        answer["ValueFlow"] = {{"from_prev_blk",
         //                                {{"grams", value_flow.from_prev_blk.grams},
@@ -341,10 +386,6 @@ class Indexer : public td::actor::Actor {
             std::make_unique<vm::AugmentedDictionary>(std::move(outmsg_cs), 256, block::tlb::aug_OutMsgDescr);
         auto account_blocks_dict_ = std::make_unique<vm::AugmentedDictionary>(
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
-
-        std::ostringstream os;
-        value_flow.show(os);
-        LOG(DEBUG) << "value flow: " << os.str();
       }
     });
 
