@@ -296,6 +296,8 @@ class Indexer : public td::actor::Actor {
           return;
         }
 
+        answer["global_id"] = blk.global_id;
+
         // todo: master_ref, prev_ref, prev_vert_ref, gen_software
         answer["BlockInfo"] = {{"version", info.version},
                                {"not_master", info.not_master},
@@ -370,12 +372,20 @@ class Indexer : public td::actor::Actor {
         auto inmsg_cs = vm::load_cell_slice_ref(extra.in_msg_descr);
         auto outmsg_cs = vm::load_cell_slice_ref(extra.out_msg_descr);
 
-        auto in_msg_dict_ =
+        auto in_msg_dict =
             std::make_unique<vm::AugmentedDictionary>(std::move(inmsg_cs), 256, block::tlb::aug_InMsgDescr);
-        auto out_msg_dict_ =
+        auto out_msg_dict =
             std::make_unique<vm::AugmentedDictionary>(std::move(outmsg_cs), 256, block::tlb::aug_OutMsgDescr);
-        auto account_blocks_dict_ = std::make_unique<vm::AugmentedDictionary>(
+        auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
+
+        account_blocks_dict->check_for_each(
+            [](const Ref<vm::CellSlice> &csr, td::BitPtrGen<const unsigned char> key, int n) {
+              int x = (int)key.get_int(n);
+              LOG(DEBUG) << "Account: " << x;
+
+              return false;
+            });
 
         answer["BlockExtra"] = {
             {"rand_seed", extra.rand_seed.to_hex()},
