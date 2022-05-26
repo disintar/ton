@@ -30,30 +30,10 @@
 #include "validator-set.hpp"
 #include "json.hpp"
 
-// for convenience
+// TODO: use td/utils/json
 using json = nlohmann::json;
 
 using td::Ref;
-
-nlohmann::basic_json<> show_extra(Ref<vm::Cell> extra) {
-  vm::Dictionary dict{std::move(extra), 32};
-  json extra_json;
-
-  dict.check_for_each([&extra_json](Ref<vm::CellSlice> csr, td::ConstBitPtr key, int n) {
-    CHECK(n == 32);
-    int x = (int)key.get_int(n);
-    auto val = block::tlb::t_VarUIntegerPos_32.as_integer_skip(csr.write());
-    if (val.is_null() || !csr->empty_ext()) {
-      return false;
-    }
-
-    extra_json[x] = val.write().to_long();
-
-    return true;
-  });
-
-  return extra_json;
-}
 
 namespace ton {
 
@@ -282,7 +262,7 @@ class Indexer : public td::actor::Actor {
                                      {"seqno", blkid.id.seqno},
                                      {"shard", blkid.id.shard},
                                  }}};
-        LOG(DEBUG) << to_string(answer["BlockIdExt"]);
+        LOG(DEBUG) << "BlockIdExt: " << to_string(answer["BlockIdExt"]);
 
         block::gen::Block::Record blk;
         block::gen::BlockInfo::Record info;
@@ -292,7 +272,8 @@ class Indexer : public td::actor::Actor {
           LOG(ERROR) << "cannot unpack Block header";
           return;
         }
-        // todo: master_ref, prev_ref, prev_vert_ref
+
+        // todo: master_ref, prev_ref, prev_vert_ref, gen_software
         answer["BlockInfo"] = {{"version", info.version},
                                {"not_master", info.not_master},
                                {"after_merge", info.after_merge},
@@ -313,7 +294,7 @@ class Indexer : public td::actor::Actor {
                                {"min_ref_mc_seqno", info.min_ref_mc_seqno},
                                {"prev_key_block_seqno", info.prev_key_block_seqno}};
 
-        LOG(DEBUG) << to_string(answer);
+        LOG(DEBUG) << "BlockInfo: " << to_string(answer["BlockInfo"]);
 
         auto value_flow_root = blk.value_flow;
         block::ValueFlow value_flow;
@@ -323,12 +304,33 @@ class Indexer : public td::actor::Actor {
           return;
         }
 
-        LOG(DEBUG) << to_string(show_extra(value_flow.from_prev_blk.extra));
-//        answer["ValueFlow"] = {{"from_prev_blk",
-//                                {{"grams", value_flow.from_prev_blk.grams},
-//                                 {
-//                                     "extra", show_extra(value_flow.from_prev_blk.extra)
-//                                 }}}};
+        std::list<std::tuple<int, std::string>> c_list;
+
+        LOG(DEBUG) << "GRAM: " << value_flow.from_prev_blk.grams;
+
+        if (value_flow.from_prev_blk.extra.not_null()) {
+          vm::Dictionary dict{value_flow.from_prev_blk.extra, 32};
+          !dict.check_for_each([&c_list](Ref<vm::CellSlice> csr, td::ConstBitPtr key, int n) {
+            CHECK(n == 32);
+            int x = (int)key.get_int(n);
+            auto val = block::tlb::t_VarUIntegerPos_32.as_integer_skip(csr.write());
+            if (val.is_null() || !csr->empty_ext()) {
+              return false;
+            }
+
+            c_list.emplace_back(x, val->to_dec_string());
+
+            return true;
+          });
+        }
+        json j_list(c_list);
+        LOG(DEBUG) << "Extra: " << to_string(j_list);
+
+        //        answer["ValueFlow"] = {{"from_prev_blk",
+        //                                {{"grams", value_flow.from_prev_blk.grams},
+        //                                 {
+        //                                     "extra", show_extra(value_flow.from_prev_blk.extra)
+        //                                 }}}};
 
         auto inmsg_cs = vm::load_cell_slice_ref(extra.in_msg_descr);
         auto outmsg_cs = vm::load_cell_slice_ref(extra.out_msg_descr);
