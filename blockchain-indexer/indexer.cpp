@@ -367,16 +367,6 @@ class Indexer : public td::actor::Actor {
 
         LOG(DEBUG) << "ValueFlow: " << to_string(answer["ValueFlow"]);
 
-        //
-        //        json j_list(c_list);
-        //        LOG(DEBUG) << "Extra: " << to_string(j_list);
-
-        //        answer["ValueFlow"] = {{"from_prev_blk",
-        //                                {{"grams", value_flow.from_prev_blk.grams},
-        //                                 {
-        //                                     "extra", show_extra(value_flow.from_prev_blk.extra)
-        //                                 }}}};
-
         auto inmsg_cs = vm::load_cell_slice_ref(extra.in_msg_descr);
         auto outmsg_cs = vm::load_cell_slice_ref(extra.out_msg_descr);
 
@@ -386,6 +376,27 @@ class Indexer : public td::actor::Actor {
             std::make_unique<vm::AugmentedDictionary>(std::move(outmsg_cs), 256, block::tlb::aug_OutMsgDescr);
         auto account_blocks_dict_ = std::make_unique<vm::AugmentedDictionary>(
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
+
+        answer["BlockExtra"] = {
+            {"rand_seed", extra.rand_seed.to_hex()},
+            {"created_by", extra.created_by.to_hex()},
+        };
+
+        LOG(DEBUG) << "BlockExtra: " << to_string(answer["BlockExtra"]);
+
+        vm::CellSlice upd_cs{vm::NoVmSpec(), blk.state_update};
+        if (!(upd_cs.is_special() && upd_cs.prefetch_long(8) == 4  // merkle update
+              && upd_cs.size_ext() == 0x20228)) {
+          LOG(ERROR) << "invalid Merkle update in block";
+          return;
+        }
+
+        auto state_old_hash = upd_cs.prefetch_ref(0)->get_hash(0).to_hex();
+        auto state_hash = upd_cs.prefetch_ref(1)->get_hash(0).to_hex();
+
+        answer["ShardState"] = {{"state_old_hash", state_old_hash}, {"state_hash", state_hash}};
+
+        LOG(DEBUG) << "ShardState: " << to_string(answer["ShardState"]);
       }
     });
 
