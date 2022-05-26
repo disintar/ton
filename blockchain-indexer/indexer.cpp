@@ -145,7 +145,7 @@ class Indexer : public td::actor::Actor {
     class Callback : public ValidatorManagerInterface::Callback {
      public:
       void initial_read_complete(BlockHandle handle) override {
-        LOG(DEBUG) << "INITIAL READ COMPLETE";
+        LOG(DEBUG) << "Initial read complete";
         td::actor::send_closure(id_, &Indexer::sync_complete, handle);
       }
       void add_shard(ShardIdFull shard) override {
@@ -232,8 +232,6 @@ class Indexer : public td::actor::Actor {
   }
 
   void sync_complete(const BlockHandle &handle) {
-    LOG(DEBUG) << "Sync complete: " << handle->id().to_str();
-
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
       LOG(DEBUG) << "Got Answer!";
 
@@ -246,17 +244,13 @@ class Indexer : public td::actor::Actor {
       }
     });
 
-    LOG(DEBUG) << "sending get_block_by_seqno_from_db request";
     ton::AccountIdPrefixFull pfx{ton::masterchainId, 0x8000000000000000};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20000000,
                             std::move(P));
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle) {
-    LOG(DEBUG) << "Returned to Indexer";
-
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
-      LOG(DEBUG) << "GOT!";
 
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
@@ -379,10 +373,11 @@ class Indexer : public td::actor::Actor {
         auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
 
-        account_blocks_dict->check_for_each(
-            [](const Ref<vm::CellSlice> &csr, td::BitPtrGen<const unsigned char> key, int n) {
-              int x = (int)key.get_int(n);
-              LOG(DEBUG) << "Account: " << x;
+        account_blocks_dict->check_for_each_extra(
+            [](const Ref<vm::CellSlice> &value, const Ref<vm::CellSlice>& extra, td::BitPtrGen<const unsigned char> key, int key_len) {
+              CHECK(key_len == 256);
+
+              LOG(DEBUG) << key;
 
               return false;
             });
