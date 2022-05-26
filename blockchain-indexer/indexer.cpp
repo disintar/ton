@@ -251,7 +251,6 @@ class Indexer : public td::actor::Actor {
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle) {
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
-
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
@@ -373,13 +372,50 @@ class Indexer : public td::actor::Actor {
         auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
 
-        account_blocks_dict->check_for_each_extra(
-            [](const Ref<vm::CellSlice> &value, const Ref<vm::CellSlice>& extra, td::ConstBitPtr key, int key_len) {
-              CHECK(key_len == 256);
-              const StdSmcAddress& acc_addr = key;
-              LOG(DEBUG) << acc_addr;
-              return false;
-            });
+        account_blocks_dict->check_for_each_extra([](const Ref<vm::CellSlice> &value, const Ref<vm::CellSlice> &extra,
+                                                     td::ConstBitPtr key, int key_len) {
+          CHECK(key_len == 256);
+          const StdSmcAddress &acc_addr = key;
+          LOG(DEBUG) << "Account" << acc_addr;
+
+          block::gen::AccountBlock::Record acc_blk;
+          CHECK(tlb::csr_unpack(value, acc_blk) && acc_blk.account_addr == acc_addr);
+          vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
+                                             block::tlb::aug_AccountTransactions};
+
+          auto f = [](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra, td::BitPtrGen<const unsigned char> key,
+                      int key_len) {
+            CHECK(key_len == 64);
+            ton::LogicalTime lt = key.get_uint(64);
+            LOG(DEBUG) << "LT: " << lt;
+
+            auto trans_root = value->prefetch_ref();
+
+            block::gen::Transaction::Record trans;
+            block::gen::HASH_UPDATE::Record hash_upd;
+            CHECK(tlb::unpack_cell(trans_root, trans) &&
+                  tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd));
+//
+//            if (!trans.r1.in_msg.is_null()) {
+//              auto in_msg_root = trans.r1.in_msg.write();
+//
+//              block::gen::MessageAny::Record in_msg_parsed;
+//              tlb::unpack(in_msg_root, in_msg_parsed);
+//
+//
+//              LOG(DEBUG) << in_msg_parsed.
+//            } {
+//              LOG(DEBUG) << "No in_msg here";
+//            }
+            // ton::LogicalTime lt = key.get_uint(64);
+            return;
+          };
+
+          trans_dict.check_for_each_extra(
+              reinterpret_cast<const std::function<bool(Ref<vm::CellSlice>, Ref<vm::CellSlice>,
+                                                        td::BitPtrGen<const unsigned char>, int)> &>(f));
+          return false;
+        });
 
         answer["BlockExtra"] = {
             {"rand_seed", extra.rand_seed.to_hex()},
