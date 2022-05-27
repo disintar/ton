@@ -407,7 +407,7 @@ class Indexer : public td::actor::Actor {
                 LOG(DEBUG) << "Trans CC Gram: " << block::tlb::t_Grams.as_integer(trans_cc.grams)->to_dec_string();
 
                 json j_list(parse_extra_currency(trans_cc.other->prefetch_ref()));
-                LOG(DEBUG) << "Trans CC Extra: " << j_list;
+                LOG(DEBUG) << "Trans CC Extra: " << to_string(j_list);
 
                 auto trans_root = value->prefetch_ref();
 
