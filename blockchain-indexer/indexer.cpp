@@ -245,8 +245,8 @@ class Indexer : public td::actor::Actor {
       }
     });
 
-    ton::AccountIdPrefixFull pfx{ton::masterchainId, 0x8000000000000000};
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20067276,
+    ton::AccountIdPrefixFull pfx{0, 0x8000000000000000};
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20077316,
                             std::move(P));
   }
 
