@@ -375,46 +375,48 @@ class Indexer : public td::actor::Actor {
         auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
 
-        account_blocks_dict->check_for_each_extra(
-            [&workchain](const Ref<vm::CellSlice> &value, Ref<vm::CellSlice> extra, td::ConstBitPtr key, int key_len) {
-              json account_block_parsed;
-              CHECK(key_len == 256);
-              const StdSmcAddress &acc_addr = key;
-              account_block_parsed["Address"] = acc_addr.to_hex();
-              account_block_parsed["Workchain"] = workchain;
+        account_blocks_dict->check_for_each_extra([&workchain](const Ref<vm::CellSlice> &value,
+                                                               Ref<vm::CellSlice> extra, td::ConstBitPtr key,
+                                                               int key_len) {
+          json account_block_parsed;
+          CHECK(key_len == 256);
+          const StdSmcAddress &acc_addr = key;
+          account_block_parsed["Address"] = acc_addr.to_hex();
+          account_block_parsed["Workchain"] = workchain;
 
-              block::gen::CurrencyCollection::Record account_cc;
-              CHECK(tlb::unpack(extra.write(), account_cc))
+          block::gen::CurrencyCollection::Record account_cc;
+          CHECK(tlb::unpack(extra.write(), account_cc))
 
-              account_block_parsed["CurrencyCollection"] = {
-                  {"gram", block::tlb::t_Grams.as_integer(account_cc.grams)->to_dec_string()},
-                  {"extra", parse_extra_currency(account_cc.other->prefetch_ref())}};
+          account_block_parsed["CurrencyCollection"] = {
+              {"gram", block::tlb::t_Grams.as_integer(account_cc.grams)->to_dec_string()},
+              {"extra", parse_extra_currency(account_cc.other->prefetch_ref())}};
 
-              LOG(DEBUG) << to_string(account_block_parsed);
+          block::gen::AccountBlock::Record acc_blk;
+          CHECK(tlb::csr_unpack(value, acc_blk) && acc_blk.account_addr == acc_addr);
+          vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
+                                             block::tlb::aug_AccountTransactions};
 
-              block::gen::AccountBlock::Record acc_blk;
-              CHECK(tlb::csr_unpack(value, acc_blk) && acc_blk.account_addr == acc_addr);
-              vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
-                                                 block::tlb::aug_AccountTransactions};
+          trans_dict.check_for_each_extra([](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra, td::ConstBitPtr key,
+                                             int key_len) {
+            CHECK(key_len == 64);
+            ton::LogicalTime lt = key.get_uint(64);
+            LOG(DEBUG) << "OP!";
+            LOG(DEBUG) << "LT: " << lt;
+            return true; });
+          //              trans_dict.check_for_each_extra(
+          //                  [](Ref<vm::CellSlice> v, Ref<vm::CellSlice> e, td::BitPtrGen<const unsigned char> k, int kl) {});
 
-              td::BitArray<64> min_trans, max_trans;
-              CHECK(trans_dict.get_minmax_key(min_trans).not_null() &&
-                    trans_dict.get_minmax_key(max_trans, true).not_null());
-              ton::LogicalTime min_trans_lt = min_trans.to_ulong(), max_trans_lt = max_trans.to_ulong();
+          //              auto trans_parser = [min_trans_lt, max_trans_lt](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra,
+          //                                                                     td::ConstBitPtr key, int key_len) {
+          //                CHECK(key_len == 64);
+          //                ton::LogicalTime lt = key.get_uint(64);
+          //                extra.clear();
+          //                return;
+          //              };
+          //              trans_dict.check_for_each_extra(trans_parser);
 
-              LOG(DEBUG) << "min_trans_lt " << min_trans_lt << " max_trans_lt " << max_trans_lt;
-
-              //              auto trans_parser = [min_trans_lt, max_trans_lt](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra,
-              //                                                                     td::ConstBitPtr key, int key_len) {
-              //                CHECK(key_len == 64);
-              //                ton::LogicalTime lt = key.get_uint(64);
-              //                extra.clear();
-              //                return;
-              //              };
-              //              trans_dict.check_for_each_extra(trans_parser);
-
-              return false;
-            });
+          return false;
+        });
 
         answer["BlockExtra"] = {
             {"rand_seed", extra.rand_seed.to_hex()},
