@@ -417,7 +417,7 @@ class Indexer : public td::actor::Actor {
             CHECK(tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd));
 
             block::gen::CurrencyCollection::Record trans_total_fees_cc;
-            CHECK(tlb::unpack(extra.write(), trans_cc))
+            CHECK(tlb::unpack(trans.total_fees.write(), trans_total_fees_cc))
             LOG(DEBUG) << "Trans Total Fees CC Gram: " << block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string();
 
             json jt_list(parse_extra_currency(trans_total_fees_cc.other->prefetch_ref()));
