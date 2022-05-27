@@ -396,20 +396,23 @@ class Indexer : public td::actor::Actor {
           vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
                                              block::tlb::aug_AccountTransactions};
 
-          trans_dict.check_for_each_extra([](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra, td::ConstBitPtr key,
-                                             int key_len) {
-            CHECK(key_len == 64);
-            ton::LogicalTime lt = key.get_uint(64);
-            LOG(DEBUG) << "LT: " << lt;
+          trans_dict.check_for_each_extra(
+              [](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra, td::ConstBitPtr key, int key_len) {
+                CHECK(key_len == 64);
+                ton::LogicalTime lt = key.get_uint(64);
+                LOG(DEBUG) << "LT: " << lt;
 
-            block::gen::CurrencyCollection::Record trans_cc;
-            CHECK(tlb::unpack(extra.write(), trans_cc))
-            LOG(DEBUG) << "Trans CC Gram: " << block::tlb::t_Grams.as_integer(trans_cc.grams)->to_dec_string();
-            LOG(DEBUG) << "Trans CC Extra: " << parse_extra_currency(trans_cc.other->prefetch_ref());
+                block::gen::CurrencyCollection::Record trans_cc;
+                CHECK(tlb::unpack(extra.write(), trans_cc))
+                LOG(DEBUG) << "Trans CC Gram: " << block::tlb::t_Grams.as_integer(trans_cc.grams)->to_dec_string();
 
-            auto trans_root = value->prefetch_ref();
+                json j_list(parse_extra_currency(trans_cc.other->prefetch_ref()));
+                LOG(DEBUG) << "Trans CC Extra: " << j_list;
 
-            return true; });
+                auto trans_root = value->prefetch_ref();
+
+                return true;
+              });
           //              trans_dict.check_for_each_extra(
           //                  [](Ref<vm::CellSlice> v, Ref<vm::CellSlice> e, td::BitPtrGen<const unsigned char> k, int kl) {});
 
