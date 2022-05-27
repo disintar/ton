@@ -396,23 +396,42 @@ class Indexer : public td::actor::Actor {
           vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
                                              block::tlb::aug_AccountTransactions};
 
-          trans_dict.check_for_each_extra(
-              [](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra, td::ConstBitPtr key, int key_len) {
-                CHECK(key_len == 64);
-                ton::LogicalTime lt = key.get_uint(64);
-                LOG(DEBUG) << "LT: " << lt;
+          trans_dict.check_for_each_extra([](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra, td::ConstBitPtr key,
+                                             int key_len) {
+            CHECK(key_len == 64);
+            ton::LogicalTime lt = key.get_uint(64);
+            LOG(DEBUG) << "LT: " << lt;
 
-                block::gen::CurrencyCollection::Record trans_cc;
-                CHECK(tlb::unpack(extra.write(), trans_cc))
-                LOG(DEBUG) << "Trans CC Gram: " << block::tlb::t_Grams.as_integer(trans_cc.grams)->to_dec_string();
+            block::gen::CurrencyCollection::Record trans_cc;
+            CHECK(tlb::unpack(extra.write(), trans_cc))
+            LOG(DEBUG) << "Trans CC Gram: " << block::tlb::t_Grams.as_integer(trans_cc.grams)->to_dec_string();
 
-                json j_list(parse_extra_currency(trans_cc.other->prefetch_ref()));
-                LOG(DEBUG) << "Trans CC Extra: " << to_string(j_list);
+            json j_list(parse_extra_currency(trans_cc.other->prefetch_ref()));
+            LOG(DEBUG) << "Trans CC Extra: " << to_string(j_list);
 
-                auto trans_root = value->prefetch_ref();
+            auto trans_root = value->prefetch_ref();
+            block::gen::Transaction::Record trans;
+            block::gen::HASH_UPDATE::Record hash_upd;
 
-                return true;
-              });
+            CHECK(tlb::unpack_cell(trans_root, trans));
+            CHECK(tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd));
+
+            block::gen::CurrencyCollection::Record trans_total_fees_cc;
+            CHECK(tlb::unpack(extra.write(), trans_cc))
+            LOG(DEBUG) << "Trans Total Fees CC Gram: " << block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string();
+
+            json jt_list(parse_extra_currency(trans_total_fees_cc.other->prefetch_ref()));
+            LOG(DEBUG) << "Trans Total Fees CC Extra: " << to_string(jt_list);
+
+            LOG(DEBUG) << "Trans NOW: " << trans.now;
+            LOG(DEBUG) << "Trans lt: " << trans.lt;
+            LOG(DEBUG) << "Trans prev_trans_lt: " << trans.prev_trans_lt;
+            LOG(DEBUG) << "Trans outmsg_cnt: " << trans.outmsg_cnt;
+
+
+
+            return true;
+          });
           //              trans_dict.check_for_each_extra(
           //                  [](Ref<vm::CellSlice> v, Ref<vm::CellSlice> e, td::BitPtrGen<const unsigned char> k, int kl) {});
 
