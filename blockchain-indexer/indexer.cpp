@@ -398,27 +398,25 @@ class Indexer : public td::actor::Actor {
 
               int count = 0;
 
-//              td::BitArray<64> min_trans;
-//              trans_dict.get_minmax_key(min_trans);
-//              LOG(DEBUG) << "min_trans " << min_trans.to_long();
-
-              td::BitArray<64> cur_trans{(long long)~0ULL};
               while (true) {
-                Ref<vm::Cell> tvalue;
+                Ref<vm::CellSlice> tvalue;
                 try {
-                  tvalue = trans_dict.extract_value_ref(
-                      trans_dict.vm::DictionaryFixed::lookup_nearest_key(cur_trans.bits(), 64, ~0ULL));
+                  td::BitArray<64> min_trans;
+                  trans_dict.get_minmax_key(min_trans);
+                  LOG(DEBUG) << "min_trans " << min_trans.to_long();
+
+                  tvalue = trans_dict.lookup_delete(min_trans);
                 } catch (vm::VmError err) {
                   break;
                 }
+
                 if (tvalue.is_null()) {
                   break;
                 }
-
                 ++count;
               };
 
-              LOG(DEBUG) << "Count " << count;
+              LOG(DEBUG) << "Count: " << count;
 
               trans_dict.check_for_each_extra(
                   [&workchain](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra, td::ConstBitPtr key, int key_len) {
