@@ -397,12 +397,17 @@ class Indexer : public td::actor::Actor {
                                                  block::tlb::aug_AccountTransactions};
 
               int count = 0;
-              td::BitArray<64> cur_trans{(long long)start_lt};
+              td::BitArray<64> min_trans;
+              trans_dict.get_minmax_key(min_trans);
+              LOG(DEBUG) << "min_trans " << min_trans;
+
+
+
               while (true) {
                 Ref<vm::Cell> tvalue;
                 try {
                   tvalue = trans_dict.extract_value_ref(
-                      trans_dict.vm::DictionaryFixed::lookup_nearest_key(cur_trans.bits(), 64, true));
+                      trans_dict.vm::DictionaryFixed::lookup_nearest_key(min_trans.bits(), 64, true));
 
                 } catch (vm::VmError err) {
                   LOG(DEBUG) << "error while traversing transaction dictionary of an AccountBlock: ";
