@@ -398,51 +398,86 @@ class Indexer : public td::actor::Actor {
 
           trans_dict.check_for_each_extra([&workchain](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra,
                                                        td::ConstBitPtr key, int key_len) {
-            json transaction;
-
             CHECK(key_len == 64);
-            block::gen::CurrencyCollection::Record trans_cc;
-            CHECK(tlb::unpack(extra.write(), trans_cc))
+            ton::LogicalTime lt = key.get_uint(64);
+            LOG(DEBUG) << lt;
 
-            transaction["extra"] = {{"grams", block::tlb::t_Grams.as_integer(trans_cc.grams)->to_dec_string()},
-                                    {"extra", parse_extra_currency(trans_cc.other->prefetch_ref())}};
+            extra.clear();
+            //            json transaction;
+            //
+            //            CHECK(key_len == 64);
+            //            block::gen::CurrencyCollection::Record trans_cc;
+            //            CHECK(tlb::unpack(extra.write(), trans_cc))
+            //
+            //            transaction["extra"] = {{"grams", block::tlb::t_Grams.as_integer(trans_cc.grams)->to_dec_string()},
+            //                                    {"extra", parse_extra_currency(trans_cc.other->prefetch_ref())}};
+            //
+            //            auto trans_root = value->prefetch_ref();
+            //            block::gen::Transaction::Record trans;
+            //            block::gen::HASH_UPDATE::Record hash_upd;
+            //
+            //            CHECK(tlb::unpack_cell(trans_root, trans));
+            //            CHECK(tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd));
+            //
+            //            block::gen::CurrencyCollection::Record trans_total_fees_cc;
+            //            CHECK(tlb::unpack(trans.total_fees.write(), trans_total_fees_cc))
+            //
+            //            transaction["total_fees"] = {
+            //                {"grams", block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string()},
+            //                {"extra", parse_extra_currency(trans_total_fees_cc.other->prefetch_ref())}};
+            //
+            //            transaction["account_addr"] = {{"workchain", workchain}, {"address", trans.account_addr.to_hex()}};
+            //            transaction["lt"] = trans.lt;
+            //            transaction["prev_trans_hash"] = trans.prev_trans_hash.to_hex();
+            //            transaction["prev_trans_lt"] = trans.prev_trans_lt;
+            //            transaction["now"] = trans.now;
+            //            transaction["outmsg_cnt"] = trans.outmsg_cnt;
+            //
+            //            LOG(DEBUG) << "Transaction: " << transaction.dump(4);
 
-            auto trans_root = value->prefetch_ref();
-            block::gen::Transaction::Record trans;
-            block::gen::HASH_UPDATE::Record hash_upd;
+            return true;
+          });
 
-            CHECK(tlb::unpack_cell(trans_root, trans));
-            CHECK(tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd));
-
-            block::gen::CurrencyCollection::Record trans_total_fees_cc;
-            CHECK(tlb::unpack(trans.total_fees.write(), trans_total_fees_cc))
-
-            transaction["total_fees"] = {
-                {"grams", block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string()},
-                {"extra", parse_extra_currency(trans_total_fees_cc.other->prefetch_ref())}};
-
-            transaction["account_addr"] = {{"workchain", workchain}, {"address", trans.account_addr.to_hex()}};
-            transaction["lt"] = trans.lt;
-            transaction["prev_trans_hash"] = trans.prev_trans_hash.to_hex();
-            transaction["prev_trans_lt"] = trans.prev_trans_lt;
-            transaction["now"] = trans.now;
-            transaction["outmsg_cnt"] = trans.outmsg_cnt;
-
-            LOG(DEBUG) << "Transaction: " << transaction.dump(4);
+          trans_dict.check_for_each_extra([&workchain](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra,
+                                                       td::ConstBitPtr key, int key_len) {
+            CHECK(key_len == 64);
+            ton::LogicalTime lt = key.get_uint(64);
+            extra.clear();
+            LOG(DEBUG) << lt;
+            //            json transaction;
+            //
+            //            CHECK(key_len == 64);
+            //            block::gen::CurrencyCollection::Record trans_cc;
+            //            CHECK(tlb::unpack(extra.write(), trans_cc))
+            //
+            //            transaction["extra"] = {{"grams", block::tlb::t_Grams.as_integer(trans_cc.grams)->to_dec_string()},
+            //                                    {"extra", parse_extra_currency(trans_cc.other->prefetch_ref())}};
+            //
+            //            auto trans_root = value->prefetch_ref();
+            //            block::gen::Transaction::Record trans;
+            //            block::gen::HASH_UPDATE::Record hash_upd;
+            //
+            //            CHECK(tlb::unpack_cell(trans_root, trans));
+            //            CHECK(tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd));
+            //
+            //            block::gen::CurrencyCollection::Record trans_total_fees_cc;
+            //            CHECK(tlb::unpack(trans.total_fees.write(), trans_total_fees_cc))
+            //
+            //            transaction["total_fees"] = {
+            //                {"grams", block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string()},
+            //                {"extra", parse_extra_currency(trans_total_fees_cc.other->prefetch_ref())}};
+            //
+            //            transaction["account_addr"] = {{"workchain", workchain}, {"address", trans.account_addr.to_hex()}};
+            //            transaction["lt"] = trans.lt;
+            //            transaction["prev_trans_hash"] = trans.prev_trans_hash.to_hex();
+            //            transaction["prev_trans_lt"] = trans.prev_trans_lt;
+            //            transaction["now"] = trans.now;
+            //            transaction["outmsg_cnt"] = trans.outmsg_cnt;
+            //
+            //            LOG(DEBUG) << "Transaction: " << transaction.dump(4);
 
             return false;
           });
-          //              trans_dict.check_for_each_extra(
-          //                  [](Ref<vm::CellSlice> v, Ref<vm::CellSlice> e, td::BitPtrGen<const unsigned char> k, int kl) {});
-
-          //              auto trans_parser = [min_trans_lt, max_trans_lt](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra,
-          //                                                                     td::ConstBitPtr key, int key_len) {
-          //                CHECK(key_len == 64);
-          //                ton::LogicalTime lt = key.get_uint(64);
-          //                extra.clear();
-          //                return;
-          //              };
-          //              trans_dict.check_for_each_extra(trans_parser);
 
           return false;
         });
