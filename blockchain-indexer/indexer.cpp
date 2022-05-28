@@ -430,7 +430,7 @@ class Indexer : public td::actor::Actor {
 
             LOG(DEBUG) << "Transaction: " << transaction.dump(4);
 
-            return true;
+            return false;
           });
           //              trans_dict.check_for_each_extra(
           //                  [](Ref<vm::CellSlice> v, Ref<vm::CellSlice> e, td::BitPtrGen<const unsigned char> k, int kl) {});
