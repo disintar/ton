@@ -235,6 +235,8 @@ class Indexer : public td::actor::Actor {
   void sync_complete(const BlockHandle &handle) {
     const BlockSeqno seqnof = 20077309, seqnol = seqnof + 10;
     for (auto i = seqnof; i <= seqnol; ++i) {
+      //TODO: temp
+      LOG(DEBUG) << std::string("for ") + std::to_string(i);
       auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
         LOG(DEBUG) << "Got Answer!";
 
@@ -254,6 +256,8 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle) {
+    //TODO: temp
+    LOG(DEBUG) << "got_block_handle";
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
