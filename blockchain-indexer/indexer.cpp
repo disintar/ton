@@ -233,27 +233,24 @@ class Indexer : public td::actor::Actor {
   }
 
   void sync_complete(const BlockHandle &handle) {
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
-      LOG(DEBUG) << "Got Answer!";
+    const auto seqnof = 20077309, seqnol = seqnof + 10;
+    for (auto i = seqnof; i <= seqnol; ++i) {
+      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
+        LOG(DEBUG) << "Got Answer!";
 
-      if (R.is_error()) {
-        LOG(ERROR) << R.move_as_error().to_string();
-      } else {
-        auto handle = R.move_as_ok();
-        LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
-        td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle);
-      }
-    });
+        if (R.is_error()) {
+          LOG(ERROR) << R.move_as_error().to_string();
+        } else {
+          auto handle = R.move_as_ok();
+          LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
+          td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle);
+        }
+      });
 
-    ton::AccountIdPrefixFull pfx{0, 0x8000000000000000};
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20077309,
-                            std::move(P));
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20077310,
-                            std::move(P));
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20077311,
-                            std::move(P));
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20077312,
-                            std::move(P));
+      ton::AccountIdPrefixFull pfx{0, 0x8000000000000000};
+      td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, i,
+                              std::move(P));
+    }
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle) {
