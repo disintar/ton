@@ -248,6 +248,12 @@ class Indexer : public td::actor::Actor {
     ton::AccountIdPrefixFull pfx{0, 0x8000000000000000};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20077309,
                             std::move(P));
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20077310,
+                            std::move(P));
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20077311,
+                            std::move(P));
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 20077312,
+                            std::move(P));
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle) {
