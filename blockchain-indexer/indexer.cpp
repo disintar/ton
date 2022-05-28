@@ -397,20 +397,18 @@ class Indexer : public td::actor::Actor {
                                                  block::tlb::aug_AccountTransactions};
 
               int count = 0;
-              td::BitArray<64> min_trans;
-              trans_dict.get_minmax_key(min_trans);
-              LOG(DEBUG) << "min_trans " << min_trans.to_long();
 
+//              td::BitArray<64> min_trans;
+//              trans_dict.get_minmax_key(min_trans);
+//              LOG(DEBUG) << "min_trans " << min_trans.to_long();
+
+              td::BitArray<64> cur_trans{(long long)~0ULL};
               while (true) {
                 Ref<vm::Cell> tvalue;
                 try {
-                  auto key = trans_dict.vm::DictionaryFixed::lookup_nearest_key(min_trans.bits(), 64, false);
-                  LOG(DEBUG) << "Got key: ", key.is_null();
-                  tvalue = trans_dict.extract_value_ref(key);
-                  LOG(DEBUG) << "Got value: ", tvalue.is_null();
+                  tvalue = trans_dict.extract_value_ref(
+                      trans_dict.vm::DictionaryFixed::lookup_nearest_key(cur_trans.bits(), 64, !reverse));
                 } catch (vm::VmError err) {
-                  LOG(DEBUG) << "error while traversing transaction dictionary of an AccountBlock: ";
-                  LOG(DEBUG) << err.get_msg();
                   break;
                 }
                 if (tvalue.is_null()) {
@@ -418,8 +416,9 @@ class Indexer : public td::actor::Actor {
                 }
 
                 ++count;
-                LOG(DEBUG) << "Transaction found: " << count;
               };
+
+              LOG(DEBUG) << "Count " << count;
 
               trans_dict.check_for_each_extra(
                   [&workchain](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra, td::ConstBitPtr key, int key_len) {
