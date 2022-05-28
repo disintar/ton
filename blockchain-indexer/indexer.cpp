@@ -280,7 +280,7 @@ class Indexer : public td::actor::Actor {
                                      {"seqno", blkid.id.seqno},
                                      {"shFard", blkid.id.shard},
                                  }}};
-        LOG(DEBUG) << "BlockIdExt: " << to_string(answer["BlockIdExt"]);
+        LOG(DEBUG) << "BlockIdExt: " << answer["BlockIdExt"].dump(4);
 
         block::gen::Block::Record blk;
         block::gen::BlockInfo::Record info;
@@ -315,7 +315,7 @@ class Indexer : public td::actor::Actor {
                                {"min_ref_mc_seqno", info.min_ref_mc_seqno},
                                {"prev_key_block_seqno", info.prev_key_block_seqno}};
 
-        LOG(DEBUG) << "BlockInfo: " << to_string(answer["BlockInfo"]);
+        LOG(DEBUG) << "BlockInfo: " << answer["BlockInfo"].dump(4);
 
         auto value_flow_root = blk.value_flow;
         block::ValueFlow value_flow;
@@ -363,7 +363,7 @@ class Indexer : public td::actor::Actor {
              {"extra", parse_extra_currency(value_flow.minted.extra)}},
         };
 
-        LOG(DEBUG) << "ValueFlow: " << to_string(answer["ValueFlow"]);
+        LOG(DEBUG) << "ValueFlow: " << answer["ValueFlow"].dump(4);
 
         auto inmsg_cs = vm::load_cell_slice_ref(extra.in_msg_descr);
         auto outmsg_cs = vm::load_cell_slice_ref(extra.out_msg_descr);
@@ -381,8 +381,8 @@ class Indexer : public td::actor::Actor {
           json account_block_parsed;
           CHECK(key_len == 256);
           const StdSmcAddress &acc_addr = key;
-          account_block_parsed["Address"] = acc_addr.to_hex();
-          account_block_parsed["Workchain"] = workchain;
+          account_block_parsed["address"] = acc_addr.to_hex();
+          account_block_parsed["workchain"] = workchain;
 
           block::gen::CurrencyCollection::Record account_cc;
           CHECK(tlb::unpack(extra.write(), account_cc))
@@ -396,8 +396,8 @@ class Indexer : public td::actor::Actor {
           vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
                                              block::tlb::aug_AccountTransactions};
 
-          trans_dict.check_for_each_extra([](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra, td::ConstBitPtr key,
-                                             int key_len) {
+          trans_dict.check_for_each_extra([&workchain](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra,
+                                                       td::ConstBitPtr key, int key_len) {
             json transaction;
 
             CHECK(key_len == 64);
@@ -421,14 +421,14 @@ class Indexer : public td::actor::Actor {
                 {"grams", block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string()},
                 {"extra", parse_extra_currency(trans_total_fees_cc.other->prefetch_ref())}};
 
-            transaction["account_addr"] = trans.account_addr.to_hex();
+            transaction["account_addr"] = {{"workchain", workchain}, {"address", trans.account_addr.to_hex()}};
             transaction["lt"] = trans.lt;
             transaction["prev_trans_hash"] = trans.prev_trans_hash.to_hex();
             transaction["prev_trans_lt"] = trans.prev_trans_lt;
             transaction["now"] = trans.now;
             transaction["outmsg_cnt"] = trans.outmsg_cnt;
 
-            LOG(DEBUG) << "Transaction: " << to_string(transaction);
+            LOG(DEBUG) << "Transaction: " << transaction.dump(4);
 
             return true;
           });
@@ -452,7 +452,7 @@ class Indexer : public td::actor::Actor {
             {"created_by", extra.created_by.to_hex()},
         };
 
-        LOG(DEBUG) << "BlockExtra: " << to_string(answer["BlockExtra"]);
+        LOG(DEBUG) << "BlockExtra: " << answer["BlockExtra"].dump(4);
 
         vm::CellSlice upd_cs{vm::NoVmSpec(), blk.state_update};
         if (!(upd_cs.is_special() && upd_cs.prefetch_long(8) == 4  // merkle update
@@ -466,7 +466,7 @@ class Indexer : public td::actor::Actor {
 
         answer["ShardState"] = {{"state_old_hash", state_old_hash}, {"state_hash", state_hash}};
 
-        LOG(DEBUG) << "ShardState: " << to_string(answer["ShardState"]);
+        LOG(DEBUG) << "ShardState: " << answer["ShardState"].dump(4);
       }
     });
 
