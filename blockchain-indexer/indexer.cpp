@@ -402,7 +402,7 @@ class Indexer : public td::actor::Actor {
                 Ref<vm::CellSlice> tvalue;
                 try {
                   td::BitArray<64> min_trans;
-                  trans_dict.get_minmax_key(min_trans);
+                  trans_dict.lookup_nearest_key(min_trans);
                   LOG(DEBUG) << "min_trans " << min_trans.to_long();
 
                   tvalue = trans_dict.lookup_delete(min_trans);
