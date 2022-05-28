@@ -233,6 +233,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void sync_complete(const BlockHandle &handle) {
+    LOG(DEBUG) << "sync_complete";
     const BlockSeqno seqnof = 20077309, seqnol = seqnof + 10;
     for (auto i = seqnof; i <= seqnol; ++i) {
       //TODO: temp
@@ -488,6 +489,7 @@ int main(int argc, char **argv) {
   SET_VERBOSITY_LEVEL(verbosity_DEBUG);
 
   LOG(DEBUG) << "Let's rock!";
+  LOG(DEBUG) << "Sanity check";
 
   CHECK(vm::init_op_cp0());
 
