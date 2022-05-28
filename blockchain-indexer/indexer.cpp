@@ -233,7 +233,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void sync_complete(const BlockHandle &handle) {
-    const auto seqnof = 20077309, seqnol = seqnof + 10;
+    const BlockSeqno seqnof = 20077309, seqnol = seqnof + 10;
     for (auto i = seqnof; i <= seqnol; ++i) {
       auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
         LOG(DEBUG) << "Got Answer!";
