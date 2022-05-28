@@ -407,7 +407,7 @@ class Indexer : public td::actor::Actor {
                 Ref<vm::Cell> tvalue;
                 try {
                   tvalue = trans_dict.extract_value_ref(
-                      trans_dict.vm::DictionaryFixed::lookup_nearest_key(cur_trans.bits(), 64, !reverse));
+                      trans_dict.vm::DictionaryFixed::lookup_nearest_key(cur_trans.bits(), 64, ~0ULL));
                 } catch (vm::VmError err) {
                   break;
                 }
