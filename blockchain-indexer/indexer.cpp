@@ -364,7 +364,7 @@ class Indexer : public td::actor::Actor {
              {"extra", parse_extra_currency(value_flow.minted.extra)}},
         };
 
-        LOG(DEBUG) << "ValueFlow: " << answer["ValueFlow"].dump(4);
+        LOG(DEBUG) << "ValueFlow: " << answer["ValueFlow"].dump(2);
 
         auto inmsg_cs = vm::load_cell_slice_ref(extra.in_msg_descr);
         auto outmsg_cs = vm::load_cell_slice_ref(extra.out_msg_descr);
@@ -399,16 +399,15 @@ class Indexer : public td::actor::Actor {
               int count = 0;
               td::BitArray<64> min_trans;
               trans_dict.get_minmax_key(min_trans);
-              LOG(DEBUG) << "min_trans " << min_trans;
-
-
+              LOG(DEBUG) << "min_trans " << min_trans.to_long();
 
               while (true) {
                 Ref<vm::Cell> tvalue;
                 try {
-                  tvalue = trans_dict.extract_value_ref(
-                      trans_dict.vm::DictionaryFixed::lookup_nearest_key(min_trans.bits(), 64, true));
-
+                  auto key = trans_dict.vm::DictionaryFixed::lookup_nearest_key(min_trans.bits(), 64, false);
+                  LOG(DEBUG) << "Got key: ", key.is_null();
+                  tvalue = trans_dict.extract_value_ref(key);
+                  LOG(DEBUG) << "Got value: ", tvalue.is_null();
                 } catch (vm::VmError err) {
                   LOG(DEBUG) << "error while traversing transaction dictionary of an AccountBlock: ";
                   LOG(DEBUG) << err.get_msg();
