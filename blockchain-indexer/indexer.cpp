@@ -278,7 +278,7 @@ class Indexer : public td::actor::Actor {
                                  {
                                      {"workchain", workchain},
                                      {"seqno", blkid.id.seqno},
-                                     {"shard", blkid.id.shard},
+                                     {"shFard", blkid.id.shard},
                                  }}};
         LOG(DEBUG) << "BlockIdExt: " << to_string(answer["BlockIdExt"]);
 
@@ -398,16 +398,14 @@ class Indexer : public td::actor::Actor {
 
           trans_dict.check_for_each_extra([](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra, td::ConstBitPtr key,
                                              int key_len) {
-            CHECK(key_len == 64);
-            ton::LogicalTime lt = key.get_uint(64);
-            LOG(DEBUG) << "LT: " << lt;
+            json transaction;
 
+            CHECK(key_len == 64);
             block::gen::CurrencyCollection::Record trans_cc;
             CHECK(tlb::unpack(extra.write(), trans_cc))
-            LOG(DEBUG) << "Trans CC Gram: " << block::tlb::t_Grams.as_integer(trans_cc.grams)->to_dec_string();
 
-            json j_list(parse_extra_currency(trans_cc.other->prefetch_ref()));
-            LOG(DEBUG) << "Trans CC Extra: " << to_string(j_list);
+            transaction["extra"] = {{"grams", block::tlb::t_Grams.as_integer(trans_cc.grams)->to_dec_string()},
+                                    {"extra", parse_extra_currency(trans_cc.other->prefetch_ref())}};
 
             auto trans_root = value->prefetch_ref();
             block::gen::Transaction::Record trans;
@@ -418,17 +416,19 @@ class Indexer : public td::actor::Actor {
 
             block::gen::CurrencyCollection::Record trans_total_fees_cc;
             CHECK(tlb::unpack(trans.total_fees.write(), trans_total_fees_cc))
-            LOG(DEBUG) << "Trans Total Fees CC Gram: " << block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string();
 
-            json jt_list(parse_extra_currency(trans_total_fees_cc.other->prefetch_ref()));
-            LOG(DEBUG) << "Trans Total Fees CC Extra: " << to_string(jt_list);
+            transaction["total_fees"] = {
+                {"grams", block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string()},
+                {"extra", parse_extra_currency(trans_total_fees_cc.other->prefetch_ref())}};
 
-            LOG(DEBUG) << "Trans NOW: " << trans.now;
-            LOG(DEBUG) << "Trans lt: " << trans.lt;
-            LOG(DEBUG) << "Trans prev_trans_lt: " << trans.prev_trans_lt;
-            LOG(DEBUG) << "Trans outmsg_cnt: " << trans.outmsg_cnt;
+            transaction["account_addr"] = trans.account_addr.to_hex();
+            transaction["lt"] = trans.lt;
+            transaction["prev_trans_hash"] = trans.prev_trans_hash.to_hex();
+            transaction["prev_trans_lt"] = trans.prev_trans_lt;
+            transaction["now"] = trans.now;
+            transaction["outmsg_cnt"] = trans.outmsg_cnt;
 
-
+            LOG(DEBUG) << "Transaction: " << to_string(transaction);
 
             return true;
           });
