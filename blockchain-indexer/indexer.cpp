@@ -81,6 +81,86 @@ std::string parse_grams(vm::CellSlice grams) {
   return import_fee_parsed.value.write().to_dec_string();
 }
 
+json parse_address(vm::CellSlice address) {
+  json answer;
+
+  // addr_none$00
+  // addr_extern$01
+  // addr_std$10
+  // addr_var$11
+  auto tag = (int)address.prefetch_ulong(2);
+
+  if (tag == 0) {
+    answer["type"] = "addr_none";
+  } else if (tag == 1) {
+    block::gen::MsgAddressExt::Record_addr_extern src_addr;
+    CHECK(tlb::unpack(address, src_addr));
+    answer["type"] = "addr_extern";
+    answer["address"] = {{"len", src_addr.len},
+                         {"address", src_addr.external_address->to_binary()},
+                         {"address_hex", src_addr.len % 8 == 0 ? src_addr.external_address->to_hex() : ""}};
+  } else if (tag == 2) {
+    block::gen::MsgAddressInt::Record_addr_std dest_addr;
+    CHECK(tlb::unpack(address, dest_addr));
+
+    // TODO: create separated function
+    std::map<std::string, std::variant<int, std::string>> anycast_prased;
+    if (dest_addr.anycast.not_null()) {
+      auto anycast = dest_addr.anycast.write();
+      anycast_prased = parse_anycast(anycast);
+    } else {
+      anycast_prased = {
+          {"depth", 0},
+          {"rewrite_pfx", ""},
+      };
+    }
+
+    answer["type"] = "addr_std";
+    answer["address"] = {
+        {"anycast",
+         {
+             "depth",
+             std::get<int>(anycast_prased["depth"]),
+             "rewrite_pfx",
+             std::get<std::string>(anycast_prased["rewrite_pfx"]),
+         }},
+        {"workchain_id", dest_addr.workchain_id},
+        {"address", dest_addr.address.to_binary()},
+        {"address_hex", dest_addr.address.to_hex()},
+    };
+  } else if (tag == 3) {
+    block::gen::MsgAddressInt::Record_addr_var dest_addr;
+    CHECK(tlb::unpack(address, dest_addr));
+
+    // TODO: create separated function
+    std::map<std::string, std::variant<int, std::string>> anycast_prased;
+    if (dest_addr.anycast.not_null()) {
+      auto anycast = dest_addr.anycast.write();
+      anycast_prased = parse_anycast(anycast);
+    } else {
+      anycast_prased = {
+          {"depth", 0},
+          {"rewrite_pfx", ""},
+      };
+    }
+
+    answer["type"] = "addr_var";
+    answer["address"] = {{"anycast",
+                          {
+                              "depth",
+                              std::get<int>(anycast_prased["depth"]),
+                              "rewrite_pfx",
+                              std::get<std::string>(anycast_prased["rewrite_pfx"]),
+                          }},
+                         {"workchain_id", dest_addr.workchain_id},
+                         {"addr_len", dest_addr.addr_len},
+                         {"address", dest_addr.address->to_binary()},
+                         {"address_hex", dest_addr.addr_len % 8 == 0 ? dest_addr.address->to_hex() : ""}};
+  }
+
+  return answer;
+}
+
 class Indexer : public td::actor::Actor {
  private:
   std::string db_root_ = "/mnt/ton/ton-node/db";
@@ -454,154 +534,24 @@ class Indexer : public td::actor::Actor {
                 block::gen::CommonMsgInfo::Record_int_msg_info msg;
                 CHECK(tlb::unpack(in_msg_info, msg));
 
-                // PARSE DEST ADDRESS
+                // Get dest
+                auto dest = parse_address(msg.dest.write());
+                transaction["in_msg"]["dest"] = dest;
 
-                auto dest = msg.dest.write();
-
-                // TODO: create separated function
-                block::gen::MsgAddressInt::Record_addr_var dest_addr;
-
-                LOG(DEBUG) << "Address type: " << (int)dest.prefetch_ulong(2);
-
-                CHECK(tlb::unpack(dest, dest_addr));
-
-                // TODO: create separated function
-                std::map<std::string, std::variant<int, std::string>> anycast_prased;
-                if (dest_addr.anycast.not_null()) {
-                  auto anycast = dest_addr.anycast.write();
-                  anycast_prased = parse_anycast(anycast);
-                } else {
-                  anycast_prased = {
-                      {"depth", 0},
-                      {"rewrite_pfx", ""},
-                  };
-                }
-
-                transaction["in_msg"]["dest"] = {
-                    {"anycast",
-                     {
-                         "depth",
-                         std::get<int>(anycast_prased["depth"]),
-                         "rewrite_pfx",
-                         std::get<std::string>(anycast_prased["rewrite_pfx"]),
-                     }},
-                    {"workchain_id", dest_addr.workchain_id},
-                    {"addr_len", dest_addr.addr_len},
-                    {"address", dest_addr.address->to_binary()},
-                    {"address_hex", dest_addr.addr_len % 8 == 0 ? dest_addr.address->to_hex() : ""}};
-
+                // Get src
                 auto src = msg.src.write();
-
-                // PARSE SRC ADDRESS
-
-                // TODO: create separated function
-                block::gen::MsgAddressInt::Record_addr_var src_addr;
-                CHECK(tlb::unpack(src, src_addr));
-
-                // TODO: create separated function
-                std::map<std::string, std::variant<int, std::string>> anycast_src_prased;
-                if (dest_addr.anycast.not_null()) {
-                  auto anycast = dest_addr.anycast.write();
-                  anycast_src_prased = parse_anycast(anycast);
-                } else {
-                  anycast_src_prased = {
-                      {"depth", 0},
-                      {"rewrite_pfx", ""},
-                  };
-                }
-                transaction["in_msg"]["src"] = {
-                    {"anycast",
-                     {
-                         "depth",
-                         std::get<int>(anycast_src_prased["depth"]),
-                         "rewrite_pfx",
-                         std::get<std::string>(anycast_src_prased["rewrite_pfx"]),
-                     }},
-                    {"workchain_id", src_addr.workchain_id},
-                    {"addr_len", src_addr.addr_len},
-                    {"address", src_addr.address->to_binary()},
-                    {"address_hex", src_addr.addr_len % 8 == 0 ? src_addr.address->to_hex() : ""}};
-
+                transaction["in_msg"]["src"] = parse_address(src);
               } else if (tag == block::gen::CommonMsgInfo::ext_in_msg_info) {
                 block::gen::CommonMsgInfo::Record_ext_in_msg_info msg;
                 CHECK(tlb::unpack(in_msg_info, msg));
 
-                auto src = msg.src.write();
-                auto src_tag = block::gen::t_MsgAddressExt.get_tag(src);
-                transaction["in_msg"] = {};
-
                 // Get src
-                if (src_tag == block::gen::MsgAddressExt::addr_none) {
-                  transaction["in_msg"]["src"] = "addr_none";
-                } else {
-                  block::gen::MsgAddressExt::Record_addr_extern src_addr;
-                  CHECK(tlb::unpack(src, src_addr));
-                  transaction["in_msg"]["src"] = {{"len", src_addr.len},
-                                                  {"external_address", src_addr.external_address->to_binary()}};
-                };
+                auto src = msg.src.write();
+                transaction["in_msg"]["src"] = parse_address(src);
 
                 // Get dest
                 auto dest = msg.dest.write();
-                auto dest_tag = block::gen::t_MsgAddressInt.get_tag(dest);
-
-                if (dest_tag == block::gen::MsgAddressInt::addr_std) {
-                  block::gen::MsgAddressInt::Record_addr_std dest_addr;
-                  CHECK(tlb::unpack(dest, dest_addr));
-
-                  // TODO: create separated function
-                  std::map<std::string, std::variant<int, std::string>> anycast_prased;
-                  if (dest_addr.anycast.not_null()) {
-                    auto anycast = dest_addr.anycast.write();
-                    anycast_prased = parse_anycast(anycast);
-                  } else {
-                    anycast_prased = {
-                        {"depth", 0},
-                        {"rewrite_pfx", ""},
-                    };
-                  }
-
-                  transaction["in_msg"]["dest"] = {
-                      {"anycast",
-                       {
-                           "depth",
-                           std::get<int>(anycast_prased["depth"]),
-                           "rewrite_pfx",
-                           std::get<std::string>(anycast_prased["rewrite_pfx"]),
-                       }},
-                      {"workchain_id", dest_addr.workchain_id},
-                      {"address", dest_addr.address.to_hex()},
-                  };
-                } else {
-                  // TODO: create separated function
-                  block::gen::MsgAddressInt::Record_addr_var dest_addr;
-                  CHECK(tlb::unpack(dest, dest_addr));
-
-                  // TODO: create separated function
-                  std::map<std::string, std::variant<int, std::string>> anycast_prased;
-                  if (dest_addr.anycast.not_null()) {
-                    auto anycast = dest_addr.anycast.write();
-                    anycast_prased = parse_anycast(anycast);
-                  } else {
-                    anycast_prased = {
-                        {"depth", 0},
-                        {"rewrite_pfx", ""},
-                    };
-                  }
-
-                  transaction["in_msg"]["dest"] = {
-                      {"anycast",
-                       {
-                           "depth",
-                           std::get<int>(anycast_prased["depth"]),
-                           "rewrite_pfx",
-                           std::get<std::string>(anycast_prased["rewrite_pfx"]),
-                       }},
-                      {"workchain_id", dest_addr.workchain_id},
-                      {"addr_len", dest_addr.addr_len},
-                      {"address", dest_addr.address->to_binary()},
-                      {"address_hex", dest_addr.addr_len % 8 == 0 ? dest_addr.address->to_hex() : ""}};
-                }
-
+                transaction["in_msg"]["dest"] = parse_address(dest);
                 transaction["in_msg"]["import_fee"] = parse_grams(msg.import_fee.write());
               } else {
                 LOG(ERROR) << "Not covered";
