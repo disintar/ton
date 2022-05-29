@@ -399,11 +399,17 @@ class Indexer : public td::actor::Actor {
           auto r = trans_dict.range();
           LOG(DEBUG) << "Range " << r.second;
 
+          td::BitArray<64> key_min;
           LogicalTime min_trans;
-          trans_dict.get_minmax_key(min_trans);
 
+          trans_dict.get_minmax_key(key_min);
+          min_trans = key_min.to_long();
+
+          td::BitArray<64> key_max;
           LogicalTime max_trans;
-          trans_dict.get_minmax_key(max_trans, true);
+
+          trans_dict.get_minmax_key(key_max, true);
+          max_trans = key_max.to_long();
 
           LOG(DEBUG) << "MIN: " << min_trans << " MAX: " << max_trans;
 
