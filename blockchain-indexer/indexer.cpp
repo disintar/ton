@@ -398,6 +398,14 @@ class Indexer : public td::actor::Actor {
               auto r = trans_dict.range();
               LOG(DEBUG) << "Range " << r.second;
 
+              td::BitArray<64> min_trans;
+              trans_dict.get_minmax_key(min_trans);
+
+              td::BitArray<64> max_trans;
+              trans_dict.get_minmax_key(min_trans, true);
+
+              LOG(DEBUG) << "MIN: " << min_trans.to_long() << " MAX: " << max_trans.to_long();
+
               int count = 0;
 
               while (true) {
