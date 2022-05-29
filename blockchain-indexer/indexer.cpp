@@ -465,8 +465,17 @@ class Indexer : public td::actor::Actor {
                 block::gen::MsgAddressInt::Record_addr_var dest_addr;
                 tlb::unpack(dest, dest_addr);
 
-                auto anycast = dest_addr.anycast.write();
-                auto anycast_prased = parse_anycast(anycast);
+                // TODO: create separated function
+                std::map<std::string, std::variant<int, std::string>> anycast_prased;
+                if (dest_addr.anycast.not_null()) {
+                  auto anycast = dest_addr.anycast.write();
+                  anycast_prased = parse_anycast(anycast);
+                } else {
+                  anycast_prased = {
+                      {"depth", 0},
+                      {"rewrite_pfx", ""},
+                  };
+                }
 
                 transaction["in_msg"]["dest"] = {
                     {"anycast",
@@ -489,9 +498,17 @@ class Indexer : public td::actor::Actor {
                 block::gen::MsgAddressInt::Record_addr_var src_addr;
                 tlb::unpack(src, src_addr);
 
-                auto anycast_src = src_addr.anycast.write();
-                auto anycast_src_prased = parse_anycast(anycast_src);
-
+                // TODO: create separated function
+                std::map<std::string, std::variant<int, std::string>> anycast_src_prased;
+                if (dest_addr.anycast.not_null()) {
+                  auto anycast = dest_addr.anycast.write();
+                  anycast_src_prased = parse_anycast(anycast);
+                } else {
+                  anycast_src_prased = {
+                      {"depth", 0},
+                      {"rewrite_pfx", ""},
+                  };
+                }
                 transaction["in_msg"]["src"] = {
                     {"anycast",
                      {
@@ -504,7 +521,6 @@ class Indexer : public td::actor::Actor {
                     {"addr_len", src_addr.addr_len},
                     {"address", src_addr.address->to_binary()},
                     {"address_hex", src_addr.addr_len % 8 == 0 ? src_addr.address->to_hex() : ""}};
-
 
               } else if (tag == block::gen::CommonMsgInfo::ext_in_msg_info) {
                 block::gen::CommonMsgInfo::Record_ext_in_msg_info msg;
@@ -532,8 +548,17 @@ class Indexer : public td::actor::Actor {
                   block::gen::MsgAddressInt::Record_addr_std dest_addr;
                   tlb::unpack(dest, dest_addr);
 
-                  auto anycast = dest_addr.anycast.write();
-                  auto anycast_prased = parse_anycast(anycast);
+                  // TODO: create separated function
+                  std::map<std::string, std::variant<int, std::string>> anycast_prased;
+                  if (dest_addr.anycast.not_null()) {
+                    auto anycast = dest_addr.anycast.write();
+                    anycast_prased = parse_anycast(anycast);
+                  } else {
+                    anycast_prased = {
+                        {"depth", 0},
+                        {"rewrite_pfx", ""},
+                    };
+                  }
 
                   transaction["in_msg"]["dest"] = {
                       {"anycast",
@@ -551,8 +576,17 @@ class Indexer : public td::actor::Actor {
                   block::gen::MsgAddressInt::Record_addr_var dest_addr;
                   tlb::unpack(dest, dest_addr);
 
-                  auto anycast = dest_addr.anycast.write();
-                  auto anycast_prased = parse_anycast(anycast);
+                  // TODO: create separated function
+                  std::map<std::string, std::variant<int, std::string>> anycast_prased;
+                  if (dest_addr.anycast.not_null()) {
+                    auto anycast = dest_addr.anycast.write();
+                    anycast_prased = parse_anycast(anycast);
+                  } else {
+                    anycast_prased = {
+                        {"depth", 0},
+                        {"rewrite_pfx", ""},
+                    };
+                  }
 
                   transaction["in_msg"]["dest"] = {
                       {"anycast",
