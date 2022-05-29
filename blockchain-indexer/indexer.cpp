@@ -536,15 +536,12 @@ int main(int argc, char **argv) {
   p.add_checked_option('s', "seqno", "seqno_first[:seqno_last]\tseqno range", [&](td::Slice arg) {
     auto pos = std::min(arg.find(':'), arg.size());
     TRY_RESULT(seqno_first, td::to_integer_safe<ton::BlockSeqno>(arg.substr(0, pos)));
-    LOG(DEBUG) << "seqno_first: " + std::to_string(seqno_first);
     ++pos;
-//    if (pos >= arg.size()) return td::Status::Error("cannot parse seqno range");
     if (pos >= arg.size()) {
       td::actor::send_closure(main, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_first);
       return td::Status::OK();
     }
     TRY_RESULT(seqno_last, td::to_integer_safe<ton::BlockSeqno>(arg.substr(pos, arg.size())));
-    LOG(DEBUG) << "seqno_last: " + std::to_string(seqno_last);
     td::actor::send_closure(main, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_last);
     return td::Status::OK();
   });
