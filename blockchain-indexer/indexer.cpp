@@ -399,12 +399,28 @@ class Indexer : public td::actor::Actor {
             trans_dict.get_minmax_key(last_lt);
 
             Ref<vm::CellSlice> tvalue;
-            tvalue = trans_dict.lookup(last_lt);
+            tvalue = trans_dict.lookup_delete(last_lt);
 
             block::gen::Transaction::Record trans;
-            CHECK(tlb::unpack_cell(tvalue->prefetch_ref(), trans));
+            block::gen::HASH_UPDATE::Record hash_upd;
+            block::gen::CurrencyCollection::Record trans_total_fees_cc;
 
-            LOG(DEBUG) << "TRANS LT: " << trans.lt;
+            CHECK(tlb::unpack_cell(tvalue->prefetch_ref(), trans) &&
+                  tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd) &&
+                  tlb::unpack(trans.total_fees.write(), trans_total_fees_cc));
+
+            json transaction;
+            transaction["total_fees"] = {
+                {"grams", block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string()},
+                {"extra", parse_extra_currency(trans_total_fees_cc.other->prefetch_ref())}};
+
+            transaction["account_addr"] = {{"workchain", workchain}, {"address", trans.account_addr.to_hex()}};
+            transaction["lt"] = trans.lt;
+            transaction["prev_trans_hash"] = trans.prev_trans_hash.to_hex();
+            transaction["prev_trans_lt"] = trans.prev_trans_lt;
+            transaction["now"] = trans.now;
+            transaction["outmsg_cnt"] = trans.outmsg_cnt;
+            LOG(DEBUG) << "Transaction: " << transaction.dump(4);
             ++count;
           };
 
@@ -501,16 +517,6 @@ class Indexer : public td::actor::Actor {
         //                block::gen::CurrencyCollection::Record trans_total_fees_cc;
         //                CHECK(tlb::unpack(trans.total_fees.write(), trans_total_fees_cc))
         //
-        //                transaction["total_fees"] = {
-        //                    {"grams", block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string()},
-        //                    {"extra", parse_extra_currency(trans_total_fees_cc.other->prefetch_ref())}};
-        //
-        //                transaction["account_addr"] = {{"workchain", workchain}, {"address", trans.account_addr.to_hex()}};
-        //                transaction["lt"] = trans.lt;
-        //                transaction["prev_trans_hash"] = trans.prev_trans_hash.to_hex();
-        //                transaction["prev_trans_lt"] = trans.prev_trans_lt;
-        //                transaction["now"] = trans.now;
-        //                transaction["outmsg_cnt"] = trans.outmsg_cnt;
         //
         //                LOG(DEBUG) << "Transaction: " << transaction.dump(4);
         //
