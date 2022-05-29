@@ -380,12 +380,11 @@ class Indexer : public td::actor::Actor {
           td::Bits256 last_key;
           Ref<vm::CellSlice> data;
           try{
-
             account_blocks_dict->get_minmax_key(last_key);
             LOG(DEBUG) << "Parse account " << last_key.to_hex();
             data = account_blocks_dict->lookup_delete(last_key);
-          } catch (vm::VmError e){
-            LOG(ERROR) << e.get_msg();
+          } catch (td::CntObject::WriteError e){
+            LOG(ERROR) << "Got all accounts";
             break;
           }
 
