@@ -413,7 +413,7 @@ class Indexer : public td::actor::Actor {
             try {
               Ref<vm::CellSlice> tvalue;
               td::BitArray<64> cur_trans{(long long)max_trans};
-              tvalue = trans_dict.lookup(cur_trans.bits());
+              tvalue = trans_dict.lookup(cur_trans);
 
               block::gen::Transaction::Record trans;
               CHECK(tlb::unpack_cell(tvalue->prefetch_ref(), trans));
