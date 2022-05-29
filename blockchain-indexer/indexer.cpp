@@ -364,7 +364,7 @@ class Indexer : public td::actor::Actor {
              {"extra", parse_extra_currency(value_flow.minted.extra)}},
         };
 
-        LOG(DEBUG) << "ValueFlow: " << answer["ValueFlow"].dump(2);
+        LOG(DEBUG) << "ValueFlow: " << answer["ValueFlow"].dump(1);
 
         auto inmsg_cs = vm::load_cell_slice_ref(extra.in_msg_descr);
         auto outmsg_cs = vm::load_cell_slice_ref(extra.out_msg_descr);
@@ -378,11 +378,12 @@ class Indexer : public td::actor::Actor {
 
 
         td::Bits256 last_key;
-        last_key.set_zero();
+        account_blocks_dict->get_minmax_key(last_key);
+        LOG(DEBUG) << last_key.to_hex();
 
-        auto key = account_blocks_dict->lookup_nearest_key(last_key);
-        const StdSmcAddress acc_addr = key->data_bits();
-        LOG(DEBUG) << acc_addr;
+        StdSmcAddress acc_addr;
+        acc_addr.from_binary(last_key.as_slice());
+        LOG(DEBUG) << acc_addr.to_hex();
 
             //        const StdSmcAddress &acc_addr = key;
 
