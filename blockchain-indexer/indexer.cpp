@@ -460,6 +460,9 @@ class Indexer : public td::actor::Actor {
 
                 // TODO: create separated function
                 block::gen::MsgAddressInt::Record_addr_var dest_addr;
+
+                LOG(DEBUG) << "Address type: " << (int)dest.prefetch_ulong(2);
+
                 CHECK(tlb::unpack(dest, dest_addr));
 
                 // TODO: create separated function
