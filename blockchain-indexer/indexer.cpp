@@ -379,11 +379,13 @@ class Indexer : public td::actor::Actor {
 
         td::Bits256 last_key;
         account_blocks_dict->get_minmax_key(last_key);
-        LOG(DEBUG) << last_key.to_hex();
+        LOG(DEBUG) << "FIRST ACCOUNT " << last_key.to_hex();
 
-        StdSmcAddress acc_addr;
-        acc_addr.from_binary(last_key.as_slice());
-        LOG(DEBUG) << acc_addr.to_hex();
+        account_blocks_dict->lookup_delete(last_key);
+
+        td::Bits256 last_key2;
+        account_blocks_dict->get_minmax_key(last_key2);
+        LOG(DEBUG)<< "SECOND ACCOUNT "  << last_key2.to_hex();
 
             //        const StdSmcAddress &acc_addr = key;
 
