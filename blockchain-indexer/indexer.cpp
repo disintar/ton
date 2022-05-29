@@ -246,7 +246,7 @@ class Indexer : public td::actor::Actor {
     });
 
     ton::AccountIdPrefixFull pfx{0, 0x8000000000000000};
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 25138331,
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 25138332,
                             std::move(P));
   }
 
@@ -385,27 +385,30 @@ class Indexer : public td::actor::Actor {
           data = account_blocks_dict->lookup_delete(last_key);
 
           json account_block_parsed;
-          account_block_parsed["address"] = last_key.to_hex();
-          account_block_parsed["workchain"] = workchain;
+          account_block_parsed["account_addr"] = {{"address", last_key.to_hex()}, {"workchain", workchain}};
 
           block::gen::AccountBlock::Record acc_blk;
           CHECK(tlb::csr_unpack(data, acc_blk));
+
           vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
                                              block::tlb::aug_AccountTransactions};
+          int count = 0;
 
-          td::BitArray<64> key_min;
-          LogicalTime min_trans;
+          while (!trans_dict.is_empty()) {
+            td::BitArray<64> last_lt;
+            trans_dict.get_minmax_key(last_lt);
 
-          trans_dict.get_minmax_key(key_min);
-          min_trans = key_min.to_long();
+            Ref<vm::CellSlice> tvalue;
+            tvalue = trans_dict.lookup(last_lt);
 
-          td::BitArray<64> key_max;
-          LogicalTime max_trans;
+            block::gen::Transaction::Record trans;
+            CHECK(tlb::unpack_cell(tvalue->prefetch_ref(), trans));
 
-          trans_dict.get_minmax_key(key_max, true);
-          max_trans = key_max.to_long();
+            LOG(DEBUG) << "TRANS LT: " << trans.lt;
+            ++count;
+          };
 
-          LOG(DEBUG) << "MIN: " << min_trans << " MAX: " << max_trans;
+          LOG(DEBUG) << "Trans count: " << count;
         }
 
         //        const StdSmcAddress &acc_addr = key;
