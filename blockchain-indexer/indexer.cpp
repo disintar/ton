@@ -246,7 +246,7 @@ class Indexer : public td::actor::Actor {
     });
 
     ton::AccountIdPrefixFull pfx{0, 0x8000000000000000};
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 25138332,
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 25138331,
                             std::move(P));
   }
 
@@ -364,7 +364,7 @@ class Indexer : public td::actor::Actor {
              {"extra", parse_extra_currency(value_flow.minted.extra)}},
         };
 
-        LOG(DEBUG) << "ValueFlow: " << answer["ValueFlow"].dump(1);
+        LOG(DEBUG) << "ValueFlow: " << to_string(answer["ValueFlow"]);
 
         auto inmsg_cs = vm::load_cell_slice_ref(extra.in_msg_descr);
         auto outmsg_cs = vm::load_cell_slice_ref(extra.out_msg_descr);
@@ -376,22 +376,13 @@ class Indexer : public td::actor::Actor {
         auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
 
-        while (true) {
+        while (!account_blocks_dict->is_empty()) {
           td::Bits256 last_key;
           Ref<vm::CellSlice> data;
 
-          try {
-            if (account_blocks_dict->is_empty()){
-              break;
-            }
-
-            account_blocks_dict->get_minmax_key(last_key);
-            LOG(DEBUG) << "Parse account " << last_key.to_hex();
-            data = account_blocks_dict->lookup_delete(last_key);
-          } catch (td::CntObject::WriteError e) {
-            LOG(ERROR) << "Got all accounts";
-            break;
-          }
+          account_blocks_dict->get_minmax_key(last_key);
+          LOG(DEBUG) << "Parse account " << last_key.to_hex();
+          data = account_blocks_dict->lookup_delete(last_key);
 
           json account_block_parsed;
           account_block_parsed["address"] = last_key.to_hex();
