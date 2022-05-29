@@ -395,6 +395,8 @@ class Indexer : public td::actor::Actor {
               CHECK(tlb::csr_unpack(value, acc_blk) && acc_blk.account_addr == acc_addr);
               vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
                                                  block::tlb::aug_AccountTransactions};
+              auto r = trans_dict.range();
+              LOG(DEBUG) << "Range " << r.second;
 
               int count = 0;
 
