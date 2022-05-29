@@ -105,8 +105,9 @@ json parse_address(vm::CellSlice address) {
 
     // TODO: create separated function
     std::map<std::string, std::variant<int, std::string>> anycast_prased;
-    if (dest_addr.anycast.not_null()) {
-      auto anycast = dest_addr.anycast.write();
+
+    auto anycast = dest_addr.anycast.write();
+    if ((int)anycast.prefetch_ulong(1) == 1) {  // Maybe Anycast
       anycast_prased = parse_anycast(anycast);
     } else {
       anycast_prased = {
@@ -134,8 +135,8 @@ json parse_address(vm::CellSlice address) {
 
     // TODO: create separated function
     std::map<std::string, std::variant<int, std::string>> anycast_prased;
-    if (dest_addr.anycast.not_null()) {
-      auto anycast = dest_addr.anycast.write();
+    auto anycast = dest_addr.anycast.write();
+    if ((int)anycast.prefetch_ulong(1) == 1) {  // Maybe Anycast
       anycast_prased = parse_anycast(anycast);
     } else {
       anycast_prased = {
