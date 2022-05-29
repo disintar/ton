@@ -431,8 +431,6 @@ class Indexer : public td::actor::Actor {
                                {"min_ref_mc_seqno", info.min_ref_mc_seqno},
                                {"prev_key_block_seqno", info.prev_key_block_seqno}};
 
-        LOG(DEBUG) << "BlockInfo: " << answer["BlockInfo"].dump(4);
-
         auto value_flow_root = blk.value_flow;
         block::ValueFlow value_flow;
         vm::CellSlice cs{vm::NoVmOrd(), value_flow_root};
@@ -493,8 +491,6 @@ class Indexer : public td::actor::Actor {
              {"extra", parse_extra_currency(value_flow.minted.extra)}},
         };
 
-        LOG(DEBUG) << "ValueFlow: " << to_string(answer["ValueFlow"]);
-
         /* tlb
          block_extra in_msg_descr:^InMsgDescr
           out_msg_descr:^OutMsgDescr
@@ -522,6 +518,9 @@ class Indexer : public td::actor::Actor {
 
           _ (HashmapAugE 256 AccountBlock CurrencyCollection) = ShardAccountBlocks;
          */
+
+        std::list<json> accounts;
+
         while (!account_blocks_dict->is_empty()) {
           td::Bits256 last_key;
           Ref<vm::CellSlice> data;
@@ -535,10 +534,11 @@ class Indexer : public td::actor::Actor {
 
           block::gen::AccountBlock::Record acc_blk;
           CHECK(tlb::csr_unpack(data, acc_blk));
+          int count = 0;
+          std::list<json> transactions;
 
           vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
                                              block::tlb::aug_AccountTransactions};
-          int count = 0;
 
           /* tlb
             transaction$0111 account_addr:bits256 lt:uint64
@@ -637,23 +637,22 @@ class Indexer : public td::actor::Actor {
                 LOG(ERROR) << "Not covered";
                 transaction["in_msg"] = {{"type", "Unknown"}};
               }
-
-              transaction["info"] = {{}};
             }
 
-            LOG(DEBUG) << "Transaction: " << transaction.dump(4);
+            transactions.push_back(transaction);
             ++count;
           };
 
-          LOG(DEBUG) << "Trans count: " << count;
+          account_block_parsed["transactions"] = transactions;
+          account_block_parsed["transactions_count"] = count;
+          accounts.push_back(account_block_parsed);
         }
 
         answer["BlockExtra"] = {
+            {"accounts", accounts},
             {"rand_seed", extra.rand_seed.to_hex()},
             {"created_by", extra.created_by.to_hex()},
         };
-
-        LOG(DEBUG) << "BlockExtra: " << answer["BlockExtra"].dump(4);
 
         vm::CellSlice upd_cs{vm::NoVmSpec(), blk.state_update};
         if (!(upd_cs.is_special() && upd_cs.prefetch_long(8) == 4  // merkle update
@@ -667,7 +666,7 @@ class Indexer : public td::actor::Actor {
 
         answer["ShardState"] = {{"state_old_hash", state_old_hash}, {"state_hash", state_hash}};
 
-        LOG(DEBUG) << "ShardState: " << answer["ShardState"].dump(4);
+        LOG(DEBUG) << "Answer: " << answer.dump(4);
       }
     });
 
