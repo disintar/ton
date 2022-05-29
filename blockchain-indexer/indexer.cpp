@@ -376,37 +376,25 @@ class Indexer : public td::actor::Actor {
         auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
 
+        while (true) {
+          td::Bits256 last_key;
+          Ref<vm::CellSlice> data;
+          try{
 
-        td::Bits256 last_key;
-        account_blocks_dict->get_minmax_key(last_key);
-        LOG(DEBUG) << "FIRST ACCOUNT " << last_key.to_hex();
+            account_blocks_dict->get_minmax_key(last_key);
+            LOG(DEBUG) << "Parse account " << last_key.to_hex();
+            data = account_blocks_dict->lookup_delete(last_key);
+          } catch (vm::VmError e){
+            LOG(ERROR) << e.get_msg();
+            break;
+          }
 
-        account_blocks_dict->lookup_delete(last_key);
-
-        td::Bits256 last_key2;
-        account_blocks_dict->get_minmax_key(last_key2);
-        LOG(DEBUG)<< "SECOND ACCOUNT "  << last_key2.to_hex();
-
-            //        const StdSmcAddress &acc_addr = key;
-
-        account_blocks_dict->check_for_each_extra([&workchain, &start_lt](const Ref<vm::CellSlice> &value,
-                                                                          Ref<vm::CellSlice> extra, td::ConstBitPtr key,
-                                                                          int key_len) {
           json account_block_parsed;
-          CHECK(key_len == 256);
-          const StdSmcAddress acc_addr = key;
-          account_block_parsed["address"] = acc_addr.to_hex();
+          account_block_parsed["address"] = last_key.to_hex();
           account_block_parsed["workchain"] = workchain;
 
-          block::gen::CurrencyCollection::Record account_cc;
-          CHECK(tlb::unpack(extra.write(), account_cc))
-
-          account_block_parsed["CurrencyCollection"] = {
-              {"gram", block::tlb::t_Grams.as_integer(account_cc.grams)->to_dec_string()},
-              {"extra", parse_extra_currency(account_cc.other->prefetch_ref())}};
-
           block::gen::AccountBlock::Record acc_blk;
-          CHECK(tlb::csr_unpack(value, acc_blk) && acc_blk.account_addr == acc_addr);
+          CHECK(tlb::csr_unpack(data, acc_blk));
           vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
                                              block::tlb::aug_AccountTransactions};
           auto r = trans_dict.range();
@@ -425,77 +413,117 @@ class Indexer : public td::actor::Actor {
           max_trans = key_max.to_long();
 
           LOG(DEBUG) << "MIN: " << min_trans << " MAX: " << max_trans;
+        }
 
-          int count = 0;
+        //        const StdSmcAddress &acc_addr = key;
 
-          while (true) {
-            try {
-              Ref<vm::CellSlice> tvalue;
-              td::BitArray<64> cur_trans{(long long)max_trans};
-              tvalue = trans_dict.lookup(cur_trans);
-
-              block::gen::Transaction::Record trans;
-              CHECK(tlb::unpack_cell(tvalue->prefetch_ref(), trans));
-
-              LOG(DEBUG) << "TRANS LT: " << trans.lt;
-              if (trans.prev_trans_lt > 0) {
-                max_trans = trans.prev_trans_lt;
-                LOG(DEBUG) << "NEXT TRANS LT: " << max_trans;
-              } else {
-                LOG(DEBUG) << "END";
-                break;
-              }
-
-            } catch (vm::VmError err) {
-              break;
-            }
-
-            ++count;
-          };
-
-          LOG(DEBUG) << "Count: " << count;
-
-          trans_dict.check_for_each_extra(
-              [&workchain](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra, td::ConstBitPtr key, int key_len) {
-                json transaction;
-
-                CHECK(key_len == 64);
-                block::gen::CurrencyCollection::Record trans_cc;
-                CHECK(tlb::unpack(extra.write(), trans_cc))
-
-                transaction["extra"] = {{"grams", block::tlb::t_Grams.as_integer(trans_cc.grams)->to_dec_string()},
-                                        {"extra", parse_extra_currency(trans_cc.other->prefetch_ref())}};
-
-                auto trans_root = value->prefetch_ref();
-                block::gen::Transaction::Record trans;
-                block::gen::HASH_UPDATE::Record hash_upd;
-
-                CHECK(tlb::unpack_cell(trans_root, trans));
-                CHECK(
-                    tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd));
-
-                block::gen::CurrencyCollection::Record trans_total_fees_cc;
-                CHECK(tlb::unpack(trans.total_fees.write(), trans_total_fees_cc))
-
-                transaction["total_fees"] = {
-                    {"grams", block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string()},
-                    {"extra", parse_extra_currency(trans_total_fees_cc.other->prefetch_ref())}};
-
-                transaction["account_addr"] = {{"workchain", workchain}, {"address", trans.account_addr.to_hex()}};
-                transaction["lt"] = trans.lt;
-                transaction["prev_trans_hash"] = trans.prev_trans_hash.to_hex();
-                transaction["prev_trans_lt"] = trans.prev_trans_lt;
-                transaction["now"] = trans.now;
-                transaction["outmsg_cnt"] = trans.outmsg_cnt;
-
-                LOG(DEBUG) << "Transaction: " << transaction.dump(4);
-
-                return true;
-              },
-              true);
-
-          return false;
-        });
+//        account_blocks_dict->check_for_each_extra([&workchain, &start_lt](const Ref<vm::CellSlice> &value,
+//                                                                          Ref<vm::CellSlice> extra, td::ConstBitPtr key,
+//                                                                          int key_len) {
+//          json account_block_parsed;
+//          CHECK(key_len == 256);
+//          const StdSmcAddress acc_addr = key;
+//          account_block_parsed["address"] = acc_addr.to_hex();
+//          account_block_parsed["workchain"] = workchain;
+//
+//          block::gen::CurrencyCollection::Record account_cc;
+//          CHECK(tlb::unpack(extra.write(), account_cc))
+//
+//          account_block_parsed["CurrencyCollection"] = {
+//              {"gram", block::tlb::t_Grams.as_integer(account_cc.grams)->to_dec_string()},
+//              {"extra", parse_extra_currency(account_cc.other->prefetch_ref())}};
+//
+//          block::gen::AccountBlock::Record acc_blk;
+//          CHECK(tlb::csr_unpack(value, acc_blk) && acc_blk.account_addr == acc_addr);
+//          vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
+//                                             block::tlb::aug_AccountTransactions};
+//          auto r = trans_dict.range();
+//          LOG(DEBUG) << "Range " << r.second;
+//
+//          td::BitArray<64> key_min;
+//          LogicalTime min_trans;
+//
+//          trans_dict.get_minmax_key(key_min);
+//          min_trans = key_min.to_long();
+//
+//          td::BitArray<64> key_max;
+//          LogicalTime max_trans;
+//
+//          trans_dict.get_minmax_key(key_max, true);
+//          max_trans = key_max.to_long();
+//
+//          LOG(DEBUG) << "MIN: " << min_trans << " MAX: " << max_trans;
+//
+//          int count = 0;
+//
+//          while (true) {
+//            try {
+//              Ref<vm::CellSlice> tvalue;
+//              td::BitArray<64> cur_trans{(long long)max_trans};
+//              tvalue = trans_dict.lookup(cur_trans);
+//
+//              block::gen::Transaction::Record trans;
+//              CHECK(tlb::unpack_cell(tvalue->prefetch_ref(), trans));
+//
+//              LOG(DEBUG) << "TRANS LT: " << trans.lt;
+//              if (trans.prev_trans_lt > 0) {
+//                max_trans = trans.prev_trans_lt;
+//                LOG(DEBUG) << "NEXT TRANS LT: " << max_trans;
+//              } else {
+//                LOG(DEBUG) << "END";
+//                break;
+//              }
+//
+//            } catch (vm::VmError err) {
+//              break;
+//            }
+//
+//            ++count;
+//          };
+//
+//          LOG(DEBUG) << "Count: " << count;
+//
+//          trans_dict.check_for_each_extra(
+//              [&workchain](Ref<vm::CellSlice> value, Ref<vm::CellSlice> extra, td::ConstBitPtr key, int key_len) {
+//                json transaction;
+//
+//                CHECK(key_len == 64);
+//                block::gen::CurrencyCollection::Record trans_cc;
+//                CHECK(tlb::unpack(extra.write(), trans_cc))
+//
+//                transaction["extra"] = {{"grams", block::tlb::t_Grams.as_integer(trans_cc.grams)->to_dec_string()},
+//                                        {"extra", parse_extra_currency(trans_cc.other->prefetch_ref())}};
+//
+//                auto trans_root = value->prefetch_ref();
+//                block::gen::Transaction::Record trans;
+//                block::gen::HASH_UPDATE::Record hash_upd;
+//
+//                CHECK(tlb::unpack_cell(trans_root, trans));
+//                CHECK(
+//                    tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd));
+//
+//                block::gen::CurrencyCollection::Record trans_total_fees_cc;
+//                CHECK(tlb::unpack(trans.total_fees.write(), trans_total_fees_cc))
+//
+//                transaction["total_fees"] = {
+//                    {"grams", block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string()},
+//                    {"extra", parse_extra_currency(trans_total_fees_cc.other->prefetch_ref())}};
+//
+//                transaction["account_addr"] = {{"workchain", workchain}, {"address", trans.account_addr.to_hex()}};
+//                transaction["lt"] = trans.lt;
+//                transaction["prev_trans_hash"] = trans.prev_trans_hash.to_hex();
+//                transaction["prev_trans_lt"] = trans.prev_trans_lt;
+//                transaction["now"] = trans.now;
+//                transaction["outmsg_cnt"] = trans.outmsg_cnt;
+//
+//                LOG(DEBUG) << "Transaction: " << transaction.dump(4);
+//
+//                return true;
+//              },
+//              true);
+//
+//          return false;
+//        });
 
         answer["BlockExtra"] = {
             {"rand_seed", extra.rand_seed.to_hex()},
