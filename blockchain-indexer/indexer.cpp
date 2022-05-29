@@ -234,10 +234,10 @@ class Indexer : public td::actor::Actor {
 
   void sync_complete(const BlockHandle &handle) {
     LOG(DEBUG) << "sync_complete";
-    const BlockSeqno seqnof = 20077309, seqnol = seqnof + 10;
-    for (auto i = seqnof; i <= seqnol; ++i) {
-      //TODO: temp
-      LOG(DEBUG) << std::string("for ") + std::to_string(i);
+    const BlockSeqno seqno_first = 20077309;
+    const BlockSeqno seqno_last = seqno_first + 24;
+    // i in [seqno_first; seqno_last)
+    for (auto seqno = seqno_first; seqno < seqno_last; ++seqno) {
       auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
         LOG(DEBUG) << "Got Answer!";
 
@@ -251,14 +251,12 @@ class Indexer : public td::actor::Actor {
       });
 
       ton::AccountIdPrefixFull pfx{0, 0x8000000000000000};
-      td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, i,
+      td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                               std::move(P));
     }
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle) {
-    //TODO: temp
-    LOG(DEBUG) << "got_block_handle";
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
@@ -489,7 +487,6 @@ int main(int argc, char **argv) {
   SET_VERBOSITY_LEVEL(verbosity_DEBUG);
 
   LOG(DEBUG) << "Let's rock!";
-  LOG(DEBUG) << "Sanity check";
 
   CHECK(vm::init_op_cp0());
 
