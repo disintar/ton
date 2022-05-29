@@ -430,18 +430,18 @@ class Indexer : public td::actor::Actor {
               CHECK(tlb::type_unpack_cell(trans.r1.in_msg->prefetch_ref(), block::gen::t_Message_Any, in_message));
 
               auto in_msg_info = in_message.info.write();
-              auto in_msg_info_tag = block::gen::t_CommonMsgInfo.check_tag(in_msg_info);
+              int tag = block::gen::t_CommonMsgInfo.get_tag(in_msg_info);
 
               LOG(DEBUG) << block::gen::t_CommonMsgInfo.check_tag(in_msg_info);
 
-              switch (in_msg_info_tag) {
-                case (block::gen::CommonMsgInfo::int_msg_info):
+              switch (tag) {
+                case block::gen::CommonMsgInfo::int_msg_info:
                   LOG(DEBUG) << "GOT int_msg_info";
                   return;
-                case (block::gen::CommonMsgInfo::ext_in_msg_info):
+                case block::gen::CommonMsgInfo::ext_in_msg_info:
                   LOG(DEBUG) << "GOT ext_in_msg_info";
                   return;
-                case (block::gen::CommonMsgInfo::ext_out_msg_info):
+                case block::gen::CommonMsgInfo::ext_out_msg_info:
                   LOG(DEBUG) << "GOT ext_out_msg_info";
                   return;
                 default:
