@@ -71,16 +71,6 @@ std::map<std::string, std::variant<int, std::string>> parse_anycast(vm::CellSlic
   return {{"depth", anycast_parsed.depth}, {"rewrite_pfx", anycast_parsed.rewrite_pfx->to_binary()}};
 };
 
-std::string parse_grams(vm::CellSlice grams) {
-  block::gen::Grams::Record import_fee;
-  block::gen::VarUInteger::Record import_fee_parsed;
-
-  CHECK(tlb::unpack(grams, import_fee));
-  tlb::csr_type_unpack(import_fee.amount, block::gen::t_VarUInteger_16, import_fee_parsed);
-
-  return import_fee_parsed.value.write().to_dec_string();
-}
-
 json parse_address(vm::CellSlice address) {
   json answer;
 
@@ -126,7 +116,6 @@ json parse_address(vm::CellSlice address) {
              std::get<std::string>(anycast_prased["rewrite_pfx"]),
          }},
         {"workchain_id", dest_addr.workchain_id},
-        {"address", dest_addr.address.to_binary()},
         {"address_hex", dest_addr.address.to_hex()},
     };
   } else if (tag == 3) {
@@ -542,6 +531,23 @@ class Indexer : public td::actor::Actor {
                 // Get src
                 auto src = msg.src.write();
                 transaction["in_msg"]["src"] = parse_address(src);
+
+                transaction["in_msg"]["ihr_disabled"] = msg.ihr_disabled;
+                transaction["in_msg"]["bounce"] = msg.bounce;
+                transaction["in_msg"]["bounced"] = msg.bounced;
+
+                block::gen::CurrencyCollection::Record value_cc;
+                // TODO: separate function
+                CHECK(tlb::unpack(msg.value.write(), value_cc))
+
+                transaction["in_msg"]["value"] = {
+                    {"grams", block::tlb::t_Grams.as_integer(value_cc.grams)->to_dec_string()},
+                    {"extra", parse_extra_currency(value_cc.other->prefetch_ref())}};
+
+                transaction["in_msg"]["ihr_fee"] = block::tlb::t_Grams.as_integer(msg.ihr_fee.write())->to_dec_string();
+                transaction["in_msg"]["fwd_fee"] = block::tlb::t_Grams.as_integer(msg.fwd_fee.write())->to_dec_string();
+                transaction["in_msg"]["created_lt"] = msg.created_lt;
+                transaction["in_msg"]["created_at"] = msg.created_at;
               } else if (tag == block::gen::CommonMsgInfo::ext_in_msg_info) {
                 block::gen::CommonMsgInfo::Record_ext_in_msg_info msg;
                 CHECK(tlb::unpack(in_msg_info, msg));
@@ -553,7 +559,8 @@ class Indexer : public td::actor::Actor {
                 // Get dest
                 auto dest = msg.dest.write();
                 transaction["in_msg"]["dest"] = parse_address(dest);
-                transaction["in_msg"]["import_fee"] = parse_grams(msg.import_fee.write());
+                transaction["in_msg"]["import_fee"] =
+                    block::tlb::t_Grams.as_integer(msg.import_fee.write())->to_dec_string();
               } else {
                 LOG(ERROR) << "Not covered";
                 transaction["in_msg"] = {{"type", "Unknown"}};
