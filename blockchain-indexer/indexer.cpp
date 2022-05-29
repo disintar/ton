@@ -430,6 +430,7 @@ class Indexer : public td::actor::Actor {
                 LOG(DEBUG) << "NEXT TRANS LT: " << max_trans;
               } else {
                 LOG(DEBUG) << "END";
+                break;
               }
 
             } catch (vm::VmError err) {
