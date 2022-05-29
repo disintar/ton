@@ -376,10 +376,39 @@ class Indexer : public td::actor::Actor {
         block::gen::BlockExtra::Record extra;
 
         CHECK(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra));
+        /* tlb
+          block#11ef55aa global_id:int32
+          info:^BlockInfo value_flow:^ValueFlow
+          state_update:^(MERKLE_UPDATE ShardState)
+          extra:^BlockExtra = Block;
+        */
 
         answer["global_id"] = blk.global_id;
         auto now = info.gen_utime;
         auto start_lt = info.start_lt;
+
+        /* tlb
+          block_info#9bc7a987 version:uint32
+              not_master:(## 1)
+              after_merge:(## 1) before_split:(## 1)
+              after_split:(## 1)
+              want_split:Bool want_merge:Bool
+              key_block:Bool vert_seqno_incr:(## 1)
+              flags:(## 8) { flags <= 1 }
+              seq_no:# vert_seq_no:# { vert_seq_no >= vert_seqno_incr }
+              { prev_seq_no:# } { ~prev_seq_no + 1 = seq_no }
+              shard:ShardIdent gen_utime:uint32
+              start_lt:uint64 end_lt:uint64
+              gen_validator_list_hash_short:uint32
+              gen_catchain_seqno:uint32
+              min_ref_mc_seqno:uint32
+              prev_key_block_seqno:uint32
+              gen_software:flags . 0?GlobalVersion
+              master_ref:not_master?^BlkMasterInfo
+              prev_ref:^(BlkPrevInfo after_merge)
+              prev_vert_ref:vert_seqno_incr?^(BlkPrevInfo 0)
+              = BlockInfo;
+        */
 
         // todo: master_ref, prev_ref, prev_vert_ref, gen_software
         answer["BlockInfo"] = {{"version", info.version},
@@ -412,6 +441,20 @@ class Indexer : public td::actor::Actor {
           return;
         }
 
+        /* tlb
+          value_flow ^[ from_prev_blk:CurrencyCollection
+                        to_next_blk:CurrencyCollection
+                        imported:CurrencyCollection
+                        exported:CurrencyCollection ]
+                        fees_collected:CurrencyCollection
+                        ^[
+                        fees_imported:CurrencyCollection
+                        recovered:CurrencyCollection
+                        created:CurrencyCollection
+                        minted:CurrencyCollection
+                        ] = ValueFlow;
+        */
+
         answer["ValueFlow"] = {
             {"from_prev_blk",
              {"grams", value_flow.from_prev_blk.grams->to_dec_string()},
@@ -433,7 +476,7 @@ class Indexer : public td::actor::Actor {
              {"grams", value_flow.fees_collected.grams->to_dec_string()},
              {"extra", parse_extra_currency(value_flow.fees_collected.extra)}},
 
-            {"fees_collected",
+            {"fees_imported",
              {"grams", value_flow.fees_imported.grams->to_dec_string()},
              {"extra", parse_extra_currency(value_flow.fees_imported.extra)}},
 
@@ -452,6 +495,15 @@ class Indexer : public td::actor::Actor {
 
         LOG(DEBUG) << "ValueFlow: " << to_string(answer["ValueFlow"]);
 
+        /* tlb
+         block_extra in_msg_descr:^InMsgDescr
+          out_msg_descr:^OutMsgDescr
+          account_blocks:^ShardAccountBlocks
+          rand_seed:bits256
+          created_by:bits256
+          custom:(Maybe ^McBlockExtra) = BlockExtra;
+        */
+
         auto inmsg_cs = vm::load_cell_slice_ref(extra.in_msg_descr);
         auto outmsg_cs = vm::load_cell_slice_ref(extra.out_msg_descr);
 
@@ -462,6 +514,14 @@ class Indexer : public td::actor::Actor {
         auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
 
+        /* tlb
+           acc_trans#5 account_addr:bits256
+             transactions:(HashmapAug 64 ^Transaction CurrencyCollection)
+             state_update:^(HASH_UPDATE Account)
+            = AccountBlock;
+
+          _ (HashmapAugE 256 AccountBlock CurrencyCollection) = ShardAccountBlocks;
+         */
         while (!account_blocks_dict->is_empty()) {
           td::Bits256 last_key;
           Ref<vm::CellSlice> data;
@@ -480,6 +540,16 @@ class Indexer : public td::actor::Actor {
                                              block::tlb::aug_AccountTransactions};
           int count = 0;
 
+          /* tlb
+            transaction$0111 account_addr:bits256 lt:uint64
+            prev_trans_hash:bits256 prev_trans_lt:uint64 now:uint32
+            outmsg_cnt:uint15
+            orig_status:AccountStatus end_status:AccountStatus
+            ^[ in_msg:(Maybe ^(Message Any)) out_msgs:(HashmapE 15 ^(Message Any)) ]
+            total_fees:CurrencyCollection state_update:^(HASH_UPDATE Account)
+            description:^TransactionDescr = Transaction;
+           */
+
           while (!trans_dict.is_empty()) {
             td::BitArray<64> last_lt;
             trans_dict.get_minmax_key(last_lt);
@@ -495,6 +565,7 @@ class Indexer : public td::actor::Actor {
                   tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd) &&
                   tlb::unpack(trans.total_fees.write(), trans_total_fees_cc));
 
+            // TODO: orig_status, end_status, out_msgs, description
             json transaction;
             transaction["total_fees"] = {
                 {"grams", block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string()},
@@ -510,6 +581,7 @@ class Indexer : public td::actor::Actor {
                                            {"new_hash", hash_upd.old_hash.to_hex()}};
 
             // Parse in msg
+            // TODO: Maybe Message - fix Maybe (not_null on ref, need to check ref)
             if (trans.r1.in_msg.not_null()) {
               block::gen::Message::Record in_message;
               block::gen::CommonMsgInfo::Record_int_msg_info info;
