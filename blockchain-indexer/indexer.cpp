@@ -437,13 +437,13 @@ class Indexer : public td::actor::Actor {
               switch (tag) {
                 case block::gen::CommonMsgInfo::int_msg_info:
                   LOG(DEBUG) << "GOT int_msg_info";
-                  return;
+                  break;
                 case block::gen::CommonMsgInfo::ext_in_msg_info:
                   LOG(DEBUG) << "GOT ext_in_msg_info";
-                  return;
+                  break;
                 case block::gen::CommonMsgInfo::ext_out_msg_info:
                   LOG(DEBUG) << "GOT ext_out_msg_info";
-                  return;
+                  break;
                 default:
                   LOG(ERROR) << "Not covered";
                   continue;
