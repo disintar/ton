@@ -66,7 +66,7 @@ std::list<std::tuple<int, std::string>> parse_extra_currency(const Ref<vm::Cell>
 
 std::map<std::string, std::variant<int, std::string>> parse_anycast(vm::CellSlice anycast) {
   block::gen::Anycast::Record anycast_parsed;
-  tlb::unpack(anycast, anycast_parsed);
+  CHECK(tlb::unpack(anycast, anycast_parsed));
 
   return {{"depth", anycast_parsed.depth}, {"rewrite_pfx", anycast_parsed.rewrite_pfx->to_binary()}};
 };
@@ -75,7 +75,7 @@ std::string parse_grams(vm::CellSlice grams) {
   block::gen::Grams::Record import_fee;
   block::gen::VarUInteger::Record import_fee_parsed;
 
-  tlb::unpack(grams, import_fee);
+  CHECK(tlb::unpack(grams, import_fee));
   tlb::csr_type_unpack(import_fee.amount, block::gen::t_VarUInteger_16, import_fee_parsed);
 
   return import_fee_parsed.value.write().to_dec_string();
@@ -305,10 +305,7 @@ class Indexer : public td::actor::Actor {
         block::gen::BlockInfo::Record info;
         block::gen::BlockExtra::Record extra;
 
-        if (!(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra))) {
-          LOG(ERROR) << "cannot unpack Block header";
-          return;
-        }
+        CHECK(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra));
 
         answer["global_id"] = blk.global_id;
         auto now = info.gen_utime;
@@ -455,7 +452,7 @@ class Indexer : public td::actor::Actor {
 
               if (tag == block::gen::CommonMsgInfo::int_msg_info) {
                 block::gen::CommonMsgInfo::Record_int_msg_info msg;
-                tlb::unpack(in_msg_info, msg);
+                CHECK(tlb::unpack(in_msg_info, msg));
 
                 // PARSE DEST ADDRESS
 
@@ -463,7 +460,7 @@ class Indexer : public td::actor::Actor {
 
                 // TODO: create separated function
                 block::gen::MsgAddressInt::Record_addr_var dest_addr;
-                tlb::unpack(dest, dest_addr);
+                CHECK(tlb::unpack(dest, dest_addr));
 
                 // TODO: create separated function
                 std::map<std::string, std::variant<int, std::string>> anycast_prased;
@@ -496,7 +493,7 @@ class Indexer : public td::actor::Actor {
 
                 // TODO: create separated function
                 block::gen::MsgAddressInt::Record_addr_var src_addr;
-                tlb::unpack(src, src_addr);
+                CHECK(tlb::unpack(src, src_addr));
 
                 // TODO: create separated function
                 std::map<std::string, std::variant<int, std::string>> anycast_src_prased;
@@ -524,7 +521,7 @@ class Indexer : public td::actor::Actor {
 
               } else if (tag == block::gen::CommonMsgInfo::ext_in_msg_info) {
                 block::gen::CommonMsgInfo::Record_ext_in_msg_info msg;
-                tlb::unpack(in_msg_info, msg);
+                CHECK(tlb::unpack(in_msg_info, msg));
 
                 auto src = msg.src.write();
                 auto src_tag = block::gen::t_MsgAddressExt.get_tag(src);
@@ -535,7 +532,7 @@ class Indexer : public td::actor::Actor {
                   transaction["in_msg"]["src"] = "addr_none";
                 } else {
                   block::gen::MsgAddressExt::Record_addr_extern src_addr;
-                  tlb::unpack(src, src_addr);
+                  CHECK(tlb::unpack(src, src_addr));
                   transaction["in_msg"]["src"] = {{"len", src_addr.len},
                                                   {"external_address", src_addr.external_address->to_binary()}};
                 };
@@ -546,7 +543,7 @@ class Indexer : public td::actor::Actor {
 
                 if (dest_tag == block::gen::MsgAddressInt::addr_std) {
                   block::gen::MsgAddressInt::Record_addr_std dest_addr;
-                  tlb::unpack(dest, dest_addr);
+                  CHECK(tlb::unpack(dest, dest_addr));
 
                   // TODO: create separated function
                   std::map<std::string, std::variant<int, std::string>> anycast_prased;
@@ -574,7 +571,7 @@ class Indexer : public td::actor::Actor {
                 } else {
                   // TODO: create separated function
                   block::gen::MsgAddressInt::Record_addr_var dest_addr;
-                  tlb::unpack(dest, dest_addr);
+                  CHECK(tlb::unpack(dest, dest_addr));
 
                   // TODO: create separated function
                   std::map<std::string, std::variant<int, std::string>> anycast_prased;
