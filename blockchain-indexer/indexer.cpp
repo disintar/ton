@@ -30,8 +30,10 @@
 #include "shard.hpp"
 #include "validator-set.hpp"
 #include "json.hpp"
+#include "tuple"
 
 // TODO: use td/utils/json
+// TODO: use tlb auto deserializer to json
 using json = nlohmann::json;
 
 using td::Ref;
@@ -60,6 +62,23 @@ std::list<std::tuple<int, std::string>> parse_extra_currency(const Ref<vm::Cell>
   }
 
   return c_list;
+}
+
+std::map<std::string, std::variant<int, std::string>> parse_anycast(vm::CellSlice anycast) {
+  block::gen::Anycast::Record anycast_parsed;
+  tlb::unpack(anycast, anycast_parsed);
+
+  return {{"depth", anycast_parsed.depth}, {"rewrite_pfx", anycast_parsed.rewrite_pfx->to_binary()}};
+};
+
+std::string parse_grams(vm::CellSlice grams) {
+  block::gen::Grams::Record import_fee;
+  block::gen::VarUInteger::Record import_fee_parsed;
+
+  tlb::unpack(grams, import_fee);
+  tlb::csr_type_unpack(import_fee.amount, block::gen::t_VarUInteger_16, import_fee_parsed);
+
+  return import_fee_parsed.value.write().to_dec_string();
 }
 
 class Indexer : public td::actor::Actor {
@@ -423,6 +442,7 @@ class Indexer : public td::actor::Actor {
             transaction["state_update"] = {{"old_hash", hash_upd.old_hash.to_hex()},
                                            {"new_hash", hash_upd.old_hash.to_hex()}};
 
+            // Parse in msg
             if (trans.r1.in_msg.not_null()) {
               block::gen::Message::Record in_message;
               block::gen::CommonMsgInfo::Record_int_msg_info info;
@@ -430,23 +450,128 @@ class Indexer : public td::actor::Actor {
               CHECK(tlb::type_unpack_cell(trans.r1.in_msg->prefetch_ref(), block::gen::t_Message_Any, in_message));
 
               auto in_msg_info = in_message.info.write();
+              // Get in msg type
               int tag = block::gen::t_CommonMsgInfo.get_tag(in_msg_info);
 
-              LOG(DEBUG) << block::gen::t_CommonMsgInfo.check_tag(in_msg_info);
+              if (tag == block::gen::CommonMsgInfo::int_msg_info) {
+                block::gen::CommonMsgInfo::Record_int_msg_info msg;
+                tlb::unpack(in_msg_info, msg);
 
-              switch (tag) {
-                case block::gen::CommonMsgInfo::int_msg_info:
-                  LOG(DEBUG) << "GOT int_msg_info";
-                  break;
-                case block::gen::CommonMsgInfo::ext_in_msg_info:
-                  LOG(DEBUG) << "GOT ext_in_msg_info";
-                  break;
-                case block::gen::CommonMsgInfo::ext_out_msg_info:
-                  LOG(DEBUG) << "GOT ext_out_msg_info";
-                  break;
-                default:
-                  LOG(ERROR) << "Not covered";
-                  continue;
+                // PARSE DEST ADDRESS
+
+                auto dest = msg.dest.write();
+
+                // TODO: create separated function
+                block::gen::MsgAddressInt::Record_addr_var dest_addr;
+                tlb::unpack(dest, dest_addr);
+
+                auto anycast = dest_addr.anycast.write();
+                auto anycast_prased = parse_anycast(anycast);
+
+                transaction["in_msg"]["dest"] = {
+                    {"anycast",
+                     {
+                         "depth",
+                         std::get<int>(anycast_prased["depth"]),
+                         "rewrite_pfx",
+                         std::get<std::string>(anycast_prased["rewrite_pfx"]),
+                     }},
+                    {"workchain_id", dest_addr.workchain_id},
+                    {"addr_len", dest_addr.addr_len},
+                    {"address", dest_addr.address->to_binary()},
+                    {"address_hex", dest_addr.addr_len % 8 == 0 ? dest_addr.address->to_hex() : ""}};
+
+                auto src = msg.src.write();
+
+                // PARSE SRC ADDRESS
+
+                // TODO: create separated function
+                block::gen::MsgAddressInt::Record_addr_var src_addr;
+                tlb::unpack(src, src_addr);
+
+                auto anycast_src = src_addr.anycast.write();
+                auto anycast_src_prased = parse_anycast(anycast_src);
+
+                transaction["in_msg"]["src"] = {
+                    {"anycast",
+                     {
+                         "depth",
+                         std::get<int>(anycast_src_prased["depth"]),
+                         "rewrite_pfx",
+                         std::get<std::string>(anycast_src_prased["rewrite_pfx"]),
+                     }},
+                    {"workchain_id", src_addr.workchain_id},
+                    {"addr_len", src_addr.addr_len},
+                    {"address", src_addr.address->to_binary()},
+                    {"address_hex", src_addr.addr_len % 8 == 0 ? src_addr.address->to_hex() : ""}};
+
+
+              } else if (tag == block::gen::CommonMsgInfo::ext_in_msg_info) {
+                block::gen::CommonMsgInfo::Record_ext_in_msg_info msg;
+                tlb::unpack(in_msg_info, msg);
+
+                auto src = msg.src.write();
+                auto src_tag = block::gen::t_MsgAddressExt.get_tag(src);
+                transaction["in_msg"] = {};
+
+                // Get src
+                if (src_tag == block::gen::MsgAddressExt::addr_none) {
+                  transaction["in_msg"]["src"] = "addr_none";
+                } else {
+                  block::gen::MsgAddressExt::Record_addr_extern src_addr;
+                  tlb::unpack(src, src_addr);
+                  transaction["in_msg"]["src"] = {{"len", src_addr.len},
+                                                  {"external_address", src_addr.external_address->to_binary()}};
+                };
+
+                // Get dest
+                auto dest = msg.dest.write();
+                auto dest_tag = block::gen::t_MsgAddressInt.get_tag(dest);
+
+                if (dest_tag == block::gen::MsgAddressInt::addr_std) {
+                  block::gen::MsgAddressInt::Record_addr_std dest_addr;
+                  tlb::unpack(dest, dest_addr);
+
+                  auto anycast = dest_addr.anycast.write();
+                  auto anycast_prased = parse_anycast(anycast);
+
+                  transaction["in_msg"]["dest"] = {
+                      {"anycast",
+                       {
+                           "depth",
+                           std::get<int>(anycast_prased["depth"]),
+                           "rewrite_pfx",
+                           std::get<std::string>(anycast_prased["rewrite_pfx"]),
+                       }},
+                      {"workchain_id", dest_addr.workchain_id},
+                      {"address", dest_addr.address.to_hex()},
+                  };
+                } else {
+                  // TODO: create separated function
+                  block::gen::MsgAddressInt::Record_addr_var dest_addr;
+                  tlb::unpack(dest, dest_addr);
+
+                  auto anycast = dest_addr.anycast.write();
+                  auto anycast_prased = parse_anycast(anycast);
+
+                  transaction["in_msg"]["dest"] = {
+                      {"anycast",
+                       {
+                           "depth",
+                           std::get<int>(anycast_prased["depth"]),
+                           "rewrite_pfx",
+                           std::get<std::string>(anycast_prased["rewrite_pfx"]),
+                       }},
+                      {"workchain_id", dest_addr.workchain_id},
+                      {"addr_len", dest_addr.addr_len},
+                      {"address", dest_addr.address->to_binary()},
+                      {"address_hex", dest_addr.addr_len % 8 == 0 ? dest_addr.address->to_hex() : ""}};
+                }
+
+                transaction["in_msg"]["import_fee"] = parse_grams(msg.import_fee.write());
+              } else {
+                LOG(ERROR) << "Not covered";
+                transaction["in_msg"] = {{"type", "Unknown"}};
               }
 
               transaction["info"] = {{}};
