@@ -133,10 +133,8 @@ class Indexer : public td::actor::Actor {
   void set_global_config_path(std::string path) {
     global_config_ = std::move(path);
   }
-  void set_seqno_first(BlockSeqno seqno_first) {
+  void set_seqno_range(BlockSeqno seqno_first, BlockSeqno seqno_last) {
     seqno_first_ = seqno_first;
-  }
-  void set_seqno_last(BlockSeqno seqno_last) {
     seqno_last_ = seqno_last;
   }
 
@@ -250,8 +248,8 @@ class Indexer : public td::actor::Actor {
   }
 
   void sync_complete(const BlockHandle &handle) {
-    // i in [seqno_first_; seqno_last_)
-    for (auto seqno = seqno_first_; seqno < seqno_last_; ++seqno) {
+    // i in [seqno_first_; seqno_last_]
+    for (auto seqno = seqno_first_; seqno <= seqno_last_; ++seqno) {
       auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
         LOG(DEBUG) << "Got Answer!";
 
@@ -538,12 +536,16 @@ int main(int argc, char **argv) {
   p.add_checked_option('s', "seqno", "seqno_first[:seqno_last]\tseqno range", [&](td::Slice arg) {
     auto pos = std::min(arg.find(':'), arg.size());
     TRY_RESULT(seqno_first, td::to_integer_safe<ton::BlockSeqno>(arg.substr(0, pos)));
-    td::actor::send_closure(main, &ton::validator::Indexer::set_seqno_first, seqno_first);
+    LOG(DEBUG) << "seqno_first: " + std::to_string(seqno_first);
     ++pos;
 //    if (pos >= arg.size()) return td::Status::Error("cannot parse seqno range");
-    if (pos >= arg.size()) td::actor::send_closure(main, &ton::validator::Indexer::set_seqno_last, seqno_first);
+    if (pos >= arg.size()) {
+      td::actor::send_closure(main, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_first);
+      return td::Status::OK();
+    }
     TRY_RESULT(seqno_last, td::to_integer_safe<ton::BlockSeqno>(arg.substr(pos, arg.size())));
-    td::actor::send_closure(main, &ton::validator::Indexer::set_seqno_last, seqno_last);
+    LOG(DEBUG) << "seqno_last: " + std::to_string(seqno_last);
+    td::actor::send_closure(main, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_last);
     return td::Status::OK();
   });
 
