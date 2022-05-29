@@ -376,12 +376,22 @@ class Indexer : public td::actor::Actor {
         auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
 
+
+        td::Bits256 last_key;
+        last_key.set_zero();
+
+        auto key = account_blocks_dict->lookup_nearest_key(last_key);
+        const StdSmcAddress acc_addr = key->data_bits();
+        LOG(DEBUG) << acc_addr;
+
+            //        const StdSmcAddress &acc_addr = key;
+
         account_blocks_dict->check_for_each_extra([&workchain, &start_lt](const Ref<vm::CellSlice> &value,
                                                                           Ref<vm::CellSlice> extra, td::ConstBitPtr key,
                                                                           int key_len) {
           json account_block_parsed;
           CHECK(key_len == 256);
-          const StdSmcAddress &acc_addr = key;
+          const StdSmcAddress acc_addr = key;
           account_block_parsed["address"] = acc_addr.to_hex();
           account_block_parsed["workchain"] = workchain;
 
