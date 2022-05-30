@@ -387,9 +387,11 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
            {{"grams", block::tlb::t_Grams.as_integer(cc.grams)->to_dec_string()},
             {"extra", cc.other->have_refs() ? parse_extra_currency(cc.other->prefetch_ref()) : dummy}}}};
 
-      if (credit_ph.due_fees_collected.not_null()) {
-        answer["credit_ph"]["due_fees_collected"] =
-            block::tlb::t_Grams.as_integer(credit_ph.due_fees_collected)->to_dec_string();
+      if ((int)credit_ph.due_fees_collected->prefetch_ulong(1) == 1) {
+        auto cs = credit_ph.due_fees_collected.write();
+        cs.skip_first(1);
+
+        answer["credit_ph"]["due_fees_collected"] = block::tlb::t_Grams.as_integer(cs)->to_dec_string();
       }
     }
 
