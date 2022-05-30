@@ -239,6 +239,60 @@ std::string parse_type(char type) {
   }
 }
 
+std::string parse_status_change(char type) {
+  if (type == block::gen::t_AccStatusChange.acst_unchanged) {
+    return "acst_unchanged";
+  } else if (type == block::gen::t_AccStatusChange.acst_frozen) {
+    return "acst_frozen";
+  } else if (type == block::gen::t_AccStatusChange.acst_deleted) {
+    return "acst_deleted";
+  } else {
+    return "undefined";
+  }
+}
+
+json parse_storage_used_short(vm::CellSlice storage_used_short) {
+  json answer;
+
+  block::gen::StorageUsedShort::Record ss;
+  CHECK(tlb::unpack(storage_used_short, ss));
+
+  answer = {
+      {"cells", block::tlb::t_VarUInteger_7.as_uint(ss.cells.write())},
+      {"bits", block::tlb::t_VarUInteger_7.as_uint(ss.bits.write())},
+  };
+
+  return answer;
+}
+
+json parse_bounce_phase(vm::CellSlice bp) {
+  json answer;
+  auto tag = block::gen::t_TrBouncePhase.check_tag(bp);
+
+  if (tag == block::gen::t_TrBouncePhase.tr_phase_bounce_negfunds) {
+    answer["type"] = "negfunds";
+  } else if (tag == block::gen::t_TrBouncePhase.tr_phase_bounce_nofunds) {
+    block::gen::TrBouncePhase::Record_tr_phase_bounce_nofunds bn;
+    CHECK(tlb::unpack(bp, bn));
+
+    answer = {
+        {"type", "nofunds"},
+        {"msg_size", parse_storage_used_short(bn.msg_size.write())},
+        {"req_fwd_fees", block::tlb::t_Grams.as_integer(bn.req_fwd_fees)->to_dec_string()},
+    };
+  } else if (tag == block::gen::t_TrBouncePhase.tr_phase_bounce_ok) {
+    block::gen::TrBouncePhase::Record_tr_phase_bounce_ok bo;
+    CHECK(tlb::unpack(bp, bo));
+
+    answer = {{"type", "ok"},
+              {"msg_size", parse_storage_used_short(bo.msg_size.write())},
+              {"msg_fees", block::tlb::t_Grams.as_integer(bo.msg_fees)->to_dec_string()},
+              {"fwd_fees", block::tlb::t_Grams.as_integer(bo.fwd_fees)->to_dec_string()}};
+  }
+
+  return answer;
+}
+
 json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
   json answer;
   auto trans_descr_cs = load_cell_slice(transaction_descr);
@@ -296,15 +350,72 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
       }
     }
 
-    if ((int)parsed.storage_ph->prefetch_ulong(1) == 1) {  // Maybe TrStoragePhase
+    if (parsed.storage_ph.not_null()) {  // Maybe TrStoragePhase
+      auto storage_ph = parsed.storage_ph.write();
+
+      block::gen::TrStoragePhase::Record ts;
+      CHECK(tlb::unpack(storage_ph, ts));
+
+      answer["storage_ph"] = {
+          {"storage_fees_collected", block::tlb::t_Grams.as_integer(ts.storage_fees_collected)->to_dec_string()},
+          {"status_change", parse_status_change(ts.status_change)}};
+
+      if (ts.storage_fees_due.not_null()) {
+        answer["storage_ph"]["storage_fees_due"] = block::tlb::t_Grams.as_integer(ts.storage_fees_due)->to_dec_string();
+      }
     }
 
-    if ((int)parsed.credit_ph->prefetch_ulong(1) == 1) {  // Maybe TrCreditPhase
+    if (parsed.credit_ph.not_null()) {  // Maybe TrCreditPhase
+      block::gen::TrCreditPhase::Record credit_ph;
+      CHECK(tlb::unpack(parsed.credit_ph.write(), credit_ph));
+
+      block::gen::CurrencyCollection::Record cc;
+      CHECK(tlb::unpack(credit_ph.credit.write(), cc));
+
+      answer["credit_ph"] = {{"credit",
+                              {{"grams", block::tlb::t_Grams.as_integer(cc.grams)->to_dec_string()},
+                               {"extra", parse_extra_currency(cc.other->prefetch_ref())}}}};
+
+      if (credit_ph.due_fees_collected.not_null()) {
+        answer["credit_ph"]["due_fees_collected"] =
+            block::tlb::t_Grams.as_integer(credit_ph.due_fees_collected)->to_dec_string();
+      }
     }
 
-    if ((int)parsed.action->prefetch_ulong(1) == 1) {  // Maybe TrActionPhase
+    if (parsed.action.not_null()) {  // Maybe TrActionPhase
+      block::gen::TrActionPhase::Record action_ph;
+      CHECK(tlb::unpack_cell(parsed.action->prefetch_ref(), action_ph));
+
+      answer["action"] = {
+          {"success", action_ph.success},
+          {"valid", action_ph.valid},
+          {"no_funds", action_ph.no_funds},
+          {"no_funds", action_ph.no_funds},
+          {"status_change", parse_status_change(action_ph.status_change)},
+          {"result_code", action_ph.result_code},
+          {"tot_actions", action_ph.tot_actions},
+          {"spec_actions", action_ph.spec_actions},
+          {"skipped_actions", action_ph.skipped_actions},
+          {"msgs_created", action_ph.msgs_created},
+          {"action_list_hash", action_ph.action_list_hash.to_hex()},
+          {"tot_msg_size", parse_storage_used_short(action_ph.tot_msg_size.write())},
+      };
+
+      if (action_ph.total_fwd_fees.not_null()) {
+        answer["action"]["total_fwd_fees"] = block::tlb::t_Grams.as_integer(action_ph.total_fwd_fees)->to_dec_string();
+      }
+
+      if (action_ph.total_action_fees.not_null()) {
+        answer["action"]["total_action_fees"] =
+            block::tlb::t_Grams.as_integer(action_ph.total_action_fees)->to_dec_string();
+      }
+      if (action_ph.result_code) {
+        answer["action"]["result_code"] = action_ph.result_code;
+      }
     }
-    if ((int)parsed.bounce->prefetch_ulong(1) == 1) {  // Maybe TrBouncePhase
+
+    if (parsed.bounce.not_null()) {  // Maybe TrBouncePhase
+      answer["bounce"] = parse_bounce_phase(parsed.bounce.write());
     }
 
   } else if (tag == block::gen::t_TransactionDescr.trans_storage) {
