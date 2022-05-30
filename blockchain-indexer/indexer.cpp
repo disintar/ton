@@ -386,7 +386,7 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
       }
     }
 
-    if ((int)parsed.action->prefetch_ulong(1) == 1) {  // Maybe TrActionPhase
+    if ((int)parsed.action->prefetch_ulong(1) == 1) {  // Maybe ^TrActionPhase
       block::gen::TrActionPhase::Record action_ph;
       CHECK(tlb::unpack_cell(parsed.action->prefetch_ref(), action_ph));
 
@@ -471,8 +471,7 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
   transaction["state_update"] = {{"old_hash", hash_upd.old_hash.to_hex()}, {"new_hash", hash_upd.old_hash.to_hex()}};
 
   // Parse in msg
-  // TODO: Maybe Message - fix Maybe (not_null on ref, need to check ref)
-  if (trans.r1.in_msg.not_null()) {
+  if (trans.r1.in_msg->prefetch_ulong(1) == 1) {
     auto message = trans.r1.in_msg->prefetch_ref();
     transaction["in_msg"] = parse_message(message);
   }
