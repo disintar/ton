@@ -245,7 +245,68 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
   auto tag = block::gen::t_TransactionDescr.get_tag(trans_descr_cs);
 
   if (tag == block::gen::t_TransactionDescr.trans_ord) {
+    block::gen::TransactionDescr::Record_trans_ord parsed;
+    CHECK(tlb::unpack_cell(transaction_descr, parsed));
+
     answer["type"] = "trans_ord";
+    answer["credit_first"] = parsed.credit_first;
+    answer["aborted"] = parsed.aborted;
+    answer["destroyed"] = parsed.destroyed;
+
+    if ((int)parsed.compute_ph->prefetch_ulong(1) == 0) {  // tr_phase_compute_skipped
+      block::gen::TrComputePhase::Record_tr_phase_compute_skipped t;
+      CHECK(tlb::unpack(parsed.compute_ph.write(), t));
+
+      if (t.reason == block::gen::t_ComputeSkipReason.cskip_no_state) {
+        answer["compute_ph"] = {{"type", "skipped"}, {"reason", "cskip_no_state"}};
+      } else if (t.reason == block::gen::t_ComputeSkipReason.cskip_bad_state) {
+        answer["compute_ph"] = {{"type", "skipped"}, {"reason", "cskip_bad_state"}};
+      } else if (t.reason == block::gen::t_ComputeSkipReason.cskip_no_gas) {
+        answer["compute_ph"] = {{"type", "skipped"}, {"reason", "cskip_no_gas"}};
+      }
+
+    } else {
+      block::gen::TrComputePhase::Record_tr_phase_compute_vm t;
+      CHECK(tlb::unpack(parsed.compute_ph.write(), t));
+
+      answer["compute_ph"] = {
+          {"success", t.success},
+          {"msg_state_used", t.msg_state_used},
+          {"account_activated", t.account_activated},
+          {"gas_fees", block::tlb::t_Grams.as_integer(t.gas_fees)->to_dec_string()},
+          {"gas_used", block::tlb::t_VarUInteger_7.as_uint(t.r1.gas_used.write())},
+          {"gas_limit", block::tlb::t_VarUInteger_7.as_uint(t.r1.gas_limit.write())},
+          {"mode", t.r1.mode},
+          {"exit_code", t.r1.exit_code},
+          {"vm_steps", t.r1.vm_steps},
+          {"vm_init_state_hash", t.r1.vm_init_state_hash.to_hex()},
+          {"vm_final_state_hash", t.r1.vm_final_state_hash.to_hex()},
+      };
+
+      if ((int)t.r1.gas_credit->prefetch_ulong(1) == 1) {
+        auto cs = t.r1.gas_credit.write();
+        cs.skip_first(1);
+        answer["compute_ph"]["gas_credit"] = block::tlb::t_VarUInteger_3.as_uint(cs);
+      }
+
+      if ((int)t.r1.exit_arg->prefetch_ulong(1) == 1) {
+        auto cs = t.r1.exit_arg.write();
+        cs.skip_first(1);
+        answer["compute_ph"]["exit_arg"] = (int)cs.prefetch_ulong(32);
+      }
+    }
+
+    if ((int)parsed.storage_ph->prefetch_ulong(1) == 1) {  // Maybe TrStoragePhase
+    }
+
+    if ((int)parsed.credit_ph->prefetch_ulong(1) == 1) {  // Maybe TrCreditPhase
+    }
+
+    if ((int)parsed.action->prefetch_ulong(1) == 1) {  // Maybe TrActionPhase
+    }
+    if ((int)parsed.bounce->prefetch_ulong(1) == 1) {  // Maybe TrBouncePhase
+    }
+
   } else if (tag == block::gen::t_TransactionDescr.trans_storage) {
     answer["type"] = "trans_storage";
   } else if (tag == block::gen::t_TransactionDescr.trans_tick_tock) {
