@@ -183,7 +183,7 @@ json parse_state_init(vm::CellSlice state_init) {
     boc.add_root(code);
     auto res = boc.import_cells();
 
-    answer["code"] = boc.serialize_to_string();
+    answer["code"] = td::base64url_encode(boc.serialize_to_slice().move_as_ok());
   }
 
   return answer;
