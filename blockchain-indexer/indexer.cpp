@@ -195,6 +195,34 @@ json parse_state_init(vm::CellSlice state_init) {
     answer["data"] = td::base64url_encode(boc.serialize_to_slice().move_as_ok());
   }
 
+  if ((int)state_init_parsed.library->prefetch_ulong(1) == 1) {  // if not empty
+    auto libraries = vm::Dictionary{state_init_parsed.library->prefetch_ref(), 256};
+
+    std::list<json> libs;
+
+    while (!libraries.is_empty()) {
+      td::BitArray<256> key{};
+      libraries.get_minmax_key(key);
+
+      auto lib = load_cell_slice(libraries.lookup_delete_ref(key));
+      auto code = lib.prefetch_ref();
+      vm::BagOfCells boc;
+      boc.add_root(code);
+      auto res = boc.import_cells();
+
+      json answer = {
+          {"hash", key.to_hex()},
+          {"public", (bool)lib.prefetch_ulong(1)},
+          {"root", td::base64url_encode(boc.serialize_to_slice().move_as_ok())},
+      };
+
+      libs.push_back(answer);
+      //      out_msgs_list.push_back(parse_message(o_msg));
+    }
+
+    answer["libs"] = libs;
+  }
+
   return answer;
 }
 
