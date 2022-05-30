@@ -23,7 +23,7 @@
 #include "td/utils/Slice.h"
 #include "td/utils/common.h"
 #include "crypto/block/transaction.h"
-
+#include "td/utils/base64.h"
 #include <utility>
 #include "auto/tl/lite_api.h"
 #include "adnl/utils.hpp"
@@ -31,6 +31,7 @@
 #include "validator-set.hpp"
 #include "json.hpp"
 #include "tuple"
+#include "vm/boc.h"
 
 // TODO: use td/utils/json
 // TODO: use tlb auto deserializer to json
@@ -151,6 +152,43 @@ json parse_address(vm::CellSlice address) {
   return answer;
 }
 
+json parse_state_init(vm::CellSlice state_init) {
+  json answer;
+
+  block::gen::StateInit::Record state_init_parsed;
+  CHECK(tlb::unpack(state_init, state_init_parsed));
+
+  if ((int)state_init_parsed.split_depth->prefetch_ulong(1) == 1) {
+    auto sd = state_init_parsed.split_depth.write();
+    sd.skip_first(1);
+    answer["split_depth"] = (int)sd.prefetch_ulong(5);
+  }
+
+  if ((int)state_init_parsed.special->prefetch_ulong(1) == 1) {
+    auto s = state_init_parsed.special.write();
+    s.skip_first(1);
+
+    block::gen::TickTock::Record tiktok{};
+    CHECK(tlb::unpack(s, tiktok));
+
+    answer["special"] = {
+        {"tick", tiktok.tick},
+        {"tock", tiktok.tock},
+    };
+  }
+
+  if ((int)state_init_parsed.code->prefetch_ulong(1) == 1) {
+    auto code = state_init_parsed.code->prefetch_ref();
+    vm::BagOfCells boc;
+    boc.add_root(code);
+    auto res = boc.import_cells();
+
+    answer["code"] = boc.serialize_to_string();
+  }
+
+  return answer;
+}
+
 json parse_message(Ref<vm::Cell> message_any) {
   // int_msg_info$0
   // ext_in_msg_info$10
@@ -222,6 +260,20 @@ json parse_message(Ref<vm::Cell> message_any) {
   } else {
     LOG(ERROR) << "Not covered";
     answer = {{"type", "Unknown"}};
+  }
+
+  // Parse init
+  auto init = in_message.init.write();
+
+  if ((int)init.prefetch_ulong(1) == 1) {
+    init.skip_first(1);
+
+    if (init.have_refs()) {
+      auto init_root = init.prefetch_ref();
+      answer["init"] = parse_state_init(load_cell_slice(init_root));
+    } else {
+      answer["init"] = parse_state_init(init);
+    }
   }
 
   return answer;
@@ -458,8 +510,6 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
 }
 
 json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
-  // TODO: orig_status, end_status, description
-
   json transaction;
   block::gen::Transaction::Record trans;
   block::gen::HASH_UPDATE::Record hash_upd{};
