@@ -186,6 +186,15 @@ json parse_state_init(vm::CellSlice state_init) {
     answer["code"] = td::base64url_encode(boc.serialize_to_slice().move_as_ok());
   }
 
+  if ((int)state_init_parsed.data->prefetch_ulong(1) == 1) {
+    auto code = state_init_parsed.data->prefetch_ref();
+    vm::BagOfCells boc;
+    boc.add_root(code);
+    auto res = boc.import_cells();
+
+    answer["data"] = td::base64url_encode(boc.serialize_to_slice().move_as_ok());
+  }
+
   return answer;
 }
 
