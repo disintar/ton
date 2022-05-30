@@ -225,6 +225,94 @@ json parse_message(Ref<vm::Cell> message_any) {
   return answer;
 }
 
+std::string parse_type(char type) {
+  if (type == block::gen::t_AccountStatus.acc_state_active) {
+    return "active";
+  } else if (type == block::gen::t_AccountStatus.acc_state_uninit) {
+    return "uninit";
+  } else if (type == block::gen::t_AccountStatus.acc_state_frozen) {
+    return "frozen";
+  } else if (type == block::gen::t_AccountStatus.acc_state_nonexist) {
+    return "nonexist";
+  } else {
+    return "undefined";
+  }
+}
+
+json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
+  json answer;
+  auto trans_descr_cs = load_cell_slice(transaction_descr);
+  auto tag = block::gen::t_TransactionDescr.get_tag(trans_descr_cs);
+
+  if (tag == block::gen::t_TransactionDescr.trans_ord) {
+    answer["type"] = "trans_ord";
+  } else if (tag == block::gen::t_TransactionDescr.trans_storage) {
+    answer["type"] = "trans_storage";
+  } else if (tag == block::gen::t_TransactionDescr.trans_tick_tock) {
+    answer["type"] = "trans_tick_tock";
+  } else if (tag == block::gen::t_TransactionDescr.trans_split_prepare) {
+    answer["type"] = "trans_split_prepare";
+  } else if (tag == block::gen::t_TransactionDescr.trans_split_install) {
+    answer["type"] = "trans_split_install";
+  } else if (tag == block::gen::t_TransactionDescr.trans_merge_prepare) {
+    answer["type"] = "trans_merge_prepare";
+  } else if (tag == block::gen::t_TransactionDescr.trans_merge_install) {
+    answer["type"] = "trans_merge_install";
+  }
+
+  return answer;
+}
+
+json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
+  // TODO: orig_status, end_status, description
+
+  json transaction;
+  block::gen::Transaction::Record trans;
+  block::gen::HASH_UPDATE::Record hash_upd{};
+  block::gen::CurrencyCollection::Record trans_total_fees_cc;
+
+  CHECK(tlb::unpack_cell(tvalue->prefetch_ref(), trans) &&
+        tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd) &&
+        tlb::unpack(trans.total_fees.write(), trans_total_fees_cc));
+
+  transaction["total_fees"] = {{"grams", block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string()},
+                               {"extra", parse_extra_currency(trans_total_fees_cc.other->prefetch_ref())}};
+
+  transaction["account_addr"] = {{"workchain", workchain}, {"address", trans.account_addr.to_hex()}};
+  transaction["lt"] = trans.lt;
+  transaction["prev_trans_hash"] = trans.prev_trans_hash.to_hex();
+  transaction["prev_trans_lt"] = trans.prev_trans_lt;
+  transaction["now"] = trans.now;
+  transaction["outmsg_cnt"] = trans.outmsg_cnt;
+  transaction["state_update"] = {{"old_hash", hash_upd.old_hash.to_hex()}, {"new_hash", hash_upd.old_hash.to_hex()}};
+
+  // Parse in msg
+  // TODO: Maybe Message - fix Maybe (not_null on ref, need to check ref)
+  if (trans.r1.in_msg.not_null()) {
+    auto message = trans.r1.in_msg->prefetch_ref();
+    transaction["in_msg"] = parse_message(message);
+  }
+
+  auto out_msgs = vm::Dictionary{trans.r1.out_msgs, 15};
+
+  std::list<json> out_msgs_list;
+
+  while (!out_msgs.is_empty()) {
+    td::BitArray<15> key{};
+    out_msgs.get_minmax_key(key);
+
+    auto o_msg = out_msgs.lookup_delete_ref(key);
+    out_msgs_list.push_back(parse_message(o_msg));
+  }
+
+  transaction["out_msgs"] = out_msgs_list;
+  transaction["orig_status"] = parse_type(trans.orig_status);
+  transaction["end_status"] = parse_type(trans.end_status);
+  transaction["description"] = parse_transaction_descr(trans.description);
+
+  return transaction;
+}
+
 class Indexer : public td::actor::Actor {
  private:
   std::string db_root_ = "/mnt/ton/ton-node/db";
@@ -630,51 +718,9 @@ class Indexer : public td::actor::Actor {
             Ref<vm::CellSlice> tvalue;
             tvalue = trans_dict.lookup_delete(last_lt);
 
-            block::gen::Transaction::Record trans;
-            block::gen::HASH_UPDATE::Record hash_upd{};
-            block::gen::CurrencyCollection::Record trans_total_fees_cc;
-
-            CHECK(tlb::unpack_cell(tvalue->prefetch_ref(), trans) &&
-                  tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd) &&
-                  tlb::unpack(trans.total_fees.write(), trans_total_fees_cc));
-
-            // TODO: orig_status, end_status, out_msgs, description
-            json transaction;
-            transaction["total_fees"] = {
-                {"grams", block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string()},
-                {"extra", parse_extra_currency(trans_total_fees_cc.other->prefetch_ref())}};
-
-            transaction["account_addr"] = {{"workchain", workchain}, {"address", trans.account_addr.to_hex()}};
-            transaction["lt"] = trans.lt;
-            transaction["prev_trans_hash"] = trans.prev_trans_hash.to_hex();
-            transaction["prev_trans_lt"] = trans.prev_trans_lt;
-            transaction["now"] = trans.now;
-            transaction["outmsg_cnt"] = trans.outmsg_cnt;
-            transaction["state_update"] = {{"old_hash", hash_upd.old_hash.to_hex()},
-                                           {"new_hash", hash_upd.old_hash.to_hex()}};
-
-            // Parse in msg
-            // TODO: Maybe Message - fix Maybe (not_null on ref, need to check ref)
-            if (trans.r1.in_msg.not_null()) {
-              auto message = trans.r1.in_msg->prefetch_ref();
-              transaction["in_msg"] = parse_message(message);
-            }
-
-            auto out_msgs = vm::Dictionary{trans.r1.out_msgs, 15};
-
-            std::list<json> out_msgs_list;
-
-            while (!out_msgs.is_empty()){
-              td::BitArray<15> key{};
-              out_msgs.get_minmax_key(key);
-
-              auto o_msg = out_msgs.lookup_delete_ref(key);
-              out_msgs_list.push_back(parse_message(o_msg));
-            }
-
-            transaction["outmsgs"] = out_msgs_list;
-
+            json transaction = parse_transaction(tvalue, workchain);
             transactions.push_back(transaction);
+
             ++count;
           };
 
