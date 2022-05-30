@@ -669,7 +669,7 @@ class Indexer : public td::actor::Actor {
     });
 
     ton::AccountIdPrefixFull pfx{0, 0x8000000000000000};
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 25138332,
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 25138331,
                             std::move(P));
   }
 
