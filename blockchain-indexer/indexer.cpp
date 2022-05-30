@@ -210,13 +210,13 @@ json parse_state_init(vm::CellSlice state_init) {
       boc.add_root(code);
       auto res = boc.import_cells();
 
-      json answer = {
+      json lib_json = {
           {"hash", key.to_hex()},
           {"public", (bool)lib.prefetch_ulong(1)},
           {"root", td::base64url_encode(boc.serialize_to_slice().move_as_ok())},
       };
 
-      libs.push_back(answer);
+      libs.push_back(lib_json);
       //      out_msgs_list.push_back(parse_message(o_msg));
     }
 
