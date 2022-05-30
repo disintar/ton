@@ -186,6 +186,7 @@ json parse_message(Ref<vm::Cell> message_any) {
     block::gen::CurrencyCollection::Record value_cc;
     // TODO: separate function
     CHECK(tlb::unpack(msg.value.write(), value_cc))
+    CHECK(value_cc.other->have_refs())
 
     answer["value"] = {{"grams", block::tlb::t_Grams.as_integer(value_cc.grams)->to_dec_string()},
                        {"extra", parse_extra_currency(value_cc.other->prefetch_ref())}};
@@ -375,6 +376,7 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
 
       block::gen::CurrencyCollection::Record cc;
       CHECK(tlb::unpack(credit_ph.credit.write(), cc));
+      CHECK(cc.other->have_refs());
 
       answer["credit_ph"] = {{"credit",
                               {{"grams", block::tlb::t_Grams.as_integer(cc.grams)->to_dec_string()},
@@ -388,6 +390,7 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
 
     if ((int)parsed.action->prefetch_ulong(1) == 1) {  // Maybe ^TrActionPhase
       block::gen::TrActionPhase::Record action_ph;
+      CHECK(parsed.action->have_refs());
       CHECK(tlb::unpack_cell(parsed.action->prefetch_ref(), action_ph));
 
       answer["action"] = {
@@ -455,10 +458,12 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
   block::gen::HASH_UPDATE::Record hash_upd{};
   block::gen::CurrencyCollection::Record trans_total_fees_cc;
 
+  CHECK(tvalue->have_refs());
   CHECK(tlb::unpack_cell(tvalue->prefetch_ref(), trans) &&
         tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd) &&
         tlb::unpack(trans.total_fees.write(), trans_total_fees_cc));
 
+  CHECK(trans_total_fees_cc.other->have_refs());
   transaction["total_fees"] = {{"grams", block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string()},
                                {"extra", parse_extra_currency(trans_total_fees_cc.other->prefetch_ref())}};
 
@@ -472,6 +477,8 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
 
   // Parse in msg
   if (trans.r1.in_msg->prefetch_ulong(1) == 1) {
+    CHECK(trans.r1.in_msg->have_refs());
+
     auto message = trans.r1.in_msg->prefetch_ref();
     transaction["in_msg"] = parse_message(message);
   }
@@ -925,6 +932,7 @@ class Indexer : public td::actor::Actor {
           return;
         }
 
+        CHECK(upd_cs.have_refs(2));
         auto state_old_hash = upd_cs.prefetch_ref(0)->get_hash(0).to_hex();
         auto state_hash = upd_cs.prefetch_ref(1)->get_hash(0).to_hex();
 
