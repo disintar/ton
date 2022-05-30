@@ -350,7 +350,7 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
       }
     }
 
-    if (parsed.storage_ph.not_null()) {  // Maybe TrStoragePhase
+    if ((int)parsed.storage_ph->prefetch_ulong(1) == 1) {  // Maybe TrStoragePhase
       auto storage_ph = parsed.storage_ph.write();
 
       block::gen::TrStoragePhase::Record ts;
@@ -365,7 +365,7 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
       }
     }
 
-    if (parsed.credit_ph.not_null()) {  // Maybe TrCreditPhase
+    if ((int)parsed.credit_ph->prefetch_ulong(1) == 1) {  // Maybe TrCreditPhase
       block::gen::TrCreditPhase::Record credit_ph;
       CHECK(tlb::unpack(parsed.credit_ph.write(), credit_ph));
 
@@ -382,7 +382,7 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
       }
     }
 
-    if (parsed.action.not_null()) {  // Maybe TrActionPhase
+    if ((int)parsed.action->prefetch_ulong(1) == 1) {  // Maybe TrActionPhase
       block::gen::TrActionPhase::Record action_ph;
       CHECK(tlb::unpack_cell(parsed.action->prefetch_ref(), action_ph));
 
@@ -401,11 +401,11 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
           {"tot_msg_size", parse_storage_used_short(action_ph.tot_msg_size.write())},
       };
 
-      if (action_ph.total_fwd_fees.not_null()) {
+      if ((int)action_ph.total_fwd_fees->prefetch_ulong(1) == 1) {
         answer["action"]["total_fwd_fees"] = block::tlb::t_Grams.as_integer(action_ph.total_fwd_fees)->to_dec_string();
       }
 
-      if (action_ph.total_action_fees.not_null()) {
+      if ((int)action_ph.total_action_fees->prefetch_ulong(1) == 1) {
         answer["action"]["total_action_fees"] =
             block::tlb::t_Grams.as_integer(action_ph.total_action_fees)->to_dec_string();
       }
@@ -414,7 +414,7 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
       }
     }
 
-    if (parsed.bounce.not_null()) {  // Maybe TrBouncePhase
+    if ((int)parsed.bounce->prefetch_ulong(1) == 1) {  // Maybe TrBouncePhase
       answer["bounce"] = parse_bounce_phase(parsed.bounce.write());
     }
 
