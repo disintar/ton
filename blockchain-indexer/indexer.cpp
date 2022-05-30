@@ -363,8 +363,11 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
           {"storage_fees_collected", block::tlb::t_Grams.as_integer(ts.storage_fees_collected)->to_dec_string()},
           {"status_change", parse_status_change(ts.status_change)}};
 
-      if (ts.storage_fees_due.not_null()) {
-        answer["storage_ph"]["storage_fees_due"] = block::tlb::t_Grams.as_integer(ts.storage_fees_due)->to_dec_string();
+      if ((int)ts.storage_fees_due->prefetch_ulong(1) == 1) {
+        auto cs = ts.storage_fees_due.write();
+        cs.skip_first(1);
+
+        answer["storage_ph"]["storage_fees_due"] = block::tlb::t_Grams.as_integer(cs)->to_dec_string();
       }
     }
 
