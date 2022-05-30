@@ -186,10 +186,11 @@ json parse_message(Ref<vm::Cell> message_any) {
     block::gen::CurrencyCollection::Record value_cc;
     // TODO: separate function
     CHECK(tlb::unpack(msg.value.write(), value_cc))
-    CHECK(value_cc.other->have_refs())
 
-    answer["value"] = {{"grams", block::tlb::t_Grams.as_integer(value_cc.grams)->to_dec_string()},
-                       {"extra", parse_extra_currency(value_cc.other->prefetch_ref())}};
+    std::list<std::tuple<int, std::string>> dummy;
+    answer["value"] = {
+        {"grams", block::tlb::t_Grams.as_integer(value_cc.grams)->to_dec_string()},
+        {"extra", value_cc.other->have_refs() ? parse_extra_currency(value_cc.other->prefetch_ref()) : dummy}};
 
     answer["ihr_fee"] = block::tlb::t_Grams.as_integer(msg.ihr_fee.write())->to_dec_string();
     answer["fwd_fee"] = block::tlb::t_Grams.as_integer(msg.fwd_fee.write())->to_dec_string();
@@ -376,11 +377,12 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
 
       block::gen::CurrencyCollection::Record cc;
       CHECK(tlb::unpack(credit_ph.credit.write(), cc));
-      CHECK(cc.other->have_refs());
 
-      answer["credit_ph"] = {{"credit",
-                              {{"grams", block::tlb::t_Grams.as_integer(cc.grams)->to_dec_string()},
-                               {"extra", parse_extra_currency(cc.other->prefetch_ref())}}}};
+      std::list<std::tuple<int, std::string>> dummy;
+      answer["credit_ph"] = {
+          {"credit",
+           {{"grams", block::tlb::t_Grams.as_integer(cc.grams)->to_dec_string()},
+            {"extra", cc.other->have_refs() ? parse_extra_currency(cc.other->prefetch_ref()) : dummy}}}};
 
       if (credit_ph.due_fees_collected.not_null()) {
         answer["credit_ph"]["due_fees_collected"] =
@@ -463,9 +465,11 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
         tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd) &&
         tlb::unpack(trans.total_fees.write(), trans_total_fees_cc));
 
-  CHECK(trans_total_fees_cc.other->have_refs());
-  transaction["total_fees"] = {{"grams", block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string()},
-                               {"extra", parse_extra_currency(trans_total_fees_cc.other->prefetch_ref())}};
+  std::list<std::tuple<int, std::string>> dummy;
+  transaction["total_fees"] = {
+      {"grams", block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string()},
+      {"extra", trans_total_fees_cc.other->have_refs() ? parse_extra_currency(trans_total_fees_cc.other->prefetch_ref())
+                                                       : dummy}};
 
   transaction["account_addr"] = {{"workchain", workchain}, {"address", trans.account_addr.to_hex()}};
   transaction["lt"] = trans.lt;
