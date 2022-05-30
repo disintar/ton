@@ -352,6 +352,7 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
 
     if ((int)parsed.storage_ph->prefetch_ulong(1) == 1) {  // Maybe TrStoragePhase
       auto storage_ph = parsed.storage_ph.write();
+      storage_ph.skip_first(1);
 
       block::gen::TrStoragePhase::Record ts;
       CHECK(tlb::unpack(storage_ph, ts));
@@ -366,8 +367,11 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
     }
 
     if ((int)parsed.credit_ph->prefetch_ulong(1) == 1) {  // Maybe TrCreditPhase
+      auto credit_ph_root = parsed.credit_ph.write();
+      credit_ph_root.skip_first(1);
+
       block::gen::TrCreditPhase::Record credit_ph;
-      CHECK(tlb::unpack(parsed.credit_ph.write(), credit_ph));
+      CHECK(tlb::unpack(credit_ph_root, credit_ph));
 
       block::gen::CurrencyCollection::Record cc;
       CHECK(tlb::unpack(credit_ph.credit.write(), cc));
@@ -402,12 +406,17 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
       };
 
       if ((int)action_ph.total_fwd_fees->prefetch_ulong(1) == 1) {
-        answer["action"]["total_fwd_fees"] = block::tlb::t_Grams.as_integer(action_ph.total_fwd_fees)->to_dec_string();
+        auto tf = action_ph.total_fwd_fees.write();
+        tf.skip_first(1);
+
+        answer["action"]["total_fwd_fees"] = block::tlb::t_Grams.as_integer(tf)->to_dec_string();
       }
 
       if ((int)action_ph.total_action_fees->prefetch_ulong(1) == 1) {
-        answer["action"]["total_action_fees"] =
-            block::tlb::t_Grams.as_integer(action_ph.total_action_fees)->to_dec_string();
+        auto tf = action_ph.total_action_fees.write();
+        tf.skip_first(1);
+
+        answer["action"]["total_action_fees"] = block::tlb::t_Grams.as_integer(tf)->to_dec_string();
       }
       if (action_ph.result_code) {
         answer["action"]["result_code"] = action_ph.result_code;
@@ -415,7 +424,10 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
     }
 
     if ((int)parsed.bounce->prefetch_ulong(1) == 1) {  // Maybe TrBouncePhase
-      answer["bounce"] = parse_bounce_phase(parsed.bounce.write());
+      auto bounce = parsed.bounce.write();
+      bounce.skip_first(1);
+
+      answer["bounce"] = parse_bounce_phase(bounce);
     }
 
   } else if (tag == block::gen::t_TransactionDescr.trans_storage) {
