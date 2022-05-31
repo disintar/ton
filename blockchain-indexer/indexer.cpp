@@ -75,6 +75,13 @@ std::map<std::string, std::variant<int, std::string>> parse_anycast(vm::CellSlic
   return {{"depth", anycast_parsed.depth}, {"rewrite_pfx", anycast_parsed.rewrite_pfx->to_binary()}};
 };
 
+std::string dump_as_boc(Ref<vm::Cell> root_cell) {
+  vm::BagOfCells boc;
+  boc.add_root(std::move(root_cell));
+  auto res = boc.import_cells();
+  return td::base64url_encode(boc.serialize_to_slice().move_as_ok());
+}
+
 json parse_address(vm::CellSlice address) {
   json answer;
 
@@ -182,20 +189,14 @@ json parse_state_init(vm::CellSlice state_init) {
 
   if ((int)state_init_parsed.code->prefetch_ulong(1) == 1) {
     auto code = state_init_parsed.code->prefetch_ref();
-    vm::BagOfCells boc;
-    boc.add_root(code);
-    auto res = boc.import_cells();
 
-    answer["code"] = td::base64url_encode(boc.serialize_to_slice().move_as_ok());
+    answer["code"] = dump_as_boc(code);
   }
 
   if ((int)state_init_parsed.data->prefetch_ulong(1) == 1) {
-    auto code = state_init_parsed.data->prefetch_ref();
-    vm::BagOfCells boc;
-    boc.add_root(code);
-    auto res = boc.import_cells();
+    auto data = state_init_parsed.data->prefetch_ref();
 
-    answer["data"] = td::base64url_encode(boc.serialize_to_slice().move_as_ok());
+    answer["data"] = dump_as_boc(data);
   }
 
   if ((int)state_init_parsed.library->prefetch_ulong(1) == 1) {  // if not empty
@@ -209,14 +210,11 @@ json parse_state_init(vm::CellSlice state_init) {
 
       auto lib = load_cell_slice(libraries.lookup_delete_ref(key));
       auto code = lib.prefetch_ref();
-      vm::BagOfCells boc;
-      boc.add_root(code);
-      auto res = boc.import_cells();
 
       json lib_json = {
           {"hash", key.to_hex()},
           {"public", (bool)lib.prefetch_ulong(1)},
-          {"root", td::base64url_encode(boc.serialize_to_slice().move_as_ok())},
+          {"root", dump_as_boc(code)},
       };
 
       libs.push_back(lib_json);
@@ -314,6 +312,17 @@ json parse_message(Ref<vm::Cell> message_any) {
     } else {
       answer["init"] = parse_state_init(init);
     }
+  }
+
+  auto body = in_message.body.write();
+  if ((int)body.prefetch_ulong(1) == 1) {  // Either
+    answer["body"] = dump_as_boc(body.prefetch_ref());
+  } else {
+    vm::CellBuilder cb;
+    cb.append_cellslice(body);
+    auto body_cell = cb.finalize();
+
+    answer["body"] = dump_as_boc(body_cell);
   }
 
   return answer;
@@ -605,7 +614,7 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
 class Indexer : public td::actor::Actor {
  private:
   std::string db_root_ = "/mnt/ton/ton-node/db";
-  std::string global_config_/*; = db_root_ + "/global-config.json"*/;
+  std::string global_config_ /*; = db_root_ + "/global-config.json"*/;
   BlockSeqno seqno_first_ = 0;
   BlockSeqno seqno_last_ = 0;
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
@@ -1087,25 +1096,27 @@ int main(int argc, char **argv) {
     std::exit(2);
   });
   p.add_checked_option('u', "user", "change user", [&](td::Slice user) { return td::change_user(user.str()); });
-  p.add_option('D', "db", "root for dbs",
-               [&](td::Slice fname) { td::actor::send_closure(main, &ton::validator::Indexer::set_db_root, fname.str()); });
-  p.add_option('C', "config", "global config path",
-               [&](td::Slice fname) { td::actor::send_closure(main, &ton::validator::Indexer::set_global_config_path, fname.str()); });
+  p.add_option('D', "db", "root for dbs", [&](td::Slice fname) {
+    td::actor::send_closure(main, &ton::validator::Indexer::set_db_root, fname.str());
+  });
+  p.add_option('C', "config", "global config path", [&](td::Slice fname) {
+    td::actor::send_closure(main, &ton::validator::Indexer::set_global_config_path, fname.str());
+  });
   td::uint32 threads = 7;
-  p.add_checked_option('t', "threads", PSTRING() << "number of threads (default=" << threads << ")",
-               [&](td::Slice arg) {
-                 td::uint32 v;
-                         try {
-                           v = std::stoi(arg.str());
-                         } catch (...) {
-                           return td::Status::Error(ton::ErrorCode::error, "bad value for --threads: not a number");
-                         }
-                         if (v < 1 || v > 256) {
-                           return td::Status::Error(ton::ErrorCode::error, "bad value for --threads: should be in range [1..256]");
-                         }
-                         threads = v;
-                         return td::Status::OK();
-               });
+  p.add_checked_option(
+      't', "threads", PSTRING() << "number of threads (default=" << threads << ")", [&](td::Slice arg) {
+        td::uint32 v;
+        try {
+          v = std::stoi(arg.str());
+        } catch (...) {
+          return td::Status::Error(ton::ErrorCode::error, "bad value for --threads: not a number");
+        }
+        if (v < 1 || v > 256) {
+          return td::Status::Error(ton::ErrorCode::error, "bad value for --threads: should be in range [1..256]");
+        }
+        threads = v;
+        return td::Status::OK();
+      });
   p.add_checked_option('s', "seqno", "seqno_first[:seqno_last]\tseqno range", [&](td::Slice arg) {
     auto pos = std::min(arg.find(':'), arg.size());
     TRY_RESULT(seqno_first, td::to_integer_safe<ton::BlockSeqno>(arg.substr(0, pos)));
