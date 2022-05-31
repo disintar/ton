@@ -1033,13 +1033,13 @@ class Indexer : public td::actor::Actor {
         std::list<json> out_msgs_json;
         while (!out_msg_dict->is_empty()) {
           td::Bits256 last_key;
-          Ref<vm::CellSlice> data;
 
           account_blocks_dict->get_minmax_key(last_key);
           LOG(DEBUG) << "Parse out message " << last_key.to_hex();
-          data = account_blocks_dict->lookup_delete(last_key);
+          vm::CellSlice data = account_blocks_dict->lookup_delete(last_key).write();
+          LOG(DEBUG) << data.size();
 
-          json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg_descr(data.write())}};
+          json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg_descr(data)}};
           LOG(DEBUG) << to_string(parsed);
 
           out_msgs_json.push_back(parsed);
