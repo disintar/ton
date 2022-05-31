@@ -162,6 +162,50 @@ json parse_address(vm::CellSlice address) {
   return answer;
 }
 
+json parse_out_msg_descr(const vm::CellSlice &out_msg) {
+  json answer;
+
+  auto tag = block::gen::t_OutMsg.check_tag(out_msg);
+
+  if (tag == block::gen::t_OutMsg.msg_export_ext) {
+    answer["type"] = "msg_export_ext";
+  }
+
+  else if (tag == block::gen::t_OutMsg.msg_export_imm) {
+    answer["type"] = "msg_export_imm";
+  }
+
+  else if (tag == block::gen::t_OutMsg.msg_export_new) {
+    answer["type"] = "msg_export_new";
+  }
+
+  else if (tag == block::gen::t_OutMsg.msg_export_tr) {
+    answer["type"] = "msg_export_tr";
+  }
+
+  else if (tag == block::gen::t_OutMsg.msg_export_deq) {
+    answer["type"] = "msg_export_deq";
+  }
+
+  else if (tag == block::gen::t_OutMsg.msg_export_deq_short) {
+    answer["type"] = "msg_export_deq_short";
+  }
+
+  else if (tag == block::gen::t_OutMsg.msg_export_tr_req) {
+    answer["type"] = "msg_export_tr_req";
+  }
+
+  else if (tag == block::gen::t_OutMsg.msg_export_deq_imm) {
+    answer["type"] = "msg_export_deq_imm";
+  }
+
+  else {
+    answer["type"] = "undefined"
+  }
+
+  return answer;
+}
+
 json parse_state_init(vm::CellSlice state_init) {
   json answer;
 
@@ -984,6 +1028,22 @@ class Indexer : public td::actor::Actor {
             std::make_unique<vm::AugmentedDictionary>(std::move(outmsg_cs), 256, block::tlb::aug_OutMsgDescr);
         auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
+
+        std::list<json> out_msgs_json;
+        while (!out_msg_dict->is_empty()) {
+          td::Bits256 last_key;
+          Ref<vm::CellSlice> data;
+
+          account_blocks_dict->get_minmax_key(last_key);
+          LOG(DEBUG) << "Parse out message " << last_key.to_hex();
+          data = account_blocks_dict->lookup_delete(last_key);
+
+          json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg_descr(data.write())}};
+
+          out_msgs_json.push_back(parsed);
+        }
+
+        answer["out_msg_descr"] = out_msgs_json;
 
         /* tlb
            acc_trans#5 account_addr:bits256
