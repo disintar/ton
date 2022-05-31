@@ -80,7 +80,7 @@ std::string dump_as_boc(Ref<vm::Cell> root_cell) {
   boc.set_root(std::move(root_cell));
   boc.import_cells().ensure();
   auto res = boc.serialize_to_string(31);
-
+  LOG(DEBUG) << res;
   return res;
 }
 
