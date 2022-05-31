@@ -24,6 +24,8 @@
 #include "td/utils/common.h"
 #include "crypto/block/transaction.h"
 #include "td/utils/base64.h"
+#include "td/utils/OptionParser.h"
+#include "td/utils/port/user.h"
 #include <utility>
 #include <fstream>
 #include "auto/tl/lite_api.h"
@@ -603,12 +605,14 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
 class Indexer : public td::actor::Actor {
  private:
   std::string db_root_ = "/mnt/ton/ton-node/db";
-  std::string config_path_ = db_root_ + "/global-config.json";
+  std::string global_config_/*; = db_root_ + "/global-config.json"*/;
+  BlockSeqno seqno_first_ = 0;
+  BlockSeqno seqno_last_ = 0;
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
   td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
 
   td::Status create_validator_options() {
-    TRY_RESULT_PREFIX(conf_data, td::read_file(config_path_), "failed to read: ");
+    TRY_RESULT_PREFIX(conf_data, td::read_file(global_config_), "failed to read: ");
     TRY_RESULT_PREFIX(conf_json, td::json_decode(conf_data.as_slice()), "failed to parse json: ");
 
     ton::ton_api::config_global conf;
@@ -661,15 +665,26 @@ class Indexer : public td::actor::Actor {
   }
 
  public:
+  void set_db_root(std::string db_root) {
+    db_root_ = std::move(db_root);
+  }
+  void set_global_config_path(std::string path) {
+    global_config_ = std::move(path);
+  }
+  void set_seqno_range(BlockSeqno seqno_first, BlockSeqno seqno_last) {
+    seqno_first_ = seqno_first;
+    seqno_last_ = seqno_last;
+  }
+
   void run() {
     LOG(DEBUG) << "Use db root: " << db_root_;
 
     auto Sr = create_validator_options();
     if (Sr.is_error()) {
-      LOG(ERROR) << "failed to load global config'" << config_path_ << "': " << Sr;
+      LOG(ERROR) << "failed to load global config'" << global_config_ << "': " << Sr;
       std::_Exit(2);
     } else {
-      LOG(DEBUG) << "Global config loaded successfully from " << config_path_;
+      LOG(DEBUG) << "Global config loaded successfully from " << global_config_;
     }
 
     auto shard = ton::ShardIdFull(ton::masterchainId, ton::shardIdAll);
@@ -771,21 +786,24 @@ class Indexer : public td::actor::Actor {
   }
 
   void sync_complete(const BlockHandle &handle) {
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
-      LOG(DEBUG) << "Got Answer!";
+    // i in [seqno_first_; seqno_last_]
+    for (auto seqno = seqno_first_; seqno <= seqno_last_; ++seqno) {
+      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
+        LOG(DEBUG) << "Got Answer!";
 
-      if (R.is_error()) {
-        LOG(ERROR) << R.move_as_error().to_string();
-      } else {
-        auto handle = R.move_as_ok();
-        LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
-        td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle);
-      }
-    });
+        if (R.is_error()) {
+          LOG(ERROR) << R.move_as_error().to_string();
+        } else {
+          auto handle = R.move_as_ok();
+          LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
+          td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle);
+        }
+      });
 
-    ton::AccountIdPrefixFull pfx{0, 0x8000000000000000};
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, 25138331,
-                            std::move(P));
+      ton::AccountIdPrefixFull pfx{0, 0x8000000000000000};
+      td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
+                              std::move(P));
+    }
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle) {
@@ -1059,10 +1077,52 @@ int main(int argc, char **argv) {
 
   td::actor::ActorOwn<ton::validator::Indexer> main;
 
-  //td::actor::send_closure(main, &Indexer::run);
+  td::OptionParser p;
+  p.set_description("blockchain indexer");
+  p.add_option('h', "help", "prints_help", [&]() {
+    char b[10240];
+    td::StringBuilder sb(td::MutableSlice{b, 10000});
+    sb << p;
+    std::cout << sb.as_cslice().c_str();
+    std::exit(2);
+  });
+  p.add_checked_option('u', "user", "change user", [&](td::Slice user) { return td::change_user(user.str()); });
+  p.add_option('D', "db", "root for dbs",
+               [&](td::Slice fname) { td::actor::send_closure(main, &ton::validator::Indexer::set_db_root, fname.str()); });
+  p.add_option('C', "config", "global config path",
+               [&](td::Slice fname) { td::actor::send_closure(main, &ton::validator::Indexer::set_global_config_path, fname.str()); });
+  td::uint32 threads = 7;
+  p.add_checked_option('t', "threads", PSTRING() << "number of threads (default=" << threads << ")",
+               [&](td::Slice arg) {
+                 td::uint32 v;
+                         try {
+                           v = std::stoi(arg.str());
+                         } catch (...) {
+                           return td::Status::Error(ton::ErrorCode::error, "bad value for --threads: not a number");
+                         }
+                         if (v < 1 || v > 256) {
+                           return td::Status::Error(ton::ErrorCode::error, "bad value for --threads: should be in range [1..256]");
+                         }
+                         threads = v;
+                         return td::Status::OK();
+               });
+  p.add_checked_option('s', "seqno", "seqno_first[:seqno_last]\tseqno range", [&](td::Slice arg) {
+    auto pos = std::min(arg.find(':'), arg.size());
+    TRY_RESULT(seqno_first, td::to_integer_safe<ton::BlockSeqno>(arg.substr(0, pos)));
+    ++pos;
+    if (pos >= arg.size()) {
+      td::actor::send_closure(main, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_first);
+      return td::Status::OK();
+    }
+    TRY_RESULT(seqno_last, td::to_integer_safe<ton::BlockSeqno>(arg.substr(pos, arg.size())));
+    td::actor::send_closure(main, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_last);
+    return td::Status::OK();
+  });
+
   td::actor::set_debug(true);
-  td::actor::Scheduler scheduler({24});
+  td::actor::Scheduler scheduler({threads});
   scheduler.run_in_context([&] { main = td::actor::create_actor<ton::validator::Indexer>("cool"); });
+  scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
   scheduler.run_in_context([&] { td::actor::send_closure(main, &ton::validator::Indexer::run); });
   scheduler.run();
   return 0;
