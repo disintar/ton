@@ -76,12 +76,7 @@ std::map<std::string, std::variant<int, std::string>> parse_anycast(vm::CellSlic
 };
 
 std::string dump_as_boc(Ref<vm::Cell> root_cell) {
-  vm::BagOfCells boc;
-  boc.set_root(std::move(root_cell));
-  boc.import_cells().ensure();
-  auto res = boc.serialize_to_string(31);
-  LOG(DEBUG) << res;
-  return res;
+  return td::base64_encode(std_boc_serialize(std::move(root_cell), 31).move_as_ok());
 }
 
 json parse_address(vm::CellSlice address) {
