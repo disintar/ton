@@ -1036,13 +1036,12 @@ class Indexer : public td::actor::Actor {
 
           account_blocks_dict->get_minmax_key(last_key);
           LOG(DEBUG) << "Parse out message " << last_key.to_hex();
-          vm::CellSlice data = account_blocks_dict->lookup_delete(last_key).write();
-          LOG(DEBUG) << data.size();
+          Ref<vm::CellSlice> data = account_blocks_dict->lookup_delete(last_key);
 
-          json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg_descr(data)}};
-          LOG(DEBUG) << to_string(parsed);
-
-          out_msgs_json.push_back(parsed);
+          if (data.not_null()) {
+            json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg_descr(data.write())}};
+            out_msgs_json.push_back(parsed);
+          }
         }
 
         LOG(DEBUG) << "Finish parse out msg descr";
