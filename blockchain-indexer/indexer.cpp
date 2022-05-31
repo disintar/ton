@@ -1039,9 +1039,12 @@ class Indexer : public td::actor::Actor {
           data = account_blocks_dict->lookup_delete(last_key);
 
           json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg_descr(data.write())}};
+          LOG(DEBUG) << to_string(parsed);
 
           out_msgs_json.push_back(parsed);
         }
+
+        LOG(DEBUG) << "Finish parse out msg descr";
 
         answer["out_msg_descr"] = out_msgs_json;
 
