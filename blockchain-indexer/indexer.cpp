@@ -25,6 +25,7 @@
 #include "crypto/block/transaction.h"
 #include "td/utils/base64.h"
 #include <utility>
+#include <fstream>
 #include "auto/tl/lite_api.h"
 #include "adnl/utils.hpp"
 #include "shard.hpp"
@@ -815,7 +816,7 @@ class Indexer : public td::actor::Actor {
                                  {
                                      {"workchain", workchain},
                                      {"seqno", blkid.id.seqno},
-                                     {"shFard", blkid.id.shard},
+                                     {"shard", blkid.id.shard},
                                  }}};
 
         block::gen::Block::Record blk;
@@ -1034,7 +1035,11 @@ class Indexer : public td::actor::Actor {
 
         answer["ShardState"] = {{"state_old_hash", state_old_hash}, {"state_hash", state_hash}};
 
-        LOG(DEBUG) << "Answer: " << answer.dump(4);
+        std::ofstream block_file;
+        block_file.open("block_" + std::to_string(workchain) + ":" + std::to_string(blkid.seqno()) + ":" +
+                        std::to_string(blkid.id.shard) + ".json");
+        block_file << answer.dump(4);
+        block_file.close();
       }
     });
 
