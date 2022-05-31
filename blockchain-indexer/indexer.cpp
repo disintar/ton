@@ -79,7 +79,7 @@ std::string dump_as_boc(Ref<vm::Cell> root_cell) {
   vm::BagOfCells boc;
   boc.add_root(std::move(root_cell));
   auto res = boc.import_cells();
-  return td::base64url_encode(boc.serialize_to_slice().move_as_ok());
+  return td::base64url_encode(boc.serialize_to_slice(31).move_as_ok());
 }
 
 json parse_address(vm::CellSlice address) {
