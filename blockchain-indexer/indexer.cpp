@@ -200,7 +200,7 @@ json parse_out_msg_descr(const vm::CellSlice &out_msg) {
   }
 
   else {
-    answer["type"] = "undefined"
+    answer["type"] = "undefined";
   }
 
   return answer;
