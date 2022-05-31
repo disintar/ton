@@ -1046,7 +1046,7 @@ class Indexer : public td::actor::Actor {
 
         LOG(DEBUG) << "Finish parse out msg descr";
 
-        answer["out_msg_descr"] = out_msgs_json;
+//        answer["out_msg_descr"] = out_msgs_json;
 
         /* tlb
            acc_trans#5 account_addr:bits256
