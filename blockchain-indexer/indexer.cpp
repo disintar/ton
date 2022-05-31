@@ -166,6 +166,7 @@ json parse_out_msg_descr(const vm::CellSlice &out_msg) {
   json answer;
 
   auto tag = block::gen::t_OutMsg.check_tag(out_msg);
+  LOG(DEBUG) << "Tag: " << tag;
 
   if (tag == block::gen::t_OutMsg.msg_export_ext) {
     answer["type"] = "msg_export_ext";
