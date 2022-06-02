@@ -1032,9 +1032,11 @@ class Indexer : public td::actor::Actor {
           LOG(DEBUG) << "Parse out message " << last_key.to_hex();
           Ref<vm::Cell> data = account_blocks_dict->lookup_delete_ref(last_key);
 
-          if (data.not_null()) {
-            json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg_descr(load_cell_slice(data))}};
-            out_msgs_json.push_back(parsed);
+          json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg_descr(load_cell_slice(data))}};
+          out_msgs_json.push_back(parsed);
+
+          if (data.is_null()) {
+            break;
           }
         }
 
