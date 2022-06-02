@@ -275,6 +275,7 @@ json parse_message(Ref<vm::Cell> message_any) {
   // ext_out_msg_info$11
 
   json answer;
+  answer["hash"] = message_any->get_hash().to_hex();
 
   block::gen::Message::Record in_message;
   block::gen::CommonMsgInfo::Record_int_msg_info info;
@@ -1096,13 +1097,11 @@ class Indexer : public td::actor::Actor {
           accounts.push_back(account_block_parsed);
         }
 
-        answer["BlockExtra"] = {
-            {"accounts", accounts},
-            {"rand_seed", extra.rand_seed.to_hex()},
-            {"created_by", extra.created_by.to_hex()},
-            {"accounts", accounts},
-            {"out_msg_descr", out_msgs_json}
-        };
+        answer["BlockExtra"] = {{"accounts", accounts},
+                                {"rand_seed", extra.rand_seed.to_hex()},
+                                {"created_by", extra.created_by.to_hex()},
+                                {"accounts", accounts},
+                                {"out_msg_descr", out_msgs_json}};
 
         vm::CellSlice upd_cs{vm::NoVmSpec(), blk.state_update};
         if (!(upd_cs.is_special() && upd_cs.prefetch_long(8) == 4  // merkle update
