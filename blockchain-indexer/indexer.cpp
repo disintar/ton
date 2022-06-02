@@ -1042,8 +1042,6 @@ class Indexer : public td::actor::Actor {
 
         LOG(DEBUG) << "Finish parse out msg descr";
 
-        //        answer["out_msg_descr"] = out_msgs_json;
-
         /* tlb
            acc_trans#5 account_addr:bits256
              transactions:(HashmapAug 64 ^Transaction CurrencyCollection)
@@ -1106,6 +1104,8 @@ class Indexer : public td::actor::Actor {
             {"accounts", accounts},
             {"rand_seed", extra.rand_seed.to_hex()},
             {"created_by", extra.created_by.to_hex()},
+            {"accounts", accounts},
+            {"out_msg_descr", out_msgs_json}
         };
 
         vm::CellSlice upd_cs{vm::NoVmSpec(), blk.state_update};
