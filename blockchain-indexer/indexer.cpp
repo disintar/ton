@@ -634,7 +634,7 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {
     tlb::unpack(out_msg, data);
 
     answer["transaction"] =
-        parse_transaction(load_cell_slice_ref(load_cell_slice(data.transaction).prefetch_ref()), workchain);
+        parse_transaction(load_cell_slice_ref(data.transaction), workchain);
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_new) {
@@ -644,7 +644,7 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {
     tlb::unpack(out_msg, data);
 
     answer["transaction"] =
-        parse_transaction(load_cell_slice_ref(load_cell_slice(data.transaction).prefetch_ref()), workchain);
+        parse_transaction(load_cell_slice_ref(data.transaction), workchain);
 
   }
 
