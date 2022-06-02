@@ -564,9 +564,9 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
   block::gen::CurrencyCollection::Record trans_total_fees_cc;
 
   CHECK(tvalue->have_refs());
-  CHECK(tlb::unpack_cell(tvalue->prefetch_ref(), trans) &&
-        tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd) &&
-        tlb::unpack(trans.total_fees.write(), trans_total_fees_cc));
+  CHECK(tlb::unpack_cell(tvalue->prefetch_ref(), trans));
+  CHECK(tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd));
+  CHECK(tlb::unpack(trans.total_fees.write(), trans_total_fees_cc));
 
   std::list<std::tuple<int, std::string>> dummy;
   transaction["total_fees"] = {
