@@ -37,7 +37,7 @@
 #include "vm/boc.h"
 
 // TODO: use td/utils/json
-// TODO: use tlb auto deserializer to json
+// TODO: use tlb auto deserializer to json (PrettyPrintJson)
 using json = nlohmann::json;
 
 using td::Ref;
@@ -154,51 +154,6 @@ json parse_address(vm::CellSlice address) {
                          {"addr_len", dest_addr.addr_len},
                          {"address", dest_addr.address->to_binary()},
                          {"address_hex", dest_addr.addr_len % 8 == 0 ? dest_addr.address->to_hex() : ""}};
-  }
-
-  return answer;
-}
-
-json parse_out_msg_descr(const vm::CellSlice &out_msg) {
-  json answer;
-
-  auto tag = block::gen::t_OutMsg.check_tag(out_msg);
-  LOG(DEBUG) << "Tag: " << tag;
-
-  if (tag == block::gen::t_OutMsg.msg_export_ext) {
-    answer["type"] = "msg_export_ext";
-  }
-
-  else if (tag == block::gen::t_OutMsg.msg_export_imm) {
-    answer["type"] = "msg_export_imm";
-  }
-
-  else if (tag == block::gen::t_OutMsg.msg_export_new) {
-    answer["type"] = "msg_export_new";
-  }
-
-  else if (tag == block::gen::t_OutMsg.msg_export_tr) {
-    answer["type"] = "msg_export_tr";
-  }
-
-  else if (tag == block::gen::t_OutMsg.msg_export_deq) {
-    answer["type"] = "msg_export_deq";
-  }
-
-  else if (tag == block::gen::t_OutMsg.msg_export_deq_short) {
-    answer["type"] = "msg_export_deq_short";
-  }
-
-  else if (tag == block::gen::t_OutMsg.msg_export_tr_req) {
-    answer["type"] = "msg_export_tr_req";
-  }
-
-  else if (tag == block::gen::t_OutMsg.msg_export_deq_imm) {
-    answer["type"] = "msg_export_deq_imm";
-  }
-
-  else {
-    answer["type"] = "undefined";
   }
 
   return answer;
@@ -584,6 +539,7 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
       answer["bounce"] = parse_bounce_phase(bounce);
     }
 
+    // TODO: parse me
   } else if (tag == block::gen::t_TransactionDescr.trans_storage) {
     answer["type"] = "trans_storage";
   } else if (tag == block::gen::t_TransactionDescr.trans_tick_tock) {
@@ -652,6 +608,71 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
   transaction["description"] = parse_transaction_descr(trans.description);
 
   return transaction;
+}
+
+json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {
+  json answer;
+
+  auto tag = block::gen::t_OutMsg.check_tag(out_msg);
+  LOG(DEBUG) << "Tag: " << tag;
+
+  if (tag == block::gen::t_OutMsg.msg_export_ext) {
+    answer["type"] = "msg_export_ext";
+
+    block::gen::OutMsg::Record_msg_export_ext data;
+    tlb::unpack(out_msg, data);
+
+    answer["message"] = parse_message(load_cell_slice(data.msg).prefetch_ref());
+    answer["transaction"] =
+        parse_transaction(load_cell_slice_ref(load_cell_slice(data.transaction).prefetch_ref()), workchain);
+  }
+
+  else if (tag == block::gen::t_OutMsg.msg_export_imm) {
+    answer["type"] = "msg_export_imm";
+
+    block::gen::OutMsg::Record_msg_export_imm data;
+    tlb::unpack(out_msg, data);
+
+    answer["transaction"] =
+        parse_transaction(load_cell_slice_ref(load_cell_slice(data.transaction).prefetch_ref()), workchain);
+  }
+
+  else if (tag == block::gen::t_OutMsg.msg_export_new) {
+    answer["type"] = "msg_export_new";
+
+    block::gen::OutMsg::Record_msg_export_new data;
+    tlb::unpack(out_msg, data);
+
+    answer["transaction"] =
+        parse_transaction(load_cell_slice_ref(load_cell_slice(data.transaction).prefetch_ref()), workchain);
+
+  }
+
+  else if (tag == block::gen::t_OutMsg.msg_export_tr) {
+    answer["type"] = "msg_export_tr";
+  }
+
+  else if (tag == block::gen::t_OutMsg.msg_export_deq) {
+    answer["type"] = "msg_export_deq";
+  }
+
+  else if (tag == block::gen::t_OutMsg.msg_export_deq_short) {
+    answer["type"] = "msg_export_deq_short";
+  }
+
+  else if (tag == block::gen::t_OutMsg.msg_export_tr_req) {
+    answer["type"] = "msg_export_tr_req";
+  }
+
+  else if (tag == block::gen::t_OutMsg.msg_export_deq_imm) {
+    answer["type"] = "msg_export_deq_imm";
+  }
+
+  else {
+    answer["type"] = "undefined";
+  }
+
+  return answer;
 }
 
 class Indexer : public td::actor::Actor {
@@ -1033,7 +1054,7 @@ class Indexer : public td::actor::Actor {
           LOG(DEBUG) << "Parse out message " << last_key.to_hex();
           Ref<vm::CellSlice> data = out_msg_dict->lookup_delete(last_key);
 
-          json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg_descr(data.write())}};
+          json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg_descr(data.write(), workchain)}};
           out_msgs_json.push_back(parsed);
         }
 
