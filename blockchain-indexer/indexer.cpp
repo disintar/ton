@@ -1028,13 +1028,9 @@ class Indexer : public td::actor::Actor {
         while (!out_msg_dict->is_empty()) {
           td::Bits256 last_key;
 
-          account_blocks_dict->get_minmax_key(last_key);
+          out_msg_dict->get_minmax_key(last_key);
           LOG(DEBUG) << "Parse out message " << last_key.to_hex();
-          Ref<vm::CellSlice> data = account_blocks_dict->lookup_delete(last_key);
-
-          if (data.is_null()) {
-            break;
-          }
+          Ref<vm::CellSlice> data = out_msg_dict->lookup_delete(last_key);
 
           json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg_descr(data.write())}};
           out_msgs_json.push_back(parsed);
