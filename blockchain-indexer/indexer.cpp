@@ -1030,10 +1030,10 @@ class Indexer : public td::actor::Actor {
 
           account_blocks_dict->get_minmax_key(last_key);
           LOG(DEBUG) << "Parse out message " << last_key.to_hex();
-          Ref<vm::CellSlice> data = account_blocks_dict->lookup_delete(last_key);
+          Ref<vm::Cell> data = account_blocks_dict->lookup_delete_ref(last_key);
 
           if (data.not_null()) {
-            json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg_descr(data.write())}};
+            json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg_descr(load_cell_slice(data))}};
             out_msgs_json.push_back(parsed);
           }
         }
