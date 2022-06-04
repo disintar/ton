@@ -635,7 +635,12 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {
 
     auto t = load_cell_slice_ref(data.transaction);
 
-    answer["transaction"] = parse_transaction(t, workchain);
+    vm::CellBuilder cb;
+    cb.store_ref(data.transaction);
+    auto body_cell = cb.finalize();
+    auto csr = load_cell_slice_ref(body_cell);
+
+    answer["transaction"] = parse_transaction(csr, workchain);
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_new) {
@@ -644,9 +649,12 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {
     block::gen::OutMsg::Record_msg_export_new data;
     tlb::unpack(out_msg, data);
 
-    auto t = load_cell_slice_ref(data.transaction);
+    vm::CellBuilder cb;
+    cb.store_ref(data.transaction);
+    auto body_cell = cb.finalize();
+    auto csr = load_cell_slice_ref(body_cell);
 
-    answer["transaction"] = parse_transaction(load_cell_slice_ref(data.transaction), workchain);
+    answer["transaction"] = parse_transaction(, workchain);
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_tr) {
