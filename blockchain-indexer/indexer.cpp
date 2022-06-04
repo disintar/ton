@@ -654,7 +654,7 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {
     auto body_cell = cb.finalize();
     auto csr = load_cell_slice_ref(body_cell);
 
-    answer["transaction"] = parse_transaction(, workchain);
+    answer["transaction"] = parse_transaction(csr, workchain);
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_tr) {
