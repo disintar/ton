@@ -1054,7 +1054,9 @@ class Indexer : public td::actor::Actor {
 
         if (info.not_master) {
           block::gen::ExtBlkRef::Record master{};
-          tlb::unpack_cell(load_cell_slice_ref(info.master_ref).write().prefetch_ref(), master);
+          auto csr = load_cell_slice(info.master_ref);
+          LOG(DEBUG) << "REFS: " << csr.size_refs();
+          tlb::unpack_cell(csr.prefetch_ref(), master);
 
           answer["BlockInfo"]["master_ref"] = {
               {"end_lt", master.end_lt},
@@ -1063,6 +1065,8 @@ class Indexer : public td::actor::Actor {
               {"file_hash", master.file_hash.to_hex()},
           };
         }
+
+        LOG(DEBUG) << "BlockInfo loaded!";
 
         auto value_flow_root = blk.value_flow;
         block::ValueFlow value_flow;
