@@ -1054,7 +1054,7 @@ class Indexer : public td::actor::Actor {
 
         if (info.not_master) {
           block::gen::ExtBlkRef::Record master{};
-          tlb::unpack_cell(info.master_ref, master);
+          tlb::unpack_cell(load_cell_slice_ref(info.master_ref).write().prefetch_ref(), master);
 
           answer["BlockInfo"]["master_ref"] = {
               {"end_lt", master.end_lt},
