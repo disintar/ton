@@ -1052,21 +1052,20 @@ class Indexer : public td::actor::Actor {
                                {"min_ref_mc_seqno", info.min_ref_mc_seqno},
                                {"prev_key_block_seqno", info.prev_key_block_seqno}};
 
+        if (info.not_master) {
+          block::gen::ExtBlkRef::Record master{};
+          LOG(DEBUG) << "Not master: " << info.not_master << " Cell: " << info.master_ref.is_null();
+          auto csr = load_cell_slice(info.master_ref);
+          LOG(DEBUG) << "REFS: " << csr.size_refs();
+          tlb::unpack_cell(csr.prefetch_ref(), master);
 
-
-//        if (info.not_master) {
-//          block::gen::ExtBlkRef::Record master{};
-//          auto csr = load_cell_slice(info.master_ref);
-//          LOG(DEBUG) << "REFS: " << csr.size_refs();
-//          tlb::unpack_cell(csr.prefetch_ref(), master);
-//
-//          answer["BlockInfo"]["master_ref"] = {
-//              {"end_lt", master.end_lt},
-//              {"seq_no", master.seq_no},
-//              {"root_hash", master.root_hash.to_hex()},
-//              {"file_hash", master.file_hash.to_hex()},
-//          };
-//        }
+          answer["BlockInfo"]["master_ref"] = {
+              {"end_lt", master.end_lt},
+              {"seq_no", master.seq_no},
+              {"root_hash", master.root_hash.to_hex()},
+              {"file_hash", master.file_hash.to_hex()},
+          };
+        }
 
         LOG(DEBUG) << "BlockInfo loaded!";
 
