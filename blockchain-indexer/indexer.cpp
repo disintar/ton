@@ -1065,6 +1065,9 @@ class Indexer : public td::actor::Actor {
         };
 
         if (info.after_merge) {
+          LOG(DEBUG) << "After merge: " << info.after_merge;
+          LOG(DEBUG) << "Refs: " << info.prev_ref->get_refcnt();
+
           block::gen::ExtBlkRef::Record prev_blk_1{};
           block::gen::ExtBlkRef::Record prev_blk_2{};
 
