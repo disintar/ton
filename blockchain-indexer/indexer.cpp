@@ -1052,6 +1052,18 @@ class Indexer : public td::actor::Actor {
                                {"min_ref_mc_seqno", info.min_ref_mc_seqno},
                                {"prev_key_block_seqno", info.prev_key_block_seqno}};
 
+        if (info.not_master) {
+          block::gen::ExtBlkRef::Record master{};
+          tlb::unpack_cell(info.master_ref, master);
+
+          answer["BlockInfo"]["master_ref"] = {
+              {"end_lt", master.end_lt},
+              {"seq_no", master.seq_no},
+              {"root_hash", master.root_hash.to_hex()},
+              {"file_hash", master.file_hash.to_hex()},
+          };
+        }
+
         auto value_flow_root = blk.value_flow;
         block::ValueFlow value_flow;
         vm::CellSlice cs{vm::NoVmOrd(), value_flow_root};
