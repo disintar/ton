@@ -689,7 +689,6 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
   json answer;
 
   auto tag = block::gen::t_OutMsg.check_tag(out_msg);
-  LOG(DEBUG) << "Tag: " << tag;
 
   if (tag == block::gen::t_OutMsg.msg_export_ext) {
     answer["type"] = "msg_export_ext";
@@ -697,7 +696,6 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     block::gen::OutMsg::Record_msg_export_ext data;
     tlb::unpack(out_msg, data);
 
-    answer["message"] = parse_message(load_cell_slice(data.msg).prefetch_ref());
     answer["transaction"] =
         parse_transaction(load_cell_slice_ref(load_cell_slice(data.transaction).prefetch_ref()), workchain);
   }
@@ -716,7 +714,6 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     auto csr = load_cell_slice_ref(body_cell);
 
     answer["transaction"] = parse_transaction(csr, workchain);
-    answer["message"] = parse_message(load_cell_slice(data.reimport).prefetch_ref());
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_new) {
