@@ -1052,11 +1052,10 @@ class Indexer : public td::actor::Actor {
                                {"min_ref_mc_seqno", info.min_ref_mc_seqno},
                                {"prev_key_block_seqno", info.prev_key_block_seqno}};
 
-        if (info.not_master) {
+        if (info.master_ref.not_null()) {
           block::gen::ExtBlkRef::Record master{};
-          LOG(DEBUG) << "Not master: " << info.not_master << " Cell: " << info.master_ref.is_null();
           auto csr = load_cell_slice(info.master_ref);
-          LOG(DEBUG) << "REFS: " << csr.size_refs();
+          LOG(DEBUG) << "Master Refs: " << csr.size_refs();
           tlb::unpack_cell(csr.prefetch_ref(), master);
 
           answer["BlockInfo"]["master_ref"] = {
