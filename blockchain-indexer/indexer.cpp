@@ -610,7 +610,82 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
   return transaction;
 }
 
-json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {
+json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
+  //  //
+  //  msg_import_ext$000 msg:^(Message Any) transaction:^Transaction
+  //                                                       = InMsg;
+  //  msg_import_ihr$010 msg:^(Message Any) transaction:^Transaction
+  //                                                           ihr_fee:Grams proof_created:^Cell = InMsg;
+  //  msg_import_imm$011 in_msg:^MsgEnvelope
+  //                                  transaction:^Transaction fwd_fee:Grams = InMsg;
+  //  msg_import_fin$100 in_msg:^MsgEnvelope
+  //                                  transaction:^Transaction fwd_fee:Grams = InMsg;
+  //  msg_import_tr$101  in_msg:^MsgEnvelope out_msg:^MsgEnvelope
+  //                                                        transit_fee:Grams = InMsg;
+  //  msg_discard_fin$110 in_msg:^MsgEnvelope transaction_id:uint64
+  //                                                                 fwd_fee:Grams = InMsg;
+  //  msg_discard_tr$111 in_msg:^MsgEnvelope transaction_id:uint64
+  //                                                                fwd_fee:Grams proof_delivered:^Cell = InMsg;
+  //  //
+
+  json answer;
+
+  auto tag = block::gen::t_InMsg.check_tag(in_msg);
+
+  if (tag == block::gen::t_InMsg.msg_import_ext) {
+    answer["type"] = "msg_import_ext";
+  }
+
+  else if (tag == block::gen::t_InMsg.msg_import_ihr) {
+    answer["type"] = "msg_import_ihr";
+  }
+
+  else if (tag == block::gen::t_InMsg.msg_import_imm) {
+    answer["type"] = "msg_import_imm";
+  }
+
+  else if (tag == block::gen::t_InMsg.msg_import_fin) {
+    answer["type"] = "msg_import_fin";
+  }
+
+  else if (tag == block::gen::t_InMsg.msg_import_tr) {
+    answer["type"] = "msg_import_tr";
+  }
+
+  else if (tag == block::gen::t_InMsg.msg_discard_fin) {
+    answer["type"] = "msg_discard_fin";
+  }
+
+  else if (tag == block::gen::t_InMsg.msg_discard_tr) {
+    answer["type"] = "msg_discard_tr";
+  }
+
+  else {
+    answer["type"] = "undefined";
+  }
+
+  return answer;
+}
+
+json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
+
+  //
+  //  msg_import_ext$000 msg:^(Message Any) transaction:^Transaction
+  //                                                       = InMsg;
+  //  msg_import_ihr$010 msg:^(Message Any) transaction:^Transaction
+  //                                                           ihr_fee:Grams proof_created:^Cell = InMsg;
+  //  msg_import_imm$011 in_msg:^MsgEnvelope
+  //                                  transaction:^Transaction fwd_fee:Grams = InMsg;
+  //  msg_import_fin$100 in_msg:^MsgEnvelope
+  //                                  transaction:^Transaction fwd_fee:Grams = InMsg;
+  //  msg_import_tr$101  in_msg:^MsgEnvelope out_msg:^MsgEnvelope
+  //                                                        transit_fee:Grams = InMsg;
+  //  msg_discard_fin$110 in_msg:^MsgEnvelope transaction_id:uint64
+  //                                                                 fwd_fee:Grams = InMsg;
+  //  msg_discard_tr$111 in_msg:^MsgEnvelope transaction_id:uint64
+  //                                                                fwd_fee:Grams proof_delivered:^Cell = InMsg;
+  //
+
   json answer;
 
   auto tag = block::gen::t_OutMsg.check_tag(out_msg);
@@ -635,12 +710,13 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {
 
     auto t = load_cell_slice_ref(data.transaction);
 
-    vm::CellBuilder cb;
+    vm::CellBuilder cb;  // TODO: fixme
     cb.store_ref(data.transaction);
     auto body_cell = cb.finalize();
     auto csr = load_cell_slice_ref(body_cell);
 
     answer["transaction"] = parse_transaction(csr, workchain);
+    answer["message"] = parse_message(load_cell_slice(data.reimport).prefetch_ref());
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_new) {
@@ -649,7 +725,7 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {
     block::gen::OutMsg::Record_msg_export_new data;
     tlb::unpack(out_msg, data);
 
-    vm::CellBuilder cb;
+    vm::CellBuilder cb;  // TODO: fixme
     cb.store_ref(data.transaction);
     auto body_cell = cb.finalize();
     auto csr = load_cell_slice_ref(body_cell);
@@ -1050,17 +1126,25 @@ class Indexer : public td::actor::Actor {
 
         auto in_msg_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.in_msg_descr), 256,
                                                                      block::tlb::aug_InMsgDescr);
+
+        std::list<json> in_msgs_json;
+        while (!in_msg_dict->is_empty()) {
+          td::Bits256 last_key;
+
+          in_msg_dict->get_minmax_key(last_key);
+          Ref<vm::CellSlice> data = in_msg_dict->lookup_delete(last_key);
+
+          json parsed = {{"hash", last_key.to_hex()}, {"message", parse_in_msg_descr(data.write(), workchain)}};
+          in_msgs_json.push_back(parsed);
+        }
+
         auto out_msg_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.out_msg_descr), 256,
                                                                       block::tlb::aug_OutMsgDescr);
-        auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
-            vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
-
         std::list<json> out_msgs_json;
         while (!out_msg_dict->is_empty()) {
           td::Bits256 last_key;
 
           out_msg_dict->get_minmax_key(last_key);
-          LOG(DEBUG) << "Parse out message " << last_key.to_hex();
           Ref<vm::CellSlice> data = out_msg_dict->lookup_delete(last_key);
 
           json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg_descr(data.write(), workchain)}};
@@ -1068,6 +1152,9 @@ class Indexer : public td::actor::Actor {
         }
 
         LOG(DEBUG) << "Finish parse out msg descr";
+
+        auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
+            vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
 
         /* tlb
            acc_trans#5 account_addr:bits256
@@ -1085,7 +1172,6 @@ class Indexer : public td::actor::Actor {
           Ref<vm::CellSlice> data;
 
           account_blocks_dict->get_minmax_key(last_key);
-          LOG(DEBUG) << "Parse account " << last_key.to_hex();
           data = account_blocks_dict->lookup_delete(last_key);
 
           json account_block_parsed;
@@ -1127,11 +1213,15 @@ class Indexer : public td::actor::Actor {
           accounts.push_back(account_block_parsed);
         }
 
-        answer["BlockExtra"] = {{"accounts", accounts},
-                                {"rand_seed", extra.rand_seed.to_hex()},
-                                {"created_by", extra.created_by.to_hex()},
-                                {"accounts", accounts},
-                                {"out_msg_descr", out_msgs_json}};
+        LOG(DEBUG) << "Finish parse accounts";
+
+        answer["BlockExtra"] = {
+            {"accounts", accounts},
+            {"rand_seed", extra.rand_seed.to_hex()},
+            {"created_by", extra.created_by.to_hex()},
+            {"out_msg_descr", out_msgs_json},
+            {"in_msg_descr", in_msgs_json},
+        };
 
         vm::CellSlice upd_cs{vm::NoVmSpec(), blk.state_update};
         if (!(upd_cs.is_special() && upd_cs.prefetch_long(8) == 4  // merkle update
@@ -1152,6 +1242,8 @@ class Indexer : public td::actor::Actor {
         block_file << answer.dump(4);
         block_file.close();
       }
+
+      LOG(DEBUG) << "Parse finished";
     });
 
     td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
