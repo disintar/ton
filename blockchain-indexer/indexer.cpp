@@ -996,7 +996,8 @@ class Indexer : public td::actor::Actor {
         block::gen::BlockInfo::Record info;
         block::gen::BlockExtra::Record extra;
 
-        CHECK(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra) && tlb::unpack_cell(blk.info, info));
+        CHECK(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra) &&
+              tlb::unpack_cell(blk.info, info));
         /* tlb
           block#11ef55aa global_id:int32
           info:^BlockInfo value_flow:^ValueFlow
@@ -1055,8 +1056,7 @@ class Indexer : public td::actor::Actor {
         if (info.master_ref.not_null()) {
           block::gen::ExtBlkRef::Record master{};
           auto csr = load_cell_slice(info.master_ref);
-          LOG(DEBUG) << "Master Refs: " << csr.size_refs();
-          tlb::unpack_cell(csr.prefetch_ref(), master);
+          tlb::unpack(csr, master);
 
           answer["BlockInfo"]["master_ref"] = {
               {"end_lt", master.end_lt},
