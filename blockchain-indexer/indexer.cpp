@@ -966,6 +966,8 @@ class Indexer : public td::actor::Actor {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
+        LOG(DEBUG) << "Start parse block";
+
         auto block = R.move_as_ok();
         CHECK(block.not_null());
 
@@ -979,6 +981,8 @@ class Indexer : public td::actor::Actor {
         //
         // Parsing
         //
+
+        LOG(DEBUG) << "BlockIdExt";
 
         json answer;
         auto workchain = blkid.id.workchain;
@@ -1031,6 +1035,8 @@ class Indexer : public td::actor::Actor {
               prev_vert_ref:vert_seqno_incr?^(BlkPrevInfo 0)
               = BlockInfo;
         */
+
+        LOG(DEBUG) << "Start block info";
 
         block::gen::ExtBlkRef::Record prev_vert_blk{};
         tlb::unpack_cell(info.prev_vert_ref, prev_vert_blk);
@@ -1109,6 +1115,8 @@ class Indexer : public td::actor::Actor {
 //                                              }}};
 //        }
 
+        LOG(DEBUG) << "Start master ref";
+
         if (info.master_ref.not_null()) {
           block::gen::ExtBlkRef::Record master{};
           auto csr = load_cell_slice(info.master_ref);
@@ -1152,6 +1160,8 @@ class Indexer : public td::actor::Actor {
                         minted:CurrencyCollection
                         ] = ValueFlow;
         */
+
+        LOG(DEBUG) << "ValueFlow data";
 
         answer["ValueFlow"] = {
             {"from_prev_blk",
