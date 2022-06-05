@@ -962,6 +962,11 @@ class Indexer : public td::actor::Actor {
     }
   }
 
+  void got_shard_to_parse(McShardHash ms, unsigned long long start_mc_lt) {
+    LOG(DEBUG) << "Parse wc: " << ms.shard().workchain;
+    LOG(DEBUG) << "To start mc lt: " << start_mc_lt;
+  }
+
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle) {
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
@@ -1422,7 +1427,8 @@ class Indexer : public td::actor::Actor {
             shards.unpack(extra_mc.shard_hashes);
 
             std::list<json> shards_json;
-            auto f = [&shards_json](McShardHash &ms) {
+
+            auto f = [&shards_json, &SelfId, &start_lt](McShardHash &ms) {
               json data = {{"BlockIdExt",
                             {{"file_hash", ms.top_block_id().file_hash.to_hex()},
                              {"root_hash", ms.top_block_id().root_hash.to_hex()},
@@ -1446,8 +1452,11 @@ class Indexer : public td::actor::Actor {
 
               shards_json.push_back(data);
 
+              td::actor::send_closure(SelfId, &Indexer::got_shard_to_parse, ms, start_lt);
+
               return 1;
             };
+
             shards.process_shard_hashes(f);
             answer["BlockExtra"]["custom"]["shards"] = shards_json;
           };
