@@ -1378,8 +1378,8 @@ class Indexer : public td::actor::Actor {
                   parse_in_msg_descr(load_cell_slice(extra_mc.r1.recover_create_msg->prefetch_ref()), workchain);
             }
 
-            if (extra_mc.shard_fees->have_refs()) {
-              vm::Dictionary prev_blk_signatures{extra_mc.shard_fees->prefetch_ref(), 16};
+            if (extra_mc.r1.prev_blk_signatures->have_refs()) {
+              vm::Dictionary prev_blk_signatures{extra_mc.r1.prev_blk_signatures->prefetch_ref(), 16};
               std::list<json> prev_blk_signatures_json;
 
               while (!prev_blk_signatures.is_empty()) {
