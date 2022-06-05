@@ -1032,6 +1032,8 @@ class Indexer : public td::actor::Actor {
   }
 
   void start_parse_shards(unsigned long long end_lt, unsigned long seqno, unsigned long shard, int workchain) {
+    LOG(DEBUG) << "Seqno: " << seqno << " Shard: " << shard << " Workchain: " << workchain;
+
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), mc_end_lt = end_lt](td::Result<ConstBlockHandle> R) {
       LOG(DEBUG) << "Got Answer!";
 
