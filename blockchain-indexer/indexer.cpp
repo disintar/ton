@@ -967,7 +967,70 @@ class Indexer : public td::actor::Actor {
     LOG(DEBUG) << "Parse shard: " << shard;
     LOG(DEBUG) << "Parse workchain: " << workchain;
 
+    // Get prev masterchain block end_lt
+    // To parse all shards to this end_lt
     LOG(DEBUG) << "Masterchain blk id: " << blkid.to_str();
+
+    auto P = td::PromiseCreator::lambda(
+        [SelfId = actor_id(this), &seqno, &shard, &workchain](td::Result<ConstBlockHandle> R) {
+          LOG(DEBUG) << "Got Answer!";
+
+          if (R.is_error()) {
+            LOG(ERROR) << R.move_as_error().to_string();
+          } else {
+            auto handle = R.move_as_ok();
+            LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
+            td::actor::send_closure(SelfId, &Indexer::got_prev_mc_handle, handle, seqno, shard, workchain);
+          }
+        });
+
+    ton::AccountIdPrefixFull pfx{blkid.id.workchain, blkid.id.shard};
+
+    if (blkid.id.seqno > 0) {
+      td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
+                              blkid.id.seqno - 1, std::move(P));
+    } else {
+      return;
+    }
+  }
+
+  void got_prev_mc_handle(std::shared_ptr<const BlockHandleInterface> handle, unsigned long seqno, unsigned long shard,
+                          int workchain) {
+    auto P = td::PromiseCreator::lambda(
+        [SelfId = actor_id(this), &seqno, &shard, &workchain](td::Result<td::Ref<BlockData>> R) {
+          if (R.is_error()) {
+            LOG(ERROR) << R.move_as_error().to_string();
+          } else {
+            LOG(DEBUG) << "Got prev mc block";
+
+            auto block = R.move_as_ok();
+            CHECK(block.not_null());
+
+            auto blkid = block->block_id();
+            auto block_root = block->root_cell();
+            if (block_root.is_null()) {
+              LOG(ERROR) << "block has no valid root cell";
+              return;
+            }
+
+            block::gen::Block::Record blk;
+            block::gen::BlockInfo::Record info;
+
+            CHECK(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.info, info));
+
+            LOG(DEBUG) << "Need to parse shard: ";
+            LOG(DEBUG) << "Seqno: " << seqno;
+            LOG(DEBUG) << "Shard: " << shard;
+            LOG(DEBUG) << "Workchain: " << workchain;
+
+            LOG(DEBUG) << "To lt: " << info.end_lt;
+          }
+
+          return;
+        });
+
+    td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
+                                  std::move(P));
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle) {
