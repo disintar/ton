@@ -1393,7 +1393,7 @@ class Indexer : public td::actor::Actor {
               block::gen::CryptoSignaturePair::Record cs_pair;
               block::gen::CryptoSignatureSimple::Record css;
 
-              CHECK(tlb::unpack(tvalue.write(), cs_pair));
+              CHECK(tlb::unpack_cell(tvalue, cs_pair));
 
               LOG(DEBUG) << "tvalue: " << cs_pair.sign.is_null();
               LOG(DEBUG) << "refs: " << cs_pair.sign->size_refs();
