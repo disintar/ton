@@ -1014,7 +1014,8 @@ class Indexer : public td::actor::Actor {
         block::gen::BlockInfo::Record info;
 
         CHECK(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.info, info));
-
+        LOG(DEBUG) << "End LT: " << info.end_lt;
+        
         td::actor::send_closure(SelfId, &Indexer::start_parse_shards, info.end_lt, shard_seqno, shard_shard,
                                 shard_workchain);
       }
