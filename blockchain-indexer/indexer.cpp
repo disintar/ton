@@ -952,7 +952,7 @@ class Indexer : public td::actor::Actor {
         } else {
           auto handle = R.move_as_ok();
           LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
-          td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle);
+          td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, 0);
         }
       });
 
@@ -1006,7 +1006,6 @@ class Indexer : public td::actor::Actor {
             auto block = R.move_as_ok();
             CHECK(block.not_null());
 
-            auto blkid = block->block_id();
             auto block_root = block->root_cell();
             if (block_root.is_null()) {
               LOG(ERROR) << "block has no valid root cell";
@@ -1018,12 +1017,7 @@ class Indexer : public td::actor::Actor {
 
             CHECK(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.info, info));
 
-            LOG(DEBUG) << "Need to parse shard: ";
-            LOG(DEBUG) << "Seqno: " << seqno;
-            LOG(DEBUG) << "Shard: " << shard;
-            LOG(DEBUG) << "Workchain: " << workchain;
-
-            LOG(DEBUG) << "To lt: " << info.end_lt;
+            td::actor::send_closure(SelfId, &Indexer::start_parse_shards, info.end_lt, seqno, shard, workchain);
           }
 
           return;
@@ -1033,7 +1027,24 @@ class Indexer : public td::actor::Actor {
                                   std::move(P));
   }
 
-  void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle) {
+  void start_parse_shards(unsigned long long end_lt, unsigned long seqno, unsigned long shard, int workchain) {
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), &end_lt](td::Result<ConstBlockHandle> R) {
+      LOG(DEBUG) << "Got Answer!";
+
+      if (R.is_error()) {
+        LOG(ERROR) << R.move_as_error().to_string();
+      } else {
+        auto handle = R.move_as_ok();
+        td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, end_lt);
+      }
+    });
+
+    ton::AccountIdPrefixFull pfx{workchain, shard};
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
+                            std::move(P));
+  }
+
+  void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle, unsigned long long end_lt = 0) {
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
