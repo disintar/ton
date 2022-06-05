@@ -1378,6 +1378,7 @@ class Indexer : public td::actor::Actor {
                   parse_in_msg_descr(load_cell_slice(extra_mc.r1.recover_create_msg->prefetch_ref()), workchain);
             }
 
+            LOG(DEBUG) << "prev_blk_signatures: " << extra_mc.r1.prev_blk_signatures->have_refs();
             if (extra_mc.r1.prev_blk_signatures->have_refs()) {
               vm::Dictionary prev_blk_signatures{extra_mc.r1.prev_blk_signatures->prefetch_ref(), 16};
               std::list<json> prev_blk_signatures_json;
@@ -1414,7 +1415,7 @@ class Indexer : public td::actor::Actor {
                 prev_blk_signatures_json.push_back(data);
               };
 
-              answer["BlockExtra"]["custom"]["prev_blk_signatures_json"] = prev_blk_signatures_json;
+              answer["BlockExtra"]["custom"]["prev_blk_signatures"] = prev_blk_signatures_json;
             };
           };
         }
