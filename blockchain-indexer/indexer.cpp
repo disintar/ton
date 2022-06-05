@@ -1045,6 +1045,8 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle, unsigned long long end_lt = 0) {
+    LOG(DEBUG) << "End LT: " << end_lt;
+
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
