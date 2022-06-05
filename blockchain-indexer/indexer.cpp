@@ -1385,11 +1385,10 @@ class Indexer : public td::actor::Actor {
               td::BitArray<16> key{};
               config_dict.get_minmax_key(key);
 
-              Ref<vm::CellSlice> tvalue;
+              Ref<vm::Cell> tvalue;
               tvalue = config_dict.lookup_delete(key);
 
               LOG(DEBUG) << "tvalue: " << tvalue.is_null();
-              LOG(DEBUG) << "refs: " << tvalue->size_refs();
 
               block::gen::CryptoSignaturePair::Record cs_pair;
               block::gen::CryptoSignatureSimple::Record css;
