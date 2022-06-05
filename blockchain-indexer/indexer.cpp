@@ -980,9 +980,6 @@ class Indexer : public td::actor::Actor {
 
         //
         // Parsing
-        //
-
-        LOG(DEBUG) << "BlockIdExt";
 
         json answer;
         auto workchain = blkid.id.workchain;
@@ -1071,7 +1068,6 @@ class Indexer : public td::actor::Actor {
               {"file_hash", prev_vert_blk.file_hash.to_hex()},
           };
         }
-        LOG(DEBUG) << "vert_seqno_incr";
 
         if (info.after_merge) {
           LOG(DEBUG) << "After merge: " << info.after_merge;
@@ -1118,8 +1114,6 @@ class Indexer : public td::actor::Actor {
                                               }}};
         }
 
-        LOG(DEBUG) << "Start master ref";
-
         if (info.master_ref.not_null()) {
           block::gen::ExtBlkRef::Record master{};
           auto csr = load_cell_slice(info.master_ref);
@@ -1139,8 +1133,6 @@ class Indexer : public td::actor::Actor {
               {"capabilities", info.gen_software->prefetch_ulong(64)},
           };
         }
-
-        LOG(DEBUG) << "BlockInfo loaded!";
 
         auto value_flow_root = blk.value_flow;
         block::ValueFlow value_flow;
@@ -1163,8 +1155,6 @@ class Indexer : public td::actor::Actor {
                         minted:CurrencyCollection
                         ] = ValueFlow;
         */
-
-        LOG(DEBUG) << "ValueFlow data";
 
         answer["ValueFlow"] = {
             {"from_prev_blk",
@@ -1240,8 +1230,6 @@ class Indexer : public td::actor::Actor {
           out_msgs_json.push_back(parsed);
         }
 
-        LOG(DEBUG) << "Finish parse out msg descr";
-
         auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
 
@@ -1312,9 +1300,14 @@ class Indexer : public td::actor::Actor {
             {"in_msg_descr", in_msgs_json},
         };
 
-        //        if ((int)extra.custom->prefetch_ulong(1) == 1) {
-        //          auto mc_extra = extra.custom->prefetch_ref();
-        //        }
+        if ((int)extra.custom->prefetch_ulong(1) == 1) {
+          auto mc_extra = extra.custom->prefetch_ref();
+
+          block::gen::McBlockExtra::Record extra_mc;
+          tlb::unpack_cell(mc_extra, extra_mc);
+
+          answer["BlockExtra"]["custom"] = {{"key_block", extra_mc.key_block}};
+        }
 
         vm::CellSlice upd_cs{vm::NoVmSpec(), blk.state_update};
         if (!(upd_cs.is_special() && upd_cs.prefetch_long(8) == 4  // merkle update
