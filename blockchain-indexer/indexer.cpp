@@ -1321,16 +1321,52 @@ class Indexer : public td::actor::Actor {
             vm::Dictionary config_dict{cp.config, 32};
 
             while (!config_dict.is_empty()) {
-              td::BitArray<32> last_lt{};
-              config_dict.get_minmax_key(last_lt);
+              td::BitArray<32> key{};
+              config_dict.get_minmax_key(key);
 
               Ref<vm::Cell> tvalue;
-              tvalue = config_dict.lookup_delete(last_lt)->prefetch_ref();
+              tvalue = config_dict.lookup_delete(key)->prefetch_ref();
 
-              configs[last_lt.to_long()] = dump_as_boc(tvalue);
+              configs[key.to_long()] = dump_as_boc(tvalue);
             };
 
             answer["BlockExtra"]["custom"]["configs"] = configs;
+
+            vm::Dictionary shard_fees_dict{extra_mc.shard_fees, 96};
+            std::map<std::string, json> shard_fees;
+
+            while (!config_dict.is_empty()) {
+              td::BitArray<96> key{};
+              config_dict.get_minmax_key(key);
+
+              Ref<vm::CellSlice> tvalue;
+              tvalue = config_dict.lookup_delete(key);
+
+              block::gen::ShardFeeCreated::Record sf;
+              tlb::unpack(tvalue.write(), sf);
+
+              block::gen::CurrencyCollection::Record fees;
+              block::gen::CurrencyCollection::Record create;
+
+              tlb::unpack(sf.fees.write(), fees);
+              tlb::unpack(sf.create.write(), create);
+
+              std::list<std::tuple<int, std::string>> dummy;
+
+              json data = {
+                  {"fees",
+                   {{"grams", block::tlb::t_Grams.as_integer(fees.grams)->to_dec_string()},
+                    {"extra", fees.other->have_refs() ? parse_extra_currency(fees.other->prefetch_ref()) : dummy}}},
+
+                  {"create",
+                   {{"grams", block::tlb::t_Grams.as_integer(create.grams)->to_dec_string()},
+                    {"extra",
+                     create.other->have_refs() ? parse_extra_currency(create.other->prefetch_ref()) : dummy}}}};
+
+              shard_fees[key.to_hex()] = data;
+            };
+
+            answer["BlockExtra"]["custom"]["shard_fees"] = shard_fees;
           };
         }
 
