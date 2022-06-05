@@ -1316,7 +1316,7 @@ class Indexer : public td::actor::Actor {
 
             answer["BlockExtra"]["custom"]["config_addr"] = cp.config_addr.to_hex();
 
-            std::list<json> configs;
+            std::map<long long, std::string> configs;
 
             vm::Dictionary config_dict{cp.config, 32};
 
@@ -1327,8 +1327,7 @@ class Indexer : public td::actor::Actor {
               Ref<vm::Cell> tvalue;
               tvalue = config_dict.lookup_delete(last_lt)->prefetch_ref();
 
-              json cc = {{last_lt.to_long(), dump_as_boc(tvalue)}};
-              configs.push_back(cc);
+              configs[last_lt.to_long()] = dump_as_boc(tvalue);
             };
 
             answer["BlockExtra"]["custom"]["configs"] = configs;
