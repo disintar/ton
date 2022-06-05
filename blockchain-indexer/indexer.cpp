@@ -1378,39 +1378,41 @@ class Indexer : public td::actor::Actor {
                   parse_in_msg_descr(load_cell_slice(extra_mc.r1.recover_create_msg->prefetch_ref()), workchain);
             }
 
-            vm::Dictionary prev_blk_signatures{extra_mc.shard_fees->prefetch_ref(), 96};
-            std::list<json> prev_blk_signatures_json;
+            if (extra_mc.shard_fees->have_refs()) {
+              vm::Dictionary prev_blk_signatures{extra_mc.shard_fees->prefetch_ref(), 16};
+              std::list<json> prev_blk_signatures_json;
 
-            while (!prev_blk_signatures.is_empty()) {
-              td::BitArray<96> key{};
-              prev_blk_signatures.get_minmax_key(key);
+              while (!prev_blk_signatures.is_empty()) {
+                td::BitArray<16> key{};
+                prev_blk_signatures.get_minmax_key(key);
 
-              Ref<vm::CellSlice> tvalue;
-              tvalue = prev_blk_signatures.lookup_delete(key);
+                Ref<vm::CellSlice> tvalue;
+                tvalue = prev_blk_signatures.lookup_delete(key);
 
-              LOG(DEBUG) << "tvalue: " << tvalue.is_null();
-              LOG(DEBUG) << "tvalue size: " << tvalue->size();
-              LOG(DEBUG) << "refs: " << tvalue->size_refs();
+                LOG(DEBUG) << "tvalue: " << tvalue.is_null();
+                LOG(DEBUG) << "tvalue size: " << tvalue->size();
+                LOG(DEBUG) << "refs: " << tvalue->size_refs();
 
-              block::gen::CryptoSignaturePair::Record cs_pair;
-              block::gen::CryptoSignatureSimple::Record css{};
+                block::gen::CryptoSignaturePair::Record cs_pair;
+                block::gen::CryptoSignatureSimple::Record css{};
 
-              CHECK(tlb::unpack(tvalue.write(), cs_pair));
+                CHECK(tlb::unpack(tvalue.write(), cs_pair));
 
-              LOG(DEBUG) << "tvalue: " << cs_pair.sign.is_null();
-              LOG(DEBUG) << "refs: " << cs_pair.sign->size_refs();
+                LOG(DEBUG) << "tvalue: " << cs_pair.sign.is_null();
+                LOG(DEBUG) << "refs: " << cs_pair.sign->size_refs();
 
-              CHECK(tlb::unpack(cs_pair.sign.write(), css));
+                CHECK(tlb::unpack(cs_pair.sign.write(), css));
 
-              json data = {{"key", key.to_long()},
-                           {"node_id_short", cs_pair.node_id_short.to_hex()},
-                           {
-                               "sign",
-                               {"R", css.R.to_hex()},
-                               {"s", css.s.to_hex()},
-                           }};
+                json data = {{"key", key.to_long()},
+                             {"node_id_short", cs_pair.node_id_short.to_hex()},
+                             {
+                                 "sign",
+                                 {"R", css.R.to_hex()},
+                                 {"s", css.s.to_hex()},
+                             }};
 
-              prev_blk_signatures_json.push_back(data);
+                prev_blk_signatures_json.push_back(data);
+              };
             };
           };
         }
