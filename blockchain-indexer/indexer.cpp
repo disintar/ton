@@ -1418,10 +1418,12 @@ class Indexer : public td::actor::Actor {
               answer["BlockExtra"]["custom"]["prev_blk_signatures"] = prev_blk_signatures_json;
             };
 
-            auto shards_dict = std::make_unique<vm::Dictionary>(std::move(extra_mc.shard_hashes), 32);
+            LOG(DEBUG) << "Shard hashes";
 
             block::ShardConfig shards;
             shards.unpack(extra_mc.shard_hashes);
+
+            LOG(DEBUG) << "Shard hashes Done";
 
             auto f = [](McShardHash &ms) {
               LOG(DEBUG) << "End lt: " << ms.end_lt();
