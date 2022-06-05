@@ -698,7 +698,12 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     block::gen::OutMsg::Record_msg_export_ext data;
     CHECK(tlb::unpack(out_msg, data));
 
-    answer["transaction"] = parse_transaction(load_cell_slice_ref(data.transaction), workchain);
+    vm::CellBuilder cb;  // TODO: fixme
+    cb.store_ref(data.transaction);
+    auto body_cell = cb.finalize();
+    auto csr = load_cell_slice_ref(body_cell);
+
+    answer["transaction"] = parse_transaction(csr, workchain);
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_imm) {
