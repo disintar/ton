@@ -1039,6 +1039,7 @@ class Indexer : public td::actor::Actor {
       }
     });
 
+    LOG(DEBUG) << "S: " << seqno << " Sh: " << shard << " Wc: " << workchain;
     ton::AccountIdPrefixFull pfx{workchain, shard};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                             std::move(P));
