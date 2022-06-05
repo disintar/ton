@@ -1383,17 +1383,18 @@ class Indexer : public td::actor::Actor {
 
             while (!prev_blk_signatures.is_empty()) {
               td::BitArray<16> key{};
-              config_dict.get_minmax_key(key);
+              prev_blk_signatures.get_minmax_key(key);
 
-              Ref<vm::Cell> tvalue;
-              tvalue = config_dict.lookup_delete(key);
+              Ref<vm::CellSlice> tvalue;
+              tvalue = prev_blk_signatures.lookup_delete(key);
 
               LOG(DEBUG) << "tvalue: " << tvalue.is_null();
+              LOG(DEBUG) << "refs: " << tvalue->size_refs();
 
               block::gen::CryptoSignaturePair::Record cs_pair;
-              block::gen::CryptoSignatureSimple::Record css;
+              block::gen::CryptoSignatureSimple::Record css{};
 
-              CHECK(tlb::unpack_cell(tvalue, cs_pair));
+              CHECK(tlb::unpack(tvalue.write(), cs_pair));
 
               LOG(DEBUG) << "tvalue: " << cs_pair.sign.is_null();
               LOG(DEBUG) << "refs: " << cs_pair.sign->size_refs();
