@@ -1332,7 +1332,7 @@ class Indexer : public td::actor::Actor {
 
             answer["BlockExtra"]["custom"]["configs"] = configs;
 
-            vm::Dictionary shard_fees_dict{extra_mc.shard_fees, 96};
+            vm::Dictionary shard_fees_dict{extra_mc.shard_fees->prefetch_ref(), 96};
             std::map<std::string, json> shard_fees;
 
             while (!config_dict.is_empty()) {
