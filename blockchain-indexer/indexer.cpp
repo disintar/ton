@@ -962,17 +962,17 @@ class Indexer : public td::actor::Actor {
     }
   }
 
-  void got_shard_to_parse(unsigned long seqno, unsigned long shard, int workchain, BlockIdExt blkid) {
-    LOG(DEBUG) << "Parse seqno: " << seqno;
-    LOG(DEBUG) << "Parse shard: " << shard;
-    LOG(DEBUG) << "Parse workchain: " << workchain;
+  void got_shard_to_parse(unsigned long shard_seqno, unsigned long shard_shard, int shard_workchain, BlockIdExt blkid) {
+    LOG(DEBUG) << "Parse seqno: " << shard_seqno;
+    LOG(DEBUG) << "Parse shard: " << shard_shard;
+    LOG(DEBUG) << "Parse workchain: " << shard_workchain;
 
     // Get prev masterchain block end_lt
     // To parse all shards to this end_lt
     LOG(DEBUG) << "Masterchain blk id: " << blkid.to_str();
 
     auto P = td::PromiseCreator::lambda(
-        [SelfId = actor_id(this), &seqno, &shard, &workchain](td::Result<ConstBlockHandle> R) {
+        [SelfId = actor_id(this), &shard_seqno, &shard_shard, &shard_workchain](td::Result<ConstBlockHandle> R) {
           LOG(DEBUG) << "Got Answer!";
 
           if (R.is_error()) {
@@ -981,11 +981,11 @@ class Indexer : public td::actor::Actor {
             auto handle = R.move_as_ok();
             LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
 
-            LOG(DEBUG) << "Parse seqno: " << seqno;
-            LOG(DEBUG) << "Parse shard: " << shard;
-            LOG(DEBUG) << "Parse workchain: " << workchain;
+            LOG(DEBUG) << "Parse seqno: " << shard_seqno;
+            LOG(DEBUG) << "Parse shard: " << shard_shard;
+            LOG(DEBUG) << "Parse workchain: " << shard_workchain;
 
-            td::actor::send_closure(SelfId, &Indexer::got_prev_mc_handle, handle, seqno, shard, workchain);
+            td::actor::send_closure(SelfId, &Indexer::got_prev_mc_handle, handle, shard_seqno, shard_shard, shard_workchain);
           }
         });
 
@@ -1013,6 +1013,7 @@ class Indexer : public td::actor::Actor {
             LOG(DEBUG) << "Parse seqno: " << seqno;
             LOG(DEBUG) << "Parse shard: " << shard;
             LOG(DEBUG) << "Parse workchain: " << workchain;
+
 
             LOG(DEBUG) << "Got prev mc block";
 
