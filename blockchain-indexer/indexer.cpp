@@ -1418,15 +1418,34 @@ class Indexer : public td::actor::Actor {
               answer["BlockExtra"]["custom"]["prev_blk_signatures"] = prev_blk_signatures_json;
             };
 
-            LOG(DEBUG) << "Shard hashes";
-
             block::ShardConfig shards;
             shards.unpack(extra_mc.shard_hashes);
 
-            LOG(DEBUG) << "Shard hashes Done";
+            std::list<json> shards_json;
+            auto f = [&shards_json](McShardHash &ms) {
+              json data = {{"BlockIdExt",
+                            {{"file_hash", ms.top_block_id().file_hash.to_hex()},
+                             {"root_hash", ms.top_block_id().root_hash.to_hex()},
+                             {"id",
+                              {
+                                  {"workchain", ms.top_block_id().id.workchain},
+                                  {"seqno", ms.top_block_id().id.seqno},
+                                  {"shard", ms.top_block_id().id.shard},
+                              }}}},
+                           {"start_lt", ms.start_lt()},
+                           {"end_lt", ms.end_lt()},
+                           {"before_split", ms.before_split()},
+                           {"before_merge", ms.before_merge()},
+                           {"shard",
+                            {
+                                {"workchain", ms.shard().workchain},
+                                {"shard", ms.shard().shard},
+                            }},
+                           {"fsm_utime", ms.fsm_utime()},
+                           {"fsm_state", ms.fsm_state()}};
 
-            auto f = [](McShardHash &ms) {
-              LOG(DEBUG) << "End lt: " << ms.end_lt();
+              shards_json.push_back(data);
+
               return 1;
             };
             shards.process_shard_hashes(f);
@@ -1459,7 +1478,7 @@ class Indexer : public td::actor::Actor {
     td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
                                   std::move(P));
   }
-};
+};  // namespace validator
 }  // namespace validator
 }  // namespace ton
 
