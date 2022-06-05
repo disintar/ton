@@ -963,10 +963,6 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_shard_to_parse(unsigned long seqno, unsigned long shard, int workchain, BlockIdExt blkid) {
-    LOG(DEBUG) << "Parse seqno: " << seqno;
-    LOG(DEBUG) << "Parse shard: " << shard;
-    LOG(DEBUG) << "Parse workchain: " << workchain;
-
     // Get prev masterchain block end_lt
     // To parse all shards to this end_lt
     LOG(DEBUG) << "Masterchain blk id: " << blkid.to_str();
@@ -980,10 +976,6 @@ class Indexer : public td::actor::Actor {
       } else {
         auto handle = R.move_as_ok();
         LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
-
-        LOG(DEBUG) << "Parse seqno: " << shard_seqno;
-        LOG(DEBUG) << "Parse shard: " << shard_shard;
-        LOG(DEBUG) << "Parse workchain: " << shard_workchain;
 
         td::actor::send_closure(SelfId, &Indexer::got_prev_mc_handle, handle, shard_seqno, shard_shard,
                                 shard_workchain);
@@ -1002,19 +994,11 @@ class Indexer : public td::actor::Actor {
 
   void got_prev_mc_handle(std::shared_ptr<const BlockHandleInterface> handle, unsigned long seqno, unsigned long shard,
                           int workchain) {
-    LOG(DEBUG) << "Parse seqno: " << seqno;
-    LOG(DEBUG) << "Parse shard: " << shard;
-    LOG(DEBUG) << "Parse workchain: " << workchain;
-
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), shard_seqno = seqno, shard_shard = shard,
                                          shard_workchain = workchain](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
-        LOG(DEBUG) << "Parse seqno: " << shard_seqno;
-        LOG(DEBUG) << "Parse shard: " << shard_shard;
-        LOG(DEBUG) << "Parse workchain: " << shard_workchain;
-
         LOG(DEBUG) << "Got prev mc block";
 
         auto block = R.move_as_ok();
@@ -1043,10 +1027,6 @@ class Indexer : public td::actor::Actor {
   }
 
   void start_parse_shards(unsigned long long end_lt, unsigned long seqno, unsigned long shard, int workchain) {
-    LOG(DEBUG) << "Parse seqno: " << seqno;
-    LOG(DEBUG) << "Parse shard: " << shard;
-    LOG(DEBUG) << "Parse workchain: " << workchain;
-
     auto P = td::PromiseCreator::lambda(
         [SelfId = actor_id(this), &seqno, &shard, &workchain, &end_lt](td::Result<ConstBlockHandle> R) {
           LOG(DEBUG) << "Got Answer!";
@@ -1059,7 +1039,6 @@ class Indexer : public td::actor::Actor {
           }
         });
 
-    LOG(DEBUG) << "S: " << seqno << " Sh: " << shard << " Wc: " << workchain;
     ton::AccountIdPrefixFull pfx{workchain, shard};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                             std::move(P));
@@ -1493,17 +1472,10 @@ class Indexer : public td::actor::Actor {
                 Ref<vm::CellSlice> tvalue;
                 tvalue = prev_blk_signatures.lookup_delete(key);
 
-                LOG(DEBUG) << "tvalue: " << tvalue.is_null();
-                LOG(DEBUG) << "tvalue size: " << tvalue->size();
-                LOG(DEBUG) << "refs: " << tvalue->size_refs();
-
                 block::gen::CryptoSignaturePair::Record cs_pair;
                 block::gen::CryptoSignatureSimple::Record css{};
 
                 CHECK(tlb::unpack(tvalue.write(), cs_pair));
-
-                LOG(DEBUG) << "tvalue: " << cs_pair.sign.is_null();
-                LOG(DEBUG) << "refs: " << cs_pair.sign->size_refs();
 
                 CHECK(tlb::unpack(cs_pair.sign.write(), css));
 
