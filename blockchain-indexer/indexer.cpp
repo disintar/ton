@@ -1306,7 +1306,33 @@ class Indexer : public td::actor::Actor {
           block::gen::McBlockExtra::Record extra_mc;
           tlb::unpack_cell(mc_extra, extra_mc);
 
-          answer["BlockExtra"]["custom"] = {{"key_block", extra_mc.key_block}};
+          answer["BlockExtra"]["custom"] = {
+              {"key_block", extra_mc.key_block},
+          };
+
+          if (extra_mc.key_block) {
+            block::gen::ConfigParams::Record cp;
+            tlb::unpack(extra_mc.config.write(), cp);
+
+            answer["BlockExtra"]["custom"]["config_addr"] = cp.config_addr.to_hex();
+
+            std::list<json> configs;
+
+            vm::Dictionary config_dict{cp.config, 32};
+
+            while (!config_dict.is_empty()) {
+              td::BitArray<32> last_lt{};
+              config_dict.get_minmax_key(last_lt);
+
+              Ref<vm::Cell> tvalue;
+              tvalue = config_dict.lookup_delete(last_lt)->prefetch_ref();
+
+              json cc = {{last_lt.to_long(), dump_as_boc(tvalue)}};
+              configs.push_back(cc);
+            };
+
+            answer["BlockExtra"]["custom"]["configs"] = configs;
+          };
         }
 
         vm::CellSlice upd_cs{vm::NoVmSpec(), blk.state_update};
