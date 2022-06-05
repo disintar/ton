@@ -691,7 +691,7 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
 
   auto tag = block::gen::t_OutMsg.check_tag(out_msg);
 
-  LOG(DEBUG) << "parse_out_msg_descr";
+  LOG(DEBUG) << "parse_out_msg_descr, tag: " << tag;
   if (tag == block::gen::t_OutMsg.msg_export_ext) {
     answer["type"] = "msg_export_ext";
 
