@@ -955,7 +955,7 @@ class Indexer : public td::actor::Actor {
         }
       });
 
-      ton::AccountIdPrefixFull pfx{0, 0x8000000000000000};
+      ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
       td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                               std::move(P));
     }
@@ -1381,7 +1381,7 @@ int main(int argc, char **argv) {
       });
   p.add_checked_option('s', "seqno", "seqno_first[:seqno_last]\tseqno range", [&](td::Slice arg) {
     auto pos = std::min(arg.find(':'), arg.size());
-    TRY_RESULT(seqno_first, td::to_integer_safe<ton::BlockSeqno>(arg.substr(-1, pos)));
+    TRY_RESULT(seqno_first, td::to_integer_safe<ton::BlockSeqno>(arg.substr(0, pos)));
     ++pos;
     if (pos >= arg.size()) {
       td::actor::send_closure(main, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_first);
