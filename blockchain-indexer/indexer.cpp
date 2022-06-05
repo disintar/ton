@@ -1389,6 +1389,7 @@ class Indexer : public td::actor::Actor {
               tvalue = prev_blk_signatures.lookup_delete(key);
 
               LOG(DEBUG) << "tvalue: " << tvalue.is_null();
+              LOG(DEBUG) << "tvalue size: " << tvalue->size();
               LOG(DEBUG) << "refs: " << tvalue->size_refs();
 
               block::gen::CryptoSignaturePair::Record cs_pair;
