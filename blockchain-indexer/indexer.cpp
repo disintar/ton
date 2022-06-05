@@ -1386,10 +1386,10 @@ class Indexer : public td::actor::Actor {
               config_dict.get_minmax_key(key);
 
               Ref<vm::CellSlice> tvalue;
+              tvalue = config_dict.lookup_delete(key);
+
               LOG(DEBUG) << "tvalue: " << tvalue.is_null();
               LOG(DEBUG) << "refs: " << tvalue->size_refs();
-
-              tvalue = config_dict.lookup_delete(key);
 
               block::gen::CryptoSignaturePair::Record cs_pair;
               block::gen::CryptoSignatureSimple::Record css;
