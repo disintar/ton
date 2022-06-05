@@ -1056,6 +1056,8 @@ class Indexer : public td::actor::Actor {
         CHECK(block.not_null());
 
         auto blkid = block->block_id();
+        LOG(DEBUG) << "Parse: " << blkid.to_str();
+
         auto block_root = block->root_cell();
         if (block_root.is_null()) {
           LOG(ERROR) << "block has no valid root cell";
