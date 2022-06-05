@@ -962,9 +962,11 @@ class Indexer : public td::actor::Actor {
     }
   }
 
-  void got_shard_to_parse(McShardHash ms, unsigned long long start_mc_lt) {
-    LOG(DEBUG) << "Parse wc: " << ms.shard().workchain;
-    LOG(DEBUG) << "To start mc lt: " << start_mc_lt;
+  void got_shard_to_parse(unsigned long seqno, unsigned long shard, int workchain, unsigned long long start_mc_lt) {
+    LOG(DEBUG) << "Parse seqno: " << seqno;
+    LOG(DEBUG) << "Parse shard: " << shard;
+    LOG(DEBUG) << "Parse workchain: " << workchain;
+    LOG(DEBUG) << "Parse start_mc_lt: " << start_mc_lt;
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle) {
@@ -1452,7 +1454,12 @@ class Indexer : public td::actor::Actor {
 
               shards_json.push_back(data);
 
-              td::actor::send_closure(SelfId, &Indexer::got_shard_to_parse, ms, start_lt);
+              auto shard_seqno = ms.top_block_id().id.seqno;
+              auto shard_shard = ms.top_block_id().id.shard;
+              auto shard_workchain = ms.shard().workchain;
+
+              td::actor::send_closure(SelfId, &Indexer::got_shard_to_parse, shard_seqno, shard_shard, shard_workchain,
+                                      start_lt);
 
               return 1;
             };
