@@ -1413,6 +1413,8 @@ class Indexer : public td::actor::Actor {
 
                 prev_blk_signatures_json.push_back(data);
               };
+
+              answer["BlockExtra"]["custom"]["prev_blk_signatures_json"] = prev_blk_signatures_json;
             };
           };
         }
