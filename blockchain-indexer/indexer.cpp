@@ -962,11 +962,12 @@ class Indexer : public td::actor::Actor {
     }
   }
 
-  void got_shard_to_parse(unsigned long seqno, unsigned long shard, int workchain, unsigned long long start_mc_lt) {
+  void got_shard_to_parse(unsigned long seqno, unsigned long shard, int workchain, BlockIdExt blkid) {
     LOG(DEBUG) << "Parse seqno: " << seqno;
     LOG(DEBUG) << "Parse shard: " << shard;
     LOG(DEBUG) << "Parse workchain: " << workchain;
-    LOG(DEBUG) << "Parse start_mc_lt: " << start_mc_lt;
+
+    LOG(DEBUG) << "Masterchain blk id: " << blkid.to_str();
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle) {
@@ -1430,7 +1431,7 @@ class Indexer : public td::actor::Actor {
 
             std::list<json> shards_json;
 
-            auto f = [&shards_json, &SelfId, &start_lt](McShardHash &ms) {
+            auto f = [&shards_json, &SelfId, &start_lt, &blkid](McShardHash &ms) {
               json data = {{"BlockIdExt",
                             {{"file_hash", ms.top_block_id().file_hash.to_hex()},
                              {"root_hash", ms.top_block_id().root_hash.to_hex()},
@@ -1459,7 +1460,7 @@ class Indexer : public td::actor::Actor {
               auto shard_workchain = ms.shard().workchain;
 
               td::actor::send_closure(SelfId, &Indexer::got_shard_to_parse, shard_seqno, shard_shard, shard_workchain,
-                                      start_lt);
+                                      blkid);
 
               return 1;
             };
