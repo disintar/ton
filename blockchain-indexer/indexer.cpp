@@ -1038,9 +1038,6 @@ class Indexer : public td::actor::Actor {
 
         LOG(DEBUG) << "Start block info";
 
-        block::gen::ExtBlkRef::Record prev_vert_blk{};
-        tlb::unpack_cell(info.prev_vert_ref, prev_vert_blk);
-
         answer["BlockInfo"] = {
             {"version", info.version},
             {"not_master", info.not_master},
@@ -1061,59 +1058,65 @@ class Indexer : public td::actor::Actor {
             {"gen_catchain_seqno", info.gen_catchain_seqno},
             {"min_ref_mc_seqno", info.min_ref_mc_seqno},
             {"prev_key_block_seqno", info.prev_key_block_seqno},
-            {"prev_vert_ref",
-             {
-                 {"end_lt", prev_vert_blk.end_lt},
-                 {"seq_no", prev_vert_blk.seq_no},
-                 {"root_hash", prev_vert_blk.root_hash.to_hex()},
-                 {"file_hash", prev_vert_blk.file_hash.to_hex()},
-             }},
         };
 
-//        if (info.after_merge) {
-//          LOG(DEBUG) << "After merge: " << info.after_merge;
-//          LOG(DEBUG) << "Refs: " << info.prev_ref->get_refcnt();
-//
-//          block::gen::ExtBlkRef::Record prev_blk_1{};
-//          block::gen::ExtBlkRef::Record prev_blk_2{};
-//
-//          auto c_ref = load_cell_slice(info.prev_ref);
-//          auto blk1 = c_ref.fetch_ref();
-//          auto blk2 = c_ref.fetch_ref();
-//
-//          tlb::unpack_cell(blk1, prev_blk_1);
-//          tlb::unpack_cell(blk2, prev_blk_2);
-//
-//          answer["BlockInfo"]["prev_ref"] = {
-//              {"type", "0"},
-//              {"data",
-//               {
-//                   {"end_lt", prev_blk_1.end_lt},
-//                   {"seq_no", prev_blk_1.seq_no},
-//                   {"root_hash", prev_blk_1.root_hash.to_hex()},
-//                   {"file_hash", prev_blk_1.file_hash.to_hex()},
-//               }},
-//              {"data_2",
-//               {
-//                   {"end_lt", prev_blk_2.end_lt},
-//                   {"seq_no", prev_blk_2.seq_no},
-//                   {"root_hash", prev_blk_2.root_hash.to_hex()},
-//                   {"file_hash", prev_blk_2.file_hash.to_hex()},
-//               }},
-//          };
-//        } else {
-//          block::gen::ExtBlkRef::Record prev_blk{};
-//          tlb::unpack_cell(info.prev_ref, prev_blk);
-//
-//          answer["BlockInfo"]["prev_ref"] = {{"type", "0"},
-//                                             {"data",
-//                                              {
-//                                                  {"end_lt", prev_blk.end_lt},
-//                                                  {"seq_no", prev_blk.seq_no},
-//                                                  {"root_hash", prev_blk.root_hash.to_hex()},
-//                                                  {"file_hash", prev_blk.file_hash.to_hex()},
-//                                              }}};
-//        }
+        if (info.vert_seqno_incr) {
+          block::gen::ExtBlkRef::Record prev_vert_blk{};
+          tlb::unpack_cell(info.prev_vert_ref, prev_vert_blk);
+
+          answer["BlockInfo"]["prev_vert_ref"] = {
+              {"end_lt", prev_vert_blk.end_lt},
+              {"seq_no", prev_vert_blk.seq_no},
+              {"root_hash", prev_vert_blk.root_hash.to_hex()},
+              {"file_hash", prev_vert_blk.file_hash.to_hex()},
+          };
+        }
+        LOG(DEBUG) << "vert_seqno_incr";
+
+        if (info.after_merge) {
+          LOG(DEBUG) << "After merge: " << info.after_merge;
+          LOG(DEBUG) << "Refs: " << info.prev_ref->get_refcnt();
+
+          block::gen::ExtBlkRef::Record prev_blk_1{};
+          block::gen::ExtBlkRef::Record prev_blk_2{};
+
+          auto c_ref = load_cell_slice(info.prev_ref);
+          auto blk1 = c_ref.fetch_ref();
+          auto blk2 = c_ref.fetch_ref();
+
+          tlb::unpack_cell(blk1, prev_blk_1);
+          tlb::unpack_cell(blk2, prev_blk_2);
+
+          answer["BlockInfo"]["prev_ref"] = {
+              {"type", "0"},
+              {"data",
+               {
+                   {"end_lt", prev_blk_1.end_lt},
+                   {"seq_no", prev_blk_1.seq_no},
+                   {"root_hash", prev_blk_1.root_hash.to_hex()},
+                   {"file_hash", prev_blk_1.file_hash.to_hex()},
+               }},
+              {"data_2",
+               {
+                   {"end_lt", prev_blk_2.end_lt},
+                   {"seq_no", prev_blk_2.seq_no},
+                   {"root_hash", prev_blk_2.root_hash.to_hex()},
+                   {"file_hash", prev_blk_2.file_hash.to_hex()},
+               }},
+          };
+        } else {
+          block::gen::ExtBlkRef::Record prev_blk{};
+          tlb::unpack_cell(info.prev_ref, prev_blk);
+
+          answer["BlockInfo"]["prev_ref"] = {{"type", "0"},
+                                             {"data",
+                                              {
+                                                  {"end_lt", prev_blk.end_lt},
+                                                  {"seq_no", prev_blk.seq_no},
+                                                  {"root_hash", prev_blk.root_hash.to_hex()},
+                                                  {"file_hash", prev_blk.file_hash.to_hex()},
+                                              }}};
+        }
 
         LOG(DEBUG) << "Start master ref";
 
@@ -1309,9 +1312,9 @@ class Indexer : public td::actor::Actor {
             {"in_msg_descr", in_msgs_json},
         };
 
-//        if ((int)extra.custom->prefetch_ulong(1) == 1) {
-//          auto mc_extra = extra.custom->prefetch_ref();
-//        }
+        //        if ((int)extra.custom->prefetch_ulong(1) == 1) {
+        //          auto mc_extra = extra.custom->prefetch_ref();
+        //        }
 
         vm::CellSlice upd_cs{vm::NoVmSpec(), blk.state_update};
         if (!(upd_cs.is_special() && upd_cs.prefetch_long(8) == 4  // merkle update
