@@ -1382,7 +1382,7 @@ class Indexer : public td::actor::Actor {
             std::list<json> prev_blk_signatures_json;
 
             while (!prev_blk_signatures.is_empty()) {
-              td::BitArray<16> key{};
+              td::BitArray<96> key{};
               prev_blk_signatures.get_minmax_key(key);
 
               Ref<vm::CellSlice> tvalue;
