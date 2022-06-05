@@ -980,6 +980,11 @@ class Indexer : public td::actor::Actor {
           } else {
             auto handle = R.move_as_ok();
             LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
+
+            LOG(DEBUG) << "Parse seqno: " << seqno;
+            LOG(DEBUG) << "Parse shard: " << shard;
+            LOG(DEBUG) << "Parse workchain: " << workchain;
+
             td::actor::send_closure(SelfId, &Indexer::got_prev_mc_handle, handle, seqno, shard, workchain);
           }
         });
@@ -996,11 +1001,19 @@ class Indexer : public td::actor::Actor {
 
   void got_prev_mc_handle(std::shared_ptr<const BlockHandleInterface> handle, unsigned long seqno, unsigned long shard,
                           int workchain) {
+    LOG(DEBUG) << "Parse seqno: " << seqno;
+    LOG(DEBUG) << "Parse shard: " << shard;
+    LOG(DEBUG) << "Parse workchain: " << workchain;
+
     auto P = td::PromiseCreator::lambda(
         [SelfId = actor_id(this), &seqno, &shard, &workchain](td::Result<td::Ref<BlockData>> R) {
           if (R.is_error()) {
             LOG(ERROR) << R.move_as_error().to_string();
           } else {
+            LOG(DEBUG) << "Parse seqno: " << seqno;
+            LOG(DEBUG) << "Parse shard: " << shard;
+            LOG(DEBUG) << "Parse workchain: " << workchain;
+
             LOG(DEBUG) << "Got prev mc block";
 
             auto block = R.move_as_ok();
@@ -1028,16 +1041,21 @@ class Indexer : public td::actor::Actor {
   }
 
   void start_parse_shards(unsigned long long end_lt, unsigned long seqno, unsigned long shard, int workchain) {
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), &end_lt](td::Result<ConstBlockHandle> R) {
-      LOG(DEBUG) << "Got Answer!";
+    LOG(DEBUG) << "Parse seqno: " << seqno;
+    LOG(DEBUG) << "Parse shard: " << shard;
+    LOG(DEBUG) << "Parse workchain: " << workchain;
 
-      if (R.is_error()) {
-        LOG(ERROR) << R.move_as_error().to_string();
-      } else {
-        auto handle = R.move_as_ok();
-        td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, end_lt);
-      }
-    });
+    auto P = td::PromiseCreator::lambda(
+        [SelfId = actor_id(this), &seqno, &shard, &workchain, &end_lt](td::Result<ConstBlockHandle> R) {
+          LOG(DEBUG) << "Got Answer!";
+
+          if (R.is_error()) {
+            LOG(ERROR) << R.move_as_error().to_string();
+          } else {
+            auto handle = R.move_as_ok();
+            td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, end_lt);
+          }
+        });
 
     LOG(DEBUG) << "S: " << seqno << " Sh: " << shard << " Wc: " << workchain;
     ton::AccountIdPrefixFull pfx{workchain, shard};
