@@ -691,6 +691,7 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
 
   auto tag = block::gen::t_OutMsg.check_tag(out_msg);
 
+  LOG(DEBUG) << "parse_out_msg_descr";
   if (tag == block::gen::t_OutMsg.msg_export_ext) {
     answer["type"] = "msg_export_ext";
 
@@ -1321,6 +1322,8 @@ class Indexer : public td::actor::Actor {
 
         auto out_msg_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.out_msg_descr), 256,
                                                                       block::tlb::aug_OutMsgDescr);
+
+        LOG(DEBUG) << "start out_msg parse";
         std::list<json> out_msgs_json;
         while (!out_msg_dict->is_empty()) {
           td::Bits256 last_key;
@@ -1331,6 +1334,7 @@ class Indexer : public td::actor::Actor {
           json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg_descr(data.write(), workchain)}};
           out_msgs_json.push_back(parsed);
         }
+        LOG(DEBUG) << "end out_msg parse";
 
         auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
