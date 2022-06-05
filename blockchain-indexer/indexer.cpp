@@ -1449,6 +1449,7 @@ class Indexer : public td::actor::Actor {
               return 1;
             };
             shards.process_shard_hashes(f);
+            answer["BlockExtra"]["custom"]["shards"] = shards_json;
           };
         }
 
