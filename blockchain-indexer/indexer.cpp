@@ -971,7 +971,7 @@ class Indexer : public td::actor::Actor {
     // To parse all shards to this end_lt
     LOG(DEBUG) << "Masterchain blk id: " << blkid.to_str();
 
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), shard_seqno = shard, shard_shard = shard,
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), shard_seqno = seqno, shard_shard = shard,
                                          shard_workchain = workchain](td::Result<ConstBlockHandle> R) {
       LOG(DEBUG) << "Got Answer!";
 
@@ -1006,36 +1006,37 @@ class Indexer : public td::actor::Actor {
     LOG(DEBUG) << "Parse shard: " << shard;
     LOG(DEBUG) << "Parse workchain: " << workchain;
 
-    auto P = td::PromiseCreator::lambda(
-        [SelfId = actor_id(this), &seqno, &shard, &workchain](td::Result<td::Ref<BlockData>> R) {
-          if (R.is_error()) {
-            LOG(ERROR) << R.move_as_error().to_string();
-          } else {
-            LOG(DEBUG) << "Parse seqno: " << seqno;
-            LOG(DEBUG) << "Parse shard: " << shard;
-            LOG(DEBUG) << "Parse workchain: " << workchain;
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), shard_seqno = seqno, shard_shard = shard,
+                                         shard_workchain = workchain](td::Result<td::Ref<BlockData>> R) {
+      if (R.is_error()) {
+        LOG(ERROR) << R.move_as_error().to_string();
+      } else {
+        LOG(DEBUG) << "Parse seqno: " << shard_seqno;
+        LOG(DEBUG) << "Parse shard: " << shard_shard;
+        LOG(DEBUG) << "Parse workchain: " << shard_workchain;
 
-            LOG(DEBUG) << "Got prev mc block";
+        LOG(DEBUG) << "Got prev mc block";
 
-            auto block = R.move_as_ok();
-            CHECK(block.not_null());
+        auto block = R.move_as_ok();
+        CHECK(block.not_null());
 
-            auto block_root = block->root_cell();
-            if (block_root.is_null()) {
-              LOG(ERROR) << "block has no valid root cell";
-              return;
-            }
-
-            block::gen::Block::Record blk;
-            block::gen::BlockInfo::Record info;
-
-            CHECK(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.info, info));
-
-            td::actor::send_closure(SelfId, &Indexer::start_parse_shards, info.end_lt, seqno, shard, workchain);
-          }
-
+        auto block_root = block->root_cell();
+        if (block_root.is_null()) {
+          LOG(ERROR) << "block has no valid root cell";
           return;
-        });
+        }
+
+        block::gen::Block::Record blk;
+        block::gen::BlockInfo::Record info;
+
+        CHECK(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.info, info));
+
+        td::actor::send_closure(SelfId, &Indexer::start_parse_shards, info.end_lt, shard_seqno, shard_shard,
+                                shard_workchain);
+      }
+
+      return;
+    });
 
     td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
                                   std::move(P));
