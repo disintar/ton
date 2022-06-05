@@ -694,7 +694,7 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     answer["type"] = "msg_export_ext";
 
     block::gen::OutMsg::Record_msg_export_ext data;
-    tlb::unpack(out_msg, data);
+    CHECK(tlb::unpack(out_msg, data));
 
     answer["transaction"] =
         parse_transaction(load_cell_slice_ref(load_cell_slice(data.transaction).prefetch_ref()), workchain);
@@ -704,7 +704,7 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     answer["type"] = "msg_export_imm";
 
     block::gen::OutMsg::Record_msg_export_imm data;
-    tlb::unpack(out_msg, data);
+    CHECK(tlb::unpack(out_msg, data));
 
     auto t = load_cell_slice_ref(data.transaction);
 
@@ -720,7 +720,7 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     answer["type"] = "msg_export_new";
 
     block::gen::OutMsg::Record_msg_export_new data;
-    tlb::unpack(out_msg, data);
+    CHECK(tlb::unpack(out_msg, data));
 
     vm::CellBuilder cb;  // TODO: fixme
     cb.store_ref(data.transaction);
@@ -1059,7 +1059,7 @@ class Indexer : public td::actor::Actor {
 
         if (info.vert_seqno_incr) {
           block::gen::ExtBlkRef::Record prev_vert_blk{};
-          tlb::unpack_cell(info.prev_vert_ref, prev_vert_blk);
+          CHECK(tlb::unpack_cell(info.prev_vert_ref, prev_vert_blk));
 
           answer["BlockInfo"]["prev_vert_ref"] = {
               {"end_lt", prev_vert_blk.end_lt},
@@ -1080,8 +1080,8 @@ class Indexer : public td::actor::Actor {
           auto blk1 = c_ref.fetch_ref();
           auto blk2 = c_ref.fetch_ref();
 
-          tlb::unpack_cell(blk1, prev_blk_1);
-          tlb::unpack_cell(blk2, prev_blk_2);
+          CHECK(tlb::unpack_cell(blk1, prev_blk_1));
+          CHECK(tlb::unpack_cell(blk2, prev_blk_2));
 
           answer["BlockInfo"]["prev_ref"] = {
               {"type", "0"},
@@ -1102,7 +1102,7 @@ class Indexer : public td::actor::Actor {
           };
         } else {
           block::gen::ExtBlkRef::Record prev_blk{};
-          tlb::unpack_cell(info.prev_ref, prev_blk);
+          CHECK(tlb::unpack_cell(info.prev_ref, prev_blk));
 
           answer["BlockInfo"]["prev_ref"] = {{"type", "0"},
                                              {"data",
@@ -1117,7 +1117,7 @@ class Indexer : public td::actor::Actor {
         if (info.master_ref.not_null()) {
           block::gen::ExtBlkRef::Record master{};
           auto csr = load_cell_slice(info.master_ref);
-          tlb::unpack(csr, master);
+          CHECK(tlb::unpack(csr, master));
 
           answer["BlockInfo"]["master_ref"] = {
               {"end_lt", master.end_lt},
@@ -1304,7 +1304,7 @@ class Indexer : public td::actor::Actor {
           auto mc_extra = extra.custom->prefetch_ref();
 
           block::gen::McBlockExtra::Record extra_mc;
-          tlb::unpack_cell(mc_extra, extra_mc);
+          CHECK(tlb::unpack_cell(mc_extra, extra_mc));
 
           answer["BlockExtra"]["custom"] = {
               {"key_block", extra_mc.key_block},
@@ -1312,7 +1312,7 @@ class Indexer : public td::actor::Actor {
 
           if (extra_mc.key_block) {
             block::gen::ConfigParams::Record cp;
-            tlb::unpack(extra_mc.config.write(), cp);
+            CHECK(tlb::unpack(extra_mc.config.write(), cp));
 
             answer["BlockExtra"]["custom"]["config_addr"] = cp.config_addr.to_hex();
 
@@ -1343,13 +1343,13 @@ class Indexer : public td::actor::Actor {
               tvalue = config_dict.lookup_delete(key);
 
               block::gen::ShardFeeCreated::Record sf;
-              tlb::unpack(tvalue.write(), sf);
+              CHECK(tlb::unpack(tvalue.write(), sf));
 
               block::gen::CurrencyCollection::Record fees;
               block::gen::CurrencyCollection::Record create;
 
-              tlb::unpack(sf.fees.write(), fees);
-              tlb::unpack(sf.create.write(), create);
+              CHECK(tlb::unpack(sf.fees.write(), fees));
+              CHECK(tlb::unpack(sf.create.write(), create));
 
               std::list<std::tuple<int, std::string>> dummy;
 
@@ -1367,6 +1367,43 @@ class Indexer : public td::actor::Actor {
             };
 
             answer["BlockExtra"]["custom"]["shard_fees"] = shard_fees;
+
+            if (extra_mc.r1.mint_msg->have_refs()) {
+              answer["BlockExtra"]["custom"]["mint_msg"] =
+                  parse_in_msg_descr(load_cell_slice(extra_mc.r1.mint_msg->prefetch_ref()), workchain);
+            }
+
+            if (extra_mc.r1.recover_create_msg->have_refs()) {
+              answer["BlockExtra"]["custom"]["recover_create_msg"] =
+                  parse_in_msg_descr(load_cell_slice(extra_mc.r1.recover_create_msg->prefetch_ref()), workchain);
+            }
+
+            vm::Dictionary prev_blk_signatures{extra_mc.shard_fees->prefetch_ref(), 96};
+            std::list<json> prev_blk_signatures_json;
+
+            while (!prev_blk_signatures.is_empty()) {
+              td::BitArray<16> key{};
+              config_dict.get_minmax_key(key);
+
+              Ref<vm::CellSlice> tvalue;
+              tvalue = config_dict.lookup_delete(key);
+
+              block::gen::CryptoSignaturePair::Record cs_pair;
+              block::gen::CryptoSignatureSimple::Record css;
+
+              CHECK(tlb::unpack(tvalue.write(), cs_pair));
+              CHECK(tlb::unpack(cs_pair.sign.write(), css));
+
+              json data = {{"key", key.to_long()},
+                           {"node_id_short", cs_pair.node_id_short.to_hex()},
+                           {
+                               "sign",
+                               {"R", css.R.to_hex()},
+                               {"s", css.s.to_hex()},
+                           }};
+
+              prev_blk_signatures_json.push_back(data);
+            };
           };
         }
 
