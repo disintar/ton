@@ -35,6 +35,7 @@
 #include "json.hpp"
 #include "tuple"
 #include "vm/boc.h"
+#include "crypto/block/mc-config.h"
 
 // TODO: use td/utils/json
 // TODO: use tlb auto deserializer to json (PrettyPrintJson)
@@ -1378,7 +1379,6 @@ class Indexer : public td::actor::Actor {
                   parse_in_msg_descr(load_cell_slice(extra_mc.r1.recover_create_msg->prefetch_ref()), workchain);
             }
 
-            LOG(DEBUG) << "prev_blk_signatures: " << extra_mc.r1.prev_blk_signatures->have_refs();
             if (extra_mc.r1.prev_blk_signatures->have_refs()) {
               vm::Dictionary prev_blk_signatures{extra_mc.r1.prev_blk_signatures->prefetch_ref(), 16};
               std::list<json> prev_blk_signatures_json;
@@ -1417,6 +1417,17 @@ class Indexer : public td::actor::Actor {
 
               answer["BlockExtra"]["custom"]["prev_blk_signatures"] = prev_blk_signatures_json;
             };
+
+            auto shards_dict = std::make_unique<vm::Dictionary>(std::move(extra_mc.shard_hashes), 32);
+
+            block::ShardConfig shards;
+            shards.unpack(extra_mc.shard_hashes);
+
+            auto f = [](McShardHash &ms) {
+              LOG(DEBUG) << "End lt: " << ms.end_lt();
+              return 1;
+            };
+            shards.process_shard_hashes(f);
           };
         }
 
