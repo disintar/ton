@@ -1412,36 +1412,38 @@ class Indexer : public td::actor::Actor {
               {"key_block", extra_mc.key_block},
           };
 
-          block::gen::ConfigParams::Record cp;
-          CHECK(tlb::unpack(extra_mc.config.write(), cp));
+          if (extra_mc.key_block) {
+            block::gen::ConfigParams::Record cp;
+            CHECK(tlb::unpack(extra_mc.config.write(), cp));
 
-          answer["BlockExtra"]["custom"]["config_addr"] = cp.config_addr.to_hex();
+            answer["BlockExtra"]["custom"]["config_addr"] = cp.config_addr.to_hex();
 
-          std::map<long long, std::string> configs;
+            std::map<long long, std::string> configs;
 
-          vm::Dictionary config_dict{cp.config, 32};
+            vm::Dictionary config_dict{cp.config, 32};
 
-          while (!config_dict.is_empty()) {
-            td::BitArray<32> key{};
-            config_dict.get_minmax_key(key);
+            while (!config_dict.is_empty()) {
+              td::BitArray<32> key{};
+              config_dict.get_minmax_key(key);
 
-            Ref<vm::Cell> tvalue;
-            tvalue = config_dict.lookup_delete(key)->prefetch_ref();
+              Ref<vm::Cell> tvalue;
+              tvalue = config_dict.lookup_delete(key)->prefetch_ref();
 
-            configs[key.to_long()] = dump_as_boc(tvalue);
+              configs[key.to_long()] = dump_as_boc(tvalue);
+            };
+
+            answer["BlockExtra"]["custom"]["configs"] = configs;
           };
-
-          answer["BlockExtra"]["custom"]["configs"] = configs;
 
           vm::Dictionary shard_fees_dict{extra_mc.shard_fees->prefetch_ref(), 96};
           std::map<std::string, json> shard_fees;
 
-          while (!config_dict.is_empty()) {
+          while (!shard_fees_dict.is_empty()) {
             td::BitArray<96> key{};
-            config_dict.get_minmax_key(key);
+            shard_fees_dict.get_minmax_key(key);
 
             Ref<vm::CellSlice> tvalue;
-            tvalue = config_dict.lookup_delete(key);
+            tvalue = shard_fees_dict.lookup_delete(key);
 
             block::gen::ShardFeeCreated::Record sf;
             CHECK(tlb::unpack(tvalue.write(), sf));
@@ -1551,7 +1553,7 @@ class Indexer : public td::actor::Actor {
 
           shards.process_shard_hashes(f);
           answer["BlockExtra"]["custom"]["shards"] = shards_json;
-        };
+        }
 
         vm::CellSlice upd_cs{vm::NoVmSpec(), blk.state_update};
         if (!(upd_cs.is_special() && upd_cs.prefetch_long(8) == 4  // merkle update
