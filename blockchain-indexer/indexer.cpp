@@ -996,7 +996,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle, bool first = false) {
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), is_first = first](td::Result<td::Ref<BlockData>> R) {
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), is_first = first, &first](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
@@ -1129,7 +1129,7 @@ class Indexer : public td::actor::Actor {
                }},
           };
 
-          if (info.not_master) {
+          if (info.not_master && !first) {
             LOG(DEBUG) << "FOR: " << blkid.to_str();
             LOG(DEBUG) << "GO: " << prev_blk_1.seq_no << ":" << blkid.id.shard << ":" << blkid.id.workchain;
             LOG(DEBUG) << "GO: " << prev_blk_2.seq_no << ":" << blkid.id.shard << ":" << blkid.id.workchain;
@@ -1154,7 +1154,7 @@ class Indexer : public td::actor::Actor {
                                                   {"file_hash", prev_blk.file_hash.to_hex()},
                                               }}};
 
-          if (info.not_master) {
+          if (info.not_master && !first) {
             LOG(DEBUG) << "FOR: " << blkid.to_str();
             LOG(DEBUG) << "GO: " << prev_blk.seq_no << ":" << blkid.id.shard << ":" << blkid.id.workchain;
 
