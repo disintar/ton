@@ -947,15 +947,17 @@ class Indexer : public td::actor::Actor {
   void sync_complete(const BlockHandle &handle) {
     // i in [seqno_first_; seqno_last_]
     for (auto seqno = seqno_first_; seqno <= seqno_last_; ++seqno) {
-      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
-        if (R.is_error()) {
-          LOG(ERROR) << R.move_as_error().to_string();
-        } else {
-          auto handle = R.move_as_ok();
-          LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
-          td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, 0);
-        }
-      });
+      auto my_seqno = seqno_first_;
+      auto P =
+          td::PromiseCreator::lambda([SelfId = actor_id(this), seqno_first = my_seqno](td::Result<ConstBlockHandle> R) {
+            if (R.is_error()) {
+              LOG(ERROR) << R.move_as_error().to_string();
+            } else {
+              auto handle = R.move_as_ok();
+              LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
+              td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
+            }
+          });
 
       ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
       td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
@@ -981,7 +983,7 @@ class Indexer : public td::actor::Actor {
 
     for (const auto &item : parsed_shards_) {
       if (item == data) {
-        LOG(WARNING) << " <- already parsed!";
+        LOG(WARNING) << workchain << ":" << seqno << ":" << shard << " <- already parsed!";
         return;  // already parsed;
       }
     }
