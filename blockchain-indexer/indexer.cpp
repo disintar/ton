@@ -822,7 +822,7 @@ class Indexer : public td::actor::Actor {
     opts_.write().set_hardforks(std::move(h));
     return td::Status::OK();
   }
-  std::list<std::tuple<int, int, int>> parsed_shards_;
+  std::set<std::tuple<int, int, int>> parsed_shards_;
 
  public:
   void set_db_root(std::string db_root) {
@@ -982,14 +982,12 @@ class Indexer : public td::actor::Actor {
 
     std::tuple<int, int, int> data = {seqno, shard, workchain};
 
-    for (const auto &item : parsed_shards_) {
-      if (item == data) {
-        LOG(WARNING) << workchain << ":" << seqno << ":" << shard << " <- already parsed!";
-        return;  // already parsed;
-      }
+    if (parsed_shards_.find(data) != parsed_shards_.end()) {
+      LOG(WARNING) << workchain << ":" << seqno << ":" << shard << " <- already parsed!";
+      return;
     }
 
-    parsed_shards_.emplace_back(data);
+    parsed_shards_.insert(data);
 
     ton::AccountIdPrefixFull pfx{workchain, shard};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
