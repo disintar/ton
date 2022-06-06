@@ -997,8 +997,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle, bool first = false) {
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), is_first = first,
-                                         &first](td::Result<td::Ref<BlockData>> R) {
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), is_first = first](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
@@ -1006,7 +1005,7 @@ class Indexer : public td::actor::Actor {
         CHECK(block.not_null());
 
         auto blkid = block->block_id();
-        LOG(DEBUG) << "Parse: " << blkid.to_str() << " is_first: " << first;
+        LOG(DEBUG) << "Parse: " << blkid.to_str() << " is_first: " << is_first;
 
         auto block_root = block->root_cell();
         if (block_root.is_null()) {
@@ -1131,7 +1130,7 @@ class Indexer : public td::actor::Actor {
                }},
           };
 
-          if (info.not_master && !first) {
+          if (info.not_master && !is_first) {
             LOG(DEBUG) << "FOR: " << blkid.to_str() << " first: " << is_first;
             LOG(DEBUG) << "GO: " << blkid.id.workchain << ":" << blkid.id.shard << ":" << prev_blk_1.seq_no;
             LOG(DEBUG) << "GO: " << blkid.id.workchain << ":" << blkid.id.shard << ":" << prev_blk_2.seq_no;
@@ -1156,7 +1155,7 @@ class Indexer : public td::actor::Actor {
                                                   {"file_hash", prev_blk.file_hash.to_hex()},
                                               }}};
 
-          if (info.not_master && !first) {
+          if (info.not_master && !is_first) {
             LOG(DEBUG) << "FOR: " << blkid.to_str();
             LOG(DEBUG) << "GO: " << blkid.id.workchain << ":" << blkid.id.shard << ":" << prev_blk.seq_no;
 
