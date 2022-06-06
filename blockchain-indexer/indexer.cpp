@@ -975,7 +975,7 @@ class Indexer : public td::actor::Actor {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
         auto handle = R.move_as_ok();
-        LOG(DEBUG) << workchain_shard << ":" << shard_shard << ":" << seqno_shard;
+        LOG(DEBUG) << workchain_shard << ":" << shard_shard << ":" << seqno_shard << " is_first: " << first;
         td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, first);
       }
     });
