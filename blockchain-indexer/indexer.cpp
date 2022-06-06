@@ -967,7 +967,7 @@ class Indexer : public td::actor::Actor {
 
   void start_parse_shards(unsigned int seqno, unsigned long shard, int workchain, bool is_first = false) {
     auto P = td::PromiseCreator::lambda([workchain_shard = workchain, seqno_shard = seqno, shard_shard = shard,
-                                         SelfId = actor_id(this), is_first](td::Result<ConstBlockHandle> R) {
+                                         SelfId = actor_id(this), first = is_first](td::Result<ConstBlockHandle> R) {
       if (R.is_error()) {
         LOG(ERROR) << "ERROR IN BLOCK: "
                    << "Seqno: " << seqno_shard - 1 << " Shard: " << shard_shard << " Worckchain: " << workchain_shard;
@@ -975,7 +975,8 @@ class Indexer : public td::actor::Actor {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
         auto handle = R.move_as_ok();
-        td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, is_first);
+        LOG(DEBUG) << workchain_shard << ":" << shard_shard << ":" << seqno_shard;
+        td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, first);
       }
     });
 
