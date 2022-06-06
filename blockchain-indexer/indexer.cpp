@@ -983,7 +983,7 @@ class Indexer : public td::actor::Actor {
     std::tuple<int, int, int> data = {seqno, shard, workchain};
 
     if (parsed_shards_.find(data) != parsed_shards_.end()) {
-      LOG(WARNING) << workchain << ":" << seqno << ":" << shard << " <- already parsed!";
+      LOG(WARNING) << workchain << ":" << shard << ":" << seqno << " <- already parsed!";
       return;
     }
 
