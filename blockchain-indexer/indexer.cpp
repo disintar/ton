@@ -1153,7 +1153,9 @@ class Indexer : public td::actor::Actor {
         };
 
         if (mc_end_lt > 0 && info.start_lt < mc_end_lt) {
-          LOG(DEBUG) << "End parse of shards";
+          LOG(ERROR) << "Block: " << blkid.to_str() << " end mc lt: " << mc_end_lt;
+          LOG(ERROR) << "Cur start_lt: " << info.start_lt;
+          LOG(ERROR) << "End parse of shards";
           return;
         }
 
