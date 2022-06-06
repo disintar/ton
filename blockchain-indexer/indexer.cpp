@@ -965,9 +965,9 @@ class Indexer : public td::actor::Actor {
     }
   }
 
-  void start_parse_shards(unsigned long seqno, unsigned long shard, int workchain) {
+  void start_parse_shards(unsigned long seqno, unsigned long shard, int workchain, bool is_first = false) {
     auto P = td::PromiseCreator::lambda([workchain_shard = workchain, seqno_shard = seqno, shard_shard = shard,
-                                         SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
+                                         SelfId = actor_id(this), is_first](td::Result<ConstBlockHandle> R) {
       if (R.is_error()) {
         LOG(ERROR) << "ERROR IN BLOCK: "
                    << "Seqno: " << seqno_shard - 1 << " Shard: " << shard_shard << " Worckchain: " << workchain_shard;
@@ -975,7 +975,7 @@ class Indexer : public td::actor::Actor {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
         auto handle = R.move_as_ok();
-        td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, false);
+        td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, is_first);
       }
     });
 
@@ -1129,7 +1129,7 @@ class Indexer : public td::actor::Actor {
                }},
           };
 
-          if (!is_first) {
+          if (!info.not_master) {
             LOG(DEBUG) << "FOR: " << blkid.to_str();
             LOG(DEBUG) << "GO: " << prev_blk_1.seq_no << ":" << blkid.id.shard << ":" << blkid.id.workchain;
             LOG(DEBUG) << "GO: " << prev_blk_2.seq_no << ":" << blkid.id.shard << ":" << blkid.id.workchain;
@@ -1154,7 +1154,7 @@ class Indexer : public td::actor::Actor {
                                                   {"file_hash", prev_blk.file_hash.to_hex()},
                                               }}};
 
-          if (!is_first) {
+          if (!info.not_master) {
             LOG(DEBUG) << "FOR: " << blkid.to_str();
             LOG(DEBUG) << "GO: " << prev_blk.seq_no << ":" << blkid.id.shard << ":" << blkid.id.workchain;
 
@@ -1463,7 +1463,7 @@ class Indexer : public td::actor::Actor {
 
           std::list<json> shards_json;
 
-          auto f = [&shards_json, &SelfId, &blkid](McShardHash &ms) {
+          auto f = [&shards_json, &SelfId, &blkid, is_first](McShardHash &ms) {
             json data = {{"BlockIdExt",
                           {{"file_hash", ms.top_block_id().file_hash.to_hex()},
                            {"root_hash", ms.top_block_id().root_hash.to_hex()},
@@ -1494,7 +1494,8 @@ class Indexer : public td::actor::Actor {
             LOG(DEBUG) << "FOR: " << blkid.to_str();
             LOG(DEBUG) << "GO: " << shard_seqno << ":" << shard_shard << ":" << shard_workchain;
 
-            td::actor::send_closure(SelfId, &Indexer::start_parse_shards, shard_seqno, shard_shard, shard_workchain);
+            td::actor::send_closure(SelfId, &Indexer::start_parse_shards, shard_seqno, shard_shard, shard_workchain,
+                                    is_first);
 
             return 1;
           };
