@@ -981,7 +981,7 @@ class Indexer : public td::actor::Actor {
 
     for (const auto &item : parsed_shards_) {
       if (item == data) {
-        LOG(WARNING) << data << " <- already parsed!";
+        LOG(WARNING) << " <- already parsed!";
         return;  // already parsed;
       }
     }
