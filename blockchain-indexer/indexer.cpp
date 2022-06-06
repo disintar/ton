@@ -1005,7 +1005,7 @@ class Indexer : public td::actor::Actor {
         CHECK(block.not_null());
 
         auto blkid = block->block_id();
-        LOG(DEBUG) << "Parse: " << blkid.to_str();
+        LOG(DEBUG) << "Parse: " << blkid.to_str() << " is_first: " << first;
 
         auto block_root = block->root_cell();
         if (block_root.is_null()) {
