@@ -996,7 +996,8 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle, bool first = false) {
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), is_first = first, &first](td::Result<td::Ref<BlockData>> R) {
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), is_first = first,
+                                         &first](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
@@ -1130,9 +1131,9 @@ class Indexer : public td::actor::Actor {
           };
 
           if (info.not_master && !first) {
-            LOG(DEBUG) << "FOR: " << blkid.to_str();
-            LOG(DEBUG) << "GO: " << prev_blk_1.seq_no << ":" << blkid.id.shard << ":" << blkid.id.workchain;
-            LOG(DEBUG) << "GO: " << prev_blk_2.seq_no << ":" << blkid.id.shard << ":" << blkid.id.workchain;
+            LOG(DEBUG) << "FOR: " << blkid.to_str() << " first: " << is_first;
+            LOG(DEBUG) << "GO: " << blkid.id.workchain << ":" << blkid.id.shard << ":" << prev_blk_1.seq_no;
+            LOG(DEBUG) << "GO: " << blkid.id.workchain << ":" << blkid.id.shard << ":" << prev_blk_2.seq_no;
 
             td::actor::send_closure(SelfId, &Indexer::start_parse_shards, prev_blk_1.seq_no, blkid.id.shard,
                                     blkid.id.workchain, false);
@@ -1156,7 +1157,7 @@ class Indexer : public td::actor::Actor {
 
           if (info.not_master && !first) {
             LOG(DEBUG) << "FOR: " << blkid.to_str();
-            LOG(DEBUG) << "GO: " << prev_blk.seq_no << ":" << blkid.id.shard << ":" << blkid.id.workchain;
+            LOG(DEBUG) << "GO: " << blkid.id.workchain << ":" << blkid.id.shard << ":" << prev_blk.seq_no;
 
             td::actor::send_closure(SelfId, &Indexer::start_parse_shards, prev_blk.seq_no, blkid.id.shard,
                                     blkid.id.workchain, false);
@@ -1491,8 +1492,8 @@ class Indexer : public td::actor::Actor {
             auto shard_shard = ms.top_block_id().id.shard;
             auto shard_workchain = ms.shard().workchain;
 
-            LOG(DEBUG) << "FOR: " << blkid.to_str();
-            LOG(DEBUG) << "GO: " << shard_seqno << ":" << shard_shard << ":" << shard_workchain;
+            LOG(DEBUG) << "FOR: " << blkid.to_str() << " first: " << is_first;
+            LOG(DEBUG) << "GO: " << shard_workchain << ":" << shard_shard << ":" << shard_seqno;
 
             td::actor::send_closure(SelfId, &Indexer::start_parse_shards, shard_seqno, shard_shard, shard_workchain,
                                     is_first);
