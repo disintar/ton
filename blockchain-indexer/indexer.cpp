@@ -991,8 +991,10 @@ class Indexer : public td::actor::Actor {
     ton::AccountIdPrefixFull pfx{blkid.id.workchain, blkid.id.shard};
 
     if (blkid.id.seqno > 0) {
+      auto prev_mc_seqno = blkid.id.seqno - 1;
+      LOG(DEBUG) << "Get prev seqno: " << prev_mc_seqno;
       td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
-                              blkid.id.seqno - 1, std::move(P));
+                              prev_mc_seqno, std::move(P));
     } else {
       return;
     }
@@ -1018,6 +1020,8 @@ class Indexer : public td::actor::Actor {
         block::gen::BlockInfo::Record info;
 
         CHECK(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.info, info));
+
+        LOG(DEBUG) << "Found for: " << info.seq_no << " end_lt: " << info.end_lt;
 
         td::actor::send_closure(SelfId, &Indexer::start_parse_shards, info.end_lt, shard_seqno, shard_shard,
                                 shard_workchain);
@@ -1391,7 +1395,6 @@ class Indexer : public td::actor::Actor {
             description:^TransactionDescr = Transaction;
            */
 
-          LOG(DEBUG) << "Start parse transactions";
           while (!trans_dict.is_empty()) {
             td::BitArray<64> last_lt{};
             trans_dict.get_minmax_key(last_lt);
@@ -1408,8 +1411,6 @@ class Indexer : public td::actor::Actor {
           account_block_parsed["transactions"] = transactions;
           account_block_parsed["transactions_count"] = count;
           accounts.push_back(account_block_parsed);
-
-          LOG(DEBUG) << "End parse transactions";
         }
 
         LOG(DEBUG) << "Finish parse accounts";
