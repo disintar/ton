@@ -1129,7 +1129,7 @@ class Indexer : public td::actor::Actor {
                }},
           };
 
-          if (!info.not_master) {
+          if (info.not_master) {
             LOG(DEBUG) << "FOR: " << blkid.to_str();
             LOG(DEBUG) << "GO: " << prev_blk_1.seq_no << ":" << blkid.id.shard << ":" << blkid.id.workchain;
             LOG(DEBUG) << "GO: " << prev_blk_2.seq_no << ":" << blkid.id.shard << ":" << blkid.id.workchain;
@@ -1154,7 +1154,7 @@ class Indexer : public td::actor::Actor {
                                                   {"file_hash", prev_blk.file_hash.to_hex()},
                                               }}};
 
-          if (!info.not_master) {
+          if (info.not_master) {
             LOG(DEBUG) << "FOR: " << blkid.to_str();
             LOG(DEBUG) << "GO: " << prev_blk.seq_no << ":" << blkid.id.shard << ":" << blkid.id.workchain;
 
