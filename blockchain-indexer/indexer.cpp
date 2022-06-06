@@ -691,7 +691,6 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
 
   auto tag = block::gen::t_OutMsg.check_tag(out_msg);
 
-  LOG(DEBUG) << "parse_out_msg_descr, tag: " << tag;
   if (tag == block::gen::t_OutMsg.msg_export_ext) {
     answer["type"] = "msg_export_ext";
 
@@ -950,8 +949,6 @@ class Indexer : public td::actor::Actor {
     // i in [seqno_first_; seqno_last_]
     for (auto seqno = seqno_first_; seqno <= seqno_last_; ++seqno) {
       auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
-        LOG(DEBUG) << "Got Answer!";
-
         if (R.is_error()) {
           LOG(ERROR) << R.move_as_error().to_string();
         } else {
@@ -972,20 +969,24 @@ class Indexer : public td::actor::Actor {
     // To parse all shards to this end_lt
     LOG(DEBUG) << "Masterchain blk id: " << blkid.to_str();
 
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), shard_seqno = seqno, shard_shard = shard,
-                                         shard_workchain = workchain](td::Result<ConstBlockHandle> R) {
-      LOG(DEBUG) << "Got Answer!";
+    auto P =
+        td::PromiseCreator::lambda([blkid_old = blkid, SelfId = actor_id(this), shard_seqno = seqno,
+                                    shard_shard = shard, shard_workchain = workchain](td::Result<ConstBlockHandle> R) {
+          LOG(DEBUG) << "Got Answer!";
 
-      if (R.is_error()) {
-        LOG(ERROR) << R.move_as_error().to_string();
-      } else {
-        auto handle = R.move_as_ok();
-        LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
+          if (R.is_error()) {
+            LOG(ERROR) << "ERROR IN BLOCK: "
+                       << "Seqno: " << blkid_old.id.seqno - 1 << " Shard: " << blkid_old.id.shard
+                       << " Worckchain: " << blkid_old.id.workchain;
+            LOG(ERROR) << R.move_as_error().to_string();
+          } else {
+            auto handle = R.move_as_ok();
+            LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
 
-        td::actor::send_closure(SelfId, &Indexer::got_prev_mc_handle, handle, shard_seqno, shard_shard,
-                                shard_workchain);
-      }
-    });
+            td::actor::send_closure(SelfId, &Indexer::got_prev_mc_handle, handle, shard_seqno, shard_shard,
+                                    shard_workchain);
+          }
+        });
 
     ton::AccountIdPrefixFull pfx{blkid.id.workchain, blkid.id.shard};
 
@@ -1004,8 +1005,6 @@ class Indexer : public td::actor::Actor {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
-        LOG(DEBUG) << "Got prev mc block";
-
         auto block = R.move_as_ok();
         CHECK(block.not_null());
 
@@ -1034,10 +1033,14 @@ class Indexer : public td::actor::Actor {
   void start_parse_shards(unsigned long long end_lt, unsigned long seqno, unsigned long shard, int workchain) {
     LOG(DEBUG) << "Seqno: " << seqno << " Shard: " << shard << " Workchain: " << workchain;
 
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), mc_end_lt = end_lt](td::Result<ConstBlockHandle> R) {
+    auto P = td::PromiseCreator::lambda([workchain_shard = workchain, seqno_shard = seqno, shard_shard = shard,
+                                         SelfId = actor_id(this), mc_end_lt = end_lt](td::Result<ConstBlockHandle> R) {
       LOG(DEBUG) << "Got Answer!";
 
       if (R.is_error()) {
+        LOG(ERROR) << "ERROR IN BLOCK: "
+                   << "Seqno: " << seqno_shard - 1 << " Shard: " << shard_shard << " Worckchain: " << workchain_shard;
+
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
         auto handle = R.move_as_ok();
