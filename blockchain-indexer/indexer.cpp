@@ -965,7 +965,7 @@ class Indexer : public td::actor::Actor {
     }
   }
 
-  void start_parse_shards(unsigned long seqno, unsigned long shard, int workchain, bool is_first = false) {
+  void start_parse_shards(unsigned int seqno, unsigned long shard, int workchain, bool is_first = false) {
     auto P = td::PromiseCreator::lambda([workchain_shard = workchain, seqno_shard = seqno, shard_shard = shard,
                                          SelfId = actor_id(this), is_first](td::Result<ConstBlockHandle> R) {
       if (R.is_error()) {
@@ -1135,10 +1135,10 @@ class Indexer : public td::actor::Actor {
             LOG(DEBUG) << "GO: " << prev_blk_2.seq_no << ":" << blkid.id.shard << ":" << blkid.id.workchain;
 
             td::actor::send_closure(SelfId, &Indexer::start_parse_shards, prev_blk_1.seq_no, blkid.id.shard,
-                                    blkid.id.workchain);
+                                    blkid.id.workchain, false);
 
             td::actor::send_closure(SelfId, &Indexer::start_parse_shards, prev_blk_2.seq_no, blkid.id.shard,
-                                    blkid.id.workchain);
+                                    blkid.id.workchain, false);
           }
 
         } else {
@@ -1159,7 +1159,7 @@ class Indexer : public td::actor::Actor {
             LOG(DEBUG) << "GO: " << prev_blk.seq_no << ":" << blkid.id.shard << ":" << blkid.id.workchain;
 
             td::actor::send_closure(SelfId, &Indexer::start_parse_shards, prev_blk.seq_no, blkid.id.shard,
-                                    blkid.id.workchain);
+                                    blkid.id.workchain, false);
           }
         }
 
