@@ -938,7 +938,6 @@ class Indexer : public td::actor::Actor {
       td::actor::ActorId<Indexer> id_;
     };
 
-    LOG(DEBUG) << "Callback";
     auto P_cb = td::PromiseCreator::lambda([](td::Unit R) {});
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::install_callback,
                             std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
@@ -967,13 +966,9 @@ class Indexer : public td::actor::Actor {
   void got_shard_to_parse(unsigned long seqno, unsigned long shard, int workchain, BlockIdExt blkid) {
     // Get prev masterchain block end_lt
     // To parse all shards to this end_lt
-    LOG(DEBUG) << "Masterchain blk id: " << blkid.to_str();
-
     auto P =
         td::PromiseCreator::lambda([blkid_old = blkid, SelfId = actor_id(this), shard_seqno = seqno,
                                     shard_shard = shard, shard_workchain = workchain](td::Result<ConstBlockHandle> R) {
-          LOG(DEBUG) << "Got Answer!";
-
           if (R.is_error()) {
             LOG(ERROR) << "ERROR IN BLOCK: "
                        << "Seqno: " << blkid_old.id.seqno - 1 << " Shard: " << blkid_old.id.shard
@@ -981,8 +976,6 @@ class Indexer : public td::actor::Actor {
             LOG(ERROR) << R.move_as_error().to_string();
           } else {
             auto handle = R.move_as_ok();
-            LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
-
             td::actor::send_closure(SelfId, &Indexer::got_prev_mc_handle, handle, shard_seqno, shard_shard,
                                     shard_workchain);
           }
@@ -992,7 +985,6 @@ class Indexer : public td::actor::Actor {
 
     if (blkid.id.seqno > 0) {
       auto prev_mc_seqno = blkid.id.seqno - 1;
-      LOG(DEBUG) << "Get prev seqno: " << prev_mc_seqno;
       td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                               prev_mc_seqno, std::move(P));
     } else {
@@ -1021,8 +1013,6 @@ class Indexer : public td::actor::Actor {
 
         CHECK(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.info, info));
 
-        LOG(DEBUG) << "Found for: " << info.seq_no << " end_lt: " << info.end_lt;
-
         td::actor::send_closure(SelfId, &Indexer::start_parse_shards, info.end_lt, shard_seqno, shard_shard,
                                 shard_workchain);
       }
@@ -1035,12 +1025,8 @@ class Indexer : public td::actor::Actor {
   }
 
   void start_parse_shards(unsigned long long end_lt, unsigned long seqno, unsigned long shard, int workchain) {
-    LOG(DEBUG) << "Seqno: " << seqno << " Shard: " << shard << " Workchain: " << workchain;
-
     auto P = td::PromiseCreator::lambda([workchain_shard = workchain, seqno_shard = seqno, shard_shard = shard,
                                          SelfId = actor_id(this), mc_end_lt = end_lt](td::Result<ConstBlockHandle> R) {
-      LOG(DEBUG) << "Got Answer!";
-
       if (R.is_error()) {
         LOG(ERROR) << "ERROR IN BLOCK: "
                    << "Seqno: " << seqno_shard - 1 << " Shard: " << shard_shard << " Worckchain: " << workchain_shard;
@@ -1063,8 +1049,6 @@ class Indexer : public td::actor::Actor {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
-        LOG(DEBUG) << "Start parse block";
-
         auto block = R.move_as_ok();
         CHECK(block.not_null());
 
@@ -1131,9 +1115,6 @@ class Indexer : public td::actor::Actor {
               prev_vert_ref:vert_seqno_incr?^(BlkPrevInfo 0)
               = BlockInfo;
         */
-
-        LOG(DEBUG) << "Start block info";
-
         answer["BlockInfo"] = {
             {"version", info.version},
             {"not_master", info.not_master},
@@ -1176,9 +1157,6 @@ class Indexer : public td::actor::Actor {
         }
 
         if (info.after_merge) {
-          LOG(DEBUG) << "After merge: " << info.after_merge;
-          LOG(DEBUG) << "Refs: " << info.prev_ref->get_refcnt();
-
           block::gen::ExtBlkRef::Record prev_blk_1{};
           block::gen::ExtBlkRef::Record prev_blk_2{};
 
@@ -1208,6 +1186,10 @@ class Indexer : public td::actor::Actor {
           };
 
           if (mc_end_lt > 0) {
+            LOG(DEBUG) << "FOR: " << blkid.to_str();
+            LOG(DEBUG) << "GO: " << prev_blk_1.seq_no << ":" << blkid.id.shard << ":" << blkid.id.workchain;
+            LOG(DEBUG) << "GO: " << prev_blk_2.seq_no << ":" << blkid.id.shard << ":" << blkid.id.workchain;
+
             td::actor::send_closure(SelfId, &Indexer::start_parse_shards, mc_end_lt, prev_blk_1.seq_no, blkid.id.shard,
                                     blkid.id.workchain);
 
@@ -1229,6 +1211,9 @@ class Indexer : public td::actor::Actor {
                                               }}};
 
           if (mc_end_lt > 0) {
+            LOG(DEBUG) << "FOR: " << blkid.to_str();
+            LOG(DEBUG) << "GO: " << prev_blk.seq_no << ":" << blkid.id.shard << ":" << blkid.id.workchain;
+
             td::actor::send_closure(SelfId, &Indexer::start_parse_shards, mc_end_lt, prev_blk.seq_no, blkid.id.shard,
                                     blkid.id.workchain);
           }
@@ -1340,7 +1325,6 @@ class Indexer : public td::actor::Actor {
         auto out_msg_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.out_msg_descr), 256,
                                                                       block::tlb::aug_OutMsgDescr);
 
-        LOG(DEBUG) << "start out_msg parse";
         std::list<json> out_msgs_json;
         while (!out_msg_dict->is_empty()) {
           td::Bits256 last_key;
@@ -1351,7 +1335,6 @@ class Indexer : public td::actor::Actor {
           json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg_descr(data.write(), workchain)}};
           out_msgs_json.push_back(parsed);
         }
-        LOG(DEBUG) << "end out_msg parse";
 
         auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
@@ -1412,8 +1395,6 @@ class Indexer : public td::actor::Actor {
           account_block_parsed["transactions_count"] = count;
           accounts.push_back(account_block_parsed);
         }
-
-        LOG(DEBUG) << "Finish parse accounts";
 
         answer["BlockExtra"] = {
             {"accounts", accounts},
@@ -1538,7 +1519,7 @@ class Indexer : public td::actor::Actor {
 
           std::list<json> shards_json;
 
-          auto f = [&shards_json, &SelfId, &start_lt, &blkid](McShardHash &ms) {
+          auto f = [&shards_json, &SelfId, &blkid](McShardHash &ms) {
             json data = {{"BlockIdExt",
                           {{"file_hash", ms.top_block_id().file_hash.to_hex()},
                            {"root_hash", ms.top_block_id().root_hash.to_hex()},
@@ -1565,6 +1546,9 @@ class Indexer : public td::actor::Actor {
             auto shard_seqno = ms.top_block_id().id.seqno;
             auto shard_shard = ms.top_block_id().id.shard;
             auto shard_workchain = ms.shard().workchain;
+
+            LOG(DEBUG) << "FOR: " << blkid.to_str();
+            LOG(DEBUG) << "GO: " << shard_seqno << ":" << shard_shard << ":" << shard_workchain;
 
             td::actor::send_closure(SelfId, &Indexer::got_shard_to_parse, shard_seqno, shard_shard, shard_workchain,
                                     blkid);
@@ -1595,8 +1579,6 @@ class Indexer : public td::actor::Actor {
         block_file << answer.dump(4);
         block_file.close();
       }
-
-      LOG(DEBUG) << "Parse finished";
     });
 
     td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
