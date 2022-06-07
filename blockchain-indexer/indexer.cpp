@@ -1111,7 +1111,7 @@ class Indexer : public td::actor::Actor {
           CHECK(tlb::unpack_cell(blk2, prev_blk_2));
 
           answer["BlockInfo"]["prev_ref"] = {
-              {"type", "0"},
+              {"type", "1"},
               {"data",
                {
                    {"end_lt", prev_blk_1.end_lt},
