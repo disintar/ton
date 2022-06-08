@@ -36,6 +36,7 @@
 #include "tuple"
 #include "vm/boc.h"
 #include "crypto/block/mc-config.h"
+#include "HTTPRequest.hpp"
 
 // TODO: use td/utils/json
 // TODO: use tlb auto deserializer to json (PrettyPrintJson)
@@ -765,6 +766,8 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
 class Indexer : public td::actor::Actor {
  private:
   std::string db_root_ = "/mnt/ton/ton-node/db";
+  std::string api_path_ = "";
+  std::string api_key_ = "";
   std::string global_config_ /*; = db_root_ + "/global-config.json"*/;
   BlockSeqno seqno_first_ = 0;
   BlockSeqno seqno_last_ = 0;
@@ -827,6 +830,12 @@ class Indexer : public td::actor::Actor {
  public:
   void set_db_root(std::string db_root) {
     db_root_ = std::move(db_root);
+  }
+  void set_api_path(std::string api_path) {
+    api_path_ = std::move(api_path);
+  }
+  void set_api_key(std::string api_key) {
+    api_key_ = std::move(api_key);
   }
   void set_global_config_path(std::string path) {
     global_config_ = std::move(path);
@@ -995,7 +1004,8 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle, bool first = false) {
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), is_first = first](td::Result<td::Ref<BlockData>> R) {
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), is_first = first, api_key = api_key_,
+                                         api_host = api_path_](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
@@ -1519,8 +1529,15 @@ class Indexer : public td::actor::Actor {
         std::ofstream block_file;
         block_file.open("block_" + std::to_string(workchain) + ":" + std::to_string(blkid.seqno()) + ":" +
                         std::to_string(blkid.id.shard) + ".json");
-        block_file << answer.dump(4);
-        block_file.close();
+
+        if (api_host.length() > 0) {
+          http::Request request{api_host};
+          const std::string body = answer.dump();
+          request.send("POST", body, {{"Content-Type", "application/json"}, {"Authorization", "Bearer " + api_key}});
+        } else {
+          block_file << answer.dump(4);
+          block_file.close();
+        }
       }
     });
 
@@ -1555,6 +1572,12 @@ int main(int argc, char **argv) {
   });
   p.add_option('C', "config", "global config path", [&](td::Slice fname) {
     td::actor::send_closure(main, &ton::validator::Indexer::set_global_config_path, fname.str());
+  });
+  p.add_option('A', "api", "api path to backend", [&](td::Slice fname) {
+    td::actor::send_closure(main, &ton::validator::Indexer::set_api_path, fname.str());
+  });
+  p.add_option('K', "key", "api key to backend", [&](td::Slice fname) {
+    td::actor::send_closure(main, &ton::validator::Indexer::set_api_key, fname.str());
   });
   td::uint32 threads = 7;
   p.add_checked_option(
