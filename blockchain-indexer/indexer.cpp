@@ -1611,24 +1611,29 @@ class Indexer : public td::actor::Actor {
           LOG(DEBUG) << shard_state.r1.libraries->size_refs();
 
           auto libraries = vm::Dictionary{shard_state.r1.libraries->prefetch_ref(), 256};
+          LOG(DEBUG) << "Loaded";
 
           std::list<json> libs;
 
           while (!libraries.is_empty()) {
             td::BitArray<256> key{};
             libraries.get_minmax_key(key);
-
+            LOG(DEBUG) << "Got key: " << key.to_hex();
             auto lib = libraries.lookup_delete(key);
+            LOG(DEBUG) << "Lib: " << lib.is_null();
+            LOG(DEBUG) << "Lib size: " << lib.write().size();
 
             block::gen::LibDescr::Record libdescr;
-            tlb::unpack(lib.write(), libdescr);
+            CHECK(tlb::unpack(lib.write(), libdescr));
 
             std::list<std::string> publishers;
 
+            LOG(DEBUG) << "Parse publishers";
             auto publishers_dict = vm::Dictionary{libdescr.publishers, 256};
             while (!libraries.is_empty()) {
               td::BitArray<256> publisher{};
               publishers_dict.get_minmax_key(publisher);
+              LOG(DEBUG) << "Parsed " << publisher.to_hex();
               publishers.push_back(publisher.to_hex());
             }
 
