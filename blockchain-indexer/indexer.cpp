@@ -1595,12 +1595,9 @@ class Indexer : public td::actor::Actor {
         CHECK(state.not_null());
 
         auto root_cell = state->root_cell();
-        LOG(DEBUG) << "Cell tag: " << block::gen::t_ShardState.get_tag(load_cell_slice(root_cell));
 
         block::gen::ShardStateUnsplit::Record shard_state;
         CHECK(tlb::unpack_cell(root_cell, shard_state));
-
-        LOG(DEBUG) << "Global id: " << shard_state.global_id;
 
         std::list<std::tuple<int, std::string>> dummy;
 
@@ -1686,10 +1683,32 @@ class Indexer : public td::actor::Actor {
         auto accounts = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(shard_state.accounts), 256,
                                                                   block::tlb::aug_ShardAccounts);
 
+        std::list<json> accounts_list;
+
         for (const auto &account : accounts_keys) {
           LOG(DEBUG) << "Account Key: " << account.to_hex();
-          accounts->lookup_delete_extra(account.cbits(), 256);
+          auto result = accounts->lookup_delete_extra(account.cbits(), 256);
+          auto value = result.first;
+          auto extra = result.second;
+
+          block::gen::ShardAccount::Record sa;
+          block::gen::DepthBalanceInfo::Record dbi;
+          block::gen::CurrencyCollection::Record dbi_cc;
+          CHECK(tlb::unpack(value.write(), sa));
+          CHECK(tlb::unpack(extra.write(), dbi));
+          CHECK(tlb::unpack(dbi.balance.write(), dbi_cc));
+
+          json data = {
+              {"balance",
+               {"split_depth", dbi.split_depth},
+               {"grams", block::tlb::t_Grams.as_integer(dbi_cc.grams)->to_dec_string()},
+               {"extra", dbi_cc.other->have_refs() ? parse_extra_currency(dbi_cc.other->prefetch_ref()) : dummy}},
+              {"account_address", {"workchain", block_id.id.workchain}, {"address", account.to_hex()}},
+              {"account", {"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}}};
+          accounts_list.push_back(data);
         }
+
+        answer["accounts"] = accounts_list;
 
         LOG(DEBUG) << answer.dump(4);
 
