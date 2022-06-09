@@ -1620,7 +1620,10 @@ class Indexer : public td::actor::Actor {
             LOG(DEBUG) << "Lib: " << key.to_hex();
 
             auto lib = load_cell_slice(libraries.lookup_delete_ref(key));
-            auto code = lib.prefetch_ref();
+            LOG(DEBUG) << "Got lib: " << lib.size() << " refs: " << lib.size_refs();
+
+            block::gen::LibDescr::Record libdescr;
+            tlb::unpack(lib, libdescr);
           }
         }
 
