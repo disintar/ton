@@ -1629,8 +1629,12 @@ class Indexer : public td::actor::Actor {
             std::list<std::string> publishers;
 
             LOG(DEBUG) << "Parse publishers";
+            LOG(DEBUG) << libdescr.publishers.is_null();
+            LOG(DEBUG) << libdescr.publishers.write().size_refs();
             auto publishers_dict = vm::Dictionary{libdescr.publishers, 256};
-            while (!libraries.is_empty()) {
+            LOG(DEBUG) << "Dict publishers created";
+
+            while (!publishers_dict.is_empty()) {
               td::BitArray<256> publisher{};
               publishers_dict.get_minmax_key(publisher);
               LOG(DEBUG) << "Parsed " << publisher.to_hex();
