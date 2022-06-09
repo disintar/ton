@@ -959,23 +959,43 @@ class Indexer : public td::actor::Actor {
 
   void sync_complete(const BlockHandle &handle) {
     // i in [seqno_first_; seqno_last_]
-    // TODO: separate first parse seqno to prevent WC shard seqno leak
-    for (auto seqno = seqno_first_; seqno <= seqno_last_; ++seqno) {
-      auto my_seqno = seqno_first_;
-      auto P =
-          td::PromiseCreator::lambda([SelfId = actor_id(this), seqno_first = my_seqno](td::Result<ConstBlockHandle> R) {
-            if (R.is_error()) {
-              LOG(ERROR) << R.move_as_error().to_string();
-            } else {
-              auto handle = R.move_as_ok();
-              LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
-              td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
-            }
-          });
 
-      ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
-      td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
-                              std::move(P));
+    // separate first parse seqno to prevent WC shard seqno leak
+    auto P = td::PromiseCreator::lambda(
+        [SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
+          if (R.is_error()) {
+            LOG(ERROR) << R.move_as_error().to_string();
+          } else {
+            auto handle = R.move_as_ok();
+            LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
+            td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
+          }
+        });
+
+    ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
+                            seqno_first_, std::move(P));
+  }
+
+  void parse_other() {
+    if (seqno_last_ != seqno_first_) {
+      for (auto seqno = seqno_first_ + 1; seqno <= seqno_last_; ++seqno) {
+        auto my_seqno = seqno_first_;
+        auto P = td::PromiseCreator::lambda([SelfId = actor_id(this),
+                                             seqno_first = my_seqno](td::Result<ConstBlockHandle> R) {
+          if (R.is_error()) {
+            LOG(ERROR) << R.move_as_error().to_string();
+          } else {
+            auto handle = R.move_as_ok();
+            LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
+            td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
+          }
+        });
+
+        ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
+        td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
+                                std::move(P));
+      }
     }
   }
 
@@ -1552,6 +1572,10 @@ class Indexer : public td::actor::Actor {
           block_file << answer.dump(4);
           block_file.close();
         }
+      }
+
+      if (is_first) {
+        td::actor::send_closure(SelfId, &Indexer::parse_other);
       }
     });
 
