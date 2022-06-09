@@ -1698,13 +1698,15 @@ class Indexer : public td::actor::Actor {
           CHECK(tlb::unpack(extra.write(), dbi));
           CHECK(tlb::unpack(dbi.balance.write(), dbi_cc));
 
-          json data = {
-              {"balance",
-               {"split_depth", dbi.split_depth},
-               {"grams", block::tlb::t_Grams.as_integer(dbi_cc.grams)->to_dec_string()},
-               {"extra", dbi_cc.other->have_refs() ? parse_extra_currency(dbi_cc.other->prefetch_ref()) : dummy}},
-              {"account_address", {"workchain", block_id.id.workchain}, {"address", account.to_hex()}},
-              {"account", {"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}}};
+          json data;
+
+          data["balance"] = {
+              {"split_depth", dbi.split_depth},
+              {"grams", block::tlb::t_Grams.as_integer(dbi_cc.grams)->to_dec_string()},
+              {"extra", dbi_cc.other->have_refs() ? parse_extra_currency(dbi_cc.other->prefetch_ref()) : dummy}};
+          data["account_address"] = {{"workchain", block_id.id.workchain}, {"address", account.to_hex()}};
+          data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}};
+
           accounts_list.push_back(data);
         }
 
