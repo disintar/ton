@@ -1601,12 +1601,16 @@ class Indexer : public td::actor::Actor {
             {"min_ref_mc_seqno", shard_state.min_ref_mc_seqno},
             {"before_split", shard_state.before_split},
             {"overload_history", shard_state.r1.overload_history},
-            {"overload_history", shard_state.r1.underload_history},
+            {"underload_history", shard_state.r1.underload_history},
             {"total_balance", total_balance},
             {"total_validator_fees", total_validator_fees},
         };
 
-        answer["libs"] = parse_libraries(shard_state.r1.libraries);
+        if (shard_state.r1.libraries->have_refs()) {
+          LOG(DEBUG) << "Parse lib";
+
+          answer["libs"] = parse_libraries(shard_state.r1.libraries->prefetch_ref());
+        }
 
         LOG(DEBUG) << answer.dump(4);
 
