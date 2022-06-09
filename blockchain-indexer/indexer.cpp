@@ -161,6 +161,31 @@ json parse_address(vm::CellSlice address) {
   return answer;
 }
 
+json parse_libraries(Ref<vm::Cell> lib_cell) {
+  auto libraries = vm::Dictionary{std::move(lib_cell), 256};
+
+  std::list<json> libs;
+
+  while (!libraries.is_empty()) {
+    td::BitArray<256> key{};
+    libraries.get_minmax_key(key);
+
+    auto lib = load_cell_slice(libraries.lookup_delete_ref(key));
+    auto code = lib.prefetch_ref();
+
+    json lib_json = {
+        {"hash", key.to_hex()},
+        {"public", (bool)lib.prefetch_ulong(1)},
+        {"root", dump_as_boc(code)},
+    };
+
+    libs.push_back(lib_json);
+    //      out_msgs_list.push_back(parse_message(o_msg));
+  }
+
+  return libs;
+}
+
 json parse_state_init(vm::CellSlice state_init) {
   json answer;
 
@@ -199,28 +224,7 @@ json parse_state_init(vm::CellSlice state_init) {
   }
 
   if ((int)state_init_parsed.library->prefetch_ulong(1) == 1) {  // if not empty
-    auto libraries = vm::Dictionary{state_init_parsed.library->prefetch_ref(), 256};
-
-    std::list<json> libs;
-
-    while (!libraries.is_empty()) {
-      td::BitArray<256> key{};
-      libraries.get_minmax_key(key);
-
-      auto lib = load_cell_slice(libraries.lookup_delete_ref(key));
-      auto code = lib.prefetch_ref();
-
-      json lib_json = {
-          {"hash", key.to_hex()},
-          {"public", (bool)lib.prefetch_ulong(1)},
-          {"root", dump_as_boc(code)},
-      };
-
-      libs.push_back(lib_json);
-      //      out_msgs_list.push_back(parse_message(o_msg));
-    }
-
-    answer["libs"] = libs;
+    answer["libs"] = parse_libraries(state_init_parsed.library->prefetch_ref());
   }
 
   return answer;
@@ -1601,6 +1605,8 @@ class Indexer : public td::actor::Actor {
             {"total_balance", total_balance},
             {"total_validator_fees", total_validator_fees},
         };
+
+        answer["libs"] = parse_libraries(shard_state.r1.libraries->prefetch_ref());
 
         LOG(DEBUG) << answer.dump(4);
 
