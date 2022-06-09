@@ -42,6 +42,7 @@ void ArchiveFile::start_up() {
     return;
   }
   package_ = std::make_shared<Package>(R.move_as_ok());
+  LOG(DEBUG) << "Open index: " << path_ + ".index";
   index_ = std::make_shared<td::RocksDb>(td::RocksDb::open(path_ + ".index", read_only_).move_as_ok());
 
   std::string value;
