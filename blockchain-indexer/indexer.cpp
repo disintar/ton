@@ -1620,8 +1620,6 @@ class Indexer : public td::actor::Actor {
             libraries.get_minmax_key(key);
             LOG(DEBUG) << "Got key: " << key.to_hex();
             auto lib = libraries.lookup_delete(key);
-            LOG(DEBUG) << "Lib: " << lib.is_null();
-            LOG(DEBUG) << "Lib size: " << lib.write().size();
 
             block::gen::LibDescr::Record libdescr;
             CHECK(tlb::unpack(lib.write(), libdescr));
@@ -1629,9 +1627,15 @@ class Indexer : public td::actor::Actor {
             std::list<std::string> publishers;
 
             LOG(DEBUG) << "Parse publishers";
-            LOG(DEBUG) << libdescr.publishers.is_null();
-            LOG(DEBUG) << libdescr.publishers.write().size_refs();
-            auto publishers_dict = vm::Dictionary{libdescr.publishers, 256};
+            auto libs_publishers = libdescr.publishers.write();
+
+            vm::CellBuilder cb;
+            Ref<vm::Cell> cool_cell;
+
+            cb.append_cellslice(libs_publishers);
+            cb.finalize_to(cool_cell);
+
+            auto publishers_dict = vm::Dictionary{cool_cell, 256};
             LOG(DEBUG) << "Dict publishers created";
 
             while (!publishers_dict.is_empty()) {
