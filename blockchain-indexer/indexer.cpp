@@ -1557,6 +1557,16 @@ class Indexer : public td::actor::Actor {
         auto root_cell = state->root_cell();
         LOG(DEBUG) << "Cell tag: " << block::gen::t_ShardState.get_tag(load_cell_slice(root_cell));
 
+        if (block::gen::t_ShardState.get_tag(load_cell_slice(root_cell)) == 0){
+          block::gen::ShardStateUnsplit::Record shard_state;
+          CHECK(tlb::unpack_cell(root_cell, shard_state));
+
+          LOG(DEBUG) << "Global id: " << shard_state.global_id;
+
+        } else {
+          // left & right
+        }
+
         auto shard = state->get_shard();
         auto block = state->get_block_id();
 
