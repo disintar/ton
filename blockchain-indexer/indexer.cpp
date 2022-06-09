@@ -1641,6 +1641,8 @@ class Indexer : public td::actor::Actor {
             while (!publishers_dict.is_empty()) {
               td::BitArray<256> publisher{};
               publishers_dict.get_minmax_key(publisher);
+              publishers_dict.lookup_delete(publisher);
+
               LOG(DEBUG) << "Parsed " << publisher.to_hex();
               publishers.push_back(publisher.to_hex());
             }
