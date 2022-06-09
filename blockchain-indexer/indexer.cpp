@@ -1606,7 +1606,7 @@ class Indexer : public td::actor::Actor {
             {"total_validator_fees", total_validator_fees},
         };
 
-        answer["libs"] = parse_libraries(shard_state.r1.libraries->prefetch_ref());
+        answer["libs"] = parse_libraries(shard_state.r1.libraries);
 
         LOG(DEBUG) << answer.dump(4);
 
