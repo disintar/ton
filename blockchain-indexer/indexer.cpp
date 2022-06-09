@@ -1545,12 +1545,9 @@ class Indexer : public td::actor::Actor {
                                   std::move(P));
 
     auto P_st = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
-      LOG(DEBUG) << "Got shard block here!";
-
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
-        LOG(DEBUG) << "Got shard block here x2!";
         auto state = R.move_as_ok();
         CHECK(state.not_null());
 
@@ -1559,6 +1556,7 @@ class Indexer : public td::actor::Actor {
 
         json answer = {{"unix_time", state->get_unix_time()},
                        {"logical_time", state->get_logical_time()},
+                       {"before_split", state->before_split()},
                        {"shard",
                         {
                             {"shard", shard.shard},
