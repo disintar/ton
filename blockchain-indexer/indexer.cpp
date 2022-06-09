@@ -1607,18 +1607,15 @@ class Indexer : public td::actor::Actor {
         };
 
         if (shard_state.r1.libraries->have_refs()) {
-          LOG(DEBUG) << "Parse lib";
           LOG(DEBUG) << shard_state.r1.libraries->size_refs();
 
           auto libraries = vm::Dictionary{shard_state.r1.libraries->prefetch_ref(), 256};
-          LOG(DEBUG) << "Loaded";
 
           std::list<json> libs;
 
           while (!libraries.is_empty()) {
             td::BitArray<256> key{};
             libraries.get_minmax_key(key);
-            LOG(DEBUG) << "Got key: " << key.to_hex();
             auto lib = libraries.lookup_delete(key);
 
             block::gen::LibDescr::Record libdescr;
@@ -1626,7 +1623,6 @@ class Indexer : public td::actor::Actor {
 
             std::list<std::string> publishers;
 
-            LOG(DEBUG) << "Parse publishers";
             auto libs_publishers = libdescr.publishers.write();
 
             vm::CellBuilder cb;
@@ -1636,14 +1632,12 @@ class Indexer : public td::actor::Actor {
             cb.finalize_to(cool_cell);
 
             auto publishers_dict = vm::Dictionary{cool_cell, 256};
-            LOG(DEBUG) << "Dict publishers created";
 
             while (!publishers_dict.is_empty()) {
               td::BitArray<256> publisher{};
               publishers_dict.get_minmax_key(publisher);
               publishers_dict.lookup_delete(publisher);
 
-              LOG(DEBUG) << "Parsed " << publisher.to_hex();
               publishers.push_back(publisher.to_hex());
             }
 
@@ -1652,6 +1646,15 @@ class Indexer : public td::actor::Actor {
           }
 
           answer["libraries"] = libs;
+        }
+
+        auto accounts = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(shard_state.accounts), 256,
+                                                                  block::tlb::aug_ShardAccounts);
+
+        while (!accounts->is_empty()) {
+          td::BitArray<256> account{};
+          accounts->get_minmax_key(account);
+          LOG(DEBUG) << "Account Key: " << account.to_hex();
         }
 
         LOG(DEBUG) << answer.dump(4);
