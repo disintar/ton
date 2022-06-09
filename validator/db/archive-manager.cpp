@@ -574,7 +574,6 @@ void ArchiveManager::load_package(PackageId id) {
   }
 
   std::string prefix = PSTRING() << db_root_ << id.path() << id.name();
-  LOG(DEBUG) << "Open pack: " << prefix;
   auto f = td::FileFd::open(prefix + ".pack", td::FileFd::Read);
   if (f.is_error()) {
     x->deleted_ = true;

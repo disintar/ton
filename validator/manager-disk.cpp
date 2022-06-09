@@ -924,6 +924,9 @@ void ValidatorManagerImpl::started(ValidatorManagerInitResult R) {
 
   //new_masterchain_block();
 
+  LOG(WARNING) << "initial read complete: " << last_masterchain_block_handle_->id() << " "
+               << last_masterchain_block_id_;
+
   callback_->initial_read_complete(last_masterchain_block_handle_);
 }
 

@@ -393,9 +393,16 @@ void RootDb::get_hardforks(td::Promise<std::vector<BlockIdExt>> promise) {
 }
 
 void RootDb::start_up() {
+  LOG(DEBUG) << "Start cell_db";
   cell_db_ = td::actor::create_actor<CellDb>("celldb", actor_id(this), root_path_ + "/celldb/", read_only_);
+
+  LOG(DEBUG) << "Start state_db";
   state_db_ = td::actor::create_actor<StateDb>("statedb", actor_id(this), root_path_ + "/state/", read_only_);
+
+  LOG(DEBUG) << "Start static_files_db";
   static_files_db_ = td::actor::create_actor<StaticFilesDb>("staticfilesdb", actor_id(this), root_path_ + "/static/", read_only_);
+
+  LOG(DEBUG) << "Start archive_db";
   archive_db_ = td::actor::create_actor<ArchiveManager>("archive", actor_id(this), root_path_, read_only_);
 }
 
