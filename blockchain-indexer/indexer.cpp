@@ -959,6 +959,7 @@ class Indexer : public td::actor::Actor {
 
   void sync_complete(const BlockHandle &handle) {
     // i in [seqno_first_; seqno_last_]
+    // TODO: separate first parse seqno to prevent WC shard seqno leak
     for (auto seqno = seqno_first_; seqno <= seqno_last_; ++seqno) {
       auto my_seqno = seqno_first_;
       auto P =
@@ -1359,8 +1360,8 @@ class Indexer : public td::actor::Actor {
           accounts.push_back(account_block_parsed);
         }
 
-//        LOG(DEBUG) << "Send get_state request";
-//        td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
+        LOG(DEBUG) << "Send get_state request";
+        td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
 
         answer["BlockExtra"] = {
             {"accounts", accounts},
