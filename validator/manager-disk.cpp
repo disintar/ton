@@ -906,7 +906,7 @@ void ValidatorManagerImpl::send_top_shard_block_description(td::Ref<ShardTopBloc
 
 void ValidatorManagerImpl::start_up() {
   db_ = create_db_actor(actor_id(this), db_root_, read_only_);
-
+  LOG(DEBUG) << "DB actor created!";
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ValidatorManagerInitResult> R) {
     R.ensure();
     td::actor::send_closure(SelfId, &ValidatorManagerImpl::started, R.move_as_ok());
