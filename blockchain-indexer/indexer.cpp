@@ -1543,6 +1543,20 @@ class Indexer : public td::actor::Actor {
 
     td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
                                   std::move(P));
+
+    auto P_st = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
+      LOG(DEBUG) << "Got shard block here!";
+
+      if (R.is_error()) {
+        LOG(ERROR) << R.move_as_error().to_string();
+      } else {
+        LOG(DEBUG) << "Got shard block here x2!";
+        auto block = R.move_as_ok();
+      }
+    });
+
+    td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_shard_state_from_db, handle,
+                                  std::move(P_st));
   }
 };  // namespace validator
 }  // namespace validator
