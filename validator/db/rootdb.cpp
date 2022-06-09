@@ -404,6 +404,8 @@ void RootDb::start_up() {
 
   LOG(DEBUG) << "Start archive_db";
   archive_db_ = td::actor::create_actor<ArchiveManager>("archive", actor_id(this), root_path_, read_only_);
+
+  LOG(DEBUG) << "All dbs loaded";
 }
 
 void RootDb::archive(BlockHandle handle, td::Promise<td::Unit> promise) {

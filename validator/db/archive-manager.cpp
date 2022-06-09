@@ -868,12 +868,17 @@ void ArchiveManager::start_up() {
     R.ensure();
     auto x = R.move_as_ok();
 
+    LOG(DEBUG) << "Load packages";
     for (auto &d : x->packages_) {
       load_package(PackageId{static_cast<td::uint32>(d), false, false});
     }
+
+    LOG(DEBUG) << "Load key packages";
     for (auto &d : x->key_packages_) {
       load_package(PackageId{static_cast<td::uint32>(d), true, false});
     }
+
+    LOG(DEBUG) << "Load temp packages";
     for (auto &d : x->temp_packages_) {
       load_package(PackageId{static_cast<td::uint32>(d), false, true});
     }
@@ -887,6 +892,7 @@ void ArchiveManager::start_up() {
     finalized_up_to_ = R.move_as_ok();
   }
 
+  LOG(DEBUG) << "Load states";
   td::WalkPath::run(db_root_ + "/archive/states/", [&](td::CSlice fname, td::WalkPath::Type t) -> void {
     if (t == td::WalkPath::Type::NotDir) {
       LOG(ERROR) << "checking file " << fname;
@@ -914,7 +920,9 @@ void ArchiveManager::start_up() {
     }
   }).ensure();
 
+  LOG(DEBUG) << "Done loading";
   persistent_state_gc(FileHash::zero());
+  LOG(DEBUG) << "Done";
 }
 
 void ArchiveManager::run_gc(UnixTime ts, UnixTime archive_ttl) {
