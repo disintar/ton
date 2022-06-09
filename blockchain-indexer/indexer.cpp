@@ -1526,15 +1526,15 @@ class Indexer : public td::actor::Actor {
 
         answer["ShardState"] = {{"state_old_hash", state_old_hash}, {"state_hash", state_hash}};
 
-        std::ofstream block_file;
-        block_file.open("block_" + std::to_string(workchain) + ":" + std::to_string(blkid.seqno()) + ":" +
-                        std::to_string(blkid.id.shard) + ".json");
-
         if (api_host.length() > 0) {
           http::Request request{api_host};
           const std::string body = answer.dump();
           request.send("POST", body, {{"Content-Type", "application/json"}, {"Authorization", "Bearer " + api_key}});
         } else {
+          std::ofstream block_file;
+          block_file.open("block_" + std::to_string(workchain) + ":" + std::to_string(blkid.seqno()) + ":" +
+                          std::to_string(blkid.id.shard) + ".json");
+
           block_file << answer.dump(4);
           block_file.close();
         }
@@ -1544,7 +1544,8 @@ class Indexer : public td::actor::Actor {
     td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
                                   std::move(P));
 
-    auto P_st = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
+    auto P_st = td::PromiseCreator::lambda([SelfId = actor_id(this), api_key = api_key_,
+                                            api_host = api_path_](td::Result<td::Ref<ShardState>> R) {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
@@ -1578,6 +1579,19 @@ class Indexer : public td::actor::Actor {
                         }}};
 
         LOG(DEBUG) << answer.dump(4);
+
+        if (api_host.length() > 0) {
+          http::Request request{api_host};
+          const std::string body = answer.dump();
+          request.send("POST", body, {{"Content-Type", "application/json"}, {"Authorization", "Bearer " + api_key}});
+        } else {
+          std::ofstream block_file;
+          block_file.open("state_" + std::to_string(block.id.workchain) + ":" + std::to_string(block.id.shard) + ":" +
+                          std::to_string(block.id.seqno) + +".json");
+
+          block_file << answer.dump(4);
+          block_file.close();
+        }
       }
     });
 
