@@ -1025,6 +1025,8 @@ class Indexer : public td::actor::Actor {
         // Parsing
 
         json answer;
+        answer["type"] = "block_data";
+
         auto workchain = blkid.id.workchain;
 
         answer["BlockIdExt"] = {{"file_hash", blkid.file_hash.to_hex()},
@@ -1552,19 +1554,23 @@ class Indexer : public td::actor::Actor {
         auto state = R.move_as_ok();
         CHECK(state.not_null());
 
+        auto root_cell = state->root_cell();
+        LOG(DEBUG) << "Cell tag: " << block::gen::t_ShardState.get_tag(load_cell_slice(root_cell));
+
         auto shard = state->get_shard();
         auto block = state->get_block_id();
 
-        json answer = {{"unix_time", state->get_unix_time()},
+        json answer = {{"type", "shard_state"},
+                       {"unix_time", state->get_unix_time()},
                        {"logical_time", state->get_logical_time()},
                        {"before_split", state->before_split()},
                        {"shard",
-                        {"is_right_child", is_right_child(shard)},
-                        {"is_left_child", is_left_child(shard)},
-                        {
-                            {"shard", shard.shard},
-                            {"workchain", shard.workchain},
-                        }},
+                        {{"is_right_child", is_right_child(shard)},
+                         {"is_left_child", is_left_child(shard)},
+                         {
+                             {"shard", shard.shard},
+                             {"workchain", shard.workchain},
+                         }}},
                        {"seqno", state->get_seqno()},
                        {"block",
                         {
