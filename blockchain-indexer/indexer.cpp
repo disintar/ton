@@ -170,12 +170,12 @@ json parse_libraries(Ref<vm::Cell> lib_cell) {
     td::BitArray<256> key{};
     libraries.get_minmax_key(key);
 
-    auto lib = load_cell_slice(libraries.lookup_delete_ref(key));
-    auto code = lib.prefetch_ref();
+    auto lib = libraries.lookup_delete(key);
+    auto code = lib->prefetch_ref();
 
     json lib_json = {
         {"hash", key.to_hex()},
-        {"public", (bool)lib.prefetch_ulong(1)},
+        {"public", (bool)lib->prefetch_ulong(1)},
         {"root", dump_as_boc(code)},
     };
 
@@ -1617,14 +1617,26 @@ class Indexer : public td::actor::Actor {
           while (!libraries.is_empty()) {
             td::BitArray<256> key{};
             libraries.get_minmax_key(key);
-            LOG(DEBUG) << "Lib: " << key.to_hex();
 
-            auto lib = libraries.lookup_delete_ref(key);
-            LOG(DEBUG) << "Got lib: " << lib->get_depth();
+            auto lib = libraries.lookup_delete(key);
 
             block::gen::LibDescr::Record libdescr;
-            tlb::unpack_cell(lib, libdescr);
+            tlb::unpack(lib.write(), libdescr);
+
+            std::list<std::string> publishers;
+
+            auto publishers_dict = vm::Dictionary{libdescr.publishers, 256};
+            while (!libraries.is_empty()) {
+              td::BitArray<256> publisher{};
+              publishers_dict.get_minmax_key(publisher);
+              publishers.push_back(publisher.to_hex());
+            }
+
+            json data = {{"hash", key.to_hex()}, {"lib", dump_as_boc(libdescr.lib)}, {"publishers", publishers}};
+            libs.push_back(data);
           }
+
+          answer["libraries"] = libs;
         }
 
         LOG(DEBUG) << answer.dump(4);
