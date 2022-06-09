@@ -1009,7 +1009,8 @@ class Indexer : public td::actor::Actor {
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle, bool first = false) {
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), is_first = first, api_key = api_key_,
-                                         api_host = api_path_](td::Result<td::Ref<BlockData>> R) {
+                                         api_host = api_path_,
+                                         block_handle = handle](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
@@ -1308,12 +1309,15 @@ class Indexer : public td::actor::Actor {
          */
 
         std::list<json> accounts;
+        std::list<td::Bits256> accounts_keys;
 
         while (!account_blocks_dict->is_empty()) {
           td::Bits256 last_key;
           Ref<vm::CellSlice> data;
 
           account_blocks_dict->get_minmax_key(last_key);
+          accounts_keys.push_back(last_key);
+
           data = account_blocks_dict->lookup_delete(last_key);
 
           json account_block_parsed;
@@ -1354,6 +1358,9 @@ class Indexer : public td::actor::Actor {
           account_block_parsed["transactions_count"] = count;
           accounts.push_back(account_block_parsed);
         }
+
+        LOG(DEBUG) << "Send get_state request";
+        td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
 
         answer["BlockExtra"] = {
             {"accounts", accounts},
@@ -1549,9 +1556,12 @@ class Indexer : public td::actor::Actor {
 
     td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
                                   std::move(P));
+  }
 
-    auto P_st = td::PromiseCreator::lambda([SelfId = actor_id(this), api_key = api_key_,
-                                            api_host = api_path_](td::Result<td::Ref<ShardState>> R) {
+  void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys) {
+    auto P_st = td::PromiseCreator::lambda([SelfId = actor_id(this), api_key = api_key_, api_host = api_path_,
+                                            accounts_keys =
+                                                std::move(accounts_keys)](td::Result<td::Ref<ShardState>> R) {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
@@ -1651,9 +1661,7 @@ class Indexer : public td::actor::Actor {
         auto accounts = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(shard_state.accounts), 256,
                                                                   block::tlb::aug_ShardAccounts);
 
-        while (!accounts->is_empty()) {
-          td::BitArray<256> account{};
-          accounts->get_minmax_key(account);
+        for (const auto &account : accounts_keys) {
           LOG(DEBUG) << "Account Key: " << account.to_hex();
           accounts->lookup_delete_extra(account.cbits(), 256);
         }
