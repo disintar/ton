@@ -1608,8 +1608,20 @@ class Indexer : public td::actor::Actor {
 
         if (shard_state.r1.libraries->have_refs()) {
           LOG(DEBUG) << "Parse lib";
+          LOG(DEBUG) << shard_state.r1.libraries->size_refs();
 
-          answer["libs"] = parse_libraries(shard_state.r1.libraries->prefetch_ref());
+          auto libraries = vm::Dictionary{shard_state.r1.libraries->prefetch_ref(), 256};
+
+          std::list<json> libs;
+
+          while (!libraries.is_empty()) {
+            td::BitArray<256> key{};
+            libraries.get_minmax_key(key);
+            LOG(DEBUG) << "Lib: " << key.to_hex();
+
+            auto lib = load_cell_slice(libraries.lookup_delete_ref(key));
+            auto code = lib.prefetch_ref();
+          }
         }
 
         LOG(DEBUG) << answer.dump(4);
