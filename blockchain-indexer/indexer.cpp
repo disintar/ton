@@ -1551,7 +1551,33 @@ class Indexer : public td::actor::Actor {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
         LOG(DEBUG) << "Got shard block here x2!";
-        auto block = R.move_as_ok();
+        auto state = R.move_as_ok();
+        CHECK(state.not_null());
+
+        auto shard = state->get_shard();
+        auto block = state->get_block_id();
+
+        json answer = {{"unix_time", state->get_unix_time()},
+                       {"logical_time", state->get_logical_time()},
+                       {"shard",
+                        {
+                            {"shard", shard.shard},
+                            {"workchain", shard.workchain},
+                        }},
+                       {"seqno", state->get_seqno()},
+                       {"block",
+                        {
+                            {"id",
+                             {
+                                 {"workchain", block.id.workchain},
+                                 {"seqno", block.id.seqno},
+                                 {"shard", block.id.shard},
+                             }},
+                            {"root_hash", block.root_hash.to_hex()},
+                            {"file_hash", block.file_hash.to_hex()},
+                        }}};
+
+        LOG(DEBUG) << "Parsed shard state";
       }
     });
 
