@@ -1584,6 +1584,12 @@ class Indexer : public td::actor::Actor {
 
         json answer = {
             {"type", "shard_state"},
+            {"id",
+             {
+                 {"workchain", block_id.id.workchain},
+                 {"seqno", block_id.id.seqno},
+                 {"shard", block_id.id.shard},
+             }},
             {"seq_no", shard_state.seq_no},
             {"vert_seq_no", shard_state.vert_seq_no},
             {"gen_utime", shard_state.gen_utime},
@@ -1604,8 +1610,8 @@ class Indexer : public td::actor::Actor {
           request.send("POST", body, {{"Content-Type", "application/json"}, {"Authorization", "Bearer " + api_key}});
         } else {
           std::ofstream block_file;
-          block_file.open("state_" + std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
-                          std::to_string(block_id.id.seqno) + +".json");
+          block_file.open("state_" + std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) +
+                          ":" + std::to_string(block_id.id.seqno) + +".json");
 
           block_file << answer.dump(4);
           block_file.close();
