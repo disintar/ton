@@ -1558,6 +1558,8 @@ class Indexer : public td::actor::Actor {
                        {"logical_time", state->get_logical_time()},
                        {"before_split", state->before_split()},
                        {"shard",
+                        {"is_right_child", is_right_child(shard)},
+                        {"is_left_child", is_left_child(shard)},
                         {
                             {"shard", shard.shard},
                             {"workchain", shard.workchain},
