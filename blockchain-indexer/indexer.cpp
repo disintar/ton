@@ -1577,7 +1577,7 @@ class Indexer : public td::actor::Actor {
                             {"file_hash", block.file_hash.to_hex()},
                         }}};
 
-        LOG(DEBUG) << answer;
+        LOG(DEBUG) << answer.dump(4);
       }
     });
 
