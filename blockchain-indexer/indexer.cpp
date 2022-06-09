@@ -1552,6 +1552,7 @@ class Indexer : public td::actor::Actor {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
         auto state = R.move_as_ok();
+        auto block_id = state->get_block_id();
         CHECK(state.not_null());
 
         auto root_cell = state->root_cell();
@@ -1603,8 +1604,8 @@ class Indexer : public td::actor::Actor {
           request.send("POST", body, {{"Content-Type", "application/json"}, {"Authorization", "Bearer " + api_key}});
         } else {
           std::ofstream block_file;
-          block_file.open("state_" + std::to_string(block.id.workchain) + ":" + std::to_string(block.id.shard) + ":" +
-                          std::to_string(block.id.seqno) + +".json");
+          block_file.open("state_" + std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+                          std::to_string(block_id.id.seqno) + +".json");
 
           block_file << answer.dump(4);
           block_file.close();
