@@ -1655,6 +1655,7 @@ class Indexer : public td::actor::Actor {
           td::BitArray<256> account{};
           accounts->get_minmax_key(account);
           LOG(DEBUG) << "Account Key: " << account.to_hex();
+          accounts->lookup_delete_extra(account.cbits(), 256);
         }
 
         LOG(DEBUG) << answer.dump(4);
