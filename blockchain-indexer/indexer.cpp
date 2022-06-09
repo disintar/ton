@@ -1562,33 +1562,38 @@ class Indexer : public td::actor::Actor {
 
         LOG(DEBUG) << "Global id: " << shard_state.global_id;
 
+        std::list<std::tuple<int, std::string>> dummy;
 
-        auto shard = state->get_shard();
-        auto block = state->get_block_id();
+        block::gen::CurrencyCollection::Record total_balance_cc;
+        block::gen::CurrencyCollection::Record total_validator_fees_cc;
 
-        json answer = {{"type", "shard_state"},
-                       {"unix_time", state->get_unix_time()},
-                       {"logical_time", state->get_logical_time()},
-                       {"before_split", state->before_split()},
-                       {"shard",
-                        {{"is_right_child", is_right_child(shard)},
-                         {"is_left_child", is_left_child(shard)},
-                         {
-                             {"shard", shard.shard},
-                             {"workchain", shard.workchain},
-                         }}},
-                       {"seqno", state->get_seqno()},
-                       {"block",
-                        {
-                            {"id",
-                             {
-                                 {"workchain", block.id.workchain},
-                                 {"seqno", block.id.seqno},
-                                 {"shard", block.id.shard},
-                             }},
-                            {"root_hash", block.root_hash.to_hex()},
-                            {"file_hash", block.file_hash.to_hex()},
-                        }}};
+        CHECK(tlb::unpack(shard_state.r1.total_balance.write(), total_balance_cc))
+        CHECK(tlb::unpack(shard_state.r1.total_validator_fees.write(), total_validator_fees_cc))
+
+        json total_balance = {
+            {"grams", block::tlb::t_Grams.as_integer(total_balance_cc.grams)->to_dec_string()},
+            {"extra", total_balance_cc.other->have_refs() ? parse_extra_currency(total_balance_cc.other->prefetch_ref())
+                                                          : dummy}};
+
+        json total_validator_fees = {
+            {"grams", block::tlb::t_Grams.as_integer(total_validator_fees_cc.grams)->to_dec_string()},
+            {"extra", total_balance_cc.other->have_refs()
+                          ? parse_extra_currency(total_validator_fees_cc.other->prefetch_ref())
+                          : dummy}};
+
+        json answer = {
+            {"type", "shard_state"},
+            {"seq_no", shard_state.seq_no},
+            {"vert_seq_no", shard_state.vert_seq_no},
+            {"gen_utime", shard_state.gen_utime},
+            {"gen_lt", shard_state.gen_lt},
+            {"min_ref_mc_seqno", shard_state.min_ref_mc_seqno},
+            {"before_split", shard_state.before_split},
+            {"overload_history", shard_state.r1.overload_history},
+            {"overload_history", shard_state.r1.underload_history},
+            {"total_balance", total_balance},
+            {"total_validator_fees", total_validator_fees},
+        };
 
         LOG(DEBUG) << answer.dump(4);
 
