@@ -1619,11 +1619,11 @@ class Indexer : public td::actor::Actor {
             libraries.get_minmax_key(key);
             LOG(DEBUG) << "Lib: " << key.to_hex();
 
-            auto lib = load_cell_slice(libraries.lookup_delete_ref(key));
-            LOG(DEBUG) << "Got lib: " << lib.size() << " refs: " << lib.size_refs();
+            auto lib = libraries.lookup_delete_ref(key);
+            LOG(DEBUG) << "Got lib: " << lib->get_depth();
 
             block::gen::LibDescr::Record libdescr;
-            tlb::unpack(lib, libdescr);
+            tlb::unpack_cell(lib, libdescr);
           }
         }
 
