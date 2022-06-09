@@ -1359,8 +1359,8 @@ class Indexer : public td::actor::Actor {
           accounts.push_back(account_block_parsed);
         }
 
-        LOG(DEBUG) << "Send get_state request";
-        td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
+//        LOG(DEBUG) << "Send get_state request";
+//        td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
 
         answer["BlockExtra"] = {
             {"accounts", accounts},
