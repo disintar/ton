@@ -1692,6 +1692,14 @@ class Indexer : public td::actor::Actor {
           auto extra = result.second;
 
           block::gen::ShardAccount::Record sa;
+
+          vm::CellBuilder cb;
+          Ref<vm::Cell> cool_cell;
+
+          cb.append_cellslice(value.write());
+          cb.finalize_to(cool_cell);
+          LOG(DEBUG) << dump_as_boc(cool_cell);
+
           block::gen::DepthBalanceInfo::Record dbi;
           block::gen::CurrencyCollection::Record dbi_cc;
           CHECK(tlb::unpack(value.write(), sa));
