@@ -1708,8 +1708,8 @@ class Indexer : public td::actor::Actor {
           data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}};
 
           auto account_cell = load_cell_slice(sa.account);
-          if (account_cell.prefetch_ulong(1) > 0) {
-            // Простите меня за название переменных
+          auto acc_tag = block::gen::t_Account.get_tag(account_cell);
+          if (acc_tag == block::gen::t_Account.account) {
             block::gen::Account::Record_account acc;
             block::gen::StorageInfo::Record si;
             block::gen::AccountStorage::Record as;
@@ -1717,9 +1717,33 @@ class Indexer : public td::actor::Actor {
             block::gen::CurrencyCollection::Record balance;
 
             CHECK(tlb::unpack(account_cell, acc));
+
+            LOG(DEBUG) << "storage";
+            LOG(DEBUG) << acc.storage.is_null();
+            LOG(DEBUG) << acc.storage->size();
+            LOG(DEBUG) << acc.storage->size_refs();
+
             CHECK(tlb::unpack(acc.storage.write(), si));
+
+            LOG(DEBUG) << "storage_stat";
+            LOG(DEBUG) << acc.storage_stat.is_null();
+            LOG(DEBUG) << acc.storage_stat->size();
+            LOG(DEBUG) << acc.storage_stat->size_refs();
+
             CHECK(tlb::unpack(acc.storage_stat.write(), as));
+
+            LOG(DEBUG) << "used";
+            LOG(DEBUG) << si.used.is_null();
+            LOG(DEBUG) << si.used->size();
+            LOG(DEBUG) << si.used->size_refs();
+
             CHECK(tlb::unpack(si.used.write(), su));
+
+            LOG(DEBUG) << "balance";
+            LOG(DEBUG) << as.balance.is_null();
+            LOG(DEBUG) << as.balance->size();
+            LOG(DEBUG) << as.balance->size_refs();
+
             CHECK(tlb::unpack(as.balance.write(), balance));
 
             data["account"]["addr"] = parse_address(acc.addr.write());
