@@ -1707,6 +1707,13 @@ class Indexer : public td::actor::Actor {
           data["account_address"] = {{"workchain", block_id.id.workchain}, {"address", account.to_hex()}};
           data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}};
 
+          auto account_cell = load_cell_slice(sa.account);
+          if (account_cell.prefetch_ulong(1) > 0) {
+            block::gen::Account::Record_account acc;
+            CHECK(tlb::unpack(account_cell, acc));
+            data["account"]["addr"] = parse_address(acc.addr.write());
+          }
+
           accounts_list.push_back(data);
         }
 
