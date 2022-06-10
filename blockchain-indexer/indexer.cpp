@@ -1719,32 +1719,9 @@ class Indexer : public td::actor::Actor {
             block::gen::CurrencyCollection::Record balance;
             CHECK(tlb::unpack(account_cell, acc));
 
-            LOG(DEBUG) << "storage";
-            LOG(DEBUG) << "Is null: " << acc.storage.is_null();
-            LOG(DEBUG) << "Size: " << acc.storage->size();
-            LOG(DEBUG) << "Size refs: " << acc.storage->size_refs();
-
             CHECK(tlb::unpack(acc.storage.write(), as));
-
-            LOG(DEBUG) << "storage_stat";
-            LOG(DEBUG) << "Is null: " << acc.storage_stat.is_null();
-            LOG(DEBUG) << "Size: " << acc.storage_stat->size();
-            LOG(DEBUG) << "Size refs: " << acc.storage_stat->size_refs();
-
             CHECK(tlb::unpack(acc.storage_stat.write(), si));
-
-            LOG(DEBUG) << "used";
-            LOG(DEBUG) << "Is null: " << si.used.is_null();
-            LOG(DEBUG) << "Size: " << si.used->size();
-            LOG(DEBUG) << "Size refs: " << si.used->size_refs();
-
             CHECK(tlb::unpack(si.used.write(), su));
-
-            LOG(DEBUG) << "balance";
-            LOG(DEBUG) << "Is null: " << as.balance.is_null();
-            LOG(DEBUG) << "Size: " << as.balance->size();
-            LOG(DEBUG) << "Size refs: " << as.balance->size_refs();
-
             CHECK(tlb::unpack(as.balance.write(), balance));
 
             data["account"]["addr"] = parse_address(acc.addr.write());
