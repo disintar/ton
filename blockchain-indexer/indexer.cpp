@@ -1709,9 +1709,57 @@ class Indexer : public td::actor::Actor {
 
           auto account_cell = load_cell_slice(sa.account);
           if (account_cell.prefetch_ulong(1) > 0) {
+            // Простите меня за название переменных
             block::gen::Account::Record_account acc;
+            block::gen::StorageInfo::Record si;
+            block::gen::AccountStorage::Record as;
+            block::gen::StorageUsed::Record su;
+            block::gen::CurrencyCollection::Record balance;
+
             CHECK(tlb::unpack(account_cell, acc));
+            CHECK(tlb::unpack(acc.storage.write(), si));
+            CHECK(tlb::unpack(acc.storage_stat.write(), as));
+            CHECK(tlb::unpack(si.used.write(), su));
+            CHECK(tlb::unpack(as.balance.write(), balance));
+
             data["account"]["addr"] = parse_address(acc.addr.write());
+            std::string due_payment;
+
+            if (si.due_payment->prefetch_ulong(1) > 0) {
+              auto due = si.due_payment.write();
+              due.fetch_bits(1);  // maybe
+              due_payment = block::tlb::t_Grams.as_integer(due)->to_dec_string();
+            }
+
+            data["account"]["storage_stat"] = {{"last_paid", si.last_paid}, {"due_payment", due_payment}};
+
+            data["account"]["storage_stat"]["used"] = {
+                {"cells", block::tlb::t_VarUInteger_7.as_uint(su.cells.write())},
+                {"bits", block::tlb::t_VarUInteger_7.as_uint(su.bits.write())},
+                {"public_cells", block::tlb::t_VarUInteger_7.as_uint(su.public_cells.write())},
+            };
+
+            data["account"]["storage"] = {{"last_trans_lt", as.last_trans_lt}};
+
+            data["account"]["storage"]["balance"] = {
+                {"grams", block::tlb::t_Grams.as_integer(balance.grams)->to_dec_string()},
+                {"extra", balance.other->have_refs() ? parse_extra_currency(balance.other->prefetch_ref()) : dummy}};
+
+            auto tag = block::gen::t_AccountState.get_tag(as.state.write());
+            if (tag == block::gen::t_AccountState.account_uninit) {
+              data["account"]["state"] = {{"type", "uninit"}};
+            } else if (tag == block::gen::t_AccountState.account_active) {
+              block::gen::AccountState::Record_account_active active_account;
+              CHECK(tlb::unpack(as.state.write(), active_account));
+
+              data["account"]["state"] = {{"type", "active"},
+                                          {"state_init", parse_state_init(active_account.x.write())}};
+
+            } else if (tag == block::gen::t_AccountState.account_frozen) {
+              block::gen::AccountState::Record_account_frozen f{};
+              CHECK(tlb::unpack(as.state.write(), f))
+              data["account"]["state"] = {{"type", "frozen"}, {"state_hash", f.state_hash.to_hex()}};
+            }
           }
 
           accounts_list.push_back(data);
