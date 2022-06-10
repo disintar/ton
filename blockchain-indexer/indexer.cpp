@@ -1693,16 +1693,10 @@ class Indexer : public td::actor::Actor {
 
           block::gen::ShardAccount::Record sa;
 
-          vm::CellBuilder cb;
-          Ref<vm::Cell> cool_cell;
-
-          cb.append_cellslice(value.write());
-          cb.finalize_to(cool_cell);
-          LOG(DEBUG) << dump_as_boc(cool_cell);
-
           block::gen::DepthBalanceInfo::Record dbi;
           block::gen::CurrencyCollection::Record dbi_cc;
           CHECK(tlb::unpack(value.write(), sa));
+
           CHECK(tlb::unpack(extra.write(), dbi));
           CHECK(tlb::unpack(dbi.balance.write(), dbi_cc));
 
@@ -1727,30 +1721,30 @@ class Indexer : public td::actor::Actor {
             CHECK(tlb::unpack(account_cell, acc));
 
             LOG(DEBUG) << "storage";
-            LOG(DEBUG) << acc.storage.is_null();
-            LOG(DEBUG) << acc.storage->size();
-            LOG(DEBUG) << acc.storage->size_refs();
+            LOG(DEBUG) << "Is null: " << acc.storage.is_null();
+            LOG(DEBUG) << "Size: " << acc.storage->size();
+            LOG(DEBUG) << "Size refs: " << acc.storage->size_refs();
 
             CHECK(tlb::unpack(acc.storage.write(), si));
 
             LOG(DEBUG) << "storage_stat";
-            LOG(DEBUG) << acc.storage_stat.is_null();
-            LOG(DEBUG) << acc.storage_stat->size();
-            LOG(DEBUG) << acc.storage_stat->size_refs();
+            LOG(DEBUG) << "Is null: " << acc.storage_stat.is_null();
+            LOG(DEBUG) << "Size: " << acc.storage_stat->size();
+            LOG(DEBUG) << "Size refs: " << acc.storage_stat->size_refs();
 
             CHECK(tlb::unpack(acc.storage_stat.write(), as));
 
             LOG(DEBUG) << "used";
-            LOG(DEBUG) << si.used.is_null();
-            LOG(DEBUG) << si.used->size();
-            LOG(DEBUG) << si.used->size_refs();
+            LOG(DEBUG) << "Is null: " << si.used.is_null();
+            LOG(DEBUG) << "Size: " << si.used->size();
+            LOG(DEBUG) << "Size refs: " << si.used->size_refs();
 
             CHECK(tlb::unpack(si.used.write(), su));
 
             LOG(DEBUG) << "balance";
-            LOG(DEBUG) << as.balance.is_null();
-            LOG(DEBUG) << as.balance->size();
-            LOG(DEBUG) << as.balance->size_refs();
+            LOG(DEBUG) << "Is null: " << as.balance.is_null();
+            LOG(DEBUG) << "Size: " << as.balance->size();
+            LOG(DEBUG) << "Size refs: " << as.balance->size_refs();
 
             CHECK(tlb::unpack(as.balance.write(), balance));
 
