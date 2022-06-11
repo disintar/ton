@@ -1791,6 +1791,9 @@ class Indexer : public td::actor::Actor {
           block::gen::DepthBalanceInfo::Record dbi;
           block::gen::CurrencyCollection::Record dbi_cc;
           LOG(DEBUG) << "Parse value";
+          LOG(DEBUG) << value.is_null();
+          LOG(DEBUG) << value->size();
+          LOG(DEBUG) << value->size_refs();
           CHECK(tlb::unpack(value.write(), sa));
           LOG(DEBUG) << "Parse extra";
           CHECK(tlb::unpack(extra.write(), dbi));
