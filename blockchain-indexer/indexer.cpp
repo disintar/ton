@@ -1656,7 +1656,16 @@ class Indexer : public td::actor::Actor {
         if (api_host.length() > 0) {
           http::Request request{api_host};
           const std::string body = answer.dump();
-          request.send("POST", body, {{"Content-Type", "application/json"}, {"Authorization", "Bearer " + api_key}});
+          while (true) {
+            try {
+              request.send("POST", body,
+                           {{"Content-Type", "application/json"}, {"Authorization", "Bearer " + api_key}});
+
+              break;
+            } catch (...) {
+              LOG(DEBUG) << "Try one more time";
+            }
+          }
         } else {
           std::ofstream block_file;
           block_file.open("block_" + std::to_string(workchain) + ":" + std::to_string(blkid.seqno()) + ":" +
@@ -1865,7 +1874,16 @@ class Indexer : public td::actor::Actor {
           http::Request request{api_host};
           const std::string body = answer.dump();
 
-          request.send("POST", body, {{"Content-Type", "application/json"}, {"Authorization", "Bearer " + api_key}});
+          while (true) {
+            try {
+              request.send("POST", body,
+                           {{"Content-Type", "application/json"}, {"Authorization", "Bearer " + api_key}});
+
+              break;
+            } catch (...) {
+              LOG(DEBUG) << "Try one more time";
+            }
+          }
 
         } else {
           std::ofstream block_file;
