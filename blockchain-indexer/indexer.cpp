@@ -372,6 +372,89 @@ json parse_storage_used_short(vm::CellSlice storage_used_short) {
   return answer;
 }
 
+json parse_storage_ph(vm::CellSlice item) {
+  json answer;
+
+  block::gen::TrStoragePhase::Record ts;
+  CHECK(tlb::unpack(item, ts));
+
+  answer = {{"storage_fees_collected", block::tlb::t_Grams.as_integer(ts.storage_fees_collected)->to_dec_string()},
+            {"status_change", parse_status_change(ts.status_change)}};
+
+  if ((int)ts.storage_fees_due->prefetch_ulong(1) == 1) {
+    auto cs = ts.storage_fees_due.write();
+    cs.skip_first(1);
+
+    answer["storage_fees_due"] = block::tlb::t_Grams.as_integer(cs)->to_dec_string();
+  }
+
+  return answer;
+}
+
+json parse_credit_ph(vm::CellSlice item) {
+  json answer;
+  block::gen::TrCreditPhase::Record credit_ph;
+  CHECK(tlb::unpack(item, credit_ph));
+
+  block::gen::CurrencyCollection::Record cc;
+  CHECK(tlb::unpack(credit_ph.credit.write(), cc));
+
+  std::list<std::tuple<int, std::string>> dummy;
+  answer = {{"credit",
+             {{"grams", block::tlb::t_Grams.as_integer(cc.grams)->to_dec_string()},
+              {"extra", cc.other->have_refs() ? parse_extra_currency(cc.other->prefetch_ref()) : dummy}}}};
+
+  if ((int)credit_ph.due_fees_collected->prefetch_ulong(1) == 1) {
+    auto cs = credit_ph.due_fees_collected.write();
+    cs.skip_first(1);
+
+    answer["due_fees_collected"] = block::tlb::t_Grams.as_integer(cs)->to_dec_string();
+  }
+
+  return answer;
+}
+
+json parse_action_ph(const vm::CellSlice &item) {
+  json answer;
+  block::gen::TrActionPhase::Record action_ph;
+
+  CHECK(tlb::unpack_cell(item.prefetch_ref(), action_ph));
+
+  answer = {
+      {"success", action_ph.success},
+      {"valid", action_ph.valid},
+      {"no_funds", action_ph.no_funds},
+      {"no_funds", action_ph.no_funds},
+      {"status_change", parse_status_change(action_ph.status_change)},
+      {"result_code", action_ph.result_code},
+      {"tot_actions", action_ph.tot_actions},
+      {"spec_actions", action_ph.spec_actions},
+      {"skipped_actions", action_ph.skipped_actions},
+      {"msgs_created", action_ph.msgs_created},
+      {"action_list_hash", action_ph.action_list_hash.to_hex()},
+      {"tot_msg_size", parse_storage_used_short(action_ph.tot_msg_size.write())},
+  };
+
+  if ((int)action_ph.total_fwd_fees->prefetch_ulong(1) == 1) {
+    auto tf = action_ph.total_fwd_fees.write();
+    tf.skip_first(1);
+
+    answer["total_fwd_fees"] = block::tlb::t_Grams.as_integer(tf)->to_dec_string();
+  }
+
+  if ((int)action_ph.total_action_fees->prefetch_ulong(1) == 1) {
+    auto tf = action_ph.total_action_fees.write();
+    tf.skip_first(1);
+
+    answer["total_action_fees"] = block::tlb::t_Grams.as_integer(tf)->to_dec_string();
+  }
+  if (action_ph.result_code) {
+    answer["result_code"] = action_ph.result_code;
+  }
+
+  return answer;
+}
+
 json parse_bounce_phase(vm::CellSlice bp) {
   json answer;
   auto tag = block::gen::t_TrBouncePhase.check_tag(bp);
@@ -400,6 +483,69 @@ json parse_bounce_phase(vm::CellSlice bp) {
   return answer;
 }
 
+json parse_compute_ph(vm::CellSlice item) {
+  json answer;
+  if (item.prefetch_ulong(1) == 0) {  // tr_phase_compute_skipped
+    block::gen::TrComputePhase::Record_tr_phase_compute_skipped t{};
+    CHECK(tlb::unpack(item, t));
+
+    if (t.reason == block::gen::t_ComputeSkipReason.cskip_no_state) {
+      answer = {{"type", "skipped"}, {"reason", "cskip_no_state"}};
+    } else if (t.reason == block::gen::t_ComputeSkipReason.cskip_bad_state) {
+      answer = {{"type", "skipped"}, {"reason", "cskip_bad_state"}};
+    } else if (t.reason == block::gen::t_ComputeSkipReason.cskip_no_gas) {
+      answer = {{"type", "skipped"}, {"reason", "cskip_no_gas"}};
+    }
+
+  } else {
+    block::gen::TrComputePhase::Record_tr_phase_compute_vm t;
+    CHECK(tlb::unpack(item, t));
+
+    answer = {
+        {"success", t.success},
+        {"msg_state_used", t.msg_state_used},
+        {"account_activated", t.account_activated},
+        {"gas_fees", block::tlb::t_Grams.as_integer(t.gas_fees)->to_dec_string()},
+        {"gas_used", block::tlb::t_VarUInteger_7.as_uint(t.r1.gas_used.write())},
+        {"gas_limit", block::tlb::t_VarUInteger_7.as_uint(t.r1.gas_limit.write())},
+        {"mode", t.r1.mode},
+        {"exit_code", t.r1.exit_code},
+        {"vm_steps", t.r1.vm_steps},
+        {"vm_init_state_hash", t.r1.vm_init_state_hash.to_hex()},
+        {"vm_final_state_hash", t.r1.vm_final_state_hash.to_hex()},
+    };
+
+    if ((int)t.r1.gas_credit->prefetch_ulong(1) == 1) {
+      auto cs = t.r1.gas_credit.write();
+      cs.skip_first(1);
+      answer["gas_credit"] = block::tlb::t_VarUInteger_3.as_uint(cs);
+    }
+
+    if ((int)t.r1.exit_arg->prefetch_ulong(1) == 1) {
+      auto cs = t.r1.exit_arg.write();
+      cs.skip_first(1);
+      answer["exit_arg"] = (int)cs.prefetch_ulong(32);
+    }
+  }
+
+  return answer;
+}
+
+json parse_split_prepare(vm::CellSlice item) {
+  json answer;
+  block::gen::SplitMergeInfo::Record splmi{};
+  CHECK(tlb::unpack(item, splmi));
+
+  answer = {
+      {"cur_shard_pfx_len", splmi.cur_shard_pfx_len},
+      {"acc_split_depth", splmi.acc_split_depth},
+      {"this_addr", splmi.this_addr.to_hex()},
+      {"sibling_addr", splmi.sibling_addr.to_hex()},
+  };
+
+  return answer;
+}
+
 json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
   json answer;
   auto trans_descr_cs = load_cell_slice(transaction_descr);
@@ -413,129 +559,23 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
     answer["credit_first"] = parsed.credit_first;
     answer["aborted"] = parsed.aborted;
     answer["destroyed"] = parsed.destroyed;
-
-    if ((int)parsed.compute_ph->prefetch_ulong(1) == 0) {  // tr_phase_compute_skipped
-      block::gen::TrComputePhase::Record_tr_phase_compute_skipped t;
-      CHECK(tlb::unpack(parsed.compute_ph.write(), t));
-
-      if (t.reason == block::gen::t_ComputeSkipReason.cskip_no_state) {
-        answer["compute_ph"] = {{"type", "skipped"}, {"reason", "cskip_no_state"}};
-      } else if (t.reason == block::gen::t_ComputeSkipReason.cskip_bad_state) {
-        answer["compute_ph"] = {{"type", "skipped"}, {"reason", "cskip_bad_state"}};
-      } else if (t.reason == block::gen::t_ComputeSkipReason.cskip_no_gas) {
-        answer["compute_ph"] = {{"type", "skipped"}, {"reason", "cskip_no_gas"}};
-      }
-
-    } else {
-      block::gen::TrComputePhase::Record_tr_phase_compute_vm t;
-      CHECK(tlb::unpack(parsed.compute_ph.write(), t));
-
-      answer["compute_ph"] = {
-          {"success", t.success},
-          {"msg_state_used", t.msg_state_used},
-          {"account_activated", t.account_activated},
-          {"gas_fees", block::tlb::t_Grams.as_integer(t.gas_fees)->to_dec_string()},
-          {"gas_used", block::tlb::t_VarUInteger_7.as_uint(t.r1.gas_used.write())},
-          {"gas_limit", block::tlb::t_VarUInteger_7.as_uint(t.r1.gas_limit.write())},
-          {"mode", t.r1.mode},
-          {"exit_code", t.r1.exit_code},
-          {"vm_steps", t.r1.vm_steps},
-          {"vm_init_state_hash", t.r1.vm_init_state_hash.to_hex()},
-          {"vm_final_state_hash", t.r1.vm_final_state_hash.to_hex()},
-      };
-
-      if ((int)t.r1.gas_credit->prefetch_ulong(1) == 1) {
-        auto cs = t.r1.gas_credit.write();
-        cs.skip_first(1);
-        answer["compute_ph"]["gas_credit"] = block::tlb::t_VarUInteger_3.as_uint(cs);
-      }
-
-      if ((int)t.r1.exit_arg->prefetch_ulong(1) == 1) {
-        auto cs = t.r1.exit_arg.write();
-        cs.skip_first(1);
-        answer["compute_ph"]["exit_arg"] = (int)cs.prefetch_ulong(32);
-      }
-    }
+    answer["compute_ph"] = parse_compute_ph(parsed.compute_ph.write());
 
     if ((int)parsed.storage_ph->prefetch_ulong(1) == 1) {  // Maybe TrStoragePhase
       auto storage_ph = parsed.storage_ph.write();
       storage_ph.skip_first(1);
 
-      block::gen::TrStoragePhase::Record ts;
-      CHECK(tlb::unpack(storage_ph, ts));
-
-      answer["storage_ph"] = {
-          {"storage_fees_collected", block::tlb::t_Grams.as_integer(ts.storage_fees_collected)->to_dec_string()},
-          {"status_change", parse_status_change(ts.status_change)}};
-
-      if ((int)ts.storage_fees_due->prefetch_ulong(1) == 1) {
-        auto cs = ts.storage_fees_due.write();
-        cs.skip_first(1);
-
-        answer["storage_ph"]["storage_fees_due"] = block::tlb::t_Grams.as_integer(cs)->to_dec_string();
-      }
+      answer["storage_ph"] = parse_storage_ph(storage_ph);
     }
 
     if ((int)parsed.credit_ph->prefetch_ulong(1) == 1) {  // Maybe TrCreditPhase
       auto credit_ph_root = parsed.credit_ph.write();
       credit_ph_root.skip_first(1);
-
-      block::gen::TrCreditPhase::Record credit_ph;
-      CHECK(tlb::unpack(credit_ph_root, credit_ph));
-
-      block::gen::CurrencyCollection::Record cc;
-      CHECK(tlb::unpack(credit_ph.credit.write(), cc));
-
-      std::list<std::tuple<int, std::string>> dummy;
-      answer["credit_ph"] = {
-          {"credit",
-           {{"grams", block::tlb::t_Grams.as_integer(cc.grams)->to_dec_string()},
-            {"extra", cc.other->have_refs() ? parse_extra_currency(cc.other->prefetch_ref()) : dummy}}}};
-
-      if ((int)credit_ph.due_fees_collected->prefetch_ulong(1) == 1) {
-        auto cs = credit_ph.due_fees_collected.write();
-        cs.skip_first(1);
-
-        answer["credit_ph"]["due_fees_collected"] = block::tlb::t_Grams.as_integer(cs)->to_dec_string();
-      }
+      answer["credit_ph"] = parse_credit_ph(credit_ph_root);
     }
 
     if ((int)parsed.action->prefetch_ulong(1) == 1) {  // Maybe ^TrActionPhase
-      block::gen::TrActionPhase::Record action_ph;
-      CHECK(parsed.action->have_refs());
-      CHECK(tlb::unpack_cell(parsed.action->prefetch_ref(), action_ph));
-
-      answer["action"] = {
-          {"success", action_ph.success},
-          {"valid", action_ph.valid},
-          {"no_funds", action_ph.no_funds},
-          {"no_funds", action_ph.no_funds},
-          {"status_change", parse_status_change(action_ph.status_change)},
-          {"result_code", action_ph.result_code},
-          {"tot_actions", action_ph.tot_actions},
-          {"spec_actions", action_ph.spec_actions},
-          {"skipped_actions", action_ph.skipped_actions},
-          {"msgs_created", action_ph.msgs_created},
-          {"action_list_hash", action_ph.action_list_hash.to_hex()},
-          {"tot_msg_size", parse_storage_used_short(action_ph.tot_msg_size.write())},
-      };
-
-      if ((int)action_ph.total_fwd_fees->prefetch_ulong(1) == 1) {
-        auto tf = action_ph.total_fwd_fees.write();
-        tf.skip_first(1);
-
-        answer["action"]["total_fwd_fees"] = block::tlb::t_Grams.as_integer(tf)->to_dec_string();
-      }
-
-      if ((int)action_ph.total_action_fees->prefetch_ulong(1) == 1) {
-        auto tf = action_ph.total_action_fees.write();
-        tf.skip_first(1);
-
-        answer["action"]["total_action_fees"] = block::tlb::t_Grams.as_integer(tf)->to_dec_string();
-      }
-      if (action_ph.result_code) {
-        answer["action"]["result_code"] = action_ph.result_code;
-      }
+      answer["action"] = parse_action_ph(parsed.action.write());
     }
 
     if ((int)parsed.bounce->prefetch_ulong(1) == 1) {  // Maybe TrBouncePhase
@@ -544,20 +584,92 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
 
       answer["bounce"] = parse_bounce_phase(bounce);
     }
-
-    // TODO: parse me
   } else if (tag == block::gen::t_TransactionDescr.trans_storage) {
+    block::gen::TransactionDescr::Record_trans_storage parsed;
+    CHECK(tlb::unpack_cell(transaction_descr, parsed));
+
     answer["type"] = "trans_storage";
+    answer["storage_ph"] = parse_storage_ph(parsed.storage_ph.write());
   } else if (tag == block::gen::t_TransactionDescr.trans_tick_tock) {
+    block::gen::TransactionDescr::Record_trans_tick_tock parsed;
+    CHECK(tlb::unpack_cell(transaction_descr, parsed));
+
     answer["type"] = "trans_tick_tock";
+    answer["is_tock"] = parsed.is_tock;
+    answer["aborted"] = parsed.aborted;
+    answer["destroyed"] = parsed.destroyed;
+    answer["compute_ph"] = parse_compute_ph(parsed.compute_ph.write());
+    answer["storage_ph"] = parse_storage_ph(parsed.storage_ph.write());
+
+    if ((int)parsed.action->prefetch_ulong(1) == 1) {  // Maybe ^TrActionPhase
+      answer["action"] = parse_action_ph(parsed.action.write());
+    }
   } else if (tag == block::gen::t_TransactionDescr.trans_split_prepare) {
+    block::gen::TransactionDescr::Record_trans_split_prepare parsed;
+    CHECK(tlb::unpack_cell(transaction_descr, parsed));
     answer["type"] = "trans_split_prepare";
+    answer["aborted"] = parsed.aborted;
+    answer["destroyed"] = parsed.destroyed;
+    answer["compute_ph"] = parse_compute_ph(parsed.compute_ph.write());
+    answer["split_info"] = parse_split_prepare(parsed.split_info.write());
+
+    if ((int)parsed.storage_ph->prefetch_ulong(1) == 1) {  // Maybe TrStoragePhase
+      auto storage_ph = parsed.storage_ph.write();
+      storage_ph.skip_first(1);
+
+      answer["storage_ph"] = parse_storage_ph(storage_ph);
+    }
+
+    if ((int)parsed.action->prefetch_ulong(1) == 1) {  // Maybe ^TrActionPhase
+      answer["action"] = parse_action_ph(parsed.action.write());
+    }
   } else if (tag == block::gen::t_TransactionDescr.trans_split_install) {
+    block::gen::TransactionDescr::Record_trans_split_install parsed;
+    CHECK(tlb::unpack_cell(transaction_descr, parsed));
+
     answer["type"] = "trans_split_install";
+    answer["installed"] = parsed.installed;
+    answer["split_info"] = parse_split_prepare(parsed.split_info.write());
+    // todo: parse
+    // answer["prepare_transaction"] = "need_to_be_parsed"
+
   } else if (tag == block::gen::t_TransactionDescr.trans_merge_prepare) {
+    block::gen::TransactionDescr::Record_trans_merge_prepare parsed;
+    CHECK(tlb::unpack_cell(transaction_descr, parsed));
+
     answer["type"] = "trans_merge_prepare";
+    answer["aborted"] = parsed.aborted;
+    answer["split_info"] = parse_split_prepare(parsed.split_info.write());
+    answer["storage_ph"] = parse_storage_ph(parsed.storage_ph.write());
+
   } else if (tag == block::gen::t_TransactionDescr.trans_merge_install) {
+    block::gen::TransactionDescr::Record_trans_merge_install parsed;
+    CHECK(tlb::unpack_cell(transaction_descr, parsed));
     answer["type"] = "trans_merge_install";
+    answer["aborted"] = parsed.aborted;
+    answer["destroyed"] = parsed.destroyed;
+    answer["split_info"] = parse_split_prepare(parsed.split_info.write());
+    answer["compute_ph"] = parse_compute_ph(parsed.compute_ph.write());
+
+    // todo: parse
+    // answer["prepare_transaction"] = "need_to_be_parsed"
+
+    if ((int)parsed.storage_ph->prefetch_ulong(1) == 1) {  // Maybe TrStoragePhase
+      auto storage_ph = parsed.storage_ph.write();
+      storage_ph.skip_first(1);
+
+      answer["storage_ph"] = parse_storage_ph(storage_ph);
+    }
+
+    if ((int)parsed.credit_ph->prefetch_ulong(1) == 1) {  // Maybe TrCreditPhase
+      auto credit_ph_root = parsed.credit_ph.write();
+      credit_ph_root.skip_first(1);
+      answer["credit_ph"] = parse_credit_ph(credit_ph_root);
+    }
+
+    if ((int)parsed.action->prefetch_ulong(1) == 1) {  // Maybe ^TrActionPhase
+      answer["action"] = parse_action_ph(parsed.action.write());
+    }
   }
 
   return answer;
@@ -1622,8 +1734,6 @@ class Indexer : public td::actor::Actor {
         };
 
         if (shard_state.r1.libraries->have_refs()) {
-          LOG(DEBUG) << shard_state.r1.libraries->size_refs();
-
           auto libraries = vm::Dictionary{shard_state.r1.libraries->prefetch_ref(), 256};
 
           std::list<json> libs;
@@ -1669,7 +1779,6 @@ class Indexer : public td::actor::Actor {
         std::list<json> accounts_list;
 
         for (const auto &account : accounts_keys) {
-          LOG(DEBUG) << "Account Key: " << account.to_hex();
           auto result = accounts->lookup_delete_extra(account.cbits(), 256);
           auto value = result.first;
           auto extra = result.second;
@@ -1751,8 +1860,6 @@ class Indexer : public td::actor::Actor {
         }
 
         answer["accounts"] = accounts_list;
-
-        LOG(DEBUG) << answer.dump(4);
 
         if (api_host.length() > 0) {
           http::Request request{api_host};
