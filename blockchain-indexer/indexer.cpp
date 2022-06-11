@@ -1786,7 +1786,7 @@ class Indexer : public td::actor::Actor {
           auto result = accounts->lookup_delete_extra(account.cbits(), 256);
           auto value = result.first;
           auto extra = result.second;
-
+          LOG(DEBUG) << "Parse account: " << account.to_hex();
           block::gen::ShardAccount::Record sa;
 
           block::gen::DepthBalanceInfo::Record dbi;
@@ -1862,7 +1862,7 @@ class Indexer : public td::actor::Actor {
 
           accounts_list.push_back(data);
         }
-
+        LOG(DEBUG) << "Parsed accounts: " << accounts_list.size();
         answer["accounts"] = accounts_list;
 
         if (api_host.length() > 0) {
