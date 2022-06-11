@@ -547,10 +547,11 @@ json parse_split_prepare(vm::CellSlice item) {
 }
 
 json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
+  LOG(DEBUG) << "Parse transaction descr";
   json answer;
   auto trans_descr_cs = load_cell_slice(transaction_descr);
   auto tag = block::gen::t_TransactionDescr.get_tag(trans_descr_cs);
-
+  LOG(DEBUG) << "Tag: " << tag;
   if (tag == block::gen::t_TransactionDescr.trans_ord) {
     block::gen::TransactionDescr::Record_trans_ord parsed;
     CHECK(tlb::unpack_cell(transaction_descr, parsed));
