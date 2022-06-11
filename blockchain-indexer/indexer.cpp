@@ -1878,7 +1878,7 @@ class Indexer : public td::actor::Actor {
                                   std::move(P_st));
   }
 
-  void send_package(const std::string &package) {
+  void send_package(const std::string package) {
     http::Request request{api_path_};
 
     try {
