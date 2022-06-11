@@ -1688,6 +1688,7 @@ class Indexer : public td::actor::Actor {
       } else {
         auto state = R.move_as_ok();
         auto block_id = state->get_block_id();
+        LOG(WARNING) << "Parse state: " << block_id.to_str();
         CHECK(state.not_null());
 
         auto root_cell = state->root_cell();
@@ -1734,6 +1735,7 @@ class Indexer : public td::actor::Actor {
             {"total_validator_fees", total_validator_fees},
         };
 
+        LOG(DEBUG) << "Parse libraries";
         if (shard_state.r1.libraries->have_refs()) {
           auto libraries = vm::Dictionary{shard_state.r1.libraries->prefetch_ref(), 256};
 
@@ -1779,6 +1781,7 @@ class Indexer : public td::actor::Actor {
 
         std::list<json> accounts_list;
 
+        LOG(DEBUG) << "Parse accounts";
         for (const auto &account : accounts_keys) {
           auto result = accounts->lookup_delete_extra(account.cbits(), 256);
           auto value = result.first;
