@@ -1654,14 +1654,8 @@ class Indexer : public td::actor::Actor {
         answer["ShardState"] = {{"state_old_hash", state_old_hash}, {"state_hash", state_hash}};
 
         if (api_host.length() > 0) {
-          http::Request request{api_host};
           const std::string body = answer.dump();
-          try {
-            request.send("POST", body, {{"Content-Type", "application/json"}, {"Authorization", "Bearer " + api_key}},
-                         std::chrono::milliseconds{1000});
-          } catch (const std::exception &e) {
-            LOG(ERROR) << "Request failed, error: " << e.what() << '\n';
-          }
+          td::actor::send_closure(SelfId, &Indexer::send_package, body);
         } else {
           std::ofstream block_file;
           block_file.open("block_" + std::to_string(workchain) + ":" + std::to_string(blkid.seqno()) + ":" +
@@ -1867,16 +1861,8 @@ class Indexer : public td::actor::Actor {
         answer["accounts"] = accounts_list;
 
         if (api_host.length() > 0) {
-          http::Request request{api_host};
           const std::string body = answer.dump();
-
-          try {
-            request.send("POST", body, {{"Content-Type", "application/json"}, {"Authorization", "Bearer " + api_key}},
-                         std::chrono::milliseconds{1000});
-          } catch (const std::exception &e) {
-            LOG(ERROR) << "Request failed, error: " << e.what() << '\n';
-          }
-
+          td::actor::send_closure(SelfId, &Indexer::send_package, body);
         } else {
           std::ofstream block_file;
           block_file.open("state_" + std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) +
@@ -1890,6 +1876,17 @@ class Indexer : public td::actor::Actor {
 
     td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_shard_state_from_db, handle,
                                   std::move(P_st));
+  }
+
+  void send_package(const std::string &package) {
+    http::Request request{api_path_};
+
+    try {
+      request.send("POST", package, {{"Content-Type", "application/json"}, {"Authorization", "Bearer " + api_key_}},
+                   std::chrono::milliseconds{1000});
+    } catch (const std::exception &e) {
+      LOG(ERROR) << "Request failed, error: " << e.what() << '\n';
+    }
   }
 };  // namespace validator
 }  // namespace validator
