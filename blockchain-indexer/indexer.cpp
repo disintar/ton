@@ -1242,43 +1242,26 @@ class Indexer : public td::actor::Actor {
                         ] = ValueFlow;
         */
 
-        answer["ValueFlow"] = {
-            {"from_prev_blk",
-             {"grams", value_flow.from_prev_blk.grams->to_dec_string()},
-             {"extra", parse_extra_currency(value_flow.from_prev_blk.extra)}},
+        answer["ValueFlow"] = {};
 
-            {"to_next_blk",
-             {"grams", value_flow.to_next_blk.grams->to_dec_string()},
-             {"extra", parse_extra_currency(value_flow.to_next_blk.extra)}},
-
-            {"imported",
-             {"grams", value_flow.imported.grams->to_dec_string()},
-             {"extra", parse_extra_currency(value_flow.imported.extra)}},
-
-            {"exported",
-             {"grams", value_flow.exported.grams->to_dec_string()},
-             {"extra", parse_extra_currency(value_flow.exported.extra)}},
-
-            {"fees_collected",
-             {"grams", value_flow.fees_collected.grams->to_dec_string()},
-             {"extra", parse_extra_currency(value_flow.fees_collected.extra)}},
-
-            {"fees_imported",
-             {"grams", value_flow.fees_imported.grams->to_dec_string()},
-             {"extra", parse_extra_currency(value_flow.fees_imported.extra)}},
-
-            {"recovered",
-             {"grams", value_flow.recovered.grams->to_dec_string()},
-             {"extra", parse_extra_currency(value_flow.recovered.extra)}},
-
-            {"created",
-             {"grams", value_flow.created.grams->to_dec_string()},
-             {"extra", parse_extra_currency(value_flow.created.extra)}},
-
-            {"minted",
-             {"grams", value_flow.minted.grams->to_dec_string()},
-             {"extra", parse_extra_currency(value_flow.minted.extra)}},
-        };
+        answer["ValueFlow"]["from_prev_blk"] = {{"grams", value_flow.from_prev_blk.grams->to_dec_string()},
+                                                {"extra", parse_extra_currency(value_flow.from_prev_blk.extra)}};
+        answer["ValueFlow"]["to_next_blk"] = {{"grams", value_flow.to_next_blk.grams->to_dec_string()},
+                                              {"extra", parse_extra_currency(value_flow.to_next_blk.extra)}};
+        answer["ValueFlow"]["imported"] = {{"grams", value_flow.imported.grams->to_dec_string()},
+                                           {"extra", parse_extra_currency(value_flow.imported.extra)}};
+        answer["ValueFlow"]["exported"] = {{"grams", value_flow.exported.grams->to_dec_string()},
+                                           {"extra", parse_extra_currency(value_flow.exported.extra)}};
+        answer["ValueFlow"]["fees_collected"] = {{"grams", value_flow.fees_collected.grams->to_dec_string()},
+                                                 {"extra", parse_extra_currency(value_flow.fees_collected.extra)}};
+        answer["ValueFlow"]["fees_imported"] = {{"grams", value_flow.fees_imported.grams->to_dec_string()},
+                                                {"extra", parse_extra_currency(value_flow.fees_imported.extra)}};
+        answer["ValueFlow"]["recovered"] = {{"grams", value_flow.recovered.grams->to_dec_string()},
+                                            {"extra", parse_extra_currency(value_flow.recovered.extra)}};
+        answer["ValueFlow"]["created"] = {{"grams", value_flow.created.grams->to_dec_string()},
+                                          {"extra", parse_extra_currency(value_flow.created.extra)}};
+        answer["ValueFlow"]["minted"] = {{"grams", value_flow.minted.grams->to_dec_string()},
+                                         {"extra", parse_extra_currency(value_flow.minted.extra)}};
 
         /* tlb
          block_extra in_msg_descr:^InMsgDescr
