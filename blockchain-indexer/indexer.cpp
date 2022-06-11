@@ -1656,16 +1656,8 @@ class Indexer : public td::actor::Actor {
         if (api_host.length() > 0) {
           http::Request request{api_host};
           const std::string body = answer.dump();
-          while (true) {
-            try {
-              request.send("POST", body,
-                           {{"Content-Type", "application/json"}, {"Authorization", "Bearer " + api_key}});
-
-              break;
-            } catch (...) {
-              LOG(DEBUG) << "Try one more time";
-            }
-          }
+          // TODO: request not working in multithreading
+          request.send("POST", body, {{"Content-Type", "application/json"}, {"Authorization", "Bearer " + api_key}});
         } else {
           std::ofstream block_file;
           block_file.open("block_" + std::to_string(workchain) + ":" + std::to_string(blkid.seqno()) + ":" +
@@ -1787,15 +1779,13 @@ class Indexer : public td::actor::Actor {
         std::list<json> accounts_list;
 
         for (const auto &account : accounts_keys) {
-          auto result = accounts->lookup_delete_extra(account.cbits(), 256);
+          auto result = accounts->lookup_extra(account.cbits(), 256);
           auto value = result.first;
           auto extra = result.second;
           if (value.not_null()) {
             block::gen::ShardAccount::Record sa;
             block::gen::DepthBalanceInfo::Record dbi;
             block::gen::CurrencyCollection::Record dbi_cc;
-            LOG(DEBUG) << value->size();
-            LOG(DEBUG) << value->size_refs();
             CHECK(tlb::unpack(value.write(), sa));
             CHECK(tlb::unpack(extra.write(), dbi));
             CHECK(tlb::unpack(dbi.balance.write(), dbi_cc));
@@ -1873,18 +1863,8 @@ class Indexer : public td::actor::Actor {
         if (api_host.length() > 0) {
           http::Request request{api_host};
           const std::string body = answer.dump();
-
-          while (true) {
-            try {
-              request.send("POST", body,
-                           {{"Content-Type", "application/json"}, {"Authorization", "Bearer " + api_key}});
-
-              break;
-            } catch (...) {
-              LOG(DEBUG) << "Try one more time";
-            }
-          }
-
+          // TODO: request not working in multithreading
+          request.send("POST", body, {{"Content-Type", "application/json"}, {"Authorization", "Bearer " + api_key}});
         } else {
           std::ofstream block_file;
           block_file.open("state_" + std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) +
