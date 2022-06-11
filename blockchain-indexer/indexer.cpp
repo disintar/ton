@@ -547,11 +547,9 @@ json parse_split_prepare(vm::CellSlice item) {
 }
 
 json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
-  LOG(DEBUG) << "Parse transaction descr";
   json answer;
   auto trans_descr_cs = load_cell_slice(transaction_descr);
   auto tag = block::gen::t_TransactionDescr.get_tag(trans_descr_cs);
-  LOG(DEBUG) << "Tag: " << tag;
   if (tag == block::gen::t_TransactionDescr.trans_ord) {
     block::gen::TransactionDescr::Record_trans_ord parsed;
     CHECK(tlb::unpack_cell(transaction_descr, parsed));
@@ -1476,7 +1474,6 @@ class Indexer : public td::actor::Actor {
           accounts.push_back(account_block_parsed);
         }
 
-        LOG(DEBUG) << "Send get_state request";
         td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
 
         answer["BlockExtra"] = {
@@ -1735,7 +1732,6 @@ class Indexer : public td::actor::Actor {
             {"total_validator_fees", total_validator_fees},
         };
 
-        LOG(DEBUG) << "Parse libraries";
         if (shard_state.r1.libraries->have_refs()) {
           auto libraries = vm::Dictionary{shard_state.r1.libraries->prefetch_ref(), 256};
 
@@ -1781,12 +1777,10 @@ class Indexer : public td::actor::Actor {
 
         std::list<json> accounts_list;
 
-        LOG(DEBUG) << "Parse accounts";
         for (const auto &account : accounts_keys) {
           auto result = accounts->lookup_delete_extra(account.cbits(), 256);
           auto value = result.first;
           auto extra = result.second;
-          LOG(DEBUG) << "Parse account: " << account.to_hex();
           if (value.not_null()) {
             block::gen::ShardAccount::Record sa;
             block::gen::DepthBalanceInfo::Record dbi;
@@ -1794,13 +1788,10 @@ class Indexer : public td::actor::Actor {
             LOG(DEBUG) << value->size();
             LOG(DEBUG) << value->size_refs();
             CHECK(tlb::unpack(value.write(), sa));
-            LOG(DEBUG) << "Parse extra";
             CHECK(tlb::unpack(extra.write(), dbi));
-            LOG(DEBUG) << "Parse Balance";
             CHECK(tlb::unpack(dbi.balance.write(), dbi_cc));
 
             json data;
-            LOG(DEBUG) << "Json go";
             data["balance"] = {
                 {"split_depth", dbi.split_depth},
                 {"grams", block::tlb::t_Grams.as_integer(dbi_cc.grams)->to_dec_string()},
@@ -1808,37 +1799,31 @@ class Indexer : public td::actor::Actor {
             data["account_address"] = {{"workchain", block_id.id.workchain}, {"address", account.to_hex()}};
             data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}};
 
-            LOG(DEBUG) << "Parse account_cell";
             auto account_cell = load_cell_slice(sa.account);
             auto acc_tag = block::gen::t_Account.get_tag(account_cell);
-            LOG(DEBUG) << "Account tag: " << acc_tag;
+
             if (acc_tag == block::gen::t_Account.account) {
               block::gen::Account::Record_account acc;
               block::gen::StorageInfo::Record si;
               block::gen::AccountStorage::Record as;
               block::gen::StorageUsed::Record su;
               block::gen::CurrencyCollection::Record balance;
-              LOG(DEBUG) << "Parse acc";
-              CHECK(tlb::unpack(account_cell, acc));
-              LOG(DEBUG) << "Parse Storage";
-              CHECK(tlb::unpack(acc.storage.write(), as));
-              LOG(DEBUG) << "Parse Storage stat";
-              CHECK(tlb::unpack(acc.storage_stat.write(), si));
-              LOG(DEBUG) << "Parse used";
-              CHECK(tlb::unpack(si.used.write(), su));
-              LOG(DEBUG) << "Parse balance";
-              CHECK(tlb::unpack(as.balance.write(), balance));
 
-              LOG(DEBUG) << "Parse addr";
+              CHECK(tlb::unpack(account_cell, acc));
+
+              CHECK(tlb::unpack(acc.storage.write(), as));
+              CHECK(tlb::unpack(acc.storage_stat.write(), si));
+              CHECK(tlb::unpack(si.used.write(), su));
+              CHECK(tlb::unpack(as.balance.write(), balance));
               data["account"]["addr"] = parse_address(acc.addr.write());
               std::string due_payment;
-              LOG(DEBUG) << "Parse due payment";
+
               if (si.due_payment->prefetch_ulong(1) > 0) {
                 auto due = si.due_payment.write();
                 due.fetch_bits(1);  // maybe
                 due_payment = block::tlb::t_Grams.as_integer(due)->to_dec_string();
               }
-              LOG(DEBUG) << "Parse storage_stat";
+
               data["account"]["storage_stat"] = {{"last_paid", si.last_paid}, {"due_payment", due_payment}};
 
               data["account"]["storage_stat"]["used"] = {
@@ -1846,19 +1831,17 @@ class Indexer : public td::actor::Actor {
                   {"bits", block::tlb::t_VarUInteger_7.as_uint(su.bits.write())},
                   {"public_cells", block::tlb::t_VarUInteger_7.as_uint(su.public_cells.write())},
               };
-              LOG(DEBUG) << "Parse storage";
+
               data["account"]["storage"] = {{"last_trans_lt", as.last_trans_lt}};
 
               data["account"]["storage"]["balance"] = {
                   {"grams", block::tlb::t_Grams.as_integer(balance.grams)->to_dec_string()},
                   {"extra", balance.other->have_refs() ? parse_extra_currency(balance.other->prefetch_ref()) : dummy}};
-              LOG(DEBUG) << "Parse Account state";
+
               auto tag = block::gen::t_AccountState.get_tag(as.state.write());
               if (tag == block::gen::t_AccountState.account_uninit) {
-                LOG(DEBUG) << "Parse uninit";
                 data["account"]["state"] = {{"type", "uninit"}};
               } else if (tag == block::gen::t_AccountState.account_active) {
-                LOG(DEBUG) << "Parse Active";
                 block::gen::AccountState::Record_account_active active_account;
                 CHECK(tlb::unpack(as.state.write(), active_account));
 
@@ -1866,18 +1849,16 @@ class Indexer : public td::actor::Actor {
                                             {"state_init", parse_state_init(active_account.x.write())}};
 
               } else if (tag == block::gen::t_AccountState.account_frozen) {
-                LOG(DEBUG) << "Parse Frozen";
                 block::gen::AccountState::Record_account_frozen f{};
                 CHECK(tlb::unpack(as.state.write(), f))
                 data["account"]["state"] = {{"type", "frozen"}, {"state_hash", f.state_hash.to_hex()}};
               }
             }
-            LOG(DEBUG) << "Done";
 
             accounts_list.push_back(data);
           }
         }
-        LOG(DEBUG) << "Parsed accounts: " << accounts_list.size();
+
         answer["accounts"] = accounts_list;
 
         if (api_host.length() > 0) {
