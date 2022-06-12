@@ -1773,13 +1773,14 @@ class Indexer : public td::actor::Actor {
           answer["libraries"] = libs;
         }
 
-        auto accounts = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(shard_state.accounts), 256,
-                                                                  block::tlb::aug_ShardAccounts);
+        vm::AugmentedDictionary accounts{vm::load_cell_slice_ref(shard_state.accounts), 256,
+                                         block::tlb::aug_ShardAccounts};
 
         std::list<json> accounts_list;
 
         for (const auto &account : accounts_keys) {
-          auto result = accounts->lookup_extra(account.cbits(), 256);
+          LOG(DEBUG) << "Parse " << account.to_hex();
+          auto result = accounts.lookup_extra(account.cbits(), 256);
           auto value = result.first;
           auto extra = result.second;
           if (value.not_null()) {
