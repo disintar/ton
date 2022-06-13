@@ -59,6 +59,8 @@
 
 #include "common/util.h"
 
+#include "ton/ton-types.h"
+
 template <class Type>
 using lite_api_ptr = ton::lite_api::object_ptr<Type>;
 template <class Type>
@@ -3336,6 +3338,61 @@ void TonlibClient::finish_load_smc(td::unique_ptr<AccountState> smc,
                                    td::Promise<object_ptr<tonlib_api::smc_info>>&& promise) {
   auto id = register_smc(std::move(smc));
   promise.set_result(get_smc_info(id));
+}
+
+td::Status TonlibClient::do_request(const tonlib_api::smc_loadFromState& request,
+                                    td::Promise<object_ptr<tonlib_api::smc_info>>&& promise) {
+  auto fullState_ptr = request.account_state_.get();
+  TRY_RESULT(account_address, get_account_address(fullState_ptr->address_->account_address_));
+
+  auto string_to_bits256 = [](std::string string)->ton::Bits256 {
+    td::Bits256 bits;
+    bits.as_slice().copy_from(string);
+    return bits;
+  };
+
+  auto balance = fullState_ptr->balance_;
+  auto blockId = fullState_ptr->block_id_.get();
+  auto blockIdExt = ton::BlockIdExt(
+      ton::BlockId(
+          blockId->workchain_,
+          blockId->seqno_, ///TODO: int/uint
+          blockId->shard_ ///TODO: int/uint
+          ),
+      string_to_bits256(blockId->root_hash_),
+      string_to_bits256(blockId->file_hash_)
+      );
+  auto account_state = (ton::tonlib_api::raw_accountState*)fullState_ptr->account_state_.get();
+//  auto string_to_cell = [](const std::string& string) -> td::Ref<vm::Cell> {
+//      auto res = vm::std_boc_deserialize(string);
+//      if (res.is_error()) {
+//        LOG(ERROR) << "cannot deserialize smc code/data: " << res.move_as_error().to_string();
+//        return {};
+//      }
+//      auto ref = res.move_as_ok();
+//      return ref;
+//  };
+  TRY_RESULT_PREFIX(code, vm::std_boc_deserialize(account_state->code_), TonlibError::InvalidBagOfCells("smc code"));
+  TRY_RESULT_PREFIX(data, vm::std_boc_deserialize(account_state->data_), TonlibError::InvalidBagOfCells("smc data"));
+
+  auto rawState = RawAccountState {
+      .balance = balance,
+//    ton::UnixTime storage_last_paid{0};
+      // storage_stat
+      .code = code,
+      .data = data,
+      // state
+      .frozen_hash = account_state->frozen_hash_,
+      // info
+      .block_id = blockIdExt
+  };
+  auto wallet_id = wallet_id_;
+
+  auto accountState_ptr = td::make_unique<AccountState>(account_address, std::move(rawState), wallet_id);
+  auto id = register_smc(std::move(accountState_ptr));
+  promise.set_result(get_smc_info(id));
+
+  return td::Status::OK();
 }
 
 td::Status TonlibClient::do_request(const tonlib_api::smc_load& request,
