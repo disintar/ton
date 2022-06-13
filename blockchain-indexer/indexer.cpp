@@ -1449,9 +1449,14 @@ class Indexer : public td::actor::Actor {
           Ref<vm::CellSlice> data;
 
           account_blocks_dict->get_minmax_key(last_key);
-          accounts_keys.push_back(last_key);
-
-          data = account_blocks_dict->lookup_delete(last_key);
+          auto hex_addr = last_key.to_hex();
+          // todo: fix
+          if (hex_addr != "3333333333333333333333333333333333333333333333333333333333333333" &&
+              hex_addr != "34517C7BDF5187C55AF4F8B61FDC321588C7AB768DEE24B006DF29106458D7CF" &&
+              hex_addr != "5555555555555555555555555555555555555555555555555555555555555555") {
+            accounts_keys.push_back(last_key);
+          }
+          😀data = account_blocks_dict->lookup_delete(last_key);
 
           json account_block_parsed;
           account_block_parsed["account_addr"] = {{"address", last_key.to_hex()}, {"workchain", workchain}};
@@ -1857,16 +1862,21 @@ class Indexer : public td::actor::Actor {
                   {"extra", balance.other->have_refs() ? parse_extra_currency(balance.other->prefetch_ref()) : dummy}};
 
               auto tag = block::gen::t_AccountState.get_tag(as.state.write());
+
               if (tag == block::gen::t_AccountState.account_uninit) {
                 data["account"]["state"] = {{"type", "uninit"}};
-              } else if (tag == block::gen::t_AccountState.account_active) {
+              }
+
+              else if (tag == block::gen::t_AccountState.account_active) {
                 block::gen::AccountState::Record_account_active active_account;
                 CHECK(tlb::unpack(as.state.write(), active_account));
 
                 data["account"]["state"] = {{"type", "active"},
                                             {"state_init", parse_state_init(active_account.x.write())}};
 
-              } else if (tag == block::gen::t_AccountState.account_frozen) {
+              }
+
+              else if (tag == block::gen::t_AccountState.account_frozen) {
                 block::gen::AccountState::Record_account_frozen f{};
                 CHECK(tlb::unpack(as.state.write(), f))
                 data["account"]["state"] = {{"type", "frozen"}, {"state_hash", f.state_hash.to_hex()}};
