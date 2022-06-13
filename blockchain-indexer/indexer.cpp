@@ -1457,7 +1457,7 @@ class Indexer : public td::actor::Actor {
             accounts_keys.push_back(last_key);
           }
 
-          😀data = account_blocks_dict->lookup_delete(last_key);
+          data = account_blocks_dict->lookup_delete(last_key);
 
           json account_block_parsed;
           account_block_parsed["account_addr"] = {{"address", last_key.to_hex()}, {"workchain", workchain}};
