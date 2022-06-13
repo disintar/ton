@@ -1456,6 +1456,7 @@ class Indexer : public td::actor::Actor {
               hex_addr != "5555555555555555555555555555555555555555555555555555555555555555") {
             accounts_keys.push_back(last_key);
           }
+
           😀data = account_blocks_dict->lookup_delete(last_key);
 
           json account_block_parsed;
