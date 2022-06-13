@@ -424,7 +424,6 @@ json parse_action_ph(const vm::CellSlice &item) {
       {"success", action_ph.success},
       {"valid", action_ph.valid},
       {"no_funds", action_ph.no_funds},
-      {"no_funds", action_ph.no_funds},
       {"status_change", parse_status_change(action_ph.status_change)},
       {"result_code", action_ph.result_code},
       {"tot_actions", action_ph.tot_actions},
@@ -432,6 +431,7 @@ json parse_action_ph(const vm::CellSlice &item) {
       {"skipped_actions", action_ph.skipped_actions},
       {"msgs_created", action_ph.msgs_created},
       {"action_list_hash", action_ph.action_list_hash.to_hex()},
+      {"result_code", action_ph.result_code},
       {"tot_msg_size", parse_storage_used_short(action_ph.tot_msg_size.write())},
   };
 
@@ -447,9 +447,6 @@ json parse_action_ph(const vm::CellSlice &item) {
     tf.skip_first(1);
 
     answer["total_action_fees"] = block::tlb::t_Grams.as_integer(tf)->to_dec_string();
-  }
-  if (action_ph.result_code) {
-    answer["result_code"] = action_ph.result_code;
   }
 
   return answer;
