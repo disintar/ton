@@ -1500,7 +1500,9 @@ class Indexer : public td::actor::Actor {
           accounts.push_back(account_block_parsed);
         }
 
-        td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
+        if (accounts_keys.size() > 0) {
+          td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
+        }
 
         answer["BlockExtra"] = {
             {"accounts", accounts},
