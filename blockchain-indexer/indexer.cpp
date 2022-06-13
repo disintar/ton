@@ -502,6 +502,7 @@ json parse_compute_ph(vm::CellSlice item) {
     CHECK(tlb::unpack(item, t));
 
     answer = {
+        {"type", "computed"},
         {"success", t.success},
         {"msg_state_used", t.msg_state_used},
         {"account_activated", t.account_activated},
@@ -550,6 +551,7 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
   json answer;
   auto trans_descr_cs = load_cell_slice(transaction_descr);
   auto tag = block::gen::t_TransactionDescr.get_tag(trans_descr_cs);
+
   if (tag == block::gen::t_TransactionDescr.trans_ord) {
     block::gen::TransactionDescr::Record_trans_ord parsed;
     CHECK(tlb::unpack_cell(transaction_descr, parsed));
@@ -583,13 +585,17 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
 
       answer["bounce"] = parse_bounce_phase(bounce);
     }
-  } else if (tag == block::gen::t_TransactionDescr.trans_storage) {
+  }
+
+  else if (tag == block::gen::t_TransactionDescr.trans_storage) {
     block::gen::TransactionDescr::Record_trans_storage parsed;
     CHECK(tlb::unpack_cell(transaction_descr, parsed));
 
     answer["type"] = "trans_storage";
     answer["storage_ph"] = parse_storage_ph(parsed.storage_ph.write());
-  } else if (tag == block::gen::t_TransactionDescr.trans_tick_tock) {
+  }
+
+  else if (tag == block::gen::t_TransactionDescr.trans_tick_tock) {
     block::gen::TransactionDescr::Record_trans_tick_tock parsed;
     CHECK(tlb::unpack_cell(transaction_descr, parsed));
 
@@ -603,7 +609,9 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
     if ((int)parsed.action->prefetch_ulong(1) == 1) {  // Maybe ^TrActionPhase
       answer["action"] = parse_action_ph(parsed.action.write());
     }
-  } else if (tag == block::gen::t_TransactionDescr.trans_split_prepare) {
+  }
+
+  else if (tag == block::gen::t_TransactionDescr.trans_split_prepare) {
     block::gen::TransactionDescr::Record_trans_split_prepare parsed;
     CHECK(tlb::unpack_cell(transaction_descr, parsed));
     answer["type"] = "trans_split_prepare";
@@ -622,7 +630,9 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
     if ((int)parsed.action->prefetch_ulong(1) == 1) {  // Maybe ^TrActionPhase
       answer["action"] = parse_action_ph(parsed.action.write());
     }
-  } else if (tag == block::gen::t_TransactionDescr.trans_split_install) {
+  }
+
+  else if (tag == block::gen::t_TransactionDescr.trans_split_install) {
     block::gen::TransactionDescr::Record_trans_split_install parsed;
     CHECK(tlb::unpack_cell(transaction_descr, parsed));
 
@@ -632,7 +642,9 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
     // todo: parse
     // answer["prepare_transaction"] = "need_to_be_parsed"
 
-  } else if (tag == block::gen::t_TransactionDescr.trans_merge_prepare) {
+  }
+
+  else if (tag == block::gen::t_TransactionDescr.trans_merge_prepare) {
     block::gen::TransactionDescr::Record_trans_merge_prepare parsed;
     CHECK(tlb::unpack_cell(transaction_descr, parsed));
 
@@ -641,7 +653,9 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
     answer["split_info"] = parse_split_prepare(parsed.split_info.write());
     answer["storage_ph"] = parse_storage_ph(parsed.storage_ph.write());
 
-  } else if (tag == block::gen::t_TransactionDescr.trans_merge_install) {
+  }
+
+  else if (tag == block::gen::t_TransactionDescr.trans_merge_install) {
     block::gen::TransactionDescr::Record_trans_merge_install parsed;
     CHECK(tlb::unpack_cell(transaction_descr, parsed));
     answer["type"] = "trans_merge_install";
@@ -681,7 +695,8 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
   block::gen::CurrencyCollection::Record trans_total_fees_cc;
 
   CHECK(tvalue->have_refs());
-  CHECK(tlb::unpack_cell(tvalue->prefetch_ref(), trans));
+  auto trans_root = tvalue->prefetch_ref();
+  CHECK(tlb::unpack_cell(trans_root, trans));
   CHECK(tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd));
   CHECK(tlb::unpack(trans.total_fees.write(), trans_total_fees_cc));
 
@@ -693,7 +708,10 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
 
   transaction["account_addr"] = {{"workchain", workchain}, {"address", trans.account_addr.to_hex()}};
   transaction["lt"] = trans.lt;
+
+  transaction["hash"] = trans_root->get_hash().to_hex();
   transaction["prev_trans_hash"] = trans.prev_trans_hash.to_hex();
+
   transaction["prev_trans_lt"] = trans.prev_trans_lt;
   transaction["now"] = trans.now;
   transaction["outmsg_cnt"] = trans.outmsg_cnt;
