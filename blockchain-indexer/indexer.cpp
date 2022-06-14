@@ -1757,6 +1757,7 @@ class Indexer : public td::actor::Actor {
   void display_progress_chain() {
     display_progress();
     delay_action([this]() {
+      std::cout << "\n\n\n" << std::flush;
       display_progress_chain();
     }, td::Timestamp::in(0.1));
   }
