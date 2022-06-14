@@ -1745,8 +1745,10 @@ class Indexer : public td::actor::Actor {
       parsed_blocks_timepoints_.pop();
     }
 
-    std::cout << std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size())
-      + std::string("\tpadding:\t") + std::to_string(seqno_padding_) + std::string("        ") << std::flush;
+    std::cout << std::string("\r")
+      + std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size())
+      + std::string("\tpadding:\t") + std::to_string(seqno_padding_) + std::string("        ")
+      << std::flush;
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys) {
@@ -1963,11 +1965,7 @@ class Indexer : public td::actor::Actor {
 
 int main(int argc, char **argv) {
 
-  std::cout << "cout check 1" << std::endl;
-
   SET_VERBOSITY_LEVEL(verbosity_DEBUG);
-
-  std::cout << "cout check 2" << std::endl;
 
   CHECK(vm::init_op_cp0());
 
