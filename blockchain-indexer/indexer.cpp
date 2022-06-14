@@ -1757,9 +1757,8 @@ class Indexer : public td::actor::Actor {
   void display_progress_chain() {
     display_progress();
     delay_action([this]() {
-      std::cout << "\n\n\n" << std::flush;
       display_progress_chain();
-    }, td::Timestamp::in(0.1));
+    }, td::Timestamp::in(0.5, td::Time::now()));
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys) {
