@@ -904,7 +904,7 @@ class Indexer : public td::actor::Actor {
   std::string global_config_ /*; = db_root_ + "/global-config.json"*/;
   BlockSeqno seqno_first_ = 0;
   BlockSeqno seqno_last_ = 0;
-  std::atomic<std::size_t> seqno_progress_ = 0; // amount of already processed seqnos
+  std::size seqno_padding_ = 0;
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
   td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
   td::Status create_validator_options() {
@@ -1167,6 +1167,8 @@ class Indexer : public td::actor::Actor {
       } else {
         auto block = R.move_as_ok();
         CHECK(block.not_null());
+
+        increase_padding();
 
         auto blkid = block->block_id();
         LOG(DEBUG) << "Parse: " << blkid.to_str() << " is_first: " << is_first;
@@ -1695,31 +1697,34 @@ class Indexer : public td::actor::Actor {
           block_file << answer.dump(4);
           block_file.close();
         }
+        decrease_padding();
       }
 
-<<<<<<< HEAD
-//      if (is_first) {
-//        td::actor::send_closure(SelfId, &Indexer::parse_other);
-//      }
-
-=======
       if (is_first) {
         td::actor::send_closure(SelfId, &Indexer::parse_other);
       }
-      on_block_parsed();
->>>>>>> parent of 6a357b6 (temp)
     });
 
     td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
                                   std::move(P));
   }
 
-  void on_block_parsed() {
-    ++seqno_progress_;
-    const auto whole_range = seqno_last_ - seqno_first_ + 1;
-    const double progress_ratio = (double)seqno_progress_ / whole_range;
-    const int percentage = progress_ratio * 100;
-    LOG(INFO) << std::string("Progress: ") + std::to_string(percentage) + std::string("%");
+  void increase_padding() {
+    static std::mutex mtx;
+    std::unique_lock<std::mutex> lock(mtx);
+    ++seqno_padding_;
+    display_progress();
+  }
+
+  void decrease_padding() {
+    static std::mutex mtx;
+    std::unique_lock<std::mutex> lock(mtx);
+    --seqno_padding_;
+    display_progress();
+  }
+
+  void display_progress() {
+    std::cout << std::string("\rPadding: ") + std::to_string(seqno_padding_) + std::string("     "); ///TODO: amount of spaces?
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys) {
