@@ -1091,8 +1091,6 @@ class Indexer : public td::actor::Actor {
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::install_callback,
                             std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
     LOG(DEBUG) << "Callback installed";
-
-    display_progress_chain();
   }
 
   void sync_complete(const BlockHandle &handle) {
@@ -1723,7 +1721,7 @@ class Indexer : public td::actor::Actor {
 
     parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
     ++seqno_padding_;
-//    display_progress();
+    display_progress();
   }
 
   void decrease_padding() {
@@ -1734,7 +1732,7 @@ class Indexer : public td::actor::Actor {
       LOG(ERROR) << "decreasing padding but it's zero";
     }
     --seqno_padding_;
-//    display_progress();
+    display_progress();
   }
 
   void display_progress() {
@@ -1752,13 +1750,6 @@ class Indexer : public td::actor::Actor {
       + std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size())
       + std::string("\tpadding:\t") + std::to_string(seqno_padding_) + std::string("\t")
       << std::flush;
-  }
-
-  void display_progress_chain() {
-    display_progress();
-    delay_action([this]() {
-      display_progress_chain();
-    }, td::Timestamp::in(0.5, td::Time::now()));
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys) {
