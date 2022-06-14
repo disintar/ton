@@ -1722,7 +1722,6 @@ class Indexer : public td::actor::Actor {
     static std::mutex mtx;
     std::unique_lock<std::mutex> lock(mtx);
 
-    parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
     ++seqno_padding_;
     display_progress();
   }
@@ -1731,6 +1730,7 @@ class Indexer : public td::actor::Actor {
     static std::mutex mtx;
     std::unique_lock<std::mutex> lock(mtx);
 
+    parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
     if (seqno_padding_ == 0) {
       LOG(ERROR) << "decreasing seqno padding but it's zero";
     }
