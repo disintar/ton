@@ -1724,7 +1724,8 @@ class Indexer : public td::actor::Actor {
   }
 
   void display_progress() {
-    std::cout << std::string("\rPadding: ") + std::to_string(seqno_padding_) + std::string("     "); ///TODO: amount of spaces?
+//    std::cout << std::string("\rPadding: ") + std::to_string(seqno_padding_) + std::string("     "); ///TODO: amount of spaces?
+    LOG(DEBUG) << std::string("\rPadding: ") + std::to_string(seqno_padding_) + std::string("     ");
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys) {
@@ -1941,8 +1942,6 @@ class Indexer : public td::actor::Actor {
 
 int main(int argc, char **argv) {
   SET_VERBOSITY_LEVEL(verbosity_DEBUG);
-
-  LOG(DEBUG) << "Let's rock!";
 
   CHECK(vm::init_op_cp0());
 
