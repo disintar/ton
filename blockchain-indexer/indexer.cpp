@@ -1957,6 +1957,11 @@ int main(int argc, char **argv) {
     std::cout << sb.as_cslice().c_str();
     std::exit(2);
   });
+  p.add_checked_option('v', "verbosity", "set verbosity level", [&](td::Slice arg) {
+    int verbosity = td::to_integer<int>(arg);
+    SET_VERBOSITY_LEVEL(VERBOSITY_NAME(FATAL) + verbosity);
+    return (verbosity >= 0 && verbosity <= 9) ? td::Status::OK() : td::Status::Error("verbosity must be 0..9");
+  });
   p.add_checked_option('u', "user", "change user", [&](td::Slice user) { return td::change_user(user.str()); });
   p.add_option('D', "db", "root for dbs", [&](td::Slice fname) {
     td::actor::send_closure(main, &ton::validator::Indexer::set_db_root, fname.str());
