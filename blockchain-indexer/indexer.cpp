@@ -1745,7 +1745,7 @@ class Indexer : public td::actor::Actor {
       parsed_blocks_timepoints_.pop();
     }
 
-    std::cout << std::string("\r\r")
+    std::cout << std::string("\\x1b[A\r")
       + std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size())
       + std::string("\tpadding:\t") + std::to_string(seqno_padding_) + std::string("\n")
       << std::flush;
@@ -1968,7 +1968,7 @@ int main(int argc, char **argv) {
   SET_VERBOSITY_LEVEL(verbosity_DEBUG);
 
   CHECK(vm::init_op_cp0());
-  std::cout << "\n";
+  std::cout << "Speed:" << std::endl;
 
   td::actor::ActorOwn<ton::validator::Indexer> main;
 
