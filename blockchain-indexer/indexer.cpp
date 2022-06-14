@@ -904,7 +904,7 @@ class Indexer : public td::actor::Actor {
   std::string global_config_ /*; = db_root_ + "/global-config.json"*/;
   BlockSeqno seqno_first_ = 0;
   BlockSeqno seqno_last_ = 0;
-  std::size seqno_padding_ = 0;
+  std::size_t seqno_padding_ = 0;
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
   td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
   td::Status create_validator_options() {
