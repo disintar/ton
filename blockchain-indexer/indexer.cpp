@@ -1747,7 +1747,7 @@ class Indexer : public td::actor::Actor {
 
     std::cout << std::string("\r")
       + std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size())
-      + std::string("\tpadding:\t") + std::to_string(seqno_padding_) + std::string("\n")
+      + std::string("\tpadding:\t") + std::to_string(seqno_padding_) + std::string("\t")
       << std::flush;
   }
 
