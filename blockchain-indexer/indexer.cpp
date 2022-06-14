@@ -907,7 +907,7 @@ class Indexer : public td::actor::Actor {
   std::string global_config_ /*; = db_root_ + "/global-config.json"*/;
   BlockSeqno seqno_first_ = 0;
   BlockSeqno seqno_last_ = 0;
-  std::size_t seqno_padding_ = 0;
+  std::ssize_t seqno_padding_ = 0;
   // store timestamps of parsed blocks for speed measuring
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_blocks_timepoints_;
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
@@ -1727,6 +1727,9 @@ class Indexer : public td::actor::Actor {
     static std::mutex mtx;
     std::unique_lock<std::mutex> lock(mtx);
 
+    if (seqno_padding_ == 0) {
+      LOG(ERROR) << "decreasing padding but it's zero";
+    }
     --seqno_padding_;
     display_progress();
   }
