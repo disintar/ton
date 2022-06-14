@@ -37,6 +37,9 @@
 #include "vm/boc.h"
 #include "crypto/block/mc-config.h"
 #include "HTTPRequest.hpp"
+#include <algorithm>
+#include <queue>
+#include <chrono>
 
 // TODO: use td/utils/json
 // TODO: use tlb auto deserializer to json (PrettyPrintJson)
@@ -905,6 +908,8 @@ class Indexer : public td::actor::Actor {
   BlockSeqno seqno_first_ = 0;
   BlockSeqno seqno_last_ = 0;
   std::size_t seqno_padding_ = 0;
+  // store timestamps of parsed blocks for speed measuring
+  std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_blocks_timepoints_;
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
   td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
   td::Status create_validator_options() {
@@ -1712,6 +1717,8 @@ class Indexer : public td::actor::Actor {
   void increase_padding() {
     static std::mutex mtx;
     std::unique_lock<std::mutex> lock(mtx);
+
+    parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
     ++seqno_padding_;
     display_progress();
   }
@@ -1719,13 +1726,23 @@ class Indexer : public td::actor::Actor {
   void decrease_padding() {
     static std::mutex mtx;
     std::unique_lock<std::mutex> lock(mtx);
+
     --seqno_padding_;
     display_progress();
   }
 
   void display_progress() {
+    while (!parsed_blocks_timepoints_.empty()) {
+      const auto timepoint = parsed_blocks_timepoints_.front();
+      if (std::chrono::high_resolution_clock::now() - timepoint < std::chrono::seconds(1)) {
+        break;
+      }
+      parsed_blocks_timepoints_.pop();
+    }
+
 //    std::cout << std::string("\rPadding: ") + std::to_string(seqno_padding_) + std::string("     "); ///TODO: amount of spaces?
-    LOG(DEBUG) << std::string("\rPadding: ") + std::to_string(seqno_padding_) + std::string("     ");
+    LOG(DEBUG) << std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size())
+      + std::string("\tpadding:\t") + std::to_string(seqno_padding_) + std::string("     ");
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys) {
