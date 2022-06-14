@@ -36,6 +36,7 @@
 #include "tuple"
 #include "vm/boc.h"
 #include "crypto/block/mc-config.h"
+#include "delay.h"
 #include "HTTPRequest.hpp"
 #include <algorithm>
 #include <queue>
@@ -1110,6 +1111,8 @@ class Indexer : public td::actor::Actor {
     ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                             seqno_first_, std::move(P));
+
+    display_progress_chain();
   }
 
   void parse_other() {
@@ -1720,7 +1723,7 @@ class Indexer : public td::actor::Actor {
 
     parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
     ++seqno_padding_;
-    display_progress();
+//    display_progress();
   }
 
   void decrease_padding() {
@@ -1731,7 +1734,7 @@ class Indexer : public td::actor::Actor {
       LOG(ERROR) << "decreasing padding but it's zero";
     }
     --seqno_padding_;
-    display_progress();
+//    display_progress();
   }
 
   void display_progress() {
@@ -1749,6 +1752,13 @@ class Indexer : public td::actor::Actor {
       + std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size())
       + std::string("\tpadding:\t") + std::to_string(seqno_padding_) + std::string("\t")
       << std::flush;
+  }
+  
+  void display_progress_chain() {
+    display_progress();
+    delay_action([this]() {
+      display_progress_chain();
+    }, td::Timestamp::in(0.1));
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys) {
