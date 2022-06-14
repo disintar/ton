@@ -1091,6 +1091,8 @@ class Indexer : public td::actor::Actor {
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::install_callback,
                             std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
     LOG(DEBUG) << "Callback installed";
+
+    display_progress_chain();
   }
 
   void sync_complete(const BlockHandle &handle) {
@@ -1111,8 +1113,6 @@ class Indexer : public td::actor::Actor {
     ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                             seqno_first_, std::move(P));
-
-    display_progress_chain();
   }
 
   void parse_other() {
@@ -1753,7 +1753,7 @@ class Indexer : public td::actor::Actor {
       + std::string("\tpadding:\t") + std::to_string(seqno_padding_) + std::string("\t")
       << std::flush;
   }
-  
+
   void display_progress_chain() {
     display_progress();
     delay_action([this]() {
