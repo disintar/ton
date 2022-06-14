@@ -1695,25 +1695,31 @@ class Indexer : public td::actor::Actor {
           block_file << answer.dump(4);
           block_file.close();
         }
-        on_block_parsed(block->block_id().seqno());
       }
 
+<<<<<<< HEAD
 //      if (is_first) {
 //        td::actor::send_closure(SelfId, &Indexer::parse_other);
 //      }
 
+=======
+      if (is_first) {
+        td::actor::send_closure(SelfId, &Indexer::parse_other);
+      }
+      on_block_parsed();
+>>>>>>> parent of 6a357b6 (temp)
     });
 
     td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
                                   std::move(P));
   }
 
-  void on_block_parsed(unsigned seqno) {
+  void on_block_parsed() {
     ++seqno_progress_;
     const auto whole_range = seqno_last_ - seqno_first_ + 1;
     const double progress_ratio = (double)seqno_progress_ / whole_range;
-    const int percentage = (int)(progress_ratio * 100);
-    LOG(INFO) << std::string("Progress: ") + std::to_string(percentage) + std::string("%") + std::string(" seqno: ") + std::to_string(seqno);
+    const int percentage = progress_ratio * 100;
+    LOG(INFO) << std::string("Progress: ") + std::to_string(percentage) + std::string("%");
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys) {
