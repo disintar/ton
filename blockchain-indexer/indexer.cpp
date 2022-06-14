@@ -909,8 +909,10 @@ class Indexer : public td::actor::Actor {
   BlockSeqno seqno_first_ = 0;
   BlockSeqno seqno_last_ = 0;
   int seqno_padding_ = 0;
+  int state_padding_ = 0;
   // store timestamps of parsed blocks for speed measuring
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_blocks_timepoints_;
+  std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_states_timepoints_;
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
   td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
   td::Status create_validator_options() {
@@ -1174,7 +1176,7 @@ class Indexer : public td::actor::Actor {
         auto block = R.move_as_ok();
         CHECK(block.not_null());
 
-        increase_padding();
+        increase_seqno_padding();
 
         auto blkid = block->block_id();
         LOG(DEBUG) << "Parse: " << blkid.to_str() << " is_first: " << is_first;
@@ -1703,7 +1705,7 @@ class Indexer : public td::actor::Actor {
           block_file << answer.dump(4);
           block_file.close();
         }
-        decrease_padding();
+        decrease_seqno_padding();
       }
 
       if (is_first) {
@@ -1715,7 +1717,7 @@ class Indexer : public td::actor::Actor {
                                   std::move(P));
   }
 
-  void increase_padding() {
+  void increase_seqno_padding() {
     static std::mutex mtx;
     std::unique_lock<std::mutex> lock(mtx);
 
@@ -1724,20 +1726,42 @@ class Indexer : public td::actor::Actor {
     display_progress();
   }
 
-  void decrease_padding() {
+  void decrease_seqno_padding() {
     static std::mutex mtx;
     std::unique_lock<std::mutex> lock(mtx);
 
     if (seqno_padding_ == 0) {
-      LOG(ERROR) << "decreasing padding but it's zero";
+      LOG(ERROR) << "decreasing seqno padding but it's zero";
     }
     --seqno_padding_;
+    display_progress();
+  }
+
+  void increase_state_padding() {
+    static std::mutex mtx;
+    std::unique_lock<std::mutex> lock(mtx);
+
+    parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
+    ++state_padding_;
+    display_progress();
+  }
+
+  void decrease_state_padding() {
+    static std::mutex mtx;
+    std::unique_lock<std::mutex> lock(mtx);
+
+    if (seqno_padding_ == 0) {
+      LOG(ERROR) << "decreasing state padding but it's zero";
+    }
+    --state_padding_;
     display_progress();
   }
 
   void display_progress() {
     static std::mutex mtx;
     std::unique_lock<std::mutex> lock(mtx);
+
+    ///TODO: there should be some standard algorithm to do this
     while (!parsed_blocks_timepoints_.empty()) {
       const auto timepoint = parsed_blocks_timepoints_.front();
       if (std::chrono::high_resolution_clock::now() - timepoint < std::chrono::seconds(1)) {
@@ -1745,15 +1769,24 @@ class Indexer : public td::actor::Actor {
       }
       parsed_blocks_timepoints_.pop();
     }
+    while (!parsed_states_timepoints_.empty()) {
+      const auto timepoint = parsed_states_timepoints_.front();
+      if (std::chrono::high_resolution_clock::now() - timepoint < std::chrono::seconds(1)) {
+        break;
+      }
+      parsed_states_timepoints_.pop();
+    }
 
     std::cout << std::string("\r")
       + std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size())
       + std::string("\tpadding:\t") + std::to_string(seqno_padding_) + std::string("\t")
+      + std::string("speed(states/s):\t") + std::to_string(parsed_states_timepoints_.size())
+      + std::string("\tpadding:\t") + std::to_string(state_padding_) + std::string("\t")
       << std::flush;
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys) {
-    auto P_st = td::PromiseCreator::lambda([SelfId = actor_id(this), api_key = api_key_, api_host = api_path_,
+    auto P_st = td::PromiseCreator::lambda([this, SelfId = actor_id(this), api_key = api_key_, api_host = api_path_,
                                             accounts_keys =
                                                 std::move(accounts_keys)](td::Result<td::Ref<ShardState>> R) {
       if (R.is_error()) {
@@ -1954,9 +1987,11 @@ class Indexer : public td::actor::Actor {
           block_file << answer.dump(4);
           block_file.close();
         }
+        decrease_state_padding();
       }
     });
 
+    increase_state_padding();
     td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_shard_state_from_db, handle,
                                   std::move(P_st));
   }
