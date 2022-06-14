@@ -1698,9 +1698,9 @@ class Indexer : public td::actor::Actor {
         on_block_parsed(block->block_id().seqno());
       }
 
-      if (is_first) {
-        td::actor::send_closure(SelfId, &Indexer::parse_other);
-      }
+//      if (is_first) {
+//        td::actor::send_closure(SelfId, &Indexer::parse_other);
+//      }
 
     });
 
