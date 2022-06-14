@@ -904,6 +904,7 @@ class Indexer : public td::actor::Actor {
   std::string global_config_ /*; = db_root_ + "/global-config.json"*/;
   BlockSeqno seqno_first_ = 0;
   BlockSeqno seqno_last_ = 0;
+  std::atomic<std::size_t> seqno_progress_ = 0; // amount of already processed seqnos
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
   td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
   td::Status create_validator_options() {
@@ -1158,7 +1159,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle, bool first = false) {
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), is_first = first, api_key = api_key_,
+    auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this), is_first = first, api_key = api_key_,
                                          api_host = api_path_,
                                          block_handle = handle](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
@@ -1699,10 +1700,19 @@ class Indexer : public td::actor::Actor {
       if (is_first) {
         td::actor::send_closure(SelfId, &Indexer::parse_other);
       }
+      on_block_parsed();
     });
 
     td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
                                   std::move(P));
+  }
+
+  void on_block_parsed() {
+    ++seqno_progress_;
+    const auto whole_range = seqno_last_ - seqno_first_ + 1;
+    const double progress_ratio = (double)seqno_progress_ / whole_range;
+    const int percentage = progress_ratio * 100;
+    LOG(INFO) << std::string("Progress: ") + std::to_string(percentage) + std::string("%");
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys) {
