@@ -1093,6 +1093,8 @@ class Indexer : public td::actor::Actor {
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::install_callback,
                             std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
     LOG(DEBUG) << "Callback installed";
+
+    display_progress();
   }
 
   void sync_complete(const BlockHandle &handle) {
@@ -1175,8 +1177,6 @@ class Indexer : public td::actor::Actor {
       } else {
         auto block = R.move_as_ok();
         CHECK(block.not_null());
-
-        increase_seqno_padding();
 
         auto blkid = block->block_id();
         LOG(DEBUG) << "Parse: " << blkid.to_str() << " is_first: " << is_first;
@@ -1713,6 +1713,7 @@ class Indexer : public td::actor::Actor {
       }
     });
 
+    increase_seqno_padding();
     td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
                                   std::move(P));
   }
@@ -1741,7 +1742,7 @@ class Indexer : public td::actor::Actor {
     static std::mutex mtx;
     std::unique_lock<std::mutex> lock(mtx);
 
-    parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
+    parsed_states_timepoints_.emplace(std::chrono::high_resolution_clock::now());
     ++state_padding_;
     display_progress();
   }
