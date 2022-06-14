@@ -1735,6 +1735,8 @@ class Indexer : public td::actor::Actor {
   }
 
   void display_progress() {
+    static std::mutex mtx;
+    std::unique_lock<std::mutex> lock(mtx);
     while (!parsed_blocks_timepoints_.empty()) {
       const auto timepoint = parsed_blocks_timepoints_.front();
       if (std::chrono::high_resolution_clock::now() - timepoint < std::chrono::seconds(1)) {
@@ -1743,9 +1745,8 @@ class Indexer : public td::actor::Actor {
       parsed_blocks_timepoints_.pop();
     }
 
-//    std::cout << std::string("\rPadding: ") + std::to_string(seqno_padding_) + std::string("     "); ///TODO: amount of spaces?
-    LOG(INFO) << std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size())
-      + std::string("\tpadding:\t") + std::to_string(seqno_padding_) + std::string("     ");
+    std::cout << std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size())
+      + std::string("\tpadding:\t") + std::to_string(seqno_padding_) + std::string("        ") << std::flush;
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys) {
