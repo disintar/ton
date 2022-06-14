@@ -1741,7 +1741,7 @@ class Indexer : public td::actor::Actor {
     }
 
 //    std::cout << std::string("\rPadding: ") + std::to_string(seqno_padding_) + std::string("     "); ///TODO: amount of spaces?
-    LOG(DEBUG) << std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size())
+    LOG(INFO) << std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size())
       + std::string("\tpadding:\t") + std::to_string(seqno_padding_) + std::string("     ");
   }
 
