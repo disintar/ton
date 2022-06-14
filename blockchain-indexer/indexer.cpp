@@ -1962,7 +1962,12 @@ class Indexer : public td::actor::Actor {
 }  // namespace ton
 
 int main(int argc, char **argv) {
+
+  std::cout << "cout check 1" << std::endl;
+
   SET_VERBOSITY_LEVEL(verbosity_DEBUG);
+
+  std::cout << "cout check 2" << std::endl;
 
   CHECK(vm::init_op_cp0());
 
