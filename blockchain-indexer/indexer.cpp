@@ -1107,6 +1107,7 @@ class Indexer : public td::actor::Actor {
     if (seqno_last_ != seqno_first_) {
       for (auto seqno = seqno_first_ + 1; seqno <= seqno_last_; ++seqno) {
         auto my_seqno = seqno_first_;
+
         auto P = td::PromiseCreator::lambda([SelfId = actor_id(this),
                                              seqno_first = my_seqno](td::Result<ConstBlockHandle> R) {
           if (R.is_error()) {
