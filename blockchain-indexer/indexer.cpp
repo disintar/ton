@@ -1755,8 +1755,6 @@ class Indexer : public td::actor::Actor {
   }
 
   void display_progress() {
-    std::unique_lock<std::mutex> lock(display_mtx_);
-
     ///TODO: there should be some standard algorithm to do this
     while (!parsed_blocks_timepoints_.empty()) {
       const auto timepoint = parsed_blocks_timepoints_.front();
