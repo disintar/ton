@@ -1793,7 +1793,7 @@ class Indexer : public td::actor::Actor {
       << std::flush;
 
     if (display_initialized_) {
-      if (display_initialized_ && parse_other_padding_ && block_padding_ == 0 && state_padding_ == 0) {
+      if (display_initialized_ && parse_other_padding_ == 0 && block_padding_ == 0 && state_padding_ == 0) {
         finish();
       }
     } else {
