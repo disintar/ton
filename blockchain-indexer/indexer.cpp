@@ -1739,7 +1739,6 @@ class Indexer : public td::actor::Actor {
   void increase_state_padding() {
     std::unique_lock<std::mutex> lock(display_mtx_);
 
-    parsed_states_timepoints_.emplace(std::chrono::high_resolution_clock::now());
     ++state_padding_;
     display_progress();
   }
@@ -1747,6 +1746,7 @@ class Indexer : public td::actor::Actor {
   void decrease_state_padding() {
     std::unique_lock<std::mutex> lock(display_mtx_);
 
+    parsed_states_timepoints_.emplace(std::chrono::high_resolution_clock::now());
     if (seqno_padding_ == 0) {
       LOG(ERROR) << "decreasing state padding but it's zero";
     }
@@ -1772,13 +1772,15 @@ class Indexer : public td::actor::Actor {
     }
 
     // :-)
-    { std::ostringstream oss; std::cout << "\r"; for (auto i = 0; i < 112; ++i) oss << " "; std::cout << oss.str(); }
-    std::cout
-      << std::string("\r")
+    std::ostringstream oss;
+    oss << "\r"; for (auto i = 0; i < 112; ++i) oss << " ";
+    oss << std::string("\r")
         + std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size())
         + std::string("\tpadding:\t") + std::to_string(seqno_padding_) + std::string("\t")
         + std::string("speed(states/s):\t") + std::to_string(parsed_states_timepoints_.size())
-        + std::string("\tpadding:\t") + std::to_string(state_padding_) + std::string("\t")
+        + std::string("\tpadding:\t") + std::to_string(state_padding_) + std::string("\t");
+    std::cout
+      << oss.str()
       << std::flush;
   }
 
