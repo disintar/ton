@@ -1798,7 +1798,7 @@ class Indexer : public td::actor::Actor {
         + std::string("speed(states/s):\t") + std::to_string(parsed_states_timepoints_.size())
         + std::string("\tpadding:\t") + std::to_string(state_padding_) + std::string("\t");
     std::cout
-      << oss.str() << "\ntick\n" <<
+      << oss.str() << "\ntick\n"
       << std::flush;
 
     if (display_initialized_) {
