@@ -913,7 +913,6 @@ class Indexer : public td::actor::Actor {
   std::mutex display_mtx_;
   std::function<void()> on_finish_;
   bool display_initialized_ = false;
-  int parse_other_padding_ = 0;
   // store timestamps of parsed blocks for speed measuring
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_blocks_timepoints_;
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_states_timepoints_;
@@ -1155,7 +1154,6 @@ class Indexer : public td::actor::Actor {
                                 std::move(P));
       }
     }
-    --parse_other_padding_;
   }
 
   void start_parse_shards(unsigned int seqno, unsigned long shard, int workchain, bool is_first = false) {
@@ -1730,7 +1728,6 @@ class Indexer : public td::actor::Actor {
       }
 
       if (is_first) {
-        ++parse_other_padding_;
         td::actor::send_closure(SelfId, &Indexer::parse_other);
       }
     });
@@ -1803,7 +1800,7 @@ class Indexer : public td::actor::Actor {
       << std::flush;
 
     if (display_initialized_) {
-      if (display_initialized_ && parse_other_padding_ == 0 && block_padding_ == 0 && state_padding_ == 0) {
+      if (display_initialized_ && block_padding_ == 0 && state_padding_ == 0) {
 //        finish();
           return false;
       }
