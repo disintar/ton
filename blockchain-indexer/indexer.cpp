@@ -911,6 +911,8 @@ class Indexer : public td::actor::Actor {
   int seqno_padding_ = 0;
   int state_padding_ = 0;
   std::mutex display_mtx_;
+  std::function<void()> on_finish_;
+  bool display_initialized_ = false;
   // store timestamps of parsed blocks for speed measuring
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_blocks_timepoints_;
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_states_timepoints_;
@@ -988,7 +990,9 @@ class Indexer : public td::actor::Actor {
     seqno_last_ = seqno_last;
   }
 
-  void run() {
+  void run(std::function<void()> on_finish) {
+    on_finish_ = std::move(on_finish);
+
     LOG(DEBUG) << "Use db root: " << db_root_;
 
     auto Sr = create_validator_options();
@@ -1720,13 +1724,13 @@ class Indexer : public td::actor::Actor {
   }
 
   void increase_seqno_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_);
+    std::unique_lock<std::mutex> lock(display_mtx_); ///TODO: might cause performance issues
     ++seqno_padding_;
     display_progress();
   }
 
   void decrease_seqno_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_);
+    std::unique_lock<std::mutex> lock(display_mtx_); ///TODO: might cause performance issues
 
     parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
     if (seqno_padding_ == 0) {
@@ -1737,14 +1741,14 @@ class Indexer : public td::actor::Actor {
   }
 
   void increase_state_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_);
+    std::unique_lock<std::mutex> lock(display_mtx_); ///TODO: might cause performance issues
 
     ++state_padding_;
     display_progress();
   }
 
   void decrease_state_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_);
+    std::unique_lock<std::mutex> lock(display_mtx_); ///TODO: might cause performance issues
 
     parsed_states_timepoints_.emplace(std::chrono::high_resolution_clock::now());
     if (seqno_padding_ == 0) {
@@ -1782,6 +1786,14 @@ class Indexer : public td::actor::Actor {
     std::cout
       << oss.str()
       << std::flush;
+
+    if (display_initialized_) {
+      if (display_initialized_ && seqno_padding_ == 0 && state_padding_ == 0) {
+        td::actor::send_closure(actor_id(this), &Indexer::on_finish_);
+      }
+    } else {
+      if (seqno_padding_ != 0 || state_padding != 0) display_initialized_ = true;
+    }
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys) {
@@ -2066,7 +2078,9 @@ int main(int argc, char **argv) {
   td::actor::Scheduler scheduler({threads});
   scheduler.run_in_context([&] { main = td::actor::create_actor<ton::validator::Indexer>("cool"); });
   scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
-  scheduler.run_in_context([&] { td::actor::send_closure(main, &ton::validator::Indexer::run); });
+  scheduler.run_in_context([&] {
+    td::actor::send_closure(main, &ton::validator::Indexer::run, [&](){ scheduler.stop(); });
+  });
   scheduler.run();
   return 0;
 }
