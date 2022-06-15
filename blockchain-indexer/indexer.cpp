@@ -1121,6 +1121,15 @@ class Indexer : public td::actor::Actor {
     ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                             seqno_first_, std::move(P));
+
+    td::actor::send_closure(actor_id(this), &Indexer::display_progress_chain);
+  }
+
+  void display_progress_chain() {
+    display_progress();
+    delay_action([&](){
+      td::actor::send_closure(td::actor::core::actor_id(this), &Indexer::display_progress_chain);
+    }, td::Timestamp::in(1));
   }
 
   void parse_other() {
@@ -1731,7 +1740,7 @@ class Indexer : public td::actor::Actor {
   void increase_block_padding() {
     std::unique_lock<std::mutex> lock(display_mtx_); ///TODO: might cause performance issues
     ++block_padding_;
-    display_progress();
+//    display_progress();
   }
 
   void decrease_block_padding() {
@@ -1742,14 +1751,14 @@ class Indexer : public td::actor::Actor {
       LOG(ERROR) << "decreasing seqno padding but it's zero";
     }
     --block_padding_;
-    display_progress();
+//    display_progress();
   }
 
   void increase_state_padding() {
     std::unique_lock<std::mutex> lock(display_mtx_); ///TODO: might cause performance issues
 
     ++state_padding_;
-    display_progress();
+//    display_progress();
   }
 
   void decrease_state_padding() {
@@ -1760,7 +1769,7 @@ class Indexer : public td::actor::Actor {
       LOG(ERROR) << "decreasing state padding but it's zero";
     }
     --state_padding_;
-    display_progress();
+//    display_progress();
   }
 
   void display_progress() {
@@ -1794,7 +1803,7 @@ class Indexer : public td::actor::Actor {
 
     if (display_initialized_) {
       if (display_initialized_ && parse_other_padding_ == 0 && block_padding_ == 0 && state_padding_ == 0) {
-        finish();
+//        finish();
       }
     } else {
       if (block_padding_ != 0 || state_padding_ != 0) display_initialized_ = true;
