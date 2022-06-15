@@ -1779,7 +1779,7 @@ class Indexer : public td::actor::Actor {
     }
 
     // :-)
-    std::cout << "\r"; for (auto i = 0; i < 60; ++i) std::cout << " ";
+    std::ostringstream oss; std::cout << "\r"; for (auto i = 0; i < 60; ++i) oss << "*"; std::cout << oss.str();
     std::cout
       << std::string("\r")
         + std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size())
