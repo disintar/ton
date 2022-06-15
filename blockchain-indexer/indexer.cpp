@@ -1789,11 +1789,16 @@ class Indexer : public td::actor::Actor {
 
     if (display_initialized_) {
       if (display_initialized_ && seqno_padding_ == 0 && state_padding_ == 0) {
-        td::actor::send_closure(actor_id(this), &Indexer::on_finish_);
+        td::actor::send_closure(actor_id(this), &Indexer::finish);
       }
     } else {
-      if (seqno_padding_ != 0 || state_padding != 0) display_initialized_ = true;
+      if (seqno_padding_ != 0 || state_padding_ != 0) display_initialized_ = true;
     }
+  }
+
+  void finish() {
+    on_finish_();
+    std::cout << "\nDone!\n" << std::flush;
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys) {
