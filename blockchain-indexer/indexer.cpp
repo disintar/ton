@@ -36,7 +36,11 @@
 #include "tuple"
 #include "vm/boc.h"
 #include "crypto/block/mc-config.h"
+#include "delay.h"
 #include "HTTPRequest.hpp"
+#include <algorithm>
+#include <queue>
+#include <chrono>
 
 // TODO: use td/utils/json
 // TODO: use tlb auto deserializer to json (PrettyPrintJson)
@@ -901,6 +905,14 @@ class Indexer : public td::actor::Actor {
   std::string global_config_ /*; = db_root_ + "/global-config.json"*/;
   BlockSeqno seqno_first_ = 0;
   BlockSeqno seqno_last_ = 0;
+  int block_padding_ = 0;
+  int state_padding_ = 0;
+  std::mutex display_mtx_;
+  std::function<void()> on_finish_;
+  bool display_initialized_ = false;
+  // store timestamps of parsed blocks for speed measuring
+  std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_blocks_timepoints_;
+  std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_states_timepoints_;
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
   td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
   td::Status create_validator_options() {
@@ -975,7 +987,9 @@ class Indexer : public td::actor::Actor {
     seqno_last_ = seqno_last;
   }
 
-  void run() {
+  void run(std::function<void()> on_finish) {
+    on_finish_ = std::move(on_finish);
+
     LOG(DEBUG) << "Use db root: " << db_root_;
 
     auto Sr = create_validator_options();
@@ -1081,11 +1095,11 @@ class Indexer : public td::actor::Actor {
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::install_callback,
                             std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
     LOG(DEBUG) << "Callback installed";
+
+    display_progress();
   }
 
   void sync_complete(const BlockHandle &handle) {
-    // i in [seqno_first_; seqno_last_]
-
     // separate first parse seqno to prevent WC shard seqno leak
     auto P = td::PromiseCreator::lambda(
         [SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
@@ -1098,10 +1112,22 @@ class Indexer : public td::actor::Actor {
           }
         });
 
+    increase_block_padding();
+
     ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                             seqno_first_, std::move(P));
+
+
   }
+
+  ///TODO: disgusting, but delay_action chain doesnt work
+//  void display_progress_loop() {
+//    while (true) {
+//      display_progress()
+//      std::this_thread::sleep_for(std::chrono::milliseconds(250));
+//    }
+//  }
 
   void parse_other() {
     if (seqno_last_ != seqno_first_) {
@@ -1118,6 +1144,8 @@ class Indexer : public td::actor::Actor {
             td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
           }
         });
+
+        increase_block_padding();
 
         ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
         td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
@@ -1141,6 +1169,8 @@ class Indexer : public td::actor::Actor {
       }
     });
 
+    increase_block_padding();
+
     std::tuple<int, int, int> data = {seqno, shard, workchain};
 
     if (parsed_shards_.find(data) != parsed_shards_.end()) {
@@ -1156,7 +1186,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle, bool first = false) {
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), is_first = first, api_key = api_key_,
+    auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this), is_first = first, api_key = api_key_,
                                          api_host = api_path_,
                                          block_handle = handle](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
@@ -1692,19 +1722,99 @@ class Indexer : public td::actor::Actor {
           block_file << answer.dump(4);
           block_file.close();
         }
+        decrease_block_padding();
       }
 
       if (is_first) {
         td::actor::send_closure(SelfId, &Indexer::parse_other);
       }
     });
-
     td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
                                   std::move(P));
   }
 
+  void increase_block_padding() {
+    std::unique_lock<std::mutex> lock(display_mtx_); ///TODO: might cause performance issues
+    ++block_padding_;
+    display_progress();
+  }
+
+  void decrease_block_padding() {
+    std::unique_lock<std::mutex> lock(display_mtx_); ///TODO: might cause performance issues
+
+    parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
+    if (block_padding_ == 0) {
+      LOG(ERROR) << "decreasing seqno padding but it's zero";
+    }
+    --block_padding_;
+    display_progress();
+  }
+
+  void increase_state_padding() {
+    std::unique_lock<std::mutex> lock(display_mtx_); ///TODO: might cause performance issues
+
+    ++state_padding_;
+    display_progress();
+  }
+
+  void decrease_state_padding() {
+    std::unique_lock<std::mutex> lock(display_mtx_); ///TODO: might cause performance issues
+
+    parsed_states_timepoints_.emplace(std::chrono::high_resolution_clock::now());
+    if (block_padding_ == 0) {
+      LOG(ERROR) << "decreasing state padding but it's zero";
+    }
+    --state_padding_;
+    display_progress();
+  }
+
+  bool display_progress() {
+    ///TODO: there should be some standard algorithm to do this
+    while (!parsed_blocks_timepoints_.empty()) {
+      const auto timepoint = parsed_blocks_timepoints_.front();
+      if (std::chrono::high_resolution_clock::now() - timepoint < std::chrono::seconds(1)) {
+        break;
+      }
+      parsed_blocks_timepoints_.pop();
+    }
+    while (!parsed_states_timepoints_.empty()) {
+      const auto timepoint = parsed_states_timepoints_.front();
+      if (std::chrono::high_resolution_clock::now() - timepoint < std::chrono::seconds(1)) {
+        break;
+      }
+      parsed_states_timepoints_.pop();
+    }
+
+    // :-)
+    std::ostringstream oss;
+    oss << "\r"; for (auto i = 0; i < 112; ++i) oss << " ";
+    oss << std::string("\r")
+        + std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size())
+        + std::string("\tpadding:\t") + std::to_string(block_padding_) + std::string("\t")
+        + std::string("speed(states/s):\t") + std::to_string(parsed_states_timepoints_.size())
+        + std::string("\tpadding:\t") + std::to_string(state_padding_) + std::string("\t");
+    std::cout
+      << oss.str()
+      << std::flush;
+
+    if (display_initialized_) {
+      if (display_initialized_ && block_padding_ == 0 && state_padding_ == 0) {
+//        finish();
+          return false;
+      }
+    } else {
+      if (block_padding_ != 0 || state_padding_ != 0) display_initialized_ = true;
+    }
+    return true;
+  }
+
+  void finish() {
+    LOG(INFO) << "Finishing...";
+    on_finish_();
+  }
+
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys) {
-    auto P_st = td::PromiseCreator::lambda([SelfId = actor_id(this), api_key = api_key_, api_host = api_path_,
+    auto P_st = td::PromiseCreator::lambda([this, SelfId = actor_id(this), api_key = api_key_, api_host = api_path_,
                                             accounts_keys =
                                                 std::move(accounts_keys)](td::Result<td::Ref<ShardState>> R) {
       if (R.is_error()) {
@@ -1905,9 +2015,11 @@ class Indexer : public td::actor::Actor {
           block_file << answer.dump(4);
           block_file.close();
         }
+        decrease_state_padding();
       }
     });
 
+    increase_state_padding();
     td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_shard_state_from_db, handle,
                                   std::move(P_st));
   }
@@ -1916,11 +2028,11 @@ class Indexer : public td::actor::Actor {
 }  // namespace ton
 
 int main(int argc, char **argv) {
+
   SET_VERBOSITY_LEVEL(verbosity_DEBUG);
 
-  LOG(DEBUG) << "Let's rock!";
-
   CHECK(vm::init_op_cp0());
+  std::cout << "Metrics:" << std::endl;
 
   td::actor::ActorOwn<ton::validator::Indexer> main;
 
@@ -1932,6 +2044,11 @@ int main(int argc, char **argv) {
     sb << p;
     std::cout << sb.as_cslice().c_str();
     std::exit(2);
+  });
+  p.add_checked_option('v', "verbosity", "set verbosity level", [&](td::Slice arg) {
+    int verbosity = td::to_integer<int>(arg);
+    SET_VERBOSITY_LEVEL(VERBOSITY_NAME(FATAL) + verbosity);
+    return (verbosity >= 0 && verbosity <= 9) ? td::Status::OK() : td::Status::Error("verbosity must be 0..9");
   });
   p.add_checked_option('u', "user", "change user", [&](td::Slice user) { return td::change_user(user.str()); });
   p.add_option('D', "db", "root for dbs", [&](td::Slice fname) {
@@ -1978,7 +2095,9 @@ int main(int argc, char **argv) {
   td::actor::Scheduler scheduler({threads});
   scheduler.run_in_context([&] { main = td::actor::create_actor<ton::validator::Indexer>("cool"); });
   scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
-  scheduler.run_in_context([&] { td::actor::send_closure(main, &ton::validator::Indexer::run); });
+  scheduler.run_in_context([&] {
+    td::actor::send_closure(main, &ton::validator::Indexer::run, [&](){ scheduler.stop(); });
+  });
   scheduler.run();
   return 0;
 }
