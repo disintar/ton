@@ -1127,8 +1127,8 @@ class Indexer : public td::actor::Actor {
 
   void display_progress_chain() {
     display_progress();
-    delay_action([&](){
-      td::actor::send_closure(td::actor::core::actor_id(this), &Indexer::display_progress_chain);
+    delay_action([SelfId = actor_id(this)](){
+      td::actor::send_closure(SelfId, &Indexer::display_progress_chain);
     }, td::Timestamp::in(1));
   }
 
