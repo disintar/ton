@@ -908,7 +908,7 @@ class Indexer : public td::actor::Actor {
   std::string global_config_ /*; = db_root_ + "/global-config.json"*/;
   BlockSeqno seqno_first_ = 0;
   BlockSeqno seqno_last_ = 0;
-  int seqno_padding_ = 0;
+  int block_padding_ = 0;
   int state_padding_ = 0;
   std::mutex display_mtx_;
   std::function<void()> on_finish_;
@@ -1103,8 +1103,6 @@ class Indexer : public td::actor::Actor {
   }
 
   void sync_complete(const BlockHandle &handle) {
-    // i in [seqno_first_; seqno_last_]
-
     // separate first parse seqno to prevent WC shard seqno leak
     auto P = td::PromiseCreator::lambda(
         [SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
@@ -1116,6 +1114,8 @@ class Indexer : public td::actor::Actor {
             td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
           }
         });
+
+    increase_block_padding();
 
     ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
@@ -1136,6 +1136,8 @@ class Indexer : public td::actor::Actor {
             td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
           }
         });
+
+        increase_block_padding();
 
         ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
         td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
@@ -1158,6 +1160,8 @@ class Indexer : public td::actor::Actor {
         td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, first);
       }
     });
+
+    increase_block_padding();
 
     std::tuple<int, int, int> data = {seqno, shard, workchain};
 
@@ -1710,33 +1714,31 @@ class Indexer : public td::actor::Actor {
           block_file << answer.dump(4);
           block_file.close();
         }
-        decrease_seqno_padding();
+        decrease_block_padding();
       }
 
       if (is_first) {
         td::actor::send_closure(SelfId, &Indexer::parse_other);
       }
     });
-
-    increase_seqno_padding();
     td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
                                   std::move(P));
   }
 
-  void increase_seqno_padding() {
+  void increase_block_padding() {
     std::unique_lock<std::mutex> lock(display_mtx_); ///TODO: might cause performance issues
-    ++seqno_padding_;
+    ++block_padding_;
     display_progress();
   }
 
-  void decrease_seqno_padding() {
+  void decrease_block_padding() {
     std::unique_lock<std::mutex> lock(display_mtx_); ///TODO: might cause performance issues
 
     parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
-    if (seqno_padding_ == 0) {
+    if (block_padding_ == 0) {
       LOG(ERROR) << "decreasing seqno padding but it's zero";
     }
-    --seqno_padding_;
+    --block_padding_;
     display_progress();
   }
 
@@ -1751,7 +1753,7 @@ class Indexer : public td::actor::Actor {
     std::unique_lock<std::mutex> lock(display_mtx_); ///TODO: might cause performance issues
 
     parsed_states_timepoints_.emplace(std::chrono::high_resolution_clock::now());
-    if (seqno_padding_ == 0) {
+    if (block_padding_ == 0) {
       LOG(ERROR) << "decreasing state padding but it's zero";
     }
     --state_padding_;
@@ -1780,7 +1782,7 @@ class Indexer : public td::actor::Actor {
     oss << "\r"; for (auto i = 0; i < 112; ++i) oss << " ";
     oss << std::string("\r")
         + std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size())
-        + std::string("\tpadding:\t") + std::to_string(seqno_padding_) + std::string("\t")
+        + std::string("\tpadding:\t") + std::to_string(block_padding_) + std::string("\t")
         + std::string("speed(states/s):\t") + std::to_string(parsed_states_timepoints_.size())
         + std::string("\tpadding:\t") + std::to_string(state_padding_) + std::string("\t");
     std::cout
@@ -1788,16 +1790,16 @@ class Indexer : public td::actor::Actor {
       << std::flush;
 
     if (display_initialized_) {
-      if (display_initialized_ && seqno_padding_ == 0 && state_padding_ == 0) {
+      if (display_initialized_ && block_padding_ == 0 && state_padding_ == 0) {
         finish();
       }
     } else {
-      if (seqno_padding_ != 0 || state_padding_ != 0) display_initialized_ = true;
+      if (block_padding_ != 0 || state_padding_ != 0) display_initialized_ = true;
     }
   }
 
   void finish() {
-    std::cout << "\nFinishing...!\n" << std::flush;
+    LOG(INFO) << "Finishing...";
     on_finish_();
   }
 
