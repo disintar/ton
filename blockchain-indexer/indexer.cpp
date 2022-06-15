@@ -910,6 +910,7 @@ class Indexer : public td::actor::Actor {
   BlockSeqno seqno_last_ = 0;
   int seqno_padding_ = 0;
   int state_padding_ = 0;
+  std::mutex display_mtx_;
   // store timestamps of parsed blocks for speed measuring
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_blocks_timepoints_;
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_states_timepoints_;
@@ -1719,16 +1720,13 @@ class Indexer : public td::actor::Actor {
   }
 
   void increase_seqno_padding() {
-    static std::mutex mtx;
-    std::unique_lock<std::mutex> lock(mtx);
-
+    std::unique_lock<std::mutex> lock(display_mtx_);
     ++seqno_padding_;
     display_progress();
   }
 
   void decrease_seqno_padding() {
-    static std::mutex mtx;
-    std::unique_lock<std::mutex> lock(mtx);
+    std::unique_lock<std::mutex> lock(display_mtx_);
 
     parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
     if (seqno_padding_ == 0) {
@@ -1739,8 +1737,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void increase_state_padding() {
-    static std::mutex mtx;
-    std::unique_lock<std::mutex> lock(mtx);
+    std::unique_lock<std::mutex> lock(display_mtx_);
 
     parsed_states_timepoints_.emplace(std::chrono::high_resolution_clock::now());
     ++state_padding_;
@@ -1748,8 +1745,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void decrease_state_padding() {
-    static std::mutex mtx;
-    std::unique_lock<std::mutex> lock(mtx);
+    std::unique_lock<std::mutex> lock(display_mtx_);
 
     if (seqno_padding_ == 0) {
       LOG(ERROR) << "decreasing state padding but it's zero";
@@ -1759,8 +1755,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void display_progress() {
-    static std::mutex mtx;
-    std::unique_lock<std::mutex> lock(mtx);
+    std::unique_lock<std::mutex> lock(display_mtx_);
 
     ///TODO: there should be some standard algorithm to do this
     while (!parsed_blocks_timepoints_.empty()) {
