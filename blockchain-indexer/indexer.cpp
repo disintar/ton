@@ -1121,7 +1121,17 @@ class Indexer : public td::actor::Actor {
     ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                             seqno_first_, std::move(P));
+
+
   }
+
+  ///TODO: disgusting, but delay_action chain doesnt work
+//  void display_progress_loop() {
+//    while (true) {
+//      display_progress()
+//      std::this_thread::sleep_for(std::chrono::milliseconds(250));
+//    }
+//  }
 
   void parse_other() {
     if (seqno_last_ != seqno_first_) {
@@ -1763,7 +1773,7 @@ class Indexer : public td::actor::Actor {
     display_progress();
   }
 
-  void display_progress() {
+  bool display_progress() {
     ///TODO: there should be some standard algorithm to do this
     while (!parsed_blocks_timepoints_.empty()) {
       const auto timepoint = parsed_blocks_timepoints_.front();
@@ -1789,16 +1799,18 @@ class Indexer : public td::actor::Actor {
         + std::string("speed(states/s):\t") + std::to_string(parsed_states_timepoints_.size())
         + std::string("\tpadding:\t") + std::to_string(state_padding_) + std::string("\t");
     std::cout
-      << oss.str() << "\ntick\n"
+      << oss.str()
       << std::flush;
 
     if (display_initialized_) {
       if (display_initialized_ && parse_other_padding_ == 0 && block_padding_ == 0 && state_padding_ == 0) {
 //        finish();
+          return false;
       }
     } else {
       if (block_padding_ != 0 || state_padding_ != 0) display_initialized_ = true;
     }
+    return true;
   }
 
   void finish() {
