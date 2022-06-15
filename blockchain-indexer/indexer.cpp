@@ -218,6 +218,7 @@ json parse_state_init(vm::CellSlice state_init) {
   if ((int)state_init_parsed.code->prefetch_ulong(1) == 1) {
     auto code = state_init_parsed.code->prefetch_ref();
 
+    answer["code_hash"] = code->get_hash().to_hex();
     answer["code"] = dump_as_boc(code);
   }
 
@@ -1117,17 +1118,15 @@ class Indexer : public td::actor::Actor {
     ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                             seqno_first_, std::move(P));
-
-
   }
 
   ///TODO: disgusting, but delay_action chain doesnt work
-//  void display_progress_loop() {
-//    while (true) {
-//      display_progress()
-//      std::this_thread::sleep_for(std::chrono::milliseconds(250));
-//    }
-//  }
+  //  void display_progress_loop() {
+  //    while (true) {
+  //      display_progress()
+  //      std::this_thread::sleep_for(std::chrono::milliseconds(250));
+  //    }
+  //  }
 
   void parse_other() {
     if (seqno_last_ != seqno_first_) {
@@ -1734,13 +1733,13 @@ class Indexer : public td::actor::Actor {
   }
 
   void increase_block_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_); ///TODO: might cause performance issues
+    std::unique_lock<std::mutex> lock(display_mtx_);  ///TODO: might cause performance issues
     ++block_padding_;
     display_progress();
   }
 
   void decrease_block_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_); ///TODO: might cause performance issues
+    std::unique_lock<std::mutex> lock(display_mtx_);  ///TODO: might cause performance issues
 
     parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
     if (block_padding_ == 0) {
@@ -1751,14 +1750,14 @@ class Indexer : public td::actor::Actor {
   }
 
   void increase_state_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_); ///TODO: might cause performance issues
+    std::unique_lock<std::mutex> lock(display_mtx_);  ///TODO: might cause performance issues
 
     ++state_padding_;
     display_progress();
   }
 
   void decrease_state_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_); ///TODO: might cause performance issues
+    std::unique_lock<std::mutex> lock(display_mtx_);  ///TODO: might cause performance issues
 
     parsed_states_timepoints_.emplace(std::chrono::high_resolution_clock::now());
     if (block_padding_ == 0) {
@@ -1787,23 +1786,23 @@ class Indexer : public td::actor::Actor {
 
     // :-)
     std::ostringstream oss;
-    oss << "\r"; for (auto i = 0; i < 112; ++i) oss << " ";
-    oss << std::string("\r")
-        + std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size())
-        + std::string("\tpadding:\t") + std::to_string(block_padding_) + std::string("\t")
-        + std::string("speed(states/s):\t") + std::to_string(parsed_states_timepoints_.size())
-        + std::string("\tpadding:\t") + std::to_string(state_padding_) + std::string("\t");
-    std::cout
-      << oss.str()
-      << std::flush;
+    oss << "\r";
+    for (auto i = 0; i < 112; ++i)
+      oss << " ";
+    oss << std::string("\r") + std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size()) +
+               std::string("\tpadding:\t") + std::to_string(block_padding_) + std::string("\t") +
+               std::string("speed(states/s):\t") + std::to_string(parsed_states_timepoints_.size()) +
+               std::string("\tpadding:\t") + std::to_string(state_padding_) + std::string("\t");
+    std::cout << oss.str() << std::flush;
 
     if (display_initialized_) {
       if (display_initialized_ && block_padding_ == 0 && state_padding_ == 0) {
-//        finish();
-          return false;
+        //        finish();
+        return false;
       }
     } else {
-      if (block_padding_ != 0 || state_padding_ != 0) display_initialized_ = true;
+      if (block_padding_ != 0 || state_padding_ != 0)
+        display_initialized_ = true;
     }
     return true;
   }
@@ -2028,7 +2027,6 @@ class Indexer : public td::actor::Actor {
 }  // namespace ton
 
 int main(int argc, char **argv) {
-
   SET_VERBOSITY_LEVEL(verbosity_DEBUG);
 
   CHECK(vm::init_op_cp0());
@@ -2095,9 +2093,8 @@ int main(int argc, char **argv) {
   td::actor::Scheduler scheduler({threads});
   scheduler.run_in_context([&] { main = td::actor::create_actor<ton::validator::Indexer>("cool"); });
   scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
-  scheduler.run_in_context([&] {
-    td::actor::send_closure(main, &ton::validator::Indexer::run, [&](){ scheduler.stop(); });
-  });
+  scheduler.run_in_context(
+      [&] { td::actor::send_closure(main, &ton::validator::Indexer::run, [&]() { scheduler.stop(); }); });
   scheduler.run();
   return 0;
 }
