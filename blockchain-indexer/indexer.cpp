@@ -1715,8 +1715,8 @@ class Indexer : public td::actor::Actor {
           request.send("POST", body, {{"Content-Type", "application/json"}, {"Authorization", "Bearer " + api_key}});
         } else {
           std::ofstream block_file;
-          block_file.open("block_" + std::to_string(workchain) + ":" + std::to_string(blkid.seqno()) + ":" +
-                          std::to_string(blkid.id.shard) + ".json");
+          block_file.open("block_" + std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" +
+                          std::to_string(blkid.seqno()) + ".json");
 
           block_file << answer.dump(4);
           block_file.close();
