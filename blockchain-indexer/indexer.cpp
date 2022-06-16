@@ -1224,8 +1224,14 @@ class Indexer : public td::actor::Actor {
         block::gen::BlockInfo::Record info;
         block::gen::BlockExtra::Record extra;
 
-        CHECK(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra) &&
-              tlb::unpack_cell(blk.info, info));
+        try {
+          CHECK(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra) &&
+                tlb::unpack_cell(blk.info, info));
+        } catch (...) {
+            LOG(ERROR) << "Error in block: " << blkid.to_str();
+            return;
+//            throw;
+        }
         /* tlb
           block#11ef55aa global_id:int32
           info:^BlockInfo value_flow:^ValueFlow
