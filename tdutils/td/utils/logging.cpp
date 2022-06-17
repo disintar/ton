@@ -272,23 +272,12 @@ void set_log_fatal_error_callback(OnFatalErrorCallback callback) {
   on_fatal_error_callback = callback;
 }
 
-//void process_fatal_error(CSlice message) {
-//  auto callback = on_fatal_error_callback;
-//  if (callback) {
-//    callback(message);
-//  }
-//
-//  std::abort();
-//}
-
 void process_fatal_error(CSlice message) {
   auto callback = on_fatal_error_callback;
-  // Todo: wtf we need to std::abort if callback installed?
   if (callback) {
     callback(message);
-  } else {
-    std::abort();
   }
+  std::abort();
 }
 
 namespace {

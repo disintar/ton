@@ -281,7 +281,8 @@ json parse_message(Ref<vm::Cell> message_any) {
     answer["fwd_fee"] = block::tlb::t_Grams.as_integer(msg.fwd_fee.write())->to_dec_string();
     answer["created_lt"] = msg.created_lt;
     answer["created_at"] = msg.created_at;
-  } else if (tag == block::gen::CommonMsgInfo::ext_in_msg_info) {
+  }
+  else if (tag == block::gen::CommonMsgInfo::ext_in_msg_info) {
     answer["type"] = "ext_in_msg_info";
     block::gen::CommonMsgInfo::Record_ext_in_msg_info msg;
     CHECK(tlb::unpack(in_msg_info, msg));
@@ -294,7 +295,8 @@ json parse_message(Ref<vm::Cell> message_any) {
     auto dest = msg.dest.write();
     answer["dest"] = parse_address(dest);
     answer["import_fee"] = block::tlb::t_Grams.as_integer(msg.import_fee.write())->to_dec_string();
-  } else if (tag == block::gen::CommonMsgInfo::ext_out_msg_info) {
+  }
+  else if (tag == block::gen::CommonMsgInfo::ext_out_msg_info) {
     answer["type"] = "ext_out_msg_info";
 
     block::gen::CommonMsgInfo::Record_ext_out_msg_info msg;
@@ -304,7 +306,8 @@ json parse_message(Ref<vm::Cell> message_any) {
     answer["dest"] = parse_address(msg.dest.write());
     answer["created_lt"] = msg.created_lt;
     answer["created_at"] = msg.created_at;
-  } else {
+  }
+  else {
     LOG(ERROR) << "Not covered";
     answer = {{"type", "Unknown"}};
   }
@@ -1226,7 +1229,7 @@ class Indexer : public td::actor::Actor {
 
         if (!(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra) &&
               tlb::unpack_cell(blk.info, info))) {
-          LOG(ERROR) << "Error in block: " << blkid.to_str();
+          LOG(FATAL) << "Error in block: " << blkid.to_str();
           return;
         }
 
@@ -2098,7 +2101,7 @@ int main(int argc, char **argv) {
   scheduler.run_in_context([&] { main = td::actor::create_actor<ton::validator::Indexer>("cool"); });
   scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
   scheduler.run_in_context(
-      [&] { td::actor::send_closure(main, &ton::validator::Indexer::run, [&]() { scheduler.stop(); }); });
+      [&] { td::actor::send_closure(main, &ton::validator::Indexer::run, [&]() { scheduler.stop();}); });
   scheduler.run();
   return 0;
 }

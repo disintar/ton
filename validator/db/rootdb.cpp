@@ -32,6 +32,8 @@ namespace ton {
 namespace validator {
 
 void RootDb::store_block_data(BlockHandle handle, td::Ref<BlockData> block, td::Promise<td::Unit> promise) {
+  LOG(WARNING) << "Store block: " << block->block_id().to_str();
+
   if (handle->received()) {
     promise.set_value(td::Unit());
     return;
