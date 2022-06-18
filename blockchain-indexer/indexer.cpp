@@ -227,9 +227,9 @@ json parse_state_init(vm::CellSlice state_init) {
 
     std::vector<std::string> library_source_files;
 
-    // via cmake
-    library_source_files.emplace_back("lib/Fift.fif");
-    library_source_files.emplace_back("lib/Disasm.fif");
+    // Todo: load one time in main class & get path from
+    library_source_files.emplace_back("Fift.fif");
+    library_source_files.emplace_back("Disasm.fif");
     std::vector<std::string> source_include_path;
 
     source_include_path.emplace_back(td::realpath(".").move_as_ok());
