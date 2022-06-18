@@ -277,14 +277,13 @@ json parse_state_init(vm::CellSlice state_init) {
     if (res.is_error()) {
       LOG(ERROR) << res.move_as_error();
       res = ctx.add_error_loc(res.move_as_error());
+      answer["code_disasm"] = "disasm error";
+    } else {
+      answer["code_disasm"] = output.str();
     }
-
-    LOG(DEBUG) << "DONE!";
-    LOG(DEBUG) << output.str();
 
     answer["code_hash"] = code->get_hash().to_hex();
     answer["code"] = dump_as_boc(code);
-    answer["code_disasm"] = output.str();
   }
 
   if ((int)state_init_parsed.data->prefetch_ulong(1) == 1) {
