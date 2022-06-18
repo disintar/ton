@@ -219,6 +219,8 @@ void RootDb::get_block_candidate(PublicKey source, BlockIdExt id, FileHash colla
 
 void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
                                td::Promise<td::Ref<ShardState>> promise) {
+  LOG(WARNING) << "Store block state: " << state->get_block_id().to_str();
+
   if (handle->moved_to_archive()) {
     promise.set_value(std::move(state));
     return;
@@ -402,7 +404,8 @@ void RootDb::start_up() {
   state_db_ = td::actor::create_actor<StateDb>("statedb", actor_id(this), root_path_ + "/state/", read_only_);
 
   LOG(DEBUG) << "Start static_files_db";
-  static_files_db_ = td::actor::create_actor<StaticFilesDb>("staticfilesdb", actor_id(this), root_path_ + "/static/", read_only_);
+  static_files_db_ =
+      td::actor::create_actor<StaticFilesDb>("staticfilesdb", actor_id(this), root_path_ + "/static/", read_only_);
 
   LOG(DEBUG) << "Start archive_db";
   archive_db_ = td::actor::create_actor<ArchiveManager>("archive", actor_id(this), root_path_, read_only_);
