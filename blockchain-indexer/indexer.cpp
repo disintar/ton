@@ -41,6 +41,11 @@
 #include <algorithm>
 #include <queue>
 #include <chrono>
+#include "fift/Fift.h"
+#include "fift/words.h"
+#include "fift/utils.h"
+#include "td/utils/port/path.h"
+#include "fift/IntCtx.h"
 
 // TODO: use td/utils/json
 // TODO: use tlb auto deserializer to json (PrettyPrintJson)
@@ -218,8 +223,68 @@ json parse_state_init(vm::CellSlice state_init) {
   if ((int)state_init_parsed.code->prefetch_ulong(1) == 1) {
     auto code = state_init_parsed.code->prefetch_ref();
 
+    fift::Fift::Config config;
+
+    std::vector<std::string> library_source_files;
+
+    // via cmake
+    library_source_files.emplace_back("lib/Fift.fif");
+    library_source_files.emplace_back("lib/Disasm.fif");
+    std::vector<std::string> source_include_path;
+
+    source_include_path.emplace_back(td::realpath(".").move_as_ok());
+
+    config.source_lookup = fift::SourceLookup(std::make_unique<fift::OsFileLoader>());
+    for (auto &path : source_include_path) {
+      config.source_lookup.add_include_path(path);
+    }
+
+    fift::init_words_common(config.dictionary);
+    fift::init_words_vm(config.dictionary);
+    fift::init_words_ton(config.dictionary);
+
+    fift::Fift fift(std::move(config));
+
+    for (auto source : library_source_files) {
+      auto status = fift.interpret_file(source, "");
+      if (status.is_error()) {
+        std::cerr << "Error interpreting preloaded file `" << source << "`: " << status.error().to_string()
+                  << std::endl;
+        std::exit(2);
+      }
+    }
+
+    std::stringstream ss;
+    std::stringstream output;
+    // Disasm
+    ss << "<s stack-disasm std-disasm disasm";
+
+    fift::IntCtx ctx{ss, "stdin", "./", 0};
+
+    vm::CellBuilder cb;
+    cb.store_long(29872, 32);
+    auto code_cell = cb.finalize();
+
+    ctx.stack.push_cell(code);
+
+    ctx.ton_db = &fift.config().ton_db;
+    ctx.source_lookup = &fift.config().source_lookup;
+    ctx.dictionary = ctx.main_dictionary = ctx.context = fift.config().dictionary;
+    ctx.output_stream = &output;
+    ctx.error_stream = fift.config().error_stream;
+
+    auto res = ctx.run(td::make_ref<fift::InterpretCont>());
+    if (res.is_error()) {
+      LOG(ERROR) << res.move_as_error();
+      res = ctx.add_error_loc(res.move_as_error());
+    }
+
+    LOG(DEBUG) << "DONE!";
+    LOG(DEBUG) << output.str();
+
     answer["code_hash"] = code->get_hash().to_hex();
     answer["code"] = dump_as_boc(code);
+    answer["code_disasm"] = output.str();
   }
 
   if ((int)state_init_parsed.data->prefetch_ulong(1) == 1) {
@@ -281,8 +346,7 @@ json parse_message(Ref<vm::Cell> message_any) {
     answer["fwd_fee"] = block::tlb::t_Grams.as_integer(msg.fwd_fee.write())->to_dec_string();
     answer["created_lt"] = msg.created_lt;
     answer["created_at"] = msg.created_at;
-  }
-  else if (tag == block::gen::CommonMsgInfo::ext_in_msg_info) {
+  } else if (tag == block::gen::CommonMsgInfo::ext_in_msg_info) {
     answer["type"] = "ext_in_msg_info";
     block::gen::CommonMsgInfo::Record_ext_in_msg_info msg;
     CHECK(tlb::unpack(in_msg_info, msg));
@@ -295,8 +359,7 @@ json parse_message(Ref<vm::Cell> message_any) {
     auto dest = msg.dest.write();
     answer["dest"] = parse_address(dest);
     answer["import_fee"] = block::tlb::t_Grams.as_integer(msg.import_fee.write())->to_dec_string();
-  }
-  else if (tag == block::gen::CommonMsgInfo::ext_out_msg_info) {
+  } else if (tag == block::gen::CommonMsgInfo::ext_out_msg_info) {
     answer["type"] = "ext_out_msg_info";
 
     block::gen::CommonMsgInfo::Record_ext_out_msg_info msg;
@@ -306,8 +369,7 @@ json parse_message(Ref<vm::Cell> message_any) {
     answer["dest"] = parse_address(msg.dest.write());
     answer["created_lt"] = msg.created_lt;
     answer["created_at"] = msg.created_at;
-  }
-  else {
+  } else {
     LOG(ERROR) << "Not covered";
     answer = {{"type", "Unknown"}};
   }
@@ -2037,6 +2099,7 @@ int main(int argc, char **argv) {
   SET_VERBOSITY_LEVEL(verbosity_DEBUG);
 
   CHECK(vm::init_op_cp0());
+
   std::cout << "Metrics:" << std::endl;
 
   td::actor::ActorOwn<ton::validator::Indexer> main;
@@ -2101,7 +2164,8 @@ int main(int argc, char **argv) {
   scheduler.run_in_context([&] { main = td::actor::create_actor<ton::validator::Indexer>("cool"); });
   scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
   scheduler.run_in_context(
-      [&] { td::actor::send_closure(main, &ton::validator::Indexer::run, [&]() { scheduler.stop();}); });
+      [&] { td::actor::send_closure(main, &ton::validator::Indexer::run, [&]() { scheduler.stop(); }); });
   scheduler.run();
+
   return 0;
 }
