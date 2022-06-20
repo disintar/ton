@@ -274,12 +274,21 @@ json parse_state_init(vm::CellSlice state_init) {
     ctx.error_stream = fift.config().error_stream;
 
     auto res = ctx.run(td::make_ref<fift::InterpretCont>());
-    if (res.is_error()) {
-      LOG(ERROR) << res.move_as_error();
-      res = ctx.add_error_loc(res.move_as_error());
-      answer["code_disasm"] = "disasm error";
-    } else {
-      answer["code_disasm"] = output.str();
+
+    try {
+      auto res = ctx.run(td::make_ref<fift::InterpretCont>());
+      if (res.is_error()) {
+        LOG(ERROR) << res.move_as_error();
+        res = ctx.add_error_loc(res.move_as_error());
+        answer["code_disasm"] = "disasm error";
+      } else {
+        answer["code_disasm"] = output.str();
+      }
+
+      answer["code_hash"] = code->get_hash().to_hex();
+      answer["code"] = dump_as_boc(code);
+    } catch (const std::exception &e) {
+      LOG(ERROR) << "Disasm error: " << e.what();
     }
 
     answer["code_hash"] = code->get_hash().to_hex();
