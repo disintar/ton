@@ -122,7 +122,7 @@ variable @contX  variable @contY  variable @cdict
   dup first @CmdC1 list-member? have-cont? and {
     flush-contY first atom>$ .curop? show-cont-op } {
   dup first @CmdR1 list-member? {
-    flush-cont fi-rst atom>$ dup $len 3 - $| drop .curop? show-ref-op } {
+    flush-cont first atom>$ dup $len 3 - $| drop .curop? show-ref-op } {
   dup first `WHILE eq? have-cont2? and {
     drop "WHILE" "}>DO<{" .curop? show-cont2-op } {
   dup first `IFELSE eq? have-cont2? and {
