@@ -2070,7 +2070,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys) {
-    auto P_st = td::PromiseCreator::lambda([this, SelfId = actor_id(this), accounts_keys = &accounts_keys](
+    auto P_st = td::PromiseCreator::lambda([this, SelfId = actor_id(this), accounts_keys](
                                                td::Result<td::Ref<ShardState>> R) {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
@@ -2169,7 +2169,7 @@ class Indexer : public td::actor::Actor {
 
         std::list<json> accounts_list;
 
-        for (const auto &account : *accounts_keys) {
+        for (const auto &account : accounts_keys) {
           LOG(DEBUG) << "Parse " << account.to_hex();
           auto result = accounts.lookup_extra(account.cbits(), 256);
           auto value = result.first;
