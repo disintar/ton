@@ -1790,6 +1790,10 @@ class Indexer : public td::actor::Actor {
           accounts.push_back(account_block_parsed);
         }
 
+        if (!accounts_keys.empty()) {
+          td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
+        }
+
         answer["BlockExtra"] = {
             {"accounts", accounts},
             {"rand_seed", extra.rand_seed.to_hex()},
@@ -1971,14 +1975,10 @@ class Indexer : public td::actor::Actor {
         block_file.open("block_" + std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" +
                         std::to_string(blkid.seqno()) + ".json");
 
-        if (!accounts_keys.empty()) {
-          td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys, answer.dump(4));
-        } else {
-          block_file << answer.dump(4);
-          block_file.close();
+        block_file << answer.dump();
+        block_file.close();
 
-          decrease_block_padding();
-        }
+        decrease_block_padding();
       }
 
       if (is_first) {
@@ -2069,10 +2069,9 @@ class Indexer : public td::actor::Actor {
     on_finish_();
   }
 
-  void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys,
-                          std::string block_data) {
-    auto P_st = td::PromiseCreator::lambda([this, SelfId = actor_id(this), accounts_keys = std::move(accounts_keys),
-                                            block_data_to_dump = std::move(block_data)](td::Result<td::Ref<ShardState>> R) {
+  void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys) {
+    auto P_st = td::PromiseCreator::lambda([this, SelfId = actor_id(this), accounts_keys = &accounts_keys](
+                                               td::Result<td::Ref<ShardState>> R) {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
@@ -2170,7 +2169,7 @@ class Indexer : public td::actor::Actor {
 
         std::list<json> accounts_list;
 
-        for (const auto &account : accounts_keys) {
+        for (const auto &account : *accounts_keys) {
           LOG(DEBUG) << "Parse " << account.to_hex();
           auto result = accounts.lookup_extra(account.cbits(), 256);
           auto value = result.first;
@@ -2258,17 +2257,11 @@ class Indexer : public td::actor::Actor {
 
         answer["accounts"] = accounts_list;
 
-        std::ofstream state_file;
-        state_file.open("state_" + std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) +
-                        ":" + std::to_string(block_id.id.seqno) + +".json");
-        state_file << answer.dump();
-        state_file.close();
-
         std::ofstream block_file;
-        block_file.open("block_" + std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) +
+        block_file.open("state_" + std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) +
                         ":" + std::to_string(block_id.id.seqno) + +".json");
 
-        block_file << block_data_to_dump;
+        block_file << answer.dump();
         block_file.close();
 
         decrease_state_padding();
