@@ -1,11 +1,12 @@
-library Lists  // List utilities
+library Lists
+ // List utilities
 //
 { hole dup 1 { @ execute } does create } : recursive
 // x x' -- ?  recursively compares two S-expressions
 recursive equal? {
   dup tuple? {
     over tuple? {
-      over count over count over = { // t t' l ?
+      over count over count over = {
         0 { dup 0>= { 2dup [] 3 pick 2 pick [] equal? { 1+ } { drop -1 } cond
             } if } rot times
         nip nip 0>=
@@ -24,7 +25,7 @@ recursive list+ {
 // l l' -- l'' -1 or 0, where l = l' ++ l''
 // Removes prefix from list
 { { dup null? { drop true true } {
-  swap dup null? { 2drop false true } { // l' l
+  swap dup null? { 2drop false true } {
   uncons swap rot uncons -rot equal? { false } {
   2drop false true
   } cond } cond } cond } until
