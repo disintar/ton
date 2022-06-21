@@ -2323,7 +2323,7 @@ int main(int argc, char **argv) {
         } catch (...) {
           return td::Status::Error(ton::ErrorCode::error, "bad value for --threads: not a number");
         }
-        if (v < 1 || v > 256) {
+        if (v < 1 || v > 256000) {
           return td::Status::Error(ton::ErrorCode::error, "bad value for --threads: should be in range [1..256]");
         }
         threads = v;
