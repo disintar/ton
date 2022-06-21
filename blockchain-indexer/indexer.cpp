@@ -1786,7 +1786,7 @@ class Indexer : public td::actor::Actor {
     }
 
     if (!accounts_keys.empty()) {
-      td::actor::send_closure(actor_id(this), &Indexer::got_state_accounts, handle, accounts_keys_ptr);
+      td::actor::send_closure_later(actor_id(this), &Indexer::got_state_accounts, handle, accounts_keys_ptr);
     }
 
     answer["BlockExtra"] = {
@@ -2273,7 +2273,7 @@ class Indexer : public td::actor::Actor {
             LOG(ERROR) << R.move_as_error().to_string();
           } else {
             auto state = R.move_as_ok();
-            td::actor::send_closure(SelfId, &Indexer::got_state, state, accounts_keys);
+            td::actor::send_closure_later(SelfId, &Indexer::got_state, state, accounts_keys);
           }
         });
 
