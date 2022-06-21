@@ -2052,7 +2052,9 @@ class Indexer : public td::actor::Actor {
     oss << "\r";
     for (auto i = 0; i < 112; ++i)
       oss << " ";
-    oss << std::string("\r") + std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size()) +
+    oss << std::string("\r")
+        << actor_id(this).actor_info().get_name().c_str()
+        << std::string(" speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size()) +
                std::string("\tpadding:\t") + std::to_string(block_padding_) + std::string("\t") +
                std::string("speed(states/s):\t") + std::to_string(parsed_states_timepoints_.size()) +
                std::string("\tpadding:\t") + std::to_string(state_padding_) + std::string("\t");
