@@ -2355,6 +2355,8 @@ int main(int argc, char **argv) {
   scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
   scheduler.run_in_context(
       [&] { td::actor::send_closure(main, &ton::validator::Indexer::run, [&]() { scheduler.stop(); }); });
+  scheduler.run_in_context(
+      [&] { td::actor::send_closure(main2, &ton::validator::Indexer::run, [&]() { scheduler.stop(); }); });
   scheduler.run();
 
   return 0;
