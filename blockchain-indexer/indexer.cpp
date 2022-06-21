@@ -1725,8 +1725,9 @@ class Indexer : public td::actor::Actor {
           _ (HashmapAugE 256 AccountBlock CurrencyCollection) = ShardAccountBlocks;
          */
 
-    std::list<json> accounts;
-    std::list<td::Bits256> accounts_keys;
+    std::vector<json> accounts;
+    auto accounts_keys_ptr = std::make_shared<std::vector<td::Bits256>>();
+    auto& accounts_keys = *accounts_keys_ptr;
 
     while (!account_blocks_dict->is_empty()) {
       td::Bits256 last_key;
@@ -1785,7 +1786,7 @@ class Indexer : public td::actor::Actor {
     }
 
     if (!accounts_keys.empty()) {
-      td::actor::send_closure(actor_id(this), &Indexer::got_state_accounts, handle, accounts_keys);
+      td::actor::send_closure(actor_id(this), &Indexer::got_state_accounts, handle, accounts_keys_ptr);
     }
 
     answer["BlockExtra"] = {
@@ -2074,7 +2075,7 @@ class Indexer : public td::actor::Actor {
     on_finish_();
   }
 
-  void got_state(const Ref<ShardState> &state, std::list<td::Bits256> accounts_keys) {
+  void got_state(const Ref<ShardState> &state, const std::shared_ptr<std::vector<td::Bits256>> accounts_keys) {
     auto block_id = state->get_block_id();
     LOG(WARNING) << "Parse state: " << block_id.to_str();
     CHECK(state.not_null());
@@ -2167,7 +2168,7 @@ class Indexer : public td::actor::Actor {
 
     std::list<json> accounts_list;
 
-    for (const auto &account : accounts_keys) {
+    for (const auto &account : *accounts_keys) {
       LOG(DEBUG) << "Parse " << account.to_hex();
       auto result = accounts.lookup_extra(account.cbits(), 256);
       auto value = result.first;
@@ -2265,7 +2266,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle,
-                          const std::list<td::Bits256> &accounts_keys) {
+                          const std::shared_ptr<std::vector<td::Bits256>> accounts_keys) {
     auto P_st = td::PromiseCreator::lambda(
         [this, SelfId = actor_id(this), accounts_keys = accounts_keys](td::Result<td::Ref<ShardState>> R) {
           if (R.is_error()) {
