@@ -2293,6 +2293,7 @@ int main(int argc, char **argv) {
   std::cout << "Metrics:" << std::endl;
 
   td::actor::ActorOwn<ton::validator::Indexer> main;
+  td::actor::ActorOwn<ton::validator::Indexer> main2;
 
   td::OptionParser p;
   p.set_description("blockchain indexer");
@@ -2311,9 +2312,11 @@ int main(int argc, char **argv) {
   p.add_checked_option('u', "user", "change user", [&](td::Slice user) { return td::change_user(user.str()); });
   p.add_option('D', "db", "root for dbs", [&](td::Slice fname) {
     td::actor::send_closure(main, &ton::validator::Indexer::set_db_root, fname.str());
+    td::actor::send_closure(main2, &ton::validator::Indexer::set_db_root, fname.str());
   });
   p.add_option('C', "config", "global config path", [&](td::Slice fname) {
     td::actor::send_closure(main, &ton::validator::Indexer::set_global_config_path, fname.str());
+    td::actor::send_closure(main2, &ton::validator::Indexer::set_global_config_path, fname.str());
   });
   td::uint32 threads = 7;
   p.add_checked_option(
@@ -2336,16 +2339,19 @@ int main(int argc, char **argv) {
     ++pos;
     if (pos >= arg.size()) {
       td::actor::send_closure(main, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_first);
+      td::actor::send_closure(main2, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_first);
       return td::Status::OK();
     }
     TRY_RESULT(seqno_last, td::to_integer_safe<ton::BlockSeqno>(arg.substr(pos, arg.size())));
-    td::actor::send_closure(main, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_last);
+    td::actor::send_closure(main, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_first + (seqno_last - seqno_first) / 2);
+    td::actor::send_closure(main2, &ton::validator::Indexer::set_seqno_range, seqno_first + (seqno_last - seqno_first) / 2, seqno_last);
     return td::Status::OK();
   });
 
   td::actor::set_debug(true);
   td::actor::Scheduler scheduler({threads});
   scheduler.run_in_context([&] { main = td::actor::create_actor<ton::validator::Indexer>("cool"); });
+  scheduler.run_in_context([&] { main2 = td::actor::create_actor<ton::validator::Indexer>("cool2"); });
   scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
   scheduler.run_in_context(
       [&] { td::actor::send_closure(main, &ton::validator::Indexer::run, [&]() { scheduler.stop(); }); });
