@@ -3340,6 +3340,12 @@ void TonlibClient::finish_load_smc(td::unique_ptr<AccountState> smc,
   promise.set_result(get_smc_info(id));
 }
 
+td::Status TonlibClient::do_request(const tonlib_api::disasm& request, td::Promise<object_ptr<std::string>>&& promise) {
+  std::cout << request.code_ << std::endl;
+  promise.set_result(std::make_unique<std::string>("hello"));
+  return td::Status::OK();
+}
+
 td::Status TonlibClient::do_request(const tonlib_api::smc_loadFromState& request,
                                     td::Promise<object_ptr<tonlib_api::smc_info>>&& promise) {
   auto fullState_ptr = request.account_state_.get();
