@@ -276,6 +276,8 @@ query.estimateFees id:int53 ignore_chksig:Bool = query.Fees;
 // query.emulate id:int53 ignore_chksig:Bool = query.EmulationResult;
 query.getInfo id:int53 = query.Info;
 
+disasm code:String = String;
+smc.disasm id:int53 = String;
 smc.loadFromState account_state:FullAccountState = smc.Info;
 smc.load account_address:accountAddress = smc.Info;
 //smc.forget id:int53 = Ok;
