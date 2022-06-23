@@ -1802,6 +1802,7 @@ class Indexer : public td::actor::Actor {
 
       block::gen::McBlockExtra::Record extra_mc;
       CHECK(tlb::unpack_cell(mc_extra, extra_mc));
+      CHECK(tlb::unpack_cell(mc_extra, extra_mc));
 
       answer["BlockExtra"]["custom"] = {
           {"key_block", extra_mc.key_block},
@@ -1984,14 +1985,14 @@ class Indexer : public td::actor::Actor {
           }
           else {
             auto block = R.move_as_ok();
-            td::actor::send_closure_later(SelfId, &Indexer::got_block, block_handle, block, is_first);
+            td::actor::send_closure(SelfId, &Indexer::got_block, block_handle, block, is_first);
           }
 
           if (is_first) {
             td::actor::send_closure(SelfId, &Indexer::parse_other);
           }
         });
-    td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
                                   std::move(P));
   }
 
@@ -2275,12 +2276,12 @@ class Indexer : public td::actor::Actor {
             LOG(ERROR) << R.move_as_error().to_string();
           } else {
             auto state = R.move_as_ok();
-            td::actor::send_closure_later(SelfId, &Indexer::got_state, state, accounts_keys);
+            td::actor::send_closure(SelfId, &Indexer::got_state, state, accounts_keys);
           }
         });
 
     increase_state_padding();
-    td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_shard_state_from_db, handle,
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_from_db, handle,
                                   std::move(P_st));
   }
 };  // namespace validator
