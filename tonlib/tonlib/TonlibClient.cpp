@@ -3597,7 +3597,14 @@ td::Status TonlibClient::do_request(const tonlib_api::disasm& request, td::Promi
     if (res.is_error()) {
       return res.move_as_error();
     } else {
-      promise.set_result(tonlib_api::make_object<tonlib_api::disasmCode>(output.str()));
+      auto disasm_out = output.str();
+      // cheap no-brainer based gigachad move
+      std::string_view pattern = " ok\n";
+      std::string::size_type n = pattern.length();
+      for (std::string::size_type i = disasm_out.find(pattern); i != std::string::npos; i = disasm_out.find(pattern)) {
+        disasm_out.erase(i, n);
+      }
+      promise.set_result(tonlib_api::make_object<tonlib_api::disasmCode>(disasm_out));
       return td::Status::OK();
     }
   } catch (const std::exception &e) {
