@@ -300,7 +300,7 @@ class TonlibClient : public td::actor::Actor {
   td::int64 register_smc(td::unique_ptr<AccountState> smc);
   td::Result<tonlib_api::object_ptr<tonlib_api::smc_info>> get_smc_info(td::int64 id);
   void finish_load_smc(td::unique_ptr<AccountState> query, td::Promise<object_ptr<tonlib_api::smc_info>>&& promise);
-  td::Status do_request(const tonlib_api::disasm& request, td::Promise<object_ptr<std::string>>&& promise);
+  td::Status do_request(const tonlib_api::disasm& request, td::Promise<object_ptr<tonlib_api::disasmCode>>&& promise);
   td::Status do_request(const tonlib_api::smc_loadFromState& request, td::Promise<object_ptr<tonlib_api::smc_info>>&& promise);
   td::Status do_request(const tonlib_api::smc_load& request, td::Promise<object_ptr<tonlib_api::smc_info>>&& promise);
   td::Status do_request(const tonlib_api::smc_getCode& request,

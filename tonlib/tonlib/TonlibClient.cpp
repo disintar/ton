@@ -60,6 +60,11 @@
 #include "common/util.h"
 
 #include "ton/ton-types.h"
+#include "fift/Fift.h"
+#include "fift/words.h"
+#include "fift/utils.h"
+#include "td/utils/port/path.h"
+#include "fift/IntCtx.h"
 
 template <class Type>
 using lite_api_ptr = ton::lite_api::object_ptr<Type>;
@@ -3340,10 +3345,265 @@ void TonlibClient::finish_load_smc(td::unique_ptr<AccountState> smc,
   promise.set_result(get_smc_info(id));
 }
 
-td::Status TonlibClient::do_request(const tonlib_api::disasm& request, td::Promise<object_ptr<std::string>>&& promise) {
-  std::cout << request.code_ << std::endl;
-  promise.set_result(std::make_unique<std::string>("hello"));
-  return td::Status::OK();
+td::Status TonlibClient::do_request(const tonlib_api::disasm& request, td::Promise<object_ptr<tonlib_api::disasmCode>>&& promise) {
+  TRY_RESULT_PREFIX(code, vm::std_boc_deserialize(request.code_), TonlibError::InvalidBagOfCells("code to disasm"));
+
+  fift::Fift::Config config;
+
+  config.source_lookup = fift::SourceLookup(std::make_unique<fift::OsFileLoader>());
+  config.source_lookup.add_include_path("./");
+
+  fift::init_words_common(config.dictionary);
+  fift::init_words_vm(config.dictionary);
+  fift::init_words_ton(config.dictionary);
+
+  fift::Fift fift(std::move(config));
+
+  std::stringstream ss;
+  std::stringstream output;
+
+  // Fift.fif & Lists.fif & Disasm.fif
+  ss << "{ char \" word 1 { swap { abort } if drop } } ::_ abort\"  { { bl word dup \"\" $= abort\"comment extends "
+        "after end of file\" \"*/\" $= } until 0 'nop } :: /*  { bl word 1 ' (forget) } :: [forget]  { char \" word "
+        "1 ' type } ::_ .\"  { char } word x>B 1 'nop } ::_ B{  { swap ({) over 2+ -roll swap (compile) (}) } : does "
+        " { 1 'nop does create } : constant  { 2 'nop does create } : 2constant  { hole constant } : variable  10 "
+        "constant ten  { bl word 1 { find 0= abort\"word not found\" } } :: (')  { bl word find not abort\"-?\" 0 "
+        "swap } :: [compile]  { bl word 1 {     dup find { \" -?\" $+ abort } ifnot nip execute  } } :: @'  { bl "
+        "word 1 { swap 1 'nop does swap 0 (create) }  } :: =:  { bl word 1 { -rot 2 'nop does swap 0 (create) }  } "
+        ":: 2=:  { <b swap s, b> } : s>c  { s>c hashB } : shash  { dup 0< ' negate if } : abs  { 2dup > ' swap if } "
+        ": minmax  { minmax drop } : min  { minmax nip } : max  \"\" constant <#  ' $reverse : #>  { swap 10 /mod "
+        "char 0 + rot swap hold } : #  { { # over 0<= } until } : #s  { 0< { char - hold } if } : sign  { dup 10 < { "
+        "48 } { 55 } cond + } : Digit  { dup 10 < { 48 } { 87 } cond + } : digit  { rot swap /mod Digit rot swap "
+        "hold } : B#  { rot swap /mod digit rot swap hold } : b#  { 16 B# } : X#  { 16 b# } : x#  { -rot { 2 pick B# "
+        "over 0<= } until rot drop } : B#s  { -rot { 2 pick b# over 0<= } until rot drop } : b#s  { 16 B#s } : X#s  "
+        "{ 16 b#s } : x#s  variable base  { 10 base ! } : decimal  { 16 base ! } : hex  { 8 base ! } : octal  { 2 "
+        "base ! } : binary  { base @ B# } : Base#  { base @ b# } : base#  { base @ B#s } : Base#s  { base @ b#s } : "
+        "base#s  { over abs <# rot 1- ' X# swap times X#s rot sign #> nip } : (0X.)  { over abs <# rot 1- ' x# swap "
+        "times x#s rot sign #> nip } : (0x.)  { (0X.) type } : 0X._  { 0X._ space } : 0X.  { (0x.) type } : 0x._  { "
+        "0x._ space } : 0x.  { bl (-trailing) } : -trailing  { char 0 (-trailing) } : -trailing0  { char \" word 1 ' "
+        "$+ } ::_ +\"  { find 0<> dup ' nip if } : (def?)  { bl word 1 ' (def?) } :: def?  { bl word 1 { (def?) not "
+        "} } :: undef?  { def? ' skip-to-eof if } : skip-ifdef  { bl word dup (def?) { drop skip-to-eof } { 'nop "
+        "swap 0 (create) } cond } : library  { bl word dup (def?) { 2drop skip-to-eof } { swap 1 'nop does swap 0 "
+        "(create) } cond } : library-version  { char ) word \"$\" swap $+ 1 { find 0= abort\"undefined parameter\" "
+        "execute } } ::_ $(  { sbitrefs rot brembitrefs rot >= -rot <= and } : s-fits?  { swap sbitrefs -rot + rot "
+        "brembitrefs -rot <= -rot <= and } : s-fits-with?  { 0 swap ! } : 0!  { tuck @ + swap ! } : +!  { tuck @ "
+        "swap - swap ! } : -!  { 1 swap +! } : 1+!  { -1 swap +! } : 1-!  { null swap ! } : null!  { not 2 pick @ "
+        "and xor swap ! } : ~!  0 tuple constant nil  { 1 tuple } : single  { 2 tuple } : pair  { 3 tuple } : triple "
+        " { 1 untuple } : unsingle  { 2 untuple } : unpair  { 3 untuple } : untriple  { over tuple? { swap count = } "
+        "{ 2drop false } cond } : tuple-len?  { 0 tuple-len? } : nil?  { 1 tuple-len? } : single?  { 2 tuple-len? } "
+        ": pair?  { 3 tuple-len? } : triple?  { 0 [] } : first  { 1 [] } : second  { 2 [] } : third  ' pair : cons  "
+        "' unpair : uncons  { 0 [] } : car  { 1 [] } : cdr  { cdr car } : cadr  { cdr cdr } : cddr  { cdr cdr car } "
+        ": caddr  { null ' cons rot times } : list  { -rot pair swap ! } : 2!  { @ unpair } : 2@  { true (atom) drop "
+        "} : atom  { bl word atom 1 'nop } ::_ `  { hole dup 1 { @ execute } does create } : recursive  { 0 { 1+ dup "
+        "1 ' $() does over (.) \"$\" swap $+ 0 (create) } rot times drop } : :$1..n  { 10 hold } : +cr  { 9 hold } : "
+        "+tab  { \"\" swap { 0 word 2dup $cmp } { rot swap $+ +cr swap } while 2drop } : scan-until-word  { 0 word "
+        "-trailing scan-until-word 1 'nop } ::_ $<<  { 0x40 runvmx } : runvmcode  { 0x48 runvmx } : gasrunvmcode  { "
+        "0xc8 runvmx } : gas2runvmcode  { 0x43 runvmx } : runvmdict  { 0x4b runvmx } : gasrunvmdict  { 0xcb runvmx } "
+        ": gas2runvmdict  { 0x45 runvmx } : runvm  { 0x4d runvmx } : gasrunvm  { 0xcd runvmx } : gas2runvm  { 0x55 "
+        "runvmx } : runvmctx  { 0x5d runvmx } : gasrunvmctx  { 0xdd runvmx } : gas2runvmctx  { 0x75 runvmx } : "
+        "runvmctxact  { 0x7d runvmx } : gasrunvmctxact  { 0xfd runvmx } : gas2runvmctxact  { 0x35 runvmx } : "
+        "runvmctxactq  { 0x3d runvmx } : gasrunvmctxactq    { hole dup 1 { @ execute } does create } : recursive  "
+        "recursive equal? {    dup tuple? {      over tuple? {        over count over count over = {          0 { "
+        "dup 0>= { 2dup [] 3 pick 2 pick [] equal? { 1+ } { drop -1 } cond              } if } rot times          "
+        "nip nip 0>=        } { drop 2drop false } cond      } { 2drop false } cond    } { eqv? } cond  } swap !  { "
+        "null swap { dup null? not } { uncons swap rot cons swap } while drop } : list-reverse  { { uncons dup null? "
+        "{ drop true } { nip false } cond } until } : list-last  recursive list+ {    over null? { nip } { swap "
+        "uncons rot list+ cons } cond  } swap !  { { dup null? { drop true true } {    swap dup null? { 2drop false "
+        "true } {    uncons swap rot uncons -rot equal? { false } {    2drop false true    } cond } cond } cond } "
+        "until  } : list-  { 0 { over null? not } { swap uncons rot 1+ } while nip } : explode-list  { swap "
+        "explode-list dup 1+ roll } : explode-list-1  { explode-list tuple } : list>tuple  { null swap rot { -rot "
+        "cons swap } swap times } : mklist-1  { \"\" { over null? not } { swap uncons -rot $+ } while nip  } : "
+        "concat-string-list  { 0 { over null? not } { swap uncons -rot + } while nip  } : sum-list  { -rot { over "
+        "null? not } { swap uncons -rot 3 pick execute } while nip nip  } : foldl  { swap uncons swap rot foldl } : "
+        "foldl-ne  recursive foldr {    rot dup null? { 2drop } {      uncons -rot 2swap swap 3 pick foldr rot "
+        "execute    } cond  } swap !  recursive foldr-ne {    over cdr null? { drop car } {      swap uncons 2 pick "
+        "foldr-ne rot execute    } cond  } swap !  { dup null? { ' list+ foldr-ne } ifnot } : concat-list-lists  { ' "
+        "cdr swap times } : list-tail  { list-tail car } : list-ref  { { dup null? { drop true true } {      dup "
+        "pair? { cdr false } {      drop false true    } cond } cond } until  } : list?  { 0 { over null? not } { 1+ "
+        "swap uncons nip swap } while nip  } : list-length  { swap {    dup null? { nip true } {    tuck car over "
+        "execute { drop true } {    swap cdr false    } cond } cond } until  } : list-tail-from  { swap 1 ' eq? does "
+        "list-tail-from } : list-member-eq  { swap 1 ' eqv? does list-tail-from } : list-member-eqv  { swap 1 ' "
+        "equal? does list-tail-from } : list-member-equal  { list-member-eq null? not } : list-member?  { "
+        "list-member-eqv null? not } : list-member-eqv?  { dup null? { drop false } { car true } cond  } : safe-car  "
+        "{ dup null? { drop false } { car second true } cond  } : get-first-value  { list-tail-from safe-car } : "
+        "assoc-gen  { list-tail-from get-first-value } : assoc-gen-x  { swap 1 { swap first eq? } does assoc-gen } : "
+        "assq  { swap 1 { swap first eqv? } does assoc-gen } : assv  { swap 1 { swap first equal? } does assoc-gen } "
+        ": assoc  { swap 1 { swap first eq? } does assoc-gen-x } : assq-val  { swap 1 { swap first eqv? } does "
+        "assoc-gen-x } : assv-val  { swap 1 { swap first equal? } does assoc-gen-x } : assoc-val  recursive list-map "
+        "{    over null? { drop } {    swap uncons -rot over execute -rot list-map cons    } cond  } swap !    "
+        "variable ctxdump  variable curctx  { ctxdump @ curctx @ ctxdump 2! curctx 2!    { curctx 2@ over null? not "
+        "} { swap uncons rot tuck curctx 2! execute }    while 2drop ctxdump 2@ curctx ! ctxdump !  } : list-foreach "
+        " forget ctxdump  forget curctx    variable loopdump  variable curloop  { curloop @ loopdump @ loopdump 2! } "
+        ": push-loop-ctx  { loopdump 2@ loopdump ! curloop ! } : pop-loop-ctx  { -rot 2dup > {      push-loop-ctx {  "
+        "      triple dup curloop ! first execute curloop @ untriple 1+ 2dup <=      } until pop-loop-ctx    } if "
+        "2drop drop  } : for  { -rot 2dup > {      push-loop-ctx {        triple dup curloop ! untriple nip swap "
+        "execute curloop @ untriple 1+ 2dup <=      } until pop-loop-ctx    } if 2drop drop  } : for-i  { curloop @ "
+        "third } : i  { loopdump @ car third } : j  { loopdump @ cadr third } : k  forget curloop  forget loopdump   "
+        " variable ')  'nop box constant ',  { \") without (\" abort } ') !   { ') @ execute } : )  anon constant "
+        "dot-marker  { swap    { -rot 2dup eq? not }    { over dot-marker eq? abort\"invalid dotted list\"      swap "
+        "rot cons } while 2drop  } : list-tail-until-marker  { null swap list-tail-until-marker } : "
+        "list-until-marker  { over dot-marker eq? { nip 2dup eq? abort\"invalid dotted list\" }    { null swap } "
+        "cond    list-tail-until-marker  } : list-until-marker-ext  { ') @ ', @ } : ops-get  { ', ! ') ! } : ops-set "
+        " { anon dup ops-get 3 { ops-set list-until-marker-ext } does ') ! 'nop ', !  } : (    { 2 { 1+ 2dup pick "
+        "eq? } until 3 - nip } : count-to-marker  { count-to-marker tuple nip } : tuple-until-marker  { anon dup "
+        "ops-get 3 { ops-set tuple-until-marker } does ') ! 'nop ', ! } : _(    \"()[]'\" 34 hold constant "
+        "lisp-delims  { lisp-delims 11 (word) } : lisp-token  { null cons `quote swap cons } : do-quote  { 1 { ', @ "
+        "2 { 2 { ', ! execute ', @ execute } does ', ! }        does ', ! } does  } : postpone-prefix  { ', @ 1 { ', "
+        "! } does ', ! } : postpone-',  ( `( ' ( pair    `) ' ) pair    `[ ' _( pair    `] ' ) pair    `' ' do-quote "
+        "postpone-prefix pair    `. ' dot-marker postpone-prefix pair    `\" { char \" word } pair    `;; { 0 word "
+        "drop postpone-', } pair  ) constant lisp-token-dict  variable eol  { eol @ eol 0! anon dup ') @ 'nop 3    { "
+        "ops-set list-until-marker-ext true eol ! } does ') ! rot ', !    { lisp-token dup (number) dup { roll drop "
+        "} {        drop atom dup lisp-token-dict assq { nip second execute } if      } cond      ', @ execute      "
+        "eol @    } until    -rot eol ! execute  } :_ List-generic(  { 'nop 'nop List-generic( } :_ LIST(      "
+        "variable 'disasm  { 'disasm @ execute } : disasm   variable @dismode  @dismode 0!  { rot over @ and rot xor "
+        "swap ! } : andxor! { -2 0 @dismode andxor! } : stack-disasm { -2 1 @dismode andxor! } : std-disasm  { -3 2 "
+        "@dismode andxor! } : show-vm-code  { -3 0 @dismode andxor! } : hide-vm-code  { @dismode @ 1 and 0= } : "
+        "stack-disasm?    variable @indent  @indent 0!  { ' space @indent @ 2* times } : .indent  { @indent 1+! } : "
+        "+indent  { @indent 1-! } : -indent "
+        "  \n { \" \" $pos } : spc-pos { dup \" \" $pos swap \",\" $pos dup 0< { drop } {   over 0< { nip } { min } "
+        "cond } cond } : spc-comma-pos \n"
+        " { { dup spc-pos 0= } { 1 $| nip } while } : -leading\n"
+        "{ -leading -trailing dup spc-pos dup 0< {\n"
+        "  drop dup $len { atom single } { drop nil } cond } {\n"
+        "    $| swap atom swap -leading 2 { over spc-comma-pos dup 0>= } {\n"
+        "      swap 1+ -rot $| 1 $| nip -leading rot\n"
+        "    } while drop tuple\n"
+        "  } cond\n"
+        "} : parse-op \n"
+        "{ dup \"s-1\" $= { drop \"s(-1)\" true } {\n"
+        "  dup \"s-2\" $= { drop \"s(-2)\" true } {\n"
+        "  dup 1 $| swap \"x\" $= { nip \"x{\" swap $+ +\"}\" true } {\n"
+        "  2drop false } cond } cond } cond\n"
+        "} : adj-op-arg\n"
+        "{ over count over <= { drop } { 2dup [] adj-op-arg { swap []= } { drop } cond } cond } : adj-arg[]\n"
+        "{ 1 adj-arg[] 2 adj-arg[] 3 adj-arg[]\n"
+        "  dup first\n"
+        "  dup `XCHG eq? {\n"
+        "    drop dup count 2 = { tpop swap \"s0\" , swap , } if } {\n"
+        "  dup `LSHIFT eq? {\n"
+        "    drop dup count 2 = stack-disasm? and { second `LSHIFT# swap pair } if } {\n"
+        "  dup `RSHIFT eq? {\n"
+        "    drop dup count 2 = stack-disasm? and { second `RSHIFT# swap pair } if } {\n"
+        "  drop\n"
+        "  } cond } cond } cond\n"
+        "} : adjust-op  \n"
+        "\n"
+        "variable @cp  @cp 0!\n"
+        "variable @curop\n"
+        "variable @contX  variable @contY  variable @cdict\n"
+        "\n"
+        "{ atom>$ type } : .atom\n"
+        "{ dup first .atom dup count 1 > { space 0 over count 2- { 1+ 2dup [] type .\", \" } swap times 1+ [] type } "
+        "{ drop } cond } : std-show-op\n"
+        "{ 0 over count 1- { 1+ 2dup [] type space } swap times drop first .atom } : stk-show-op\n"
+        "{ @dismode @ 2 and { .indent .\"// \" @curop @ csr. } if } : .curop? "
+        "\n{ .curop? .indent @dismode @ 1 and ' std-show-op ' stk-show-op cond cr\n"
+        "} : show-simple-op\n"
+        "{ dup 4 u@ 9 = { 8 u@+ swap 15 and 3 << s@ } {\n"
+        "  dup 7 u@ 0x47 = { 7 u@+ nip 2 u@+ 7 u@+ -rot 3 << swap sr@ } {\n"
+        "  dup 8 u@ 0x8A = { ref@ <s } {\n"
+        "  abort\"invalid PUSHCONT\"\n"
+        "  } cond } cond } cond\n"
+        "} : get-cont-body\n"
+        "{ 14 u@+ nip 10 u@+ ref@ dup rot pair swap <s empty? { drop null } if } : get-const-dict\n"
+        "{ @contX @ @contY @ @contX ! @contY ! } : scont-swap\n"
+        "{ .indent swap type type cr @contY @ @contY null! @contX @ @contX null!\n"
+        "  +indent disasm -indent @contY !\n"
+        "} : show-cont-bodyx\n"
+        "{ \":<{\" show-cont-bodyx .indent .\"}>\" cr } : show-cont-op\n"
+        "{ swap scont-swap \":<{\" show-cont-bodyx scont-swap\n"
+        "  \"\" show-cont-bodyx .indent .\"}>\" cr } : show-cont2-op\n"
+        "\n"
+        "{ @contX @ null? { \"CONT\" show-cont-op } ifnot\n"
+        "} : flush-contX\n"
+        "{ @contY @ null? { scont-swap \"CONT\" show-cont-op scont-swap } ifnot\n"
+        "} : flush-contY\n"
+        "{ flush-contY flush-contX } : flush-cont\n"
+        "{ @contX @ null? not } : have-cont?\n"
+        "{ @contY @ null? not } : have-cont2?\n"
+        "{ flush-contY @contY ! scont-swap } : save-cont-body\n"
+        "\n"
+        "{ @cdict ! } : save-const-dict\n"
+        "{ @cdict null! } : flush-dict\n"
+        "{ @cdict @ null? not } : have-dict?\n"
+        "\n"
+        "{ flush-cont .indent type .\":<{\" cr\n"
+        "  @curop @ ref@ <s +indent disasm -indent .indent .\"}>\" cr\n"
+        "} : show-ref-op\n"
+        "{ flush-contY .indent rot type .\":<{\" cr\n"
+        "  @curop @ ref@ <s @contX @ @contX null! rot ' swap if\n"
+        "  +indent disasm -indent .indent swap type cr\n"
+        "  +indent disasm -indent .indent .\"}>\" cr\n"
+        "} : show-cont-ref-op\n"
+        "{ flush-cont .indent swap type .\":<{\" cr\n"
+        "  @curop @ ref@+ <s +indent disasm -indent .indent swap type cr\n"
+        "  ref@ <s +indent disasm -indent .indent .\"}>\" cr\n"
+        "} : show-ref2-op\n"
+        "\n"
+        "{ flush-cont first atom>$ dup 5 $| drop \"DICTI\" $= swap\n"
+        "  .indent type .\" {\" cr +indent @cdict @ @cdict null! unpair\n"
+        "  rot {\n"
+        "    swap .indent . .\"=> <{\" cr +indent disasm -indent .indent .\"}>\" cr true\n"
+        "  } swap ' idictforeach ' dictforeach cond drop\n"
+        "  -indent .indent .\"}\" cr\n"
+        "} : show-const-dict-op\n"
+        "\n"
+        "( `PUSHCONT `PUSHREFCONT ) constant @PushContL\n"
+        "( `REPEAT `UNTIL `IF `IFNOT `IFJMP `IFNOTJMP ) constant @CmdC1\n"
+        "( `IFREF `IFNOTREF `IFJMPREF `IFNOTJMPREF `CALLREF `JMPREF ) constant @CmdR1\n"
+        "( `DICTIGETJMP `DICTIGETJMPZ `DICTUGETJMP `DICTUGETJMPZ `DICTIGETEXEC `DICTUGETEXEC ) constant @JmpDictL\n"
+        " { dup first `DICTPUSHCONST eq? {\n"
+        "    flush-cont @curop @ get-const-dict save-const-dict show-simple-op } {\n"
+        "  dup first @JmpDictL list-member? have-dict? and {\n"
+        "    flush-cont show-const-dict-op } {\n"
+        "  flush-dict\n"
+        "  dup first @PushContL list-member? {\n"
+        "    drop @curop @ get-cont-body save-cont-body } {\n"
+        "  dup first @CmdC1 list-member? have-cont? and {\n"
+        "    flush-contY first atom>$ .curop? show-cont-op } {\n"
+        "  dup first @CmdR1 list-member? {\n"
+        "    flush-cont first atom>$ dup $len 3 - $| drop .curop? show-ref-op } {\n"
+        "  dup first `WHILE eq? have-cont2? and {\n"
+        "    drop \"WHILE\" \"}>DO<{\" .curop? show-cont2-op } {\n"
+        "  dup first `IFELSE eq? have-cont2? and {\n"
+        "    drop \"IF\" \"}>ELSE<{\" .curop? show-cont2-op } {\n"
+        "  dup first dup `IFREFELSE eq? swap `IFELSEREF eq? or have-cont? and {\n"
+        "    first `IFREFELSE eq? \"IF\" \"}>ELSE<{\" rot .curop? show-cont-ref-op } {\n"
+        "  dup first `IFREFELSEREF eq? {\n"
+        "    drop \"IF\" \"}>ELSE<{\" .curop? show-ref2-op } {\n"
+        "    flush-cont show-simple-op\n"
+        "  } cond } cond } cond } cond } cond } cond } cond } cond } cond\n"
+        "} : show-op\n"
+        "{ dup @cp @ (vmoplen) dup 0> { 65536 /mod swap sr@+ swap dup @cp @ (vmopdump) parse-op swap s> true } { "
+        "drop false } cond } : fetch-one-op\n"
+        "{ { fetch-one-op } { swap @curop ! adjust-op show-op } while } : disasm-slice\n"
+        "{ { disasm-slice dup sbitrefs 1- or 0= } { ref@ <s } while flush-dict flush-cont } : disasm-chain\n"
+        "{ @curop @ swap disasm-chain dup sbitrefs or { .indent .\"Cannot disassemble: \" csr. } { drop } cond "
+        "@curop ! }\n"
+        "'disasm ! <s std-disasm disasm ";
+
+  fift::IntCtx ctx{ss, "stdin", "./", 0};
+
+  ctx.stack.push_cell(code);
+
+  ctx.ton_db = &fift.config().ton_db;
+  ctx.source_lookup = &fift.config().source_lookup;
+  ctx.dictionary = ctx.main_dictionary = ctx.context = fift.config().dictionary;
+  ctx.output_stream = &output;
+  ctx.error_stream = fift.config().error_stream;
+
+  try {
+    auto res = ctx.run(td::make_ref<fift::InterpretCont>());
+    if (res.is_error()) {
+      return res.move_as_error();
+    } else {
+      promise.set_result(tonlib_api::make_object<tonlib_api::disasmCode>(output.str()));
+      return td::Status::OK();
+    }
+  } catch (const std::exception &e) {
+    LOG(ERROR) << "Disasm error: " << e.what();
+    return td::Status::Error("unknown disasm error");
+  }
 }
 
 td::Status TonlibClient::do_request(const tonlib_api::smc_loadFromState& request,
