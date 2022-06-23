@@ -56,7 +56,7 @@ target_include_directories(tonlib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>/..
   $<BUILD_INTERFACE:${OPENSSL_INCLUDE_DIR}>
 )
-target_link_libraries(tonlib PRIVATE tdactor adnllite tl_lite_api tl-lite-utils ton_crypto ton_block lite-client-common smc-envelope)
+target_link_libraries(tonlib PRIVATE fift-lib tdactor adnllite tl_lite_api tl-lite-utils ton_crypto ton_block lite-client-common smc-envelope)
 target_link_libraries(tonlib PUBLIC tdutils tl_tonlib_api)
 
 if (TONLIB_ENABLE_JNI AND NOT ANDROID) # jni is available by default on Android
@@ -89,7 +89,7 @@ set(TONLIB_JSON_SOURCE tonlib/tonlib_client_json.cpp)
 include(GenerateExportHeader)
 
 add_library(tonlibjson SHARED ${TONLIB_JSON_SOURCE} ${TONLIB_JSON_HEADERS})
-target_link_libraries(tonlibjson PRIVATE tonlibjson_private)
+target_link_libraries(tonlibjson PRIVATE PRIVATE tonlibjson_private)
 generate_export_header(tonlibjson EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/tonlib/tonlibjson_export.h)
 target_include_directories(tonlibjson PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
