@@ -1152,6 +1152,7 @@ class Indexer : public td::actor::Actor {
                    << "Seqno: " << seqno_shard - 1 << " Shard: " << shard_shard << " Worckchain: " << workchain_shard;
 
         LOG(ERROR) << R.move_as_error().to_string();
+        return;
       } else {
         auto handle = R.move_as_ok();
         LOG(DEBUG) << workchain_shard << ":" << shard_shard << ":" << seqno_shard << " is_first: " << first;
