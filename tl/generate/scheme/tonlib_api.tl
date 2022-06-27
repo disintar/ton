@@ -214,6 +214,7 @@ blocks.header id:ton.blockIdExt global_id:int32 version:int32 flags:# after_merg
 configInfo config:tvm.cell = ConfigInfo;
 
 disasmCode code:string = DisasmCode;
+methodId id:String = MethodId;
 
 ---functions---
 
@@ -278,6 +279,7 @@ query.estimateFees id:int53 ignore_chksig:Bool = query.Fees;
 // query.emulate id:int53 ignore_chksig:Bool = query.EmulationResult;
 query.getInfo id:int53 = query.Info;
 
+method_name_to_id method_name:string = MethodId;
 disasm code:bytes = DisasmCode;
 smc.loadFromState account_state:FullAccountState = smc.Info;
 smc.load account_address:accountAddress = smc.Info;

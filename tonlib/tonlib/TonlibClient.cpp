@@ -3345,6 +3345,15 @@ void TonlibClient::finish_load_smc(td::unique_ptr<AccountState> smc,
   promise.set_result(get_smc_info(id));
 }
 
+td::Status TonlibClient::do_request(const tonlib_api::method_name_to_id& request,
+                                    td::Promise<object_ptr<tonlib_api::methodId>>&& promise) {
+  unsigned crc = td::crc16(request.method_name_);
+  const unsigned method_id = (crc & 0xffff) | 0x10000;
+  std::ostringstream oss; oss << method_id;
+  promise.set_result(tonlib_api::make_object<tonlib_api::methodId>(oss.str()));
+  return td::Status::OK();
+}
+
 td::Status TonlibClient::do_request(const tonlib_api::disasm& request, td::Promise<object_ptr<tonlib_api::disasmCode>>&& promise) {
   TRY_RESULT_PREFIX(code, vm::std_boc_deserialize(request.code_), TonlibError::InvalidBagOfCells("code to disasm"));
 
