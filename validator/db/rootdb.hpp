@@ -26,10 +26,38 @@
 #include "statedb.hpp"
 #include "staticfilesdb.hpp"
 #include "archive-manager.hpp"
+#include <zmq.hpp>
 
 namespace ton {
 
 namespace validator {
+
+class BlockPublisher {
+public:
+  explicit BlockPublisher(const std::string& endpoint = "tcp://127.0.0.1:5001") : socket(ctx, zmq::socket_type::pub) {
+    socket.bind(endpoint);
+  }
+
+  // super naive implementation
+
+  void publishBlockData(const std::string& json) {
+    std::lock_guard<std::mutex> guard(mtx);
+    socket.send(zmq::str_buffer("block/data"), zmq::send_flags::sndmore);
+    socket.send(zmq::message_t(json.c_str(), json.size()));
+  }
+
+  void publishBlockState(const std::string& json) {
+    std::lock_guard<std::mutex> guard(mtx);
+    socket.send(zmq::str_buffer("block/state"), zmq::send_flags::sndmore);
+    socket.send(zmq::message_t(json.c_str(), json.size()));
+  }
+
+private:
+  zmq::context_t ctx;
+  zmq::socket_t socket;
+  std::mutex mtx;
+};
+
 
 class RootDb : public Db {
  public:
@@ -143,6 +171,8 @@ class RootDb : public Db {
   td::actor::ActorOwn<StateDb> state_db_;
   td::actor::ActorOwn<StaticFilesDb> static_files_db_;
   td::actor::ActorOwn<ArchiveManager> archive_db_;
+
+  BlockPublisher publisher_;
 };
 
 }  // namespace validator

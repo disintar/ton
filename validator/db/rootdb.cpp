@@ -26,40 +26,15 @@
 #include "common/checksum.h"
 #include "validator/stats-merger.h"
 #include "td/actor/MultiPromise.h"
-#include <zmq.hpp>
 
 namespace ton {
 
 namespace validator {
 
-//TODO: move it somewhere else?
-class BlockPublisher {
-public:
-  explicit BlockPublisher(const std::string& endpoint) : socket(ctx, zmq::socket_type::pub) {
-    socket.bind(endpoint);
-  }
-
-  void publishBlockData(const std::string& json) {
-    std::lock_guard<std::mutex> guard(mtx);
-    socket.send(zmq::str_buffer("block/data"), zmq::send_flags::sndmore);
-    socket.send(zmq::message_t(json.c_str(), json.size()));
-  }
-
-  void publishBlockState(const std::string& json) {
-    std::lock_guard<std::mutex> guard(mtx);
-    socket.send(zmq::str_buffer("block/state"), zmq::send_flags::sndmore);
-    socket.send(zmq::message_t(json.c_str(), json.size()));
-  }
-
-private:
-  zmq::context_t ctx;
-  zmq::socket_t socket;
-  std::mutex mtx;
-};
-
 void RootDb::store_block_data(BlockHandle handle, td::Ref<BlockData> block, td::Promise<td::Unit> promise) {
   LOG(WARNING) << "Store block: " << block->block_id().to_str();
-  ///TODO: use block publisher
+  ///TODO: build json
+  publisher_.publishBlockState(std::string("TODO: build block json, seqno:") + std::to_string(block.get()->block_id().seqno()));
 
   if (handle->received()) {
     promise.set_value(td::Unit());
@@ -247,7 +222,8 @@ void RootDb::get_block_candidate(PublicKey source, BlockIdExt id, FileHash colla
 void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
                                td::Promise<td::Ref<ShardState>> promise) {
   LOG(WARNING) << "Store block state: " << state->get_block_id().to_str();
-  ///TODO: use block publisher
+  ///TODO: build json
+  publisher_.publishBlockState(std::string("TODO: build state json, seqno:") + std::to_string(state.get()->get_seqno()));
 
   if (handle->moved_to_archive()) {
     promise.set_value(std::move(state));
