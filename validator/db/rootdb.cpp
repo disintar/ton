@@ -34,7 +34,7 @@ namespace validator {
 void RootDb::store_block_data(BlockHandle handle, td::Ref<BlockData> block, td::Promise<td::Unit> promise) {
   LOG(WARNING) << "Store block: " << block->block_id().to_str();
   ///TODO: build json
-  publisher_.publishBlockState(std::string("TODO: build block json, seqno:") + std::to_string(block.get()->block_id().seqno()));
+  publisher_.publishBlockData(std::string("TODO: build block json, seqno:") + std::to_string(block.get()->block_id().seqno()));
 
   if (handle->received()) {
     promise.set_value(td::Unit());
