@@ -1751,7 +1751,7 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
     account_block_parsed["account_addr"] = {{"address", last_key.to_hex()}, {"workchain", workchain}};
 
     block::gen::AccountBlock::Record acc_blk;
-    CHECK(tlb::csr_unpack(data, acc_blk));
+//    CHECK(tlb::csr_unpack(data, acc_blk));
     int count = 0;
     std::list<json> transactions;
 
