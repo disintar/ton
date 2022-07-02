@@ -1637,8 +1637,8 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
   LOG(WARNING) << "Store block state: " << state->get_block_id().to_str();
   auto f = [&](){
     // start
-    LOG(WARNING) << "HELLO";
     auto block_id = state->get_block_id();
+    LOG(WARNING) << "HELLO";
     //  LOG(WARNING) << "Parse state: " << block_id.to_str();
     CHECK(state.not_null());
 
