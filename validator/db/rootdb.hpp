@@ -45,8 +45,6 @@
 #include "td/utils/JsonBuilder.h"
 #include "auto/tl/ton_api_json.h"
 #include "crypto/vm/cp0.h"
-#include "validator/validator.h"
-#include "validator/manager-disk.h"
 #include "ton/ton-types.h"
 #include "ton/ton-tl.hpp"
 #include "tl/tlblib.hpp"
@@ -63,15 +61,12 @@
 #include "td/utils/OptionParser.h"
 #include "td/utils/port/user.h"
 #include <utility>
-#include <fstream>
 #include "auto/tl/lite_api.h"
 #include "adnl/utils.hpp"
 #include "json.hpp"
 #include "tuple"
 #include "vm/boc.h"
 #include "crypto/block/mc-config.h"
-#include "delay.h"
-#include <thread>
 
 
 namespace ton {
