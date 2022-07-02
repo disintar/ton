@@ -25,29 +25,6 @@
 #include "validator/stats-merger.h"
 #include "td/actor/MultiPromise.h"
 
-#include "json.hpp"
-#include "td/utils/logging.h"
-#include "td/actor/actor.h"
-#include "td/utils/filesystem.h"
-#include "crypto/vm/cp0.h"
-#include "validator/validator.h"
-#include "ton/ton-types.h"
-#include "vm/dict.h"
-#include "td/utils/Slice.h"
-#include "td/utils/common.h"
-#include "td/utils/OptionParser.h"
-#include "td/utils/port/user.h"
-#include <utility>
-#include "auto/tl/lite_api.h"
-#include "adnl/utils.hpp"
-#include "tuple"
-#include "vm/boc.h"
-
-// TODO: use td/utils/json
-// TODO: use tlb auto deserializer to json (PrettyPrintJson)
-using json = nlohmann::json;
-using td::Ref;
-
 
 namespace ton {
 
