@@ -1111,14 +1111,6 @@ class Indexer : public td::actor::Actor {
                             seqno_first_, std::move(P));
   }
 
-  ///TODO: disgusting, but delay_action chain doesnt work
-  //  void display_progress_loop() {
-  //    while (true) {
-  //      display_progress()
-  //      std::this_thread::sleep_for(std::chrono::milliseconds(250));
-  //    }
-  //  }
-
   void parse_other() {
     if (seqno_last_ != seqno_first_) {
       for (auto seqno = seqno_first_ + 1; seqno <= seqno_last_; ++seqno) {
