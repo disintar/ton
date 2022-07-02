@@ -882,6 +882,12 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
   return answer;
 }
 
+
+BlockPublisher::BlockPublisher(const std::string& endpoint)
+    : socket(ctx, zmq::socket_type::pub) {
+  socket.bind(endpoint);
+}
+
 void BlockPublisher::storeBlockData(BlockHandle handle, td::Ref<BlockData> block) {
   LOG(WARNING) << "Store block: " << block->block_id().to_str();
   CHECK(block.not_null());
@@ -1419,6 +1425,20 @@ void BlockPublisher::storeBlockData(BlockHandle handle, td::Ref<BlockData> block
   publishBlockData(answer.dump());
 }
 
+void BlockPublisher::storeBlockState(BlockHandle handle, td::Ref<ShardState> state) {
+  std::lock_guard<std::mutex> lock(maps_mtx);
+  const auto block_id = state->get_block_id();
+  const std::string key = std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) +
+                          ":" + std::to_string(block_id.id.seqno);
+  auto accounts = accounts_keys_.find(key);
+  if (accounts == accounts_keys_.end()) {
+    states_.insert({key, {handle, state}});
+  } else {
+    gotState(handle, state, accounts->second);
+    accounts_keys_.erase(accounts);
+  }
+}
+
 void BlockPublisher::gotState(BlockHandle handle, td::Ref<ShardState> state, std::list<td::Bits256> accounts_keys) {
   auto block_id = state->get_block_id();
   LOG(WARNING) << "Parse state: " << block_id.to_str();
@@ -1604,6 +1624,18 @@ void BlockPublisher::gotState(BlockHandle handle, td::Ref<ShardState> state, std
   answer["filename"] = std::string("state_") + std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) +
                        ":" + std::to_string(block_id.id.seqno);
   publishBlockState(answer.dump());
+}
+
+void BlockPublisher::publishBlockData(const std::string& json) {
+  std::lock_guard<std::mutex> guard(net_mtx);
+  socket.send(zmq::str_buffer("block/data"), zmq::send_flags::sndmore);
+  socket.send(zmq::message_t(json.c_str(), json.size()));
+}
+
+void BlockPublisher::publishBlockState(const std::string& json) {
+  std::lock_guard<std::mutex> guard(net_mtx);
+  socket.send(zmq::str_buffer("block/state"), zmq::send_flags::sndmore);
+  socket.send(zmq::message_t(json.c_str(), json.size()));
 }
 
 

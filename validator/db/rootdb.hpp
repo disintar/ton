@@ -75,40 +75,18 @@ namespace validator {
 
 class BlockPublisher {
 public:
-  explicit BlockPublisher(const std::string& endpoint = "tcp://127.0.0.1:5001")
-     : socket(ctx, zmq::socket_type::pub) {
-    socket.bind(endpoint);
-  }
+  explicit BlockPublisher(const std::string& endpoint = "tcp://127.0.0.1:5001");
 
   void storeBlockData(BlockHandle handle, td::Ref<BlockData> block);
 
-  void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) {
-    std::lock_guard<std::mutex> lock(maps_mtx);
-    const auto block_id = state->get_block_id();
-    const std::string key = std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) +
-                            ":" + std::to_string(block_id.id.seqno);
-    auto accounts = accounts_keys_.find(key);
-    if (accounts == accounts_keys_.end()) {
-      states_.insert({key, {handle, state}});
-    } else {
-      gotState(handle, state, accounts->second);
-      accounts_keys_.erase(accounts);
-    }
-  }
+  void storeBlockState(BlockHandle handle, td::Ref<ShardState> state);
 
 private:
   void gotState(BlockHandle handle, td::Ref<ShardState> state, std::list<td::Bits256> accounts_keys);
-  void publishBlockData(const std::string& json) {
-    std::lock_guard<std::mutex> guard(net_mtx);
-    socket.send(zmq::str_buffer("block/data"), zmq::send_flags::sndmore);
-    socket.send(zmq::message_t(json.c_str(), json.size()));
-  }
 
-  void publishBlockState(const std::string& json) {
-    std::lock_guard<std::mutex> guard(net_mtx);
-    socket.send(zmq::str_buffer("block/state"), zmq::send_flags::sndmore);
-    socket.send(zmq::message_t(json.c_str(), json.size()));
-  }
+  void publishBlockData(const std::string& json);
+
+  void publishBlockState(const std::string& json);
 
 private:
   zmq::context_t ctx;
