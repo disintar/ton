@@ -1807,93 +1807,93 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
       }
       // end from got_block_handle
 
-      /*for (const auto &account : accounts_keys) {
-    LOG(DEBUG) << "Parse " << account.to_hex();
-    auto result = accounts.lookup_extra(account.cbits(), 256);
-    auto value = result.first;
-    auto extra = result.second;
-    if (value.not_null()) {
-      block::gen::ShardAccount::Record sa;
-      block::gen::DepthBalanceInfo::Record dbi;
-      block::gen::CurrencyCollection::Record dbi_cc;
-      CHECK(tlb::unpack(value.write(), sa));
-      CHECK(tlb::unpack(extra.write(), dbi));
-      CHECK(tlb::unpack(dbi.balance.write(), dbi_cc));
+      for (const auto &account : accounts_keys) {
+        LOG(DEBUG) << "Parse " << account.to_hex();
+        auto result = account_blocks_dict->lookup_extra(account.cbits(), 256);
+        auto value = result.first;
+        auto extra = result.second;
+        if (value.not_null()) {
+          block::gen::ShardAccount::Record sa;
+          block::gen::DepthBalanceInfo::Record dbi;
+          block::gen::CurrencyCollection::Record dbi_cc;
+          CHECK(tlb::unpack(value.write(), sa));
+          CHECK(tlb::unpack(extra.write(), dbi));
+          CHECK(tlb::unpack(dbi.balance.write(), dbi_cc));
 
-      json data;
-      data["balance"] = {
-          {"split_depth", dbi.split_depth},
-          {"grams", block::tlb::t_Grams.as_integer(dbi_cc.grams)->to_dec_string()},
-          {"extra", dbi_cc.other->have_refs() ? parse_extra_currency(dbi_cc.other->prefetch_ref()) : dummy}};
-      data["account_address"] = {{"workchain", block_id.id.workchain}, {"address", account.to_hex()}};
-      data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}};
+          json data;
+          data["balance"] = {
+              {"split_depth", dbi.split_depth},
+              {"grams", block::tlb::t_Grams.as_integer(dbi_cc.grams)->to_dec_string()},
+              {"extra", dbi_cc.other->have_refs() ? parse_extra_currency(dbi_cc.other->prefetch_ref()) : dummy}};
+          data["account_address"] = {{"workchain", block_id.id.workchain}, {"address", account.to_hex()}};
+          data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}};
 
-      auto account_cell = load_cell_slice(sa.account);
-      auto acc_tag = block::gen::t_Account.get_tag(account_cell);
+          auto account_cell = load_cell_slice(sa.account);
+          auto acc_tag = block::gen::t_Account.get_tag(account_cell);
 
-      if (acc_tag == block::gen::t_Account.account) {
-        block::gen::Account::Record_account acc;
-        block::gen::StorageInfo::Record si;
-        block::gen::AccountStorage::Record as;
-        block::gen::StorageUsed::Record su;
-        block::gen::CurrencyCollection::Record balance;
+          if (acc_tag == block::gen::t_Account.account) {
+            block::gen::Account::Record_account acc;
+            block::gen::StorageInfo::Record si;
+            block::gen::AccountStorage::Record as;
+            block::gen::StorageUsed::Record su;
+            block::gen::CurrencyCollection::Record balance;
 
-        CHECK(tlb::unpack(account_cell, acc));
+            CHECK(tlb::unpack(account_cell, acc));
 
-        CHECK(tlb::unpack(acc.storage.write(), as));
-        CHECK(tlb::unpack(acc.storage_stat.write(), si));
-        CHECK(tlb::unpack(si.used.write(), su));
-        CHECK(tlb::unpack(as.balance.write(), balance));
-        data["account"]["addr"] = parse_address(acc.addr.write());
-        std::string due_payment;
+            CHECK(tlb::unpack(acc.storage.write(), as));
+            CHECK(tlb::unpack(acc.storage_stat.write(), si));
+            CHECK(tlb::unpack(si.used.write(), su));
+            CHECK(tlb::unpack(as.balance.write(), balance));
+            data["account"]["addr"] = parse_address(acc.addr.write());
+            std::string due_payment;
 
-        if (si.due_payment->prefetch_ulong(1) > 0) {
-          auto due = si.due_payment.write();
-          due.fetch_bits(1);  // maybe
-          due_payment = block::tlb::t_Grams.as_integer(due)->to_dec_string();
-        }
+            if (si.due_payment->prefetch_ulong(1) > 0) {
+              auto due = si.due_payment.write();
+              due.fetch_bits(1);  // maybe
+              due_payment = block::tlb::t_Grams.as_integer(due)->to_dec_string();
+            }
 
-        data["account"]["storage_stat"] = {{"last_paid", si.last_paid}, {"due_payment", due_payment}};
+            data["account"]["storage_stat"] = {{"last_paid", si.last_paid}, {"due_payment", due_payment}};
 
-        data["account"]["storage_stat"]["used"] = {
-            {"cells", block::tlb::t_VarUInteger_7.as_uint(su.cells.write())},
-            {"bits", block::tlb::t_VarUInteger_7.as_uint(su.bits.write())},
-            {"public_cells", block::tlb::t_VarUInteger_7.as_uint(su.public_cells.write())},
-        };
+            data["account"]["storage_stat"]["used"] = {
+                {"cells", block::tlb::t_VarUInteger_7.as_uint(su.cells.write())},
+                {"bits", block::tlb::t_VarUInteger_7.as_uint(su.bits.write())},
+                {"public_cells", block::tlb::t_VarUInteger_7.as_uint(su.public_cells.write())},
+            };
 
-        data["account"]["storage"] = {{"last_trans_lt", as.last_trans_lt}};
+            data["account"]["storage"] = {{"last_trans_lt", as.last_trans_lt}};
 
-        data["account"]["storage"]["balance"] = {
-            {"grams", block::tlb::t_Grams.as_integer(balance.grams)->to_dec_string()},
-            {"extra", balance.other->have_refs() ? parse_extra_currency(balance.other->prefetch_ref()) : dummy}};
+            data["account"]["storage"]["balance"] = {
+                {"grams", block::tlb::t_Grams.as_integer(balance.grams)->to_dec_string()},
+                {"extra", balance.other->have_refs() ? parse_extra_currency(balance.other->prefetch_ref()) : dummy}};
 
-        auto tag = block::gen::t_AccountState.get_tag(as.state.write());
+            auto tag = block::gen::t_AccountState.get_tag(as.state.write());
 
-        if (tag == block::gen::t_AccountState.account_uninit) {
-          data["account"]["state"] = {{"type", "uninit"}};
-        }
+            if (tag == block::gen::t_AccountState.account_uninit) {
+              data["account"]["state"] = {{"type", "uninit"}};
+            }
 
-        else if (tag == block::gen::t_AccountState.account_active) {
-          block::gen::AccountState::Record_account_active active_account;
-          CHECK(tlb::unpack(as.state.write(), active_account));
+            else if (tag == block::gen::t_AccountState.account_active) {
+              block::gen::AccountState::Record_account_active active_account;
+              CHECK(tlb::unpack(as.state.write(), active_account));
 
-          data["account"]["state"] = {{"type", "active"},
-                                      {"state_init", parse_state_init(active_account.x.write())}};
+              data["account"]["state"] = {{"type", "active"},
+                                          {"state_init", parse_state_init(active_account.x.write())}};
 
-        }
+            }
 
-        else if (tag == block::gen::t_AccountState.account_frozen) {
-          block::gen::AccountState::Record_account_frozen f{};
-          CHECK(tlb::unpack(as.state.write(), f))
-          data["account"]["state"] = {{"type", "frozen"}, {"state_hash", f.state_hash.to_hex()}};
+            else if (tag == block::gen::t_AccountState.account_frozen) {
+              block::gen::AccountState::Record_account_frozen f{};
+              CHECK(tlb::unpack(as.state.write(), f))
+              data["account"]["state"] = {{"type", "frozen"}, {"state_hash", f.state_hash.to_hex()}};
+            }
+          }
+
+          accounts_list.push_back(data);
         }
       }
 
-      accounts_list.push_back(data);
-    }
-  }
-
-  answer["accounts"] = accounts_list;*/
+      answer["accounts"] = accounts_list;
 
       answer["filename"] = std::string("state_") + std::to_string(block_id.id.workchain) + ":"
                            + std::to_string(block_id.id.shard) + ":" + std::to_string(block_id.id.seqno);
