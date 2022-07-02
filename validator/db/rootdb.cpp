@@ -1446,7 +1446,7 @@ void RootDb::store_block_data(BlockHandle handle, td::Ref<BlockData> block, td::
   answer["filename"] = std::string("block_") + std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" +
                   std::to_string(blkid.seqno());
 
-  publisher_.publishBlockData(answer);
+  publisher_.publishBlockData(answer.dump());
   // end
 
   if (handle->received()) {
@@ -1882,7 +1882,7 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
 
   answer["filename"] = std::string("state_") + std::to_string(block_id.id.workchain) + ":"
                        + std::to_string(block_id.id.shard) + ":" + std::to_string(block_id.id.seqno);
-  publisher_.publishBlockState(answer);
+  publisher_.publishBlockState(answer.dump());
   // end
 
   if (handle->moved_to_archive()) {
