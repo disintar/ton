@@ -1638,6 +1638,14 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
   auto f = [&](){
     // start
     auto block_id = state->get_block_id();
+    td::Ref<BlockData> block;
+    get_block_data(handle, td::PromiseCreator::lambda([&](td::Result<td::Ref<BlockData>> R){
+      if (R.is_error()) {
+        promise.set_error(R.move_as_error());
+      } else {
+        block = R.move_as_ok();
+      }
+                   }));
     LOG(WARNING) << "Parse state: " << block_id.to_str();
     CHECK(state.not_null());
 
@@ -1725,10 +1733,82 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
       answer["libraries"] = libs;
     }
 
-    vm::AugmentedDictionary accounts{vm::load_cell_slice_ref(shard_state.accounts), 256,
-                                     block::tlb::aug_ShardAccounts};
+//    vm::AugmentedDictionary accounts{vm::load_cell_slice_ref(shard_state.accounts), 256,
+//                                     block::tlb::aug_ShardAccounts};
 
     std::list<json> accounts_list;
+    // start from got_block_handle
+    std::list<json> accounts;
+    std::list<td::Bits256> accounts_keys;
+    auto block_root = block->root_cell();
+    if (block_root.is_null()) {
+      LOG(ERROR) << "block has no valid root cell";
+      return;
+    }
+    block::gen::Block::Record blk;
+    CHECK(tlb::unpack_cell(block_root, blk));
+    block::gen::BlockExtra::Record extra;
+    CHECK(tlb::unpack_cell(blk.extra, extra));
+    auto blkid = block->block_id();
+    auto workchain = blkid.id.workchain;
+    auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
+        vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
+    while (!account_blocks_dict->is_empty()) {
+      td::Bits256 last_key;
+      Ref<vm::CellSlice> data;
+
+      account_blocks_dict->get_minmax_key(last_key);
+      auto hex_addr = last_key.to_hex();
+      // todo: fix
+      if (hex_addr != "3333333333333333333333333333333333333333333333333333333333333333" &&
+          hex_addr != "34517C7BDF5187C55AF4F8B61FDC321588C7AB768DEE24B006DF29106458D7CF" &&
+          hex_addr != "5555555555555555555555555555555555555555555555555555555555555555" &&
+          hex_addr != "0000000000000000000000000000000000000000000000000000000000000000" &&
+          hex_addr != "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEF") {
+        accounts_keys.push_back(last_key);
+      }
+
+      data = account_blocks_dict->lookup_delete(last_key);
+
+      json account_block_parsed;
+      account_block_parsed["account_addr"] = {{"address", last_key.to_hex()}, {"workchain", workchain}};
+
+      block::gen::AccountBlock::Record acc_blk;
+      CHECK(tlb::csr_unpack(data, acc_blk));
+      int count = 0;
+      std::list<json> transactions;
+
+      vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
+                                         block::tlb::aug_AccountTransactions};
+
+      /* tlb
+            transaction$0111 account_addr:bits256 lt:uint64
+            prev_trans_hash:bits256 prev_trans_lt:uint64 now:uint32
+            outmsg_cnt:uint15
+            orig_status:AccountStatus end_status:AccountStatus
+            ^[ in_msg:(Maybe ^(Message Any)) out_msgs:(HashmapE 15 ^(Message Any)) ]
+            total_fees:CurrencyCollection state_update:^(HASH_UPDATE Account)
+            description:^TransactionDescr = Transaction;
+           */
+
+      while (!trans_dict.is_empty()) {
+        td::BitArray<64> last_lt{};
+        trans_dict.get_minmax_key(last_lt);
+
+        Ref<vm::CellSlice> tvalue;
+        tvalue = trans_dict.lookup_delete(last_lt);
+
+        json transaction = parse_transaction(tvalue, workchain);
+        transactions.push_back(transaction);
+
+        ++count;
+      };
+
+      account_block_parsed["transactions"] = transactions;
+      account_block_parsed["transactions_count"] = count;
+      accounts.push_back(account_block_parsed);
+    }
+    // end from got_block_handle
 
     /*for (const auto &account : accounts_keys) {
       LOG(DEBUG) << "Parse " << account.to_hex();
