@@ -1642,7 +1642,6 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
     return;
   }
   if (!handle->inited_state_boc()) {
-    LOG(INFO) << "not inited_state_boc()";
     auto P = td::PromiseCreator::lambda([b = archive_db_.get(), root_hash = state->root_hash(), handle,
                                          promise = std::move(promise),
                                          state = state, this
@@ -1661,6 +1660,9 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
               R.ensure();
               promise.set_value(std::move(state));
             });
+        LOG(INFO) << "HELLO1";
+        auto q = state;
+        LOG(INFO) << state->get_block_id().to_str();
         auto f = [&](){
           // start
           auto block_id = state->get_block_id();
@@ -1912,13 +1914,14 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
           publisher_.publishBlockState(answer.dump());
           // end
         };
+        LOG(INFO) << "HELLO2";
         f();
+        LOG(INFO) << "HELLO3";
         td::actor::send_closure(b, &ArchiveManager::update_handle, std::move(handle), std::move(P));
       }
     });
     td::actor::send_closure(cell_db_, &CellDb::store_cell, handle->id(), state->root_cell(), std::move(P));
   } else {
-    LOG(INFO) << "inited_state_boc()";
     get_block_state(handle, std::move(promise));
   }
 }
