@@ -1637,6 +1637,7 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
   LOG(WARNING) << "Store block state: " << state->get_block_id().to_str();
   auto f = [&](){
     // start
+    LOG(WARNING) << "HELLO";
     auto block_id = state->get_block_id();
     //  LOG(WARNING) << "Parse state: " << block_id.to_str();
     CHECK(state.not_null());
@@ -1895,7 +1896,9 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
   if (!handle->inited_state_boc()) {
     LOG(INFO) << "not inited_state_boc()";
     auto P = td::PromiseCreator::lambda([b = archive_db_.get(), root_hash = state->root_hash(), handle,
-                                         promise = std::move(promise), f = std::move(f)](td::Result<td::Ref<vm::DataCell>> R) mutable {
+                                         promise = std::move(promise),
+                                         state = state, f = std::move(f)
+    ](td::Result<td::Ref<vm::DataCell>> R) mutable {
       if (R.is_error()) {
         promise.set_error(R.move_as_error());
       } else {
