@@ -1457,7 +1457,6 @@ class Indexer : public td::actor::Actor {
 
         std::list<json> accounts;
         std::list<td::Bits256> accounts_keys;
-
         while (!account_blocks_dict->is_empty()) {
           td::Bits256 last_key;
           Ref<vm::CellSlice> data;
