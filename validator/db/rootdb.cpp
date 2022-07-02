@@ -1638,7 +1638,7 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
   // start
   get_block_data(handle, td::PromiseCreator::lambda([=, promise = std::move(promise)](td::Result<td::Ref<BlockData>> R) mutable{
     if (R.is_error()) {
-//      promise.set_error(R.move_as_error());
+      promise.set_error(R.move_as_error());
     } else {
       auto block_id = state->get_block_id();
       td::Ref<BlockData> block;
