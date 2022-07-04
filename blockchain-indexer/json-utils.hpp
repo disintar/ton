@@ -24,44 +24,44 @@ using json = nlohmann::json;
 using td::Ref;
 
 
-inline std::list<std::tuple<int, std::string>> parse_extra_currency(const Ref<vm::Cell> &extra);
+std::list<std::tuple<int, std::string>> parse_extra_currency(const Ref<vm::Cell> &extra);
 
-inline std::map<std::string, std::variant<int, std::string>> parse_anycast(vm::CellSlice anycast);
+std::map<std::string, std::variant<int, std::string>> parse_anycast(vm::CellSlice anycast);
 
-inline std::string dump_as_boc(Ref<vm::Cell> root_cell);
+std::string dump_as_boc(Ref<vm::Cell> root_cell);
 
-inline json parse_address(vm::CellSlice address);
+json parse_address(vm::CellSlice address);
 
-inline json parse_libraries(Ref<vm::Cell> lib_cell);
+json parse_libraries(Ref<vm::Cell> lib_cell);
 
-inline json parse_state_init(vm::CellSlice state_init);
+json parse_state_init(vm::CellSlice state_init);
 
-inline json parse_message(Ref<vm::Cell> message_any);
+json parse_message(Ref<vm::Cell> message_any);
 
-inline std::string parse_type(char type);
+std::string parse_type(char type);
 
-inline std::string parse_status_change(char type);
+std::string parse_status_change(char type);
 
-inline json parse_storage_used_short(vm::CellSlice storage_used_short);
+json parse_storage_used_short(vm::CellSlice storage_used_short);
 
-inline json parse_storage_ph(vm::CellSlice item);
+json parse_storage_ph(vm::CellSlice item);
 
-inline json parse_credit_ph(vm::CellSlice item);
+json parse_credit_ph(vm::CellSlice item);
 
-inline json parse_action_ph(const vm::CellSlice &item);
+json parse_action_ph(const vm::CellSlice &item);
 
-inline json parse_bounce_phase(vm::CellSlice bp);
+json parse_bounce_phase(vm::CellSlice bp);
 
-inline json parse_compute_ph(vm::CellSlice item);
+json parse_compute_ph(vm::CellSlice item);
 
-inline json parse_split_prepare(vm::CellSlice item);
+json parse_split_prepare(vm::CellSlice item);
 
-inline json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr);
+json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr);
 
-inline json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain);
+json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain);
 
-inline json parse_in_msg_descr(vm::CellSlice in_msg, int workchain);
+json parse_in_msg_descr(vm::CellSlice in_msg, int workchain);
 
-inline json parse_out_msg_descr(vm::CellSlice out_msg, int workchain);
+json parse_out_msg_descr(vm::CellSlice out_msg, int workchain);
 
 #endif  //TON_JSON_UTILS_HPP
