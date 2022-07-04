@@ -37,7 +37,6 @@
 #include "validator/stats-merger.h"
 #include "td/actor/MultiPromise.h"
 
-#include "json.hpp"
 #include "td/utils/logging.h"
 #include "td/actor/actor.h"
 #include "td/utils/Time.h"
@@ -63,12 +62,9 @@
 #include <utility>
 #include "auto/tl/lite_api.h"
 #include "adnl/utils.hpp"
-#include "json.hpp"
 #include "tuple"
 #include "vm/boc.h"
 #include "crypto/block/mc-config.h"
-#include "blockchain-indexer/json-utils.hpp"
-
 
 namespace ton {
 

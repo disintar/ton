@@ -24,6 +24,7 @@
 #include "common/checksum.h"
 #include "validator/stats-merger.h"
 #include "td/actor/MultiPromise.h"
+#include "blockchain-indexer/json-utils.hpp"
 
 
 namespace ton {

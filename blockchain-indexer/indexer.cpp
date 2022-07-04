@@ -31,7 +31,7 @@
 #include "auto/tl/lite_api.h"
 #include "adnl/utils.hpp"
 #include "json.hpp"
-#include "json-utils.hpp"
+#include "json-utils.cpp"
 #include "tuple"
 #include "vm/boc.h"
 #include "crypto/block/mc-config.h"
