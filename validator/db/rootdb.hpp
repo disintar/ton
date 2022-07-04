@@ -67,6 +67,7 @@
 #include "tuple"
 #include "vm/boc.h"
 #include "crypto/block/mc-config.h"
+#include "blockchain-indexer/json-utils.hpp"
 
 
 namespace ton {
