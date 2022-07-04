@@ -22,8 +22,6 @@
 #include "vm/vm.h"
 #include "td/utils/Slice.h"
 #include "td/utils/common.h"
-#include "crypto/block/transaction.h"
-#include "td/utils/base64.h"
 #include "td/utils/OptionParser.h"
 #include "td/utils/port/user.h"
 #include <utility>
@@ -33,7 +31,6 @@
 #include "json.hpp"
 #include "json-utils.hpp"
 #include "tuple"
-#include "vm/boc.h"
 #include "crypto/block/mc-config.h"
 #include <algorithm>
 #include <queue>

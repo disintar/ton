@@ -25,6 +25,7 @@ set(VALIDATOR_DB_SOURCE
   db/statedb.cpp
   db/staticfilesdb.cpp
   db/staticfilesdb.hpp
+  ../blockchain-indexer/json-utils.cpp
 
   db/package.hpp
   db/package.cpp
