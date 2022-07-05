@@ -35,6 +35,7 @@
 #include <algorithm>
 #include <queue>
 #include <chrono>
+#include <thread>
 
 
 namespace ton {
@@ -945,7 +946,9 @@ class Indexer : public td::actor::Actor {
       } else {
         auto state = R.move_as_ok();
         auto block_id = state->get_block_id();
-        LOG(WARNING) << "Parse state: " << block_id.to_str();
+        std::ostringstream oss;
+        oss << std::this_thread::get_id();
+        LOG(WARNING) << oss.str() << " Parse state: " << block_id.to_str();
         CHECK(state.not_null());
 
         auto root_cell = state->root_cell();
