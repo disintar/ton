@@ -1035,7 +1035,7 @@ class Indexer : public td::actor::Actor {
                                          block::tlb::aug_ShardAccounts};
 
         std::vector<json> accounts_list;
-        accounts_list.reserve(accounts_keys);
+        accounts_list.reserve(accounts_keys.size());
 
         for (const auto &account : accounts_keys) {
           LOG(DEBUG) << "Parse " << account.to_hex();
@@ -1201,10 +1201,15 @@ int main(int argc, char **argv) {
     return td::Status::OK();
   });
 
+  auto S = p.run(argc, argv);
+  if (S.is_error()) {
+    LOG(ERROR) << "failed to parse options: " << S.move_as_error();
+    std::_Exit(2);
+  }
+
   td::actor::set_debug(true);
   td::actor::Scheduler scheduler({threads});
   scheduler.run_in_context([&] { main = td::actor::create_actor<ton::validator::Indexer>("cool"); });
-  scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
   scheduler.run_in_context(
       [&] { td::actor::send_closure(main, &ton::validator::Indexer::run, [&]() { scheduler.stop(); }); });
   scheduler.run();
