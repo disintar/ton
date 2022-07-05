@@ -52,7 +52,7 @@ void CellDbIn::start_up() {
 }
 
 void CellDbIn::load_cell(RootHash hash, td::Promise<td::Ref<vm::DataCell>> promise) {
-  td::PerfWarningTimer{"loadcell", 0.1};
+  td::PerfWarningTimer{"loadcell", 0.01};
   promise.set_result(boc_->load_cell(hash.as_slice()));
 }
 
