@@ -1039,15 +1039,16 @@ class Indexer : public td::actor::Actor {
 
         for (const auto &account : accounts_keys) {
           LOG(DEBUG) << "Parse " << account.to_hex();
-          auto result = accounts.lookup_extra(account.cbits(), 256);
-          auto value = result.first;
-          auto extra = result.second;
+          auto result = accounts.lookup(account.cbits(), 256);
+//          auto value = result.first;
+//          auto extra = result.second;
+          auto value = result;
           if (value.not_null()) {
             block::gen::ShardAccount::Record sa;
             block::gen::DepthBalanceInfo::Record dbi;
             block::gen::CurrencyCollection::Record dbi_cc;
             CHECK(tlb::unpack(value.write(), sa));
-            CHECK(tlb::unpack(extra.write(), dbi));
+//            CHECK(tlb::unpack(extra.write(), dbi));
             CHECK(tlb::unpack(dbi.balance.write(), dbi_cc));
 
             json data;
