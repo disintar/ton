@@ -79,7 +79,7 @@ public:
   void storeBlockState(BlockHandle handle, td::Ref<ShardState> state);
 
 private:
-  void gotState(BlockHandle handle, td::Ref<ShardState> state, std::list<td::Bits256> accounts_keys);
+  void gotState(BlockHandle handle, td::Ref<ShardState> state, std::vector<td::Bits256> accounts_keys);
 
   void publishBlockData(const std::string& json);
 
@@ -92,7 +92,7 @@ private:
 
   std::mutex maps_mtx;
   std::map<std::string, std::pair<BlockHandle, td::Ref<ShardState>>> states_;
-  std::map<std::string, std::list<td::Bits256>> accounts_keys_;
+  std::map<std::string, std::vector<td::Bits256>> accounts_keys_;
 };
 
 

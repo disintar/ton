@@ -281,7 +281,7 @@ void BlockPublisher::storeBlockData(BlockHandle handle, td::Ref<BlockData> block
   auto in_msg_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.in_msg_descr), 256,
                                                                block::tlb::aug_InMsgDescr);
 
-  std::list<json> in_msgs_json;
+  std::vector<json> in_msgs_json;
   while (!in_msg_dict->is_empty()) {
     td::Bits256 last_key;
 
@@ -295,7 +295,7 @@ void BlockPublisher::storeBlockData(BlockHandle handle, td::Ref<BlockData> block
   auto out_msg_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.out_msg_descr), 256,
                                                                 block::tlb::aug_OutMsgDescr);
 
-  std::list<json> out_msgs_json;
+  std::vector<json> out_msgs_json;
   while (!out_msg_dict->is_empty()) {
     td::Bits256 last_key;
 
@@ -318,8 +318,8 @@ void BlockPublisher::storeBlockData(BlockHandle handle, td::Ref<BlockData> block
           _ (HashmapAugE 256 AccountBlock CurrencyCollection) = ShardAccountBlocks;
          */
 
-  std::list<json> accounts;
-  std::list<td::Bits256> accounts_keys;
+  std::vector<json> accounts;
+  std::vector<td::Bits256> accounts_keys;
 
   while (!account_blocks_dict->is_empty()) {
     td::Bits256 last_key;
@@ -344,7 +344,7 @@ void BlockPublisher::storeBlockData(BlockHandle handle, td::Ref<BlockData> block
     block::gen::AccountBlock::Record acc_blk;
     CHECK(tlb::csr_unpack(data, acc_blk));
     int count = 0;
-    std::list<json> transactions;
+    std::vector<json> transactions;
 
     vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
                                        block::tlb::aug_AccountTransactions};
@@ -450,7 +450,7 @@ void BlockPublisher::storeBlockData(BlockHandle handle, td::Ref<BlockData> block
       CHECK(tlb::unpack(sf.fees.write(), fees));
       CHECK(tlb::unpack(sf.create.write(), create));
 
-      std::list<std::tuple<int, std::string>> dummy;
+      std::vector<std::tuple<int, std::string>> dummy;
 
       json data = {
           {"fees",
@@ -478,7 +478,7 @@ void BlockPublisher::storeBlockData(BlockHandle handle, td::Ref<BlockData> block
 
     if (extra_mc.r1.prev_blk_signatures->have_refs()) {
       vm::Dictionary prev_blk_signatures{extra_mc.r1.prev_blk_signatures->prefetch_ref(), 16};
-      std::list<json> prev_blk_signatures_json;
+      std::vector<json> prev_blk_signatures_json;
 
       while (!prev_blk_signatures.is_empty()) {
         td::BitArray<16> key{};
@@ -511,7 +511,7 @@ void BlockPublisher::storeBlockData(BlockHandle handle, td::Ref<BlockData> block
     block::ShardConfig shards;
     shards.unpack(extra_mc.shard_hashes);
 
-    std::list<json> shards_json;
+    std::vector<json> shards_json;
 
     auto f = [&shards_json, &blkid](McShardHash &ms) {
       json data = {{"BlockIdExt",
@@ -587,7 +587,7 @@ void BlockPublisher::storeBlockState(BlockHandle handle, td::Ref<ShardState> sta
   }
 }
 
-void BlockPublisher::gotState(BlockHandle handle, td::Ref<ShardState> state, std::list<td::Bits256> accounts_keys) {
+void BlockPublisher::gotState(BlockHandle handle, td::Ref<ShardState> state, std::vector<td::Bits256> accounts_keys) {
   auto block_id = state->get_block_id();
   LOG(WARNING) << "Parse state: " << block_id.to_str();
   CHECK(state.not_null());
@@ -597,7 +597,7 @@ void BlockPublisher::gotState(BlockHandle handle, td::Ref<ShardState> state, std
   block::gen::ShardStateUnsplit::Record shard_state;
   CHECK(tlb::unpack_cell(root_cell, shard_state));
 
-  std::list<std::tuple<int, std::string>> dummy;
+  std::vector<std::tuple<int, std::string>> dummy;
 
   block::gen::CurrencyCollection::Record total_balance_cc;
   block::gen::CurrencyCollection::Record total_validator_fees_cc;
@@ -639,7 +639,7 @@ void BlockPublisher::gotState(BlockHandle handle, td::Ref<ShardState> state, std
   if (shard_state.r1.libraries->have_refs()) {
     auto libraries = vm::Dictionary{shard_state.r1.libraries->prefetch_ref(), 256};
 
-    std::list<json> libs;
+    std::vector<json> libs;
 
     while (!libraries.is_empty()) {
       td::BitArray<256> key{};
@@ -649,7 +649,7 @@ void BlockPublisher::gotState(BlockHandle handle, td::Ref<ShardState> state, std
       block::gen::LibDescr::Record libdescr;
       CHECK(tlb::unpack(lib.write(), libdescr));
 
-      std::list<std::string> publishers;
+      std::vector<std::string> publishers;
 
       auto libs_publishers = libdescr.publishers.write();
 
@@ -679,7 +679,7 @@ void BlockPublisher::gotState(BlockHandle handle, td::Ref<ShardState> state, std
   vm::AugmentedDictionary accounts{vm::load_cell_slice_ref(shard_state.accounts), 256,
                                    block::tlb::aug_ShardAccounts};
 
-  std::list<json> accounts_list;
+  std::vector<json> accounts_list;
 
   for (const auto &account : accounts_keys) {
     LOG(DEBUG) << "Parse " << account.to_hex();
