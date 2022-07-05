@@ -853,7 +853,7 @@ class Indexer : public td::actor::Actor {
         td::actor::send_closure_later(SelfId, &Indexer::parse_other);
       }
     });
-    td::actor::send_closure_later_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
+    td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
                                   std::move(P));
   }
 
@@ -1138,7 +1138,7 @@ class Indexer : public td::actor::Actor {
     });
 
     increase_state_padding();
-    td::actor::send_closure_later_later(validator_manager_, &ValidatorManagerInterface::get_shard_state_from_db, handle,
+    td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_shard_state_from_db, handle,
                                   std::move(P_st));
   }
 };  // namespace validator
