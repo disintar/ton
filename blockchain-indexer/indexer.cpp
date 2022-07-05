@@ -270,9 +270,6 @@ class Indexer : public td::actor::Actor {
             auto handle = R.move_as_ok();
             LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
             td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
-
-            std::vector<td::Bits256> accounts_keys;
-            td::actor::send_closure(SelfId, &Indexer::got_state_accounts, handle, accounts_keys);
           }
         });
 
@@ -662,9 +659,9 @@ class Indexer : public td::actor::Actor {
           accounts.emplace_back(account_block_parsed);
         }
 
-//        if (accounts_keys.size() > 0) {
-//          td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
-//        }
+        if (accounts_keys.size() > 0) {
+          td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
+        }
 
         answer["BlockExtra"] = {
             {"accounts", std::move(accounts)},

@@ -1016,7 +1016,7 @@ void RootDb::get_block_state(ConstBlockHandle handle, td::Promise<td::Ref<ShardS
             promise.set_error(R.move_as_error());
           } else {
             auto S = create_shard_state(handle->id(), R.move_as_ok());
-            // S.ensure();
+            // S.ensure(); TODO: try to avoid
             promise.set_value(S.move_as_ok());
           }
         });
