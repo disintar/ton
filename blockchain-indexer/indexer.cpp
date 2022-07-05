@@ -1151,7 +1151,7 @@ int main(int argc, char **argv) {
   std::cout << "Metrics:" << std::endl;
 
   std::cout << "before creation Hello World!" << std::endl;
-  td::actor::ActorOwn<ton::validator::Indexer> main = td::actor::create_actor<ton::validator::Indexer>("cool");
+  td::actor::ActorOwn<ton::validator::Indexer> main;
   std::cout << "after creation Hello World!" << std::endl;
 
   td::OptionParser p;
@@ -1207,14 +1207,16 @@ int main(int argc, char **argv) {
 
   td::actor::set_debug(true);
   std::cout << "2 Hello World!" << std::endl;
-  p.run(argc, argv).ensure();
+  main = td::actor::create_actor<ton::validator::Indexer>("cool");
   std::cout << "3 Hello World!" << std::endl;
+  p.run(argc, argv).ensure();
+  std::cout << "4 Hello World!" << std::endl;
 
   td::actor::Scheduler scheduler({threads});
-  std::cout << "4 Hello World!" << std::endl;
+  std::cout << "5 Hello World!" << std::endl;
   scheduler.run_in_context(
       [&] { td::actor::send_closure(main, &ton::validator::Indexer::run, [&]() { scheduler.stop(); }); });
-  std::cout << "5 Hello World!" << std::endl;
+  std::cout << "6 Hello World!" << std::endl;
   scheduler.run();
   return 0;
 }
