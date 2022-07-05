@@ -1052,10 +1052,10 @@ class Indexer : public td::actor::Actor {
 //            CHECK(tlb::unpack(dbi.balance.write(), dbi_cc));
 
             json data;
-            data["balance"] = {
+//            data["balance"] = {
 //                {"split_depth", dbi.split_depth},
-                {"grams", block::tlb::t_Grams.as_integer(dbi_cc.grams)->to_dec_string()},
-                {"extra", dbi_cc.other->have_refs() ? parse_extra_currency(dbi_cc.other->prefetch_ref()) : dummy}};
+//                {"grams", block::tlb::t_Grams.as_integer(dbi_cc.grams)->to_dec_string()},
+//                {"extra", dbi_cc.other->have_refs() ? parse_extra_currency(dbi_cc.other->prefetch_ref()) : dummy}};
             data["account_address"] = {{"workchain", block_id.id.workchain}, {"address", account.to_hex()}};
             data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}};
 
