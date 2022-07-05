@@ -1012,6 +1012,7 @@ void RootDb::get_block_state(ConstBlockHandle handle, td::Promise<td::Ref<ShardS
     }
     auto P =
         td::PromiseCreator::lambda([handle, promise = std::move(promise)](td::Result<td::Ref<vm::DataCell>> R) mutable {
+          LOG(DEBUG) << "STATE FUCKUP: Loaded! " << handle->id().to_str();
           if (R.is_error()) {
             promise.set_error(R.move_as_error());
           } else {
@@ -1020,6 +1021,7 @@ void RootDb::get_block_state(ConstBlockHandle handle, td::Promise<td::Ref<ShardS
             promise.set_value(S.move_as_ok());
           }
         });
+    LOG(DEBUG) << "STATE FUCKUP: Start load! " << handle->id().to_str();
     td::actor::send_closure(cell_db_, &CellDb::load_cell, handle->state(), std::move(P));
   } else {
     promise.set_error(td::Status::Error(ErrorCode::notready, "state not in db"));
