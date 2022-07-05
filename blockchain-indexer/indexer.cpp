@@ -1150,7 +1150,7 @@ int main(int argc, char **argv) {
   CHECK(vm::init_op_cp0());
   std::cout << "Metrics:" << std::endl;
 
-  td::actor::ActorOwn<ton::validator::Indexer> main;
+  td::actor::ActorOwn<ton::validator::Indexer> main = td::actor::create_actor<ton::validator::Indexer>("cool");
 
   td::OptionParser p;
   p.set_description("blockchain indexer");
@@ -1200,8 +1200,6 @@ int main(int argc, char **argv) {
     td::actor::send_closure(main, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_last);
     return td::Status::OK();
   });
-
-  main = td::actor::create_actor<ton::validator::Indexer>("cool");
 
   auto S = p.run(argc, argv);
   if (S.is_error()) {
