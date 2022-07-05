@@ -102,7 +102,7 @@ class Indexer : public td::actor::Actor {
   std::function<void()> on_finish_;
   bool display_initialized_ = false;
   JsonDumper block_dumper_  = JsonDumper("blocks_", 1000);
-  JsonDumper states_dumper_ = JsonDumper("states_", 1000);
+  JsonDumper state_dumper_ = JsonDumper("states_", 1000);
 
   // store timestamps of parsed blocks for speed measuring
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_blocks_timepoints_;
@@ -1179,12 +1179,11 @@ class Indexer : public td::actor::Actor {
 
         answer["accounts"] = std::move(accounts_list);
 
-        std::ofstream block_file;
-        block_file.open("state_" + std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) +
-                        ":" + std::to_string(block_id.id.seqno) + +".json");
-
-        block_file << answer.dump(4);
-        block_file.close();
+        state_dumper_.store(
+            "state_" + std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) +
+                ":" + std::to_string(block_id.id.seqno),
+            std::move(answer)
+        );
 
         decrease_state_padding();
       }
