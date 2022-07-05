@@ -1150,7 +1150,9 @@ int main(int argc, char **argv) {
   CHECK(vm::init_op_cp0());
   std::cout << "Metrics:" << std::endl;
 
+  std::cout << "before creation Hello World!" << std::endl;
   td::actor::ActorOwn<ton::validator::Indexer> main = td::actor::create_actor<ton::validator::Indexer>("cool");
+  std::cout << "after creation Hello World!" << std::endl;
 
   td::OptionParser p;
   p.set_description("blockchain indexer");
