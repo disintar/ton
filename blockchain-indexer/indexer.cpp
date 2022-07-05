@@ -1201,13 +1201,9 @@ int main(int argc, char **argv) {
     return td::Status::OK();
   });
 
-  auto S = p.run(argc, argv);
-  if (S.is_error()) {
-    LOG(ERROR) << "failed to parse options: " << S.move_as_error();
-    std::_Exit(2);
-  }
-
   td::actor::set_debug(true);
+  p.run(argc, argv).ensure();
+
   td::actor::Scheduler scheduler({threads});
   scheduler.run_in_context(
       [&] { td::actor::send_closure(main, &ton::validator::Indexer::run, [&]() { scheduler.stop(); }); });
