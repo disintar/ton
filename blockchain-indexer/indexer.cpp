@@ -1150,9 +1150,7 @@ int main(int argc, char **argv) {
   CHECK(vm::init_op_cp0());
   std::cout << "Metrics:" << std::endl;
 
-  std::cout << "before creation Hello World!" << std::endl;
   td::actor::ActorOwn<ton::validator::Indexer> main;
-  std::cout << "after creation Hello World!" << std::endl;
 
   td::OptionParser p;
   p.set_description("blockchain indexer");
@@ -1175,7 +1173,7 @@ int main(int argc, char **argv) {
   p.add_option('C', "config", "global config path", [&](td::Slice fname) {
     td::actor::send_closure(main, &ton::validator::Indexer::set_global_config_path, fname.str());
   });
-  td::uint32 threads = 7;
+  td::uint32 threads = 24;
   p.add_checked_option(
       't', "threads", PSTRING() << "number of threads (default=" << threads << ")", [&](td::Slice arg) {
         td::uint32 v;
@@ -1203,20 +1201,12 @@ int main(int argc, char **argv) {
     return td::Status::OK();
   });
 
-  std::cout << "1 Hello World!" << std::endl;
-
   td::actor::set_debug(true);
-  std::cout << "2 Hello World!" << std::endl;
-  main = td::actor::create_actor<ton::validator::Indexer>("cool");
-  std::cout << "3 Hello World!" << std::endl;
-  p.run(argc, argv).ensure();
-  std::cout << "4 Hello World!" << std::endl;
-
-  td::actor::Scheduler scheduler({threads});
-  std::cout << "5 Hello World!" << std::endl;
+  td::actor::Scheduler scheduler({threads});  // contans a bug: threads not initialized by OptionsParser
+  scheduler.run_in_context([&] { main = td::actor::create_actor<ton::validator::Indexer>("cool"); });
+  scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
   scheduler.run_in_context(
       [&] { td::actor::send_closure(main, &ton::validator::Indexer::run, [&]() { scheduler.stop(); }); });
-  std::cout << "6 Hello World!" << std::endl;
   scheduler.run();
   return 0;
 }
