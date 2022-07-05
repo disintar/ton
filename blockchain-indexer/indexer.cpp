@@ -1045,15 +1045,15 @@ class Indexer : public td::actor::Actor {
           auto value = result;
           if (value.not_null()) {
             block::gen::ShardAccount::Record sa;
-            block::gen::DepthBalanceInfo::Record dbi;
+//            block::gen::DepthBalanceInfo::Record dbi;
             block::gen::CurrencyCollection::Record dbi_cc;
             CHECK(tlb::unpack(value.write(), sa));
 //            CHECK(tlb::unpack(extra.write(), dbi));
-            CHECK(tlb::unpack(dbi.balance.write(), dbi_cc));
+//            CHECK(tlb::unpack(dbi.balance.write(), dbi_cc));
 
             json data;
             data["balance"] = {
-                {"split_depth", dbi.split_depth},
+//                {"split_depth", dbi.split_depth},
                 {"grams", block::tlb::t_Grams.as_integer(dbi_cc.grams)->to_dec_string()},
                 {"extra", dbi_cc.other->have_refs() ? parse_extra_currency(dbi_cc.other->prefetch_ref()) : dummy}};
             data["account_address"] = {{"workchain", block_id.id.workchain}, {"address", account.to_hex()}};
