@@ -1201,6 +1201,8 @@ int main(int argc, char **argv) {
     return td::Status::OK();
   });
 
+  main = td::actor::create_actor<ton::validator::Indexer>("cool");
+
   auto S = p.run(argc, argv);
   if (S.is_error()) {
     LOG(ERROR) << "failed to parse options: " << S.move_as_error();
@@ -1209,7 +1211,6 @@ int main(int argc, char **argv) {
 
   td::actor::set_debug(true);
   td::actor::Scheduler scheduler({threads});
-  scheduler.run_in_context([&] { main = td::actor::create_actor<ton::validator::Indexer>("cool"); });
   scheduler.run_in_context(
       [&] { td::actor::send_closure(main, &ton::validator::Indexer::run, [&]() { scheduler.stop(); }); });
   scheduler.run();
