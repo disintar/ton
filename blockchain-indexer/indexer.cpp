@@ -1201,12 +1201,18 @@ int main(int argc, char **argv) {
     return td::Status::OK();
   });
 
+  std::cout << "1 Hello World!" << std::endl;
+
   td::actor::set_debug(true);
+  std::cout << "2 Hello World!" << std::endl;
   p.run(argc, argv).ensure();
+  std::cout << "3 Hello World!" << std::endl;
 
   td::actor::Scheduler scheduler({threads});
+  std::cout << "4 Hello World!" << std::endl;
   scheduler.run_in_context(
       [&] { td::actor::send_closure(main, &ton::validator::Indexer::run, [&]() { scheduler.stop(); }); });
+  std::cout << "5 Hello World!" << std::endl;
   scheduler.run();
   return 0;
 }
