@@ -659,8 +659,8 @@ class Indexer : public td::actor::Actor {
           accounts.emplace_back(account_block_parsed);
         }
 
-        if (accounts_keys.size() > 0) {
-          td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
+        if (!accounts_keys.empty()) {
+          td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle); // , accounts_keys);
         }
 
         answer["BlockExtra"] = {
@@ -938,7 +938,8 @@ class Indexer : public td::actor::Actor {
     on_finish_();
   }
 
-  void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::vector<td::Bits256> accounts_keys) {
+  void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle) {
+    std::vector<td::Bits256> accounts_keys;
     auto P_st = td::PromiseCreator::lambda([this, SelfId = actor_id(this), accounts_keys = std::move(accounts_keys)](
                                                td::Result<td::Ref<ShardState>> R) {
       if (R.is_error()) {
