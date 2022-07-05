@@ -24,7 +24,7 @@ using json = nlohmann::json;
 using td::Ref;
 
 
-std::list<std::tuple<int, std::string>> parse_extra_currency(const Ref<vm::Cell> &extra);
+std::vector<std::tuple<int, std::string>> parse_extra_currency(const Ref<vm::Cell> &extra);
 
 std::map<std::string, std::variant<int, std::string>> parse_anycast(vm::CellSlice anycast);
 

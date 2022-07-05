@@ -104,7 +104,7 @@ class Indexer : public td::actor::Actor {
           y.invalidate();
         }
       }
-      h.push_back(b);
+      h.emplace_back(b);
     }
     opts_.write().set_hardforks(std::move(h));
     return td::Status::OK();
@@ -562,7 +562,7 @@ class Indexer : public td::actor::Actor {
         auto in_msg_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.in_msg_descr), 256,
                                                                      block::tlb::aug_InMsgDescr);
 
-        std::list<json> in_msgs_json;
+        std::vector<json> in_msgs_json;
         while (!in_msg_dict->is_empty()) {
           td::Bits256 last_key;
 
@@ -570,13 +570,13 @@ class Indexer : public td::actor::Actor {
           Ref<vm::CellSlice> data = in_msg_dict->lookup_delete(last_key);
 
           json parsed = {{"hash", last_key.to_hex()}, {"message", parse_in_msg_descr(data.write(), workchain)}};
-          in_msgs_json.push_back(parsed);
+          in_msgs_json.emplace_back(std::move(parsed));
         }
 
         auto out_msg_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.out_msg_descr), 256,
                                                                       block::tlb::aug_OutMsgDescr);
 
-        std::list<json> out_msgs_json;
+        std::vector<json> out_msgs_json;
         while (!out_msg_dict->is_empty()) {
           td::Bits256 last_key;
 
@@ -584,7 +584,7 @@ class Indexer : public td::actor::Actor {
           Ref<vm::CellSlice> data = out_msg_dict->lookup_delete(last_key);
 
           json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg_descr(data.write(), workchain)}};
-          out_msgs_json.push_back(parsed);
+          out_msgs_json.emplace_back(std::move(parsed));
         }
 
         auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
@@ -599,8 +599,8 @@ class Indexer : public td::actor::Actor {
           _ (HashmapAugE 256 AccountBlock CurrencyCollection) = ShardAccountBlocks;
          */
 
-        std::list<json> accounts;
-        std::list<td::Bits256> accounts_keys;
+        std::vector<json> accounts;
+        std::vector<td::Bits256> accounts_keys;
         while (!account_blocks_dict->is_empty()) {
           td::Bits256 last_key;
           Ref<vm::CellSlice> data;
@@ -613,7 +613,7 @@ class Indexer : public td::actor::Actor {
               hex_addr != "5555555555555555555555555555555555555555555555555555555555555555" &&
               hex_addr != "0000000000000000000000000000000000000000000000000000000000000000" &&
               hex_addr != "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEF") {
-            accounts_keys.push_back(last_key);
+            accounts_keys.emplace_back(last_key);
           }
 
           data = account_blocks_dict->lookup_delete(last_key);
@@ -624,7 +624,7 @@ class Indexer : public td::actor::Actor {
           block::gen::AccountBlock::Record acc_blk;
           CHECK(tlb::csr_unpack(data, acc_blk));
           int count = 0;
-          std::list<json> transactions;
+          std::vector<json> transactions;
 
           vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
                                              block::tlb::aug_AccountTransactions};
@@ -647,14 +647,14 @@ class Indexer : public td::actor::Actor {
             tvalue = trans_dict.lookup_delete(last_lt);
 
             json transaction = parse_transaction(tvalue, workchain);
-            transactions.push_back(transaction);
+            transactions.emplace_back(std::move(transaction));
 
             ++count;
           };
 
           account_block_parsed["transactions"] = transactions;
           account_block_parsed["transactions_count"] = count;
-          accounts.push_back(account_block_parsed);
+          accounts.emplace_back(account_block_parsed);
         }
 
         if (accounts_keys.size() > 0) {
@@ -721,7 +721,7 @@ class Indexer : public td::actor::Actor {
           //            CHECK(tlb::unpack(sf.fees.write(), fees));
           //            CHECK(tlb::unpack(sf.create.write(), create));
           //
-          //            std::list<std::tuple<int, std::string>> dummy;
+          //            std::vector<std::tuple<int, std::string>> dummy;
           //
           //            json data = {
           //                {"fees",
@@ -749,7 +749,7 @@ class Indexer : public td::actor::Actor {
 
           if (extra_mc.r1.prev_blk_signatures->have_refs()) {
             vm::Dictionary prev_blk_signatures{extra_mc.r1.prev_blk_signatures->prefetch_ref(), 16};
-            std::list<json> prev_blk_signatures_json;
+            std::vector<json> prev_blk_signatures_json;
 
             while (!prev_blk_signatures.is_empty()) {
               td::BitArray<16> key{};
@@ -773,7 +773,7 @@ class Indexer : public td::actor::Actor {
                                {"s", css.s.to_hex()},
                            }};
 
-              prev_blk_signatures_json.push_back(data);
+              prev_blk_signatures_json.emplace_back(std::move(data));
             };
 
             answer["BlockExtra"]["custom"]["prev_blk_signatures"] = prev_blk_signatures_json;
@@ -782,7 +782,7 @@ class Indexer : public td::actor::Actor {
           block::ShardConfig shards;
           shards.unpack(extra_mc.shard_hashes);
 
-          std::list<json> shards_json;
+          std::vector<json> shards_json;
 
           auto f = [&shards_json, &SelfId, &blkid, is_first](McShardHash &ms) {
             json data = {{"BlockIdExt",
@@ -806,7 +806,7 @@ class Indexer : public td::actor::Actor {
                          {"fsm_utime", ms.fsm_utime()},
                          {"fsm_state", ms.fsm_state()}};
 
-            shards_json.push_back(data);
+            shards_json.emplace_back(std::move(data));
 
             auto shard_seqno = ms.top_block_id().id.seqno;
             auto shard_shard = ms.top_block_id().id.shard;
@@ -936,7 +936,7 @@ class Indexer : public td::actor::Actor {
     on_finish_();
   }
 
-  void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::list<td::Bits256> accounts_keys) {
+  void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::vector<td::Bits256> accounts_keys) {
     auto P_st = td::PromiseCreator::lambda([this, SelfId = actor_id(this), accounts_keys = std::move(accounts_keys)](
                                                td::Result<td::Ref<ShardState>> R) {
       if (R.is_error()) {
@@ -952,7 +952,7 @@ class Indexer : public td::actor::Actor {
         block::gen::ShardStateUnsplit::Record shard_state;
         CHECK(tlb::unpack_cell(root_cell, shard_state));
 
-        std::list<std::tuple<int, std::string>> dummy;
+        std::vector<std::tuple<int, std::string>> dummy;
 
         block::gen::CurrencyCollection::Record total_balance_cc;
         block::gen::CurrencyCollection::Record total_validator_fees_cc;
@@ -994,7 +994,7 @@ class Indexer : public td::actor::Actor {
         if (shard_state.r1.libraries->have_refs()) {
           auto libraries = vm::Dictionary{shard_state.r1.libraries->prefetch_ref(), 256};
 
-          std::list<json> libs;
+          std::vector<json> libs;
 
           while (!libraries.is_empty()) {
             td::BitArray<256> key{};
@@ -1004,7 +1004,7 @@ class Indexer : public td::actor::Actor {
             block::gen::LibDescr::Record libdescr;
             CHECK(tlb::unpack(lib.write(), libdescr));
 
-            std::list<std::string> publishers;
+            std::vector<std::string> publishers;
 
             auto libs_publishers = libdescr.publishers.write();
 
@@ -1021,11 +1021,11 @@ class Indexer : public td::actor::Actor {
               publishers_dict.get_minmax_key(publisher);
               publishers_dict.lookup_delete(publisher);
 
-              publishers.push_back(publisher.to_hex());
+              publishers.emplace_back(publisher.to_hex());
             }
 
             json data = {{"hash", key.to_hex()}, {"lib", dump_as_boc(libdescr.lib)}, {"publishers", publishers}};
-            libs.push_back(data);
+            libs.emplace_back(std::move(data));
           }
 
           answer["libraries"] = libs;
@@ -1034,7 +1034,7 @@ class Indexer : public td::actor::Actor {
         vm::AugmentedDictionary accounts{vm::load_cell_slice_ref(shard_state.accounts), 256,
                                          block::tlb::aug_ShardAccounts};
 
-        std::list<json> accounts_list;
+        std::vector<json> accounts_list;
 
         for (const auto &account : accounts_keys) {
           LOG(DEBUG) << "Parse " << account.to_hex();
@@ -1118,11 +1118,11 @@ class Indexer : public td::actor::Actor {
               }
             }
 
-            accounts_list.push_back(data);
+            accounts_list.emplace_back(std::move(data));
           }
         }
 
-        answer["accounts"] = accounts_list;
+        answer["accounts"] = std::move(accounts_list);
 
         std::ofstream block_file;
         block_file.open("state_" + std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) +

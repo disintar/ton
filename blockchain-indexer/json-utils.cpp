@@ -1,7 +1,7 @@
 #include "json-utils.hpp"
 
-std::list<std::tuple<int, std::string>> parse_extra_currency(const Ref<vm::Cell> &extra) {
-  std::list<std::tuple<int, std::string>> c_list;
+std::vector<std::tuple<int, std::string>> parse_extra_currency(const Ref<vm::Cell> &extra) {
+  std::vector<std::tuple<int, std::string>> c_list;
 
   if (extra.not_null()) {
     vm::Dictionary dict{extra, 32};
@@ -116,7 +116,7 @@ json parse_address(vm::CellSlice address) {
 json parse_libraries(Ref<vm::Cell> lib_cell) {
   auto libraries = vm::Dictionary{std::move(lib_cell), 256};
 
-  std::list<json> libs;
+  std::vector<json> libs;
 
   while (!libraries.is_empty()) {
     td::BitArray<256> key{};
@@ -131,8 +131,8 @@ json parse_libraries(Ref<vm::Cell> lib_cell) {
         {"root", dump_as_boc(code)},
     };
 
-    libs.push_back(lib_json);
-    //      out_msgs_list.push_back(parse_message(o_msg));
+    libs.emplace_back(std::move(lib_json));
+    //      out_msgs_list.emplace_back(parse_message(o_msg));
   }
 
   return libs;
@@ -220,7 +220,7 @@ json parse_message(Ref<vm::Cell> message_any) {
     // TODO: separate function
     CHECK(tlb::unpack(msg.value.write(), value_cc))
 
-    std::list<std::tuple<int, std::string>> dummy;
+    std::vector<std::tuple<int, std::string>> dummy;
     answer["value"] = {
         {"grams", block::tlb::t_Grams.as_integer(value_cc.grams)->to_dec_string()},
         {"extra", value_cc.other->have_refs() ? parse_extra_currency(value_cc.other->prefetch_ref()) : dummy}};
@@ -352,7 +352,7 @@ json parse_credit_ph(vm::CellSlice item) {
   block::gen::CurrencyCollection::Record cc;
   CHECK(tlb::unpack(credit_ph.credit.write(), cc));
 
-  std::list<std::tuple<int, std::string>> dummy;
+  std::vector<std::tuple<int, std::string>> dummy;
   answer = {{"credit",
              {{"grams", block::tlb::t_Grams.as_integer(cc.grams)->to_dec_string()},
               {"extra", cc.other->have_refs() ? parse_extra_currency(cc.other->prefetch_ref()) : dummy}}}};
@@ -650,7 +650,7 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
   CHECK(tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd));
   CHECK(tlb::unpack(trans.total_fees.write(), trans_total_fees_cc));
 
-  std::list<std::tuple<int, std::string>> dummy;
+  std::vector<std::tuple<int, std::string>> dummy;
   transaction["total_fees"] = {
       {"grams", block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string()},
       {"extra", trans_total_fees_cc.other->have_refs() ? parse_extra_currency(trans_total_fees_cc.other->prefetch_ref())
@@ -677,14 +677,14 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
 
   auto out_msgs = vm::Dictionary{trans.r1.out_msgs, 15};
 
-  std::list<json> out_msgs_list;
+  std::vector<json> out_msgs_list;
 
   while (!out_msgs.is_empty()) {
     td::BitArray<15> key{};
     out_msgs.get_minmax_key(key);
 
     auto o_msg = out_msgs.lookup_delete_ref(key);
-    out_msgs_list.push_back(parse_message(o_msg));
+    out_msgs_list.emplace_back(parse_message(o_msg));
   }
 
   transaction["out_msgs"] = out_msgs_list;
