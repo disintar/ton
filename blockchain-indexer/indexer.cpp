@@ -150,75 +150,75 @@ class Indexer : public td::actor::Actor {
      public:
       void initial_read_complete(BlockHandle handle) override {
         LOG(DEBUG) << "Initial read complete";
-        td::actor::send_closure(id_, &Indexer::sync_complete, handle);
+        td::actor::send_closure_later(id_, &Indexer::sync_complete, handle);
       }
       void add_shard(ShardIdFull shard) override {
         LOG(DEBUG) << "add_shard";
-        //        td::actor::send_closure(id_, &FullNodeImpl::add_shard, shard);
+        //        td::actor::send_closure_later(id_, &FullNodeImpl::add_shard, shard);
       }
       void del_shard(ShardIdFull shard) override {
         LOG(DEBUG) << "del_shard";
-        //        td::actor::send_closure(id_, &FullNodeImpl::del_shard, shard);
+        //        td::actor::send_closure_later(id_, &FullNodeImpl::del_shard, shard);
       }
       void send_ihr_message(AccountIdPrefixFull dst, td::BufferSlice data) override {
         LOG(DEBUG) << "send_ihr_message";
-        //        td::actor::send_closure(id_, &FullNodeImpl::send_ihr_message, dst, std::move(data));
+        //        td::actor::send_closure_later(id_, &FullNodeImpl::send_ihr_message, dst, std::move(data));
       }
       void send_ext_message(AccountIdPrefixFull dst, td::BufferSlice data) override {
         LOG(DEBUG) << "send_ext_message";
-        //        td::actor::send_closure(id_, &FullNodeImpl::send_ext_message, dst, std::move(data));
+        //        td::actor::send_closure_later(id_, &FullNodeImpl::send_ext_message, dst, std::move(data));
       }
       void send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) override {
         LOG(DEBUG) << "send_shard_block_info";
-        //        td::actor::send_closure(id_, &FullNodeImpl::send_shard_block_info, block_id, cc_seqno, std::move(data));
+        //        td::actor::send_closure_later(id_, &FullNodeImpl::send_shard_block_info, block_id, cc_seqno, std::move(data));
       }
       void send_broadcast(BlockBroadcast broadcast) override {
         LOG(DEBUG) << "send_broadcast";
-        //        td::actor::send_closure(id_, &FullNodeImpl::send_broadcast, std::move(broadcast));
+        //        td::actor::send_closure_later(id_, &FullNodeImpl::send_broadcast, std::move(broadcast));
       }
       void download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                           td::Promise<ReceivedBlock> promise) override {
         LOG(DEBUG) << "download_block";
-        //        td::actor::send_closure(id_, &FullNodeImpl::download_block, id, priority, timeout, std::move(promise));
+        //        td::actor::send_closure_later(id_, &FullNodeImpl::download_block, id, priority, timeout, std::move(promise));
       }
       void download_zero_state(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                td::Promise<td::BufferSlice> promise) override {
         LOG(DEBUG) << "download_zero_state";
-        //        td::actor::send_closure(id_, &FullNodeImpl::download_zero_state, id, priority, timeout, std::move(promise));
+        //        td::actor::send_closure_later(id_, &FullNodeImpl::download_zero_state, id, priority, timeout, std::move(promise));
       }
       void download_persistent_state(BlockIdExt id, BlockIdExt masterchain_block_id, td::uint32 priority,
                                      td::Timestamp timeout, td::Promise<td::BufferSlice> promise) override {
         LOG(DEBUG) << "download_persistent_state";
-        //        td::actor::send_closure(id_, &FullNodeImpl::download_persistent_state, id, masterchain_block_id, priority,
+        //        td::actor::send_closure_later(id_, &FullNodeImpl::download_persistent_state, id, masterchain_block_id, priority,
         //                                timeout, std::move(promise));
       }
       void download_block_proof(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
                                 td::Promise<td::BufferSlice> promise) override {
         LOG(DEBUG) << "download_block_proof";
-        //        td::actor::send_closure(id_, &FullNodeImpl::download_block_proof, block_id, priority, timeout,
+        //        td::actor::send_closure_later(id_, &FullNodeImpl::download_block_proof, block_id, priority, timeout,
         //                                std::move(promise));
       }
       void download_block_proof_link(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
                                      td::Promise<td::BufferSlice> promise) override {
         LOG(DEBUG) << "download_block_proof_link";
-        //        td::actor::send_closure(id_, &FullNodeImpl::download_block_proof_link, block_id, priority, timeout,
+        //        td::actor::send_closure_later(id_, &FullNodeImpl::download_block_proof_link, block_id, priority, timeout,
         //                                std::move(promise));
       }
       void get_next_key_blocks(BlockIdExt block_id, td::Timestamp timeout,
                                td::Promise<std::vector<BlockIdExt>> promise) override {
         LOG(DEBUG) << "get_next_key_blocks";
-        //        td::actor::send_closure(id_, &FullNodeImpl::get_next_key_blocks, block_id, timeout, std::move(promise));
+        //        td::actor::send_closure_later(id_, &FullNodeImpl::get_next_key_blocks, block_id, timeout, std::move(promise));
       }
       void download_archive(BlockSeqno masterchain_seqno, std::string tmp_dir, td::Timestamp timeout,
                             td::Promise<std::string> promise) override {
         LOG(DEBUG) << "download_archive";
-        //        td::actor::send_closure(id_, &FullNodeImpl::download_archive, masterchain_seqno, std::move(tmp_dir), timeout,
+        //        td::actor::send_closure_later(id_, &FullNodeImpl::download_archive, masterchain_seqno, std::move(tmp_dir), timeout,
         //                                std::move(promise));
       }
 
       void new_key_block(BlockHandle handle) override {
         LOG(DEBUG) << "new_key_block";
-        //        td::actor::send_closure(id_, &FullNodeImpl::new_key_block, std::move(handle));
+        //        td::actor::send_closure_later(id_, &FullNodeImpl::new_key_block, std::move(handle));
       }
 
       Callback(td::actor::ActorId<Indexer> id) : id_(id) {
@@ -229,7 +229,7 @@ class Indexer : public td::actor::Actor {
     };
 
     auto P_cb = td::PromiseCreator::lambda([](td::Unit R) {});
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::install_callback,
+    td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::install_callback,
                             std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
     LOG(DEBUG) << "Callback installed";
 
@@ -245,14 +245,14 @@ class Indexer : public td::actor::Actor {
           } else {
             auto handle = R.move_as_ok();
             LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
-            td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
+            td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
           }
         });
 
     increase_block_padding();
 
     ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
+    td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                             seqno_first_, std::move(P));
   }
 
@@ -268,14 +268,14 @@ class Indexer : public td::actor::Actor {
           } else {
             auto handle = R.move_as_ok();
             LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
-            td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
+            td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
           }
         });
 
         increase_block_padding();
 
         ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
-        td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
+        td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                                 std::move(P));
       }
     }
@@ -293,7 +293,7 @@ class Indexer : public td::actor::Actor {
       } else {
         auto handle = R.move_as_ok();
         LOG(DEBUG) << workchain_shard << ":" << shard_shard << ":" << seqno_shard << " is_first: " << first;
-        td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, first);
+        td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle, first);
       }
     });
 
@@ -309,7 +309,7 @@ class Indexer : public td::actor::Actor {
     parsed_shards_.insert(data);
 
     ton::AccountIdPrefixFull pfx{workchain, shard};
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
+    td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                             std::move(P));
   }
 
@@ -459,10 +459,10 @@ class Indexer : public td::actor::Actor {
             LOG(DEBUG) << "GO: " << blkid.id.workchain << ":" << blkid.id.shard << ":" << prev_blk_1.seq_no;
             LOG(DEBUG) << "GO: " << blkid.id.workchain << ":" << blkid.id.shard << ":" << prev_blk_2.seq_no;
 
-            td::actor::send_closure(SelfId, &Indexer::start_parse_shards, prev_blk_1.seq_no, blkid.id.shard,
+            td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, prev_blk_1.seq_no, blkid.id.shard,
                                     blkid.id.workchain, false);
 
-            td::actor::send_closure(SelfId, &Indexer::start_parse_shards, prev_blk_2.seq_no, blkid.id.shard,
+            td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, prev_blk_2.seq_no, blkid.id.shard,
                                     blkid.id.workchain, false);
           }
 
@@ -483,7 +483,7 @@ class Indexer : public td::actor::Actor {
             LOG(DEBUG) << "FOR: " << blkid.to_str();
             LOG(DEBUG) << "GO: " << blkid.id.workchain << ":" << blkid.id.shard << ":" << prev_blk.seq_no;
 
-            td::actor::send_closure(SelfId, &Indexer::start_parse_shards, prev_blk.seq_no, blkid.id.shard,
+            td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, prev_blk.seq_no, blkid.id.shard,
                                     blkid.id.workchain, false);
           }
         }
@@ -659,7 +659,7 @@ class Indexer : public td::actor::Actor {
         }
 
         if (accounts_keys.size() > 0) {
-          td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
+          td::actor::send_closure_later(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
         }
 
         answer["BlockExtra"] = {
@@ -816,7 +816,7 @@ class Indexer : public td::actor::Actor {
             LOG(DEBUG) << "FOR: " << blkid.to_str() << " first: " << is_first;
             LOG(DEBUG) << "GO: " << shard_workchain << ":" << shard_shard << ":" << shard_seqno;
 
-            td::actor::send_closure(SelfId, &Indexer::start_parse_shards, shard_seqno, shard_shard, shard_workchain,
+            td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, shard_seqno, shard_shard, shard_workchain,
                                     is_first);
 
             return 1;
@@ -850,10 +850,10 @@ class Indexer : public td::actor::Actor {
       }
 
       if (is_first) {
-        td::actor::send_closure(SelfId, &Indexer::parse_other);
+        td::actor::send_closure_later(SelfId, &Indexer::parse_other);
       }
     });
-    td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
+    td::actor::send_closure_later_later(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
                                   std::move(P));
   }
 
@@ -1138,7 +1138,7 @@ class Indexer : public td::actor::Actor {
     });
 
     increase_state_padding();
-    td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_shard_state_from_db, handle,
+    td::actor::send_closure_later_later(validator_manager_, &ValidatorManagerInterface::get_shard_state_from_db, handle,
                                   std::move(P_st));
   }
 };  // namespace validator
@@ -1169,10 +1169,10 @@ int main(int argc, char **argv) {
   });
   p.add_checked_option('u', "user", "change user", [&](td::Slice user) { return td::change_user(user.str()); });
   p.add_option('D', "db", "root for dbs", [&](td::Slice fname) {
-    td::actor::send_closure(main, &ton::validator::Indexer::set_db_root, fname.str());
+    td::actor::send_closure_later(main, &ton::validator::Indexer::set_db_root, fname.str());
   });
   p.add_option('C', "config", "global config path", [&](td::Slice fname) {
-    td::actor::send_closure(main, &ton::validator::Indexer::set_global_config_path, fname.str());
+    td::actor::send_closure_later(main, &ton::validator::Indexer::set_global_config_path, fname.str());
   });
   td::uint32 threads = 24;
   p.add_checked_option(
@@ -1194,11 +1194,11 @@ int main(int argc, char **argv) {
     TRY_RESULT(seqno_first, td::to_integer_safe<ton::BlockSeqno>(arg.substr(0, pos)));
     ++pos;
     if (pos >= arg.size()) {
-      td::actor::send_closure(main, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_first);
+      td::actor::send_closure_later(main, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_first);
       return td::Status::OK();
     }
     TRY_RESULT(seqno_last, td::to_integer_safe<ton::BlockSeqno>(arg.substr(pos, arg.size())));
-    td::actor::send_closure(main, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_last);
+    td::actor::send_closure_later(main, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_last);
     return td::Status::OK();
   });
 
@@ -1207,7 +1207,7 @@ int main(int argc, char **argv) {
   scheduler.run_in_context([&] { main = td::actor::create_actor<ton::validator::Indexer>("cool"); });
   scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
   scheduler.run_in_context(
-      [&] { td::actor::send_closure(main, &ton::validator::Indexer::run, [&]() { scheduler.stop(); }); });
+      [&] { td::actor::send_closure_later(main, &ton::validator::Indexer::run, [&]() { scheduler.stop(); }); });
   scheduler.run();
   return 0;
 }
