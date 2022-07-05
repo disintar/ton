@@ -90,6 +90,7 @@ class Indexer : public td::actor::Actor {
                                                             key_proof_ttl, max_mempool_num, initial_sync_disabled);
 
     std::vector<ton::BlockIdExt> h;
+    h.reserve(conf.validator_->hardforks_.size());
     for (auto &x : conf.validator_->hardforks_) {
       auto b = ton::create_block_id(x);
       if (!b.is_masterchain()) {
@@ -104,7 +105,7 @@ class Indexer : public td::actor::Actor {
           y.invalidate();
         }
       }
-      h.emplace_back(b);
+      h.emplace_back(std::move(b));
     }
     opts_.write().set_hardforks(std::move(h));
     return td::Status::OK();
@@ -662,11 +663,11 @@ class Indexer : public td::actor::Actor {
         }
 
         answer["BlockExtra"] = {
-            {"accounts", accounts},
+            {"accounts", std::move(accounts)},
             {"rand_seed", extra.rand_seed.to_hex()},
             {"created_by", extra.created_by.to_hex()},
-            {"out_msg_descr", out_msgs_json},
-            {"in_msg_descr", in_msgs_json},
+            {"out_msg_descr", std::move(out_msgs_json)},
+            {"in_msg_descr", std::move(in_msgs_json)},
         };
 
         if ((int)extra.custom->prefetch_ulong(1) == 1) {
@@ -776,7 +777,7 @@ class Indexer : public td::actor::Actor {
               prev_blk_signatures_json.emplace_back(std::move(data));
             };
 
-            answer["BlockExtra"]["custom"]["prev_blk_signatures"] = prev_blk_signatures_json;
+            answer["BlockExtra"]["custom"]["prev_blk_signatures"] = std::move(prev_blk_signatures_json);
           };
 
           block::ShardConfig shards;
@@ -995,7 +996,6 @@ class Indexer : public td::actor::Actor {
           auto libraries = vm::Dictionary{shard_state.r1.libraries->prefetch_ref(), 256};
 
           std::vector<json> libs;
-
           while (!libraries.is_empty()) {
             td::BitArray<256> key{};
             libraries.get_minmax_key(key);
@@ -1028,13 +1028,14 @@ class Indexer : public td::actor::Actor {
             libs.emplace_back(std::move(data));
           }
 
-          answer["libraries"] = libs;
+          answer["libraries"] = std::move(libs);
         }
 
         vm::AugmentedDictionary accounts{vm::load_cell_slice_ref(shard_state.accounts), 256,
                                          block::tlb::aug_ShardAccounts};
 
         std::vector<json> accounts_list;
+        accounts_list.reserve(accounts_keys);
 
         for (const auto &account : accounts_keys) {
           LOG(DEBUG) << "Parse " << account.to_hex();
