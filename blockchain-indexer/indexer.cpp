@@ -939,7 +939,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::vector<td::Bits256> accounts_keys) {
-    auto P_st = td::PromiseCreator::lambda([this, SelfId = actor_id(this), accounts_keys](
+    auto P_st = td::PromiseCreator::lambda([](
                                                td::Result<td::Ref<ShardState>> R) {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
