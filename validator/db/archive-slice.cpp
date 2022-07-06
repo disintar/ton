@@ -213,25 +213,34 @@ void ArchiveSlice::add_file_cont(size_t idx, FileReference ref_id, td::uint64 of
 }
 
 void ArchiveSlice::get_handle(BlockIdExt block_id, td::Promise<BlockHandle> promise) {
+  LOG(DEBUG) << "Find slow 1";
   if (destroyed_) {
     promise.set_error(td::Status::Error(ErrorCode::notready, "package already gc'd"));
     return;
   }
+  LOG(DEBUG) << "Find slow 2";
   CHECK(!key_blocks_only_);
   std::string value;
+  LOG(DEBUG) << "Find slow 3";
   auto R = kv_->get(get_db_key_block_info(block_id), value);
   R.ensure();
+  LOG(DEBUG) << "Find slow 4";
   if (R.move_as_ok() == td::KeyValue::GetStatus::NotFound) {
     promise.set_error(td::Status::Error(ErrorCode::notready, "handle not in archive slice"));
     return;
   }
+  LOG(DEBUG) << "Find slow 5";
   auto E = create_block_handle(td::BufferSlice{value});
   E.ensure();
+  LOG(DEBUG) << "Find slow 6";
   auto handle = E.move_as_ok();
   if (!temp_) {
     handle->set_handle_moved_to_archive();
+    LOG(DEBUG) << "Find slow 6.5";
   }
+  LOG(DEBUG) << "Find slow 7";
   promise.set_value(std::move(handle));
+  LOG(DEBUG) << "Find slow 8";
 }
 
 void ArchiveSlice::get_temp_handle(BlockIdExt block_id, td::Promise<ConstBlockHandle> promise) {
