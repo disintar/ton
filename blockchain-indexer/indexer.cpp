@@ -1290,9 +1290,6 @@ void signal_handler(const int signal) {
 int main(int argc, char **argv) {
   SET_VERBOSITY_LEVEL(verbosity_DEBUG);
 
-  std::signal(SIGINT, signal_handler);
-  LOG(INFO) << "Send SIGINT to shutdown";
-
   CHECK(vm::init_op_cp0());
   std::cout << "Metrics:" << std::endl;
 
@@ -1349,6 +1346,10 @@ int main(int argc, char **argv) {
   td::actor::Scheduler scheduler({threads});  // contans a bug: threads not initialized by OptionsParser
   scheduler.run_in_context([&] { indexer = td::actor::create_actor<ton::validator::Indexer>("cool"); });
   scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
+  scheduler.run_in_context([&] {
+    LOG(INFO) << "Send SIGINT to shutdown";
+    std::signal(SIGINT, signal_handler);
+  });
   scheduler.run_in_context(
       [&] { td::actor::send_closure(indexer, &ton::validator::Indexer::run); });
   scheduler.run();
