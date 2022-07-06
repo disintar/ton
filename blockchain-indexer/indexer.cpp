@@ -324,7 +324,10 @@ class Indexer : public td::actor::Actor {
         CHECK(block.not_null());
 
         auto blkid = block->block_id();
-        LOG(DEBUG) << "Parse: " << blkid.to_str() << " is_first: " << is_first;
+
+        std::ostringstream oss;
+        oss << std::this_thread::get_id();
+        LOG(DEBUG) << oss.str() << "Parse: " << blkid.to_str() << " is_first: " << is_first;
 
         auto block_root = block->root_cell();
         if (block_root.is_null()) {
