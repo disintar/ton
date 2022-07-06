@@ -921,7 +921,7 @@ void ArchiveManager::start_up() {
   }).ensure();
 
   LOG(DEBUG) << "Done loading";
-  persistent_state_gc(FileHash::zero());
+//  persistent_state_gc(FileHash::zero());
   LOG(DEBUG) << "Done";
 }
 

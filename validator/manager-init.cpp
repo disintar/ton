@@ -304,6 +304,7 @@ void ValidatorManagerMasterchainStarter::start_up() {
       td::actor::send_closure(SelfId, &ValidatorManagerMasterchainStarter::got_init_block_id, R.move_as_ok());
     }
   });
+  LOG(DEBUG) << "Send get_init_masterchain_block";
   td::actor::send_closure(db_, &Db::get_init_masterchain_block, std::move(P));
 }
 
