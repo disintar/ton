@@ -36,7 +36,7 @@
 #include <queue>
 #include <chrono>
 #include <thread>
-#include <algorithm>
+#include <csignal>
 
 namespace ton {
 
@@ -45,11 +45,13 @@ namespace validator {
 class Dumper {
  public:
   explicit Dumper(std::string prefix, const std::size_t buffer_size)
-      : prefix(std::move(prefix)), buffer_size(buffer_size) {
+     : prefix(std::move(prefix)), buffer_size(buffer_size) {
+    joined.reserve(buffer_size);
   }
 
   ~Dumper() {
     dump();
+    dumpLoners();
   }
 
   void storeBlock(std::string id, json block) {
@@ -59,8 +61,12 @@ class Dumper {
     if (state == states.end()) {
       blocks.insert({std::move(id), std::move(block)});
     } else {
-      json together = {{"id", id}, {"block", std::move(block)}, {"state", std::move(state->second)}};
-      joined.insert({std::move(id), std::move(together)});
+      json together = {
+          {"id", id},
+          {"block", std::move(block)},
+          {"state", std::move(state->second)}
+      };
+      joined.emplace_back(std::move(together));
       states.erase(state);
     }
 
@@ -76,8 +82,12 @@ class Dumper {
     if (block == blocks.end()) {
       states.insert({std::move(id), std::move(state)});
     } else {
-      json together = {{"id", id}, {"block", std::move(block->second)}, {"state", std::move(state)}};
-      joined.insert({std::move(id), std::move(together)});
+      json together = {
+          {"id", id},
+          {"block", std::move(block->second)},
+          {"state", std::move(state)}
+      };
+      joined.emplace_back(std::move(together));
       blocks.erase(block);
     }
 
@@ -87,7 +97,7 @@ class Dumper {
   }
 
   void forceDump() {
-    // log or smth
+    LOG(INFO) << "Force dump of what is left";
     dump();
   }
 
@@ -103,8 +113,39 @@ class Dumper {
 
     std::ostringstream oss;
     oss << prefix
-        << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
-               .count();
+        << std::chrono::duration_cast<std::chrono::seconds>(
+               std::chrono::system_clock::now().time_since_epoch()).count()
+        << ".json";
+    std::ofstream file(oss.str());
+    file << to_dump.dump(4);
+  }
+
+  void dumpLoners() {
+    std::lock_guard lock(dump_mtx);
+
+    auto blocks_to_dump = json::array();
+    for (auto& e : blocks) {
+      blocks_to_dump.emplace_back(std::move(e));
+    }
+    blocks.clear();
+
+    auto states_to_dump = json::array();
+    for (auto& e : states) {
+      states_to_dump.emplace_back(std::move(e));
+    }
+    states.clear();
+
+    json to_dump = {
+        {"blocks", std::move(blocks_to_dump)},
+        {"states", std::move(states_to_dump)}
+    };
+
+    std::ostringstream oss;
+    oss << prefix
+        << "loners_"
+        << std::chrono::duration_cast<std::chrono::seconds>(
+               std::chrono::system_clock::now().time_since_epoch()).count()
+        << ".json";
     std::ofstream file(oss.str());
     file << to_dump.dump(4);
   }
@@ -113,9 +154,9 @@ class Dumper {
   const std::string prefix;
   std::mutex store_mtx;
   std::mutex dump_mtx;
-  std::map<std::string, json> blocks;
-  std::map<std::string, json> states;
-  std::map<std::string, json> joined;  // could be vector
+  std::unordered_map<std::string, json> blocks;
+  std::unordered_map<std::string, json> states;
+  std::vector<json> joined;
   const std::size_t buffer_size;
 };
 
@@ -1218,13 +1259,27 @@ class Indexer : public td::actor::Actor {
 }  // namespace validator
 }  // namespace ton
 
+td::actor::ActorOwn<ton::validator::Indexer> indexer;
+
+void signal_handler(const int signal) {
+  switch (signal) {
+    case SIGINT: {
+      LOG(INFO) << "Received SIGINT";
+      LOG(INFO) << "Shutting down...";
+      td::actor::send_closure(indexer, &ton::validator::Indexer::shutdown);
+      break;
+    }
+    default: {
+      LOG(ERROR) << "signal " << signal << " not supported";
+    }
+  }
+}
+
 int main(int argc, char **argv) {
   SET_VERBOSITY_LEVEL(verbosity_DEBUG);
 
   CHECK(vm::init_op_cp0());
   std::cout << "Metrics:" << std::endl;
-
-  td::actor::ActorOwn<ton::validator::Indexer> main;
 
   td::OptionParser p;
   p.set_description("blockchain indexer");
@@ -1242,10 +1297,10 @@ int main(int argc, char **argv) {
   });
   p.add_checked_option('u', "user", "change user", [&](td::Slice user) { return td::change_user(user.str()); });
   p.add_option('D', "db", "root for dbs", [&](td::Slice fname) {
-    td::actor::send_closure(main, &ton::validator::Indexer::set_db_root, fname.str());
+    td::actor::send_closure(indexer, &ton::validator::Indexer::set_db_root, fname.str());
   });
   p.add_option('C', "config", "global config path", [&](td::Slice fname) {
-    td::actor::send_closure(main, &ton::validator::Indexer::set_global_config_path, fname.str());
+    td::actor::send_closure(indexer, &ton::validator::Indexer::set_global_config_path, fname.str());
   });
   td::uint32 threads = 24;
   p.add_checked_option(
@@ -1267,19 +1322,24 @@ int main(int argc, char **argv) {
     TRY_RESULT(seqno_first, td::to_integer_safe<ton::BlockSeqno>(arg.substr(0, pos)));
     ++pos;
     if (pos >= arg.size()) {
-      td::actor::send_closure(main, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_first);
+      td::actor::send_closure(indexer, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_first);
       return td::Status::OK();
     }
     TRY_RESULT(seqno_last, td::to_integer_safe<ton::BlockSeqno>(arg.substr(pos, arg.size())));
-    td::actor::send_closure(main, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_last);
+    td::actor::send_closure(indexer, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_last);
     return td::Status::OK();
   });
 
   td::actor::set_debug(true);
   td::actor::Scheduler scheduler({threads});  // contans a bug: threads not initialized by OptionsParser
-  scheduler.run_in_context([&] { main = td::actor::create_actor<ton::validator::Indexer>("cool"); });
+  scheduler.run_in_context([&] { indexer = td::actor::create_actor<ton::validator::Indexer>("cool"); });
   scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
-  scheduler.run_in_context([&] { td::actor::send_closure(main, &ton::validator::Indexer::run); });
+  scheduler.run_in_context([&] {
+    LOG(INFO) << "Send SIGINT to shutdown";
+    std::signal(SIGINT, signal_handler);
+  });
+  scheduler.run_in_context(
+      [&] { td::actor::send_closure(indexer, &ton::validator::Indexer::run); });
   scheduler.run();
   scheduler.stop();
   return 0;
