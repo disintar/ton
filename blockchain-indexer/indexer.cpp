@@ -36,11 +36,59 @@
 #include <queue>
 #include <chrono>
 #include <thread>
+#include <algorithm>
 
 
 namespace ton {
 
 namespace validator {
+
+class JsonDumper {
+public:
+  explicit JsonDumper(std::string prefix, const std::size_t buffer_size)
+     : prefix(std::move(prefix)), buffer_size(buffer_size) {}
+
+  ~JsonDumper() {
+    dump();
+  }
+
+  void store(std::string name, json j) {
+    {
+      std::lock_guard lock(mtx);
+      jsons.emplace_back(json{
+          {"filename", std::move(name)},
+          {"content", std::move(j)}
+      });
+    }
+
+    if (jsons.size() >= buffer_size) {
+      dump();
+    }
+  }
+
+private:
+  void dump() {
+    std::lock_guard lock(mtx);
+    auto to_dump = json::array();
+    for (auto& e : jsons) {
+      to_dump.emplace_back(std::move(e));
+    }
+    jsons.clear();
+
+    std::ostringstream oss;
+    oss << prefix
+        << std::chrono::duration_cast<std::chrono::seconds>(
+               std::chrono::system_clock::now().time_since_epoch()).count();
+    std::ofstream file(oss.str());
+    file << to_dump.dump(4);
+  }
+
+private:
+  const std::string prefix;
+  std::mutex mtx;
+  std::vector<json> jsons;
+  const std::size_t buffer_size;
+};
 
 class Indexer : public td::actor::Actor {
  private:
@@ -53,6 +101,9 @@ class Indexer : public td::actor::Actor {
   std::mutex display_mtx_;
   std::function<void()> on_finish_;
   bool display_initialized_ = false;
+  JsonDumper block_dumper_  = JsonDumper("blocks_", 1000);
+  JsonDumper state_dumper_ = JsonDumper("states_", 1000);
+
   // store timestamps of parsed blocks for speed measuring
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_blocks_timepoints_;
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_states_timepoints_;
@@ -843,12 +894,11 @@ class Indexer : public td::actor::Actor {
 
         answer["ShardState"] = {{"state_old_hash", state_old_hash}, {"state_hash", state_hash}};
 
-        std::ofstream block_file;
-        block_file.open("block_" + std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" +
-                        std::to_string(blkid.seqno()) + ".json");
-
-        block_file << answer.dump(4);
-        block_file.close();
+        block_dumper_.store(
+            "block_" + std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" +
+                            std::to_string(blkid.seqno()),
+            std::move(answer)
+        );
 
         decrease_block_padding();
       }
@@ -1132,12 +1182,11 @@ class Indexer : public td::actor::Actor {
 
         answer["accounts"] = std::move(accounts_list);
 
-        std::ofstream block_file;
-        block_file.open("state_" + std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) +
-                        ":" + std::to_string(block_id.id.seqno) + +".json");
-
-        block_file << answer.dump(4);
-        block_file.close();
+        state_dumper_.store(
+            "state_" + std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) +
+                ":" + std::to_string(block_id.id.seqno),
+            std::move(answer)
+        );
 
         decrease_state_padding();
       }
