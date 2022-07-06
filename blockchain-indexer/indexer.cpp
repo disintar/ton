@@ -244,6 +244,7 @@ class Indexer : public td::actor::Actor {
     return td::Status::OK();
   }
   std::set<std::tuple<int, int, int>> parsed_shards_;
+  std::mutex parsed_shards_mtx_;
 
  public:
   void set_db_root(std::string db_root) {
@@ -429,14 +430,15 @@ class Indexer : public td::actor::Actor {
       }
     });
 
-    std::tuple<int, int, int> data = {seqno, shard, workchain};
-
-    if (parsed_shards_.find(data) != parsed_shards_.end()) {
-      LOG(WARNING) << workchain << ":" << shard << ":" << seqno << " <- already parsed!";
-      return;
+    {
+      std::lock_guard<std::mutex> lock(parsed_shards_mtx_);
+      std::tuple<int, int, int> data = {seqno, shard, workchain};
+      if (parsed_shards_.find(data) != parsed_shards_.end()) {
+        LOG(WARNING) << workchain << ":" << shard << ":" << seqno << " <- already parsed!";
+        return;
+      }
+      parsed_shards_.emplace(data);
     }
-
-    parsed_shards_.insert(data);
 
     increase_block_padding();
     ton::AccountIdPrefixFull pfx{workchain, shard};
