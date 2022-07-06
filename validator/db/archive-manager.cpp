@@ -151,7 +151,10 @@ void ArchiveManager::add_temp_file_short(FileReference ref_id, td::BufferSlice d
 
 void ArchiveManager::get_handle(BlockIdExt block_id, td::Promise<BlockHandle> promise) {
   auto f = get_file_desc_by_seqno(block_id.shard_full(), block_id.seqno(), false);
+
   if (f) {
+    LOG(DEBUG) << "Got: " << f->id.name();
+
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), block_id, idx = get_max_temp_file_desc_idx(),
                                          promise = std::move(promise)](td::Result<BlockHandle> R) mutable {
       if (R.is_ok()) {
@@ -162,7 +165,11 @@ void ArchiveManager::get_handle(BlockIdExt block_id, td::Promise<BlockHandle> pr
     });
     td::actor::send_closure(f->file_actor_id(), &ArchiveSlice::get_handle, block_id, std::move(P));
   } else {
-    get_handle_cont(block_id, get_max_temp_file_desc_idx(), std::move(promise));
+    LOG(DEBUG) << "F NOT FOUND!";
+    auto id = get_max_temp_file_desc_idx();
+    LOG(DEBUG) << id.name();
+
+    get_handle_cont(block_id, id, std::move(promise));
   }
 }
 
@@ -921,7 +928,7 @@ void ArchiveManager::start_up() {
   }).ensure();
 
   LOG(DEBUG) << "Done loading";
-//  persistent_state_gc(FileHash::zero());
+  persistent_state_gc(FileHash::zero());
   LOG(DEBUG) << "Done";
 }
 
