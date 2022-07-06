@@ -246,6 +246,11 @@ class Indexer : public td::actor::Actor {
   std::set<std::tuple<int, int, int>> parsed_shards_;
   std::mutex parsed_shards_mtx_;
 
+  std::mutex stored_counter_mtx_;
+ public:
+  std::size_t stored_blocks_counter_ = 0;
+  std::size_t stored_states_counter_ = 0;
+
  public:
   void set_db_root(std::string db_root) {
     db_root_ = std::move(db_root);
@@ -973,6 +978,10 @@ class Indexer : public td::actor::Actor {
 
         answer["ShardState"] = {{"state_old_hash", state_old_hash}, {"state_hash", state_hash}};
 
+        {
+          std::lock_guard<std::mutex> lock(stored_counter_mtx_);
+          ++stored_blocks_counter_;
+        }
         dumper_.storeBlock(
             std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" + std::to_string(blkid.seqno()),
             std::move(answer));
@@ -1066,6 +1075,8 @@ class Indexer : public td::actor::Actor {
   void shutdown() {
     LOG(INFO) << "Shutting down...";
     dumper_.forceDump();
+    LOG(INFO) << "Stored blocks: " << stored_blocks_counter_;
+    LOG(INFO) << "Stored states: " << stored_states_counter_;
     LOG(INFO) << "Ready to die";
   }
 
@@ -1259,6 +1270,10 @@ class Indexer : public td::actor::Actor {
 
         answer["accounts"] = std::move(accounts_list);
 
+        {
+          std::lock_guard<std::mutex> lock(stored_counter_mtx_);
+          ++stored_states_counter_;
+        }
         dumper_.storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
                                std::to_string(block_id.id.seqno),
                            std::move(answer));
