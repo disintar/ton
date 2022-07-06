@@ -50,8 +50,7 @@ class Dumper {
   }
 
   ~Dumper() {
-    dump();
-    dumpLoners();
+    forceDump();
   }
 
   void storeBlock(std::string id, json block) {
@@ -99,6 +98,7 @@ class Dumper {
   void forceDump() {
     LOG(INFO) << "Force dump of what is left";
     dump();
+    dumpLoners();
   }
 
  public:
