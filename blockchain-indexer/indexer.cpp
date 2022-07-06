@@ -378,7 +378,7 @@ class Indexer : public td::actor::Actor {
 
         std::ostringstream oss;
         oss << std::this_thread::get_id();
-        LOG(DEBUG) << oss.str() << " Parse block: " << blkid.to_str() << " is_first: " << is_first;
+        LOG(INFO) << oss.str() << " Parse block: " << blkid.to_str() << " is_first: " << is_first;
 
         auto block_root = block->root_cell();
         if (block_root.is_null()) {
@@ -1001,7 +1001,7 @@ class Indexer : public td::actor::Actor {
         auto block_id = state->get_block_id();
         std::ostringstream oss;
         oss << std::this_thread::get_id();
-        LOG(DEBUG) << oss.str() << " Parse state: " << block_id.to_str();
+        LOG(INFO) << oss.str() << " Parse state: " << block_id.to_str();
         CHECK(state.not_null());
 
         auto root_cell = state->root_cell();
