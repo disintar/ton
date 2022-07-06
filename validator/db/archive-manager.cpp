@@ -157,6 +157,8 @@ void ArchiveManager::get_handle(BlockIdExt block_id, td::Promise<BlockHandle> pr
 
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), block_id, idx = get_max_temp_file_desc_idx(),
                                          promise = std::move(promise)](td::Result<BlockHandle> R) mutable {
+      LOG(DEBUG) << "Hendle received";
+
       if (R.is_ok()) {
         promise.set_value(R.move_as_ok());
       } else {
@@ -165,10 +167,7 @@ void ArchiveManager::get_handle(BlockIdExt block_id, td::Promise<BlockHandle> pr
     });
     td::actor::send_closure(f->file_actor_id(), &ArchiveSlice::get_handle, block_id, std::move(P));
   } else {
-    LOG(DEBUG) << "F NOT FOUND!";
     auto id = get_max_temp_file_desc_idx();
-    LOG(DEBUG) << id.name();
-
     get_handle_cont(block_id, id, std::move(promise));
   }
 }
