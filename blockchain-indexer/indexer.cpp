@@ -1084,7 +1084,7 @@ class Indexer : public td::actor::Actor {
     LOG(INFO) << "Stored states: " << stored_states_counter_;
     LOG(INFO) << "Ready to die";
     if (verbosity == 0) {
-        std::cout << "Ready to die" << std::endl;;
+        std::cout << "\nReady to die" << std::endl;;
     }
   }
 
