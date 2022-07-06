@@ -1245,6 +1245,8 @@ td::actor::ActorOwn<ton::validator::Indexer> indexer;
 void signal_handler(const int signal) {
   switch (signal) {
     case SIGINT: {
+      LOG(INFO) << "Received SIGINT";
+      LOG(INFO) << "Shutting down...";
       td::actor::send_closure(indexer, &ton::validator::Indexer::shutdown);
       break;
     }
