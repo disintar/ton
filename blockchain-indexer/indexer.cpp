@@ -1083,6 +1083,9 @@ class Indexer : public td::actor::Actor {
     LOG(INFO) << "Stored blocks: " << stored_blocks_counter_;
     LOG(INFO) << "Stored states: " << stored_states_counter_;
     LOG(INFO) << "Ready to die";
+    if (verbosity == 0) {
+        std::cout << "Ready to die" << std::endl;;
+    }
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::vector<td::Bits256> accounts_keys) {
