@@ -28,7 +28,7 @@
 #include "block/block-auto.h"
 #include "td/utils/filesystem.h"
 
-#define LAZY_STATE_DESERIALIZE 0
+#define LAZY_STATE_DESERIALIZE 1
 
 namespace ton {
 

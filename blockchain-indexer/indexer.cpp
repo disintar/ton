@@ -1193,7 +1193,7 @@ class Indexer : public td::actor::Actor {
     });
 
     increase_state_padding();
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_from_db, handle,
+    td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_shard_state_from_db, handle,
                                   std::move(P_st));
   }
 };  // namespace validator
@@ -1263,7 +1263,7 @@ int main(int argc, char **argv) {
   scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
   scheduler.run_in_context(
       [&] { td::actor::send_closure(main, &ton::validator::Indexer::run, [&]() {}); });
-  scheduler.start();
+  scheduler.run();
   scheduler.stop();
   return 0;
 }
