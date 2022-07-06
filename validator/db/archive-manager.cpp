@@ -165,7 +165,10 @@ void ArchiveManager::get_handle(BlockIdExt block_id, td::Promise<BlockHandle> pr
         td::actor::send_closure(SelfId, &ArchiveManager::get_handle_cont, block_id, idx, std::move(promise));
       }
     });
-    td::actor::send_closure(f->file_actor_id(), &ArchiveSlice::get_handle, block_id, std::move(P));
+
+    auto actor_id = f->file_actor_id();
+    LOG(DEBUG) << "Actor id: " << actor_id.actor_info().get_name().str() << " block_id " << block_id.to_str();
+    td::actor::send_closure(actor_id, &ArchiveSlice::get_handle, block_id, std::move(P));
   } else {
     auto id = get_max_temp_file_desc_idx();
     get_handle_cont(block_id, id, std::move(promise));
