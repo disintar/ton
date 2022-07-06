@@ -52,6 +52,7 @@ public:
 
   ~Dumper() {
     dump();
+    dumpLoners();
   }
 
   void storeBlock(std::string id, json block) {
@@ -103,7 +104,7 @@ public:
   }
 
   void forceDump() {
-    // log or smth
+    LOG(INFO) << "Force dump of what is left";
     dump();
   }
 
@@ -126,12 +127,42 @@ public:
     file << to_dump.dump(4);
   }
 
+  void dumpLoners() {
+    std::lock_guard lock(dump_mtx);
+
+    auto blocks_to_dump = json::array();
+    for (auto& e : blocks) {
+      blocks_to_dump.emplace_back(std::move(e));
+    }
+    blocks.clear();
+
+    auto states_to_dump = json::array();
+    for (auto& e : states) {
+      states_to_dump.emplace_back(std::move(e));
+    }
+    states.clear();
+
+    json to_dump = {
+        {"blocks", std::move(blocks_to_dump)},
+        {"states", std::move(states_to_dump)}
+    };
+
+    std::ostringstream oss;
+    oss << prefix
+        << "loners_"
+        << std::chrono::duration_cast<std::chrono::seconds>(
+               std::chrono::system_clock::now().time_since_epoch()).count()
+        << ".json";
+    std::ofstream file(oss.str());
+    file << to_dump.dump(4);
+  }
+
 private:
   const std::string prefix;
   std::mutex store_mtx;
   std::mutex dump_mtx;
-  std::map<std::string, json> blocks;
-  std::map<std::string, json> states;
+  std::unordered_map<std::string, json> blocks;
+  std::unordered_map<std::string, json> states;
   std::vector<json> joined;
   const std::size_t buffer_size;
 };
