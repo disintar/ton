@@ -113,7 +113,7 @@ class Dumper {
 
     std::ostringstream oss;
     oss << prefix
-        << std::chrono::duration_cast<std::chrono::seconds>(
+        << std::chrono::duration_cast<std::chrono::milliseconds>(
                std::chrono::system_clock::now().time_since_epoch()).count()
         << ".json";
     std::ofstream file(oss.str());
@@ -151,7 +151,7 @@ class Dumper {
     std::ostringstream oss;
     oss << prefix
         << "loners_"
-        << std::chrono::duration_cast<std::chrono::seconds>(
+        << std::chrono::duration_cast<std::chrono::milliseconds>(
                std::chrono::system_clock::now().time_since_epoch()).count()
         << ".json";
     std::ofstream file(oss.str());
