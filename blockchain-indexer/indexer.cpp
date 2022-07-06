@@ -99,6 +99,7 @@ class Dumper {
     LOG(INFO) << "Force dump of what is left";
     dump();
     dumpLoners();
+    LOG(INFO) << "Finished force dumping";
   }
 
  public:
@@ -1063,6 +1064,7 @@ class Indexer : public td::actor::Actor {
   void shutdown() {
     LOG(INFO) << "Shutting down...";
     dumper_.forceDump();
+    LOG(INFO) << "Ready to die";
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::vector<td::Bits256> accounts_keys) {
