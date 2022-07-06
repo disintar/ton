@@ -105,6 +105,8 @@ class Dumper {
   void dump() {
     std::lock_guard lock(dump_mtx);
 
+    LOG(DEBUG) << "dump start";
+
     auto to_dump = json::array();
     for (auto &e : joined) {
       to_dump.emplace_back(std::move(e));
@@ -118,6 +120,8 @@ class Dumper {
         << ".json";
     std::ofstream file(oss.str());
     file << to_dump.dump(4);
+
+    LOG(DEBUG) << "dump end";
   }
 
   void dumpLoners() {
