@@ -38,6 +38,8 @@
 #include <thread>
 #include <csignal>
 
+int verbosity = 0;
+
 namespace ton {
 
 namespace validator {
@@ -1033,6 +1035,9 @@ class Indexer : public td::actor::Actor {
   }
 
   bool display_progress() {
+    if (verbosity != 0) {
+        return true;
+    }
     ///TODO: there should be some standard algorithm to do this
     while (!parsed_blocks_timepoints_.empty()) {
       const auto timepoint = parsed_blocks_timepoints_.front();
@@ -1322,7 +1327,7 @@ int main(int argc, char **argv) {
     std::exit(2);
   });
   p.add_checked_option('v', "verbosity", "set verbosity level", [&](td::Slice arg) {
-    int verbosity = td::to_integer<int>(arg);
+    verbosity = td::to_integer<int>(arg);
     SET_VERBOSITY_LEVEL(VERBOSITY_NAME(FATAL) + verbosity);
     return (verbosity >= 0 && verbosity <= 9) ? td::Status::OK() : td::Status::Error("verbosity must be 0..9");
   });
