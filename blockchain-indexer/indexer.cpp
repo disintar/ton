@@ -43,37 +43,83 @@ namespace ton {
 
 namespace validator {
 
-class JsonDumper {
+class Dumper {
 public:
-  explicit JsonDumper(std::string prefix, const std::size_t buffer_size)
+  explicit Dumper(std::string prefix, const std::size_t buffer_size)
      : prefix(std::move(prefix)), buffer_size(buffer_size) {}
 
-  ~JsonDumper() {
+  ~Dumper() {
     dump();
   }
 
-  void store(std::string name, json j) {
-    {
-      std::lock_guard lock(mtx);
-      jsons.emplace_back(json{
-          {"filename", std::move(name)},
-          {"content", std::move(j)}
+  void storeBlock(std::string id, json block) {
+    std::lock_guard lock(store_mtx);
+
+    auto state = states.find(id);
+    if (state == states.end()) {
+      blocks.insert({
+          std::move(id),
+          std::move(block)
       });
+    } else {
+      json together = {
+          {"id", id},
+          {"block", std::move(block)},
+          {"state", std::move(state->second)}
+      };
+      joined.insert({
+          std::move(id),
+          std::move(together)
+      });
+      states.erase(state);
     }
 
-    if (jsons.size() >= buffer_size) {
+    if (joined.size() >= buffer_size) {
       dump();
     }
   }
 
-private:
+  void storeState(std::string id, json state) {
+    std::lock_guard lock(store_mtx);
+
+    auto block = blocks.find(id);
+    if (block == blocks.end()) {
+      states.insert({
+          std::move(id),
+          std::move(state)
+      });
+    } else {
+      json together = {
+          {"id", id},
+          {"block", std::move(block->second)},
+          {"state", std::move(state)}
+      };
+      joined.insert({
+          std::move(id),
+          std::move(together)
+      });
+      blocks.erase(block);
+    }
+
+    if (joined.size() >= buffer_size) {
+      dump();
+    }
+  }
+
+  void forceDump() {
+    // log or smth
+    dump();
+  }
+
+public:
   void dump() {
-    std::lock_guard lock(mtx);
+    std::lock_guard lock(dump_mtx);
+
     auto to_dump = json::array();
-    for (auto& e : jsons) {
+    for (auto& e : joined) {
       to_dump.emplace_back(std::move(e));
     }
-    jsons.clear();
+    joined.clear();
 
     std::ostringstream oss;
     oss << prefix
@@ -85,8 +131,11 @@ private:
 
 private:
   const std::string prefix;
-  std::mutex mtx;
-  std::vector<json> jsons;
+  std::mutex store_mtx;
+  std::mutex dump_mtx;
+  std::map<std::string, json> blocks;
+  std::map<std::string, json> states;
+  std::map<std::string, json> joined; // could be vector
   const std::size_t buffer_size;
 };
 
@@ -99,10 +148,8 @@ class Indexer : public td::actor::Actor {
   int block_padding_ = 0;
   int state_padding_ = 0;
   std::mutex display_mtx_;
-  std::function<void()> on_finish_;
   bool display_initialized_ = false;
-  JsonDumper block_dumper_  = JsonDumper("blocks_", 1000);
-  JsonDumper state_dumper_ = JsonDumper("states_", 1000);
+  Dumper dumper_  = Dumper("dump_", 1000);
 
   // store timestamps of parsed blocks for speed measuring
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_blocks_timepoints_;
@@ -176,9 +223,7 @@ class Indexer : public td::actor::Actor {
     seqno_last_ = seqno_last;
   }
 
-  void run(std::function<void()> on_finish) {
-    on_finish_ = std::move(on_finish);
-
+  void run() {
     LOG(DEBUG) << "Use db root: " << db_root_;
 
     auto Sr = create_validator_options();
@@ -713,7 +758,7 @@ class Indexer : public td::actor::Actor {
           accounts.emplace_back(account_block_parsed);
         }
 
-        if (accounts_keys.size() > 0) {
+        if (true /*accounts_keys.size() > 0*/) {
           td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
         }
 
@@ -894,9 +939,8 @@ class Indexer : public td::actor::Actor {
 
         answer["ShardState"] = {{"state_old_hash", state_old_hash}, {"state_hash", state_hash}};
 
-        block_dumper_.store(
-            "block_" + std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" +
-                            std::to_string(blkid.seqno()),
+        dumper_.storeBlock(
+            std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" + std::to_string(blkid.seqno()),
             std::move(answer)
         );
 
@@ -986,9 +1030,9 @@ class Indexer : public td::actor::Actor {
     return true;
   }
 
-  void finish() {
-    LOG(INFO) << "Finishing...";
-    on_finish_();
+  void shutdown() {
+    LOG(INFO) << "Shutting down...";
+    dumper_.forceDump();
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::vector<td::Bits256> accounts_keys) {
@@ -1182,9 +1226,8 @@ class Indexer : public td::actor::Actor {
 
         answer["accounts"] = std::move(accounts_list);
 
-        state_dumper_.store(
-            "state_" + std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) +
-                ":" + std::to_string(block_id.id.seqno),
+        dumper_.storeState(
+            std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" + std::to_string(block_id.id.seqno),
             std::move(answer)
         );
 
@@ -1262,7 +1305,7 @@ int main(int argc, char **argv) {
   scheduler.run_in_context([&] { main = td::actor::create_actor<ton::validator::Indexer>("cool"); });
   scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
   scheduler.run_in_context(
-      [&] { td::actor::send_closure(main, &ton::validator::Indexer::run, [&]() {}); });
+      [&] { td::actor::send_closure(main, &ton::validator::Indexer::run); });
   scheduler.run();
   scheduler.stop();
   return 0;
