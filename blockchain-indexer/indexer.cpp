@@ -291,8 +291,9 @@ class Indexer : public td::actor::Actor {
   void sync_complete(const BlockHandle &handle) {
     // separate first parse seqno to prevent WC shard seqno leak
     auto P = td::PromiseCreator::lambda(
-        [SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
+        [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
           if (R.is_error()) {
+            decrease_block_padding();
             LOG(ERROR) << R.move_as_error().to_string();
           } else {
             auto handle = R.move_as_ok();
@@ -302,7 +303,6 @@ class Indexer : public td::actor::Actor {
         });
 
     increase_block_padding();
-
     ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                             seqno_first_, std::move(P));
@@ -313,10 +313,11 @@ class Indexer : public td::actor::Actor {
       for (auto seqno = seqno_first_ + 1; seqno <= seqno_last_; ++seqno) {
         auto my_seqno = seqno_first_;
 
-        auto P = td::PromiseCreator::lambda([SelfId = actor_id(this),
+        auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this),
                                              seqno_first = my_seqno](td::Result<ConstBlockHandle> R) {
           if (R.is_error()) {
             LOG(ERROR) << R.move_as_error().to_string();
+            decrease_block_padding();
           } else {
             auto handle = R.move_as_ok();
             LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
@@ -325,7 +326,6 @@ class Indexer : public td::actor::Actor {
         });
 
         increase_block_padding();
-
         ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
         td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                                 std::move(P));
@@ -334,13 +334,14 @@ class Indexer : public td::actor::Actor {
   }
 
   void start_parse_shards(unsigned int seqno, unsigned long shard, int workchain, bool is_first = false) {
-    auto P = td::PromiseCreator::lambda([workchain_shard = workchain, seqno_shard = seqno, shard_shard = shard,
+    auto P = td::PromiseCreator::lambda([this, workchain_shard = workchain, seqno_shard = seqno, shard_shard = shard,
                                          SelfId = actor_id(this), first = is_first](td::Result<ConstBlockHandle> R) {
       if (R.is_error()) {
         LOG(ERROR) << "ERROR IN BLOCK: "
                    << "Seqno: " << seqno_shard - 1 << " Shard: " << shard_shard << " Worckchain: " << workchain_shard;
 
         LOG(ERROR) << R.move_as_error().to_string();
+        decrease_block_padding();
         return;
       } else {
         auto handle = R.move_as_ok();
@@ -348,8 +349,6 @@ class Indexer : public td::actor::Actor {
         td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, first);
       }
     });
-
-    increase_block_padding();
 
     std::tuple<int, int, int> data = {seqno, shard, workchain};
 
@@ -360,6 +359,7 @@ class Indexer : public td::actor::Actor {
 
     parsed_shards_.insert(data);
 
+    increase_block_padding();
     ton::AccountIdPrefixFull pfx{workchain, shard};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                             std::move(P));
@@ -378,7 +378,7 @@ class Indexer : public td::actor::Actor {
 
         std::ostringstream oss;
         oss << std::this_thread::get_id();
-        LOG(WARNING) << oss.str() << "Parse block: " << blkid.to_str() << " is_first: " << is_first;
+        LOG(DEBUG) << oss.str() << " Parse block: " << blkid.to_str() << " is_first: " << is_first;
 
         auto block_root = block->root_cell();
         if (block_root.is_null()) {
@@ -1001,7 +1001,7 @@ class Indexer : public td::actor::Actor {
         auto block_id = state->get_block_id();
         std::ostringstream oss;
         oss << std::this_thread::get_id();
-        LOG(WARNING) << oss.str() << " Parse state: " << block_id.to_str();
+        LOG(DEBUG) << oss.str() << " Parse state: " << block_id.to_str();
         CHECK(state.not_null());
 
         auto root_cell = state->root_cell();
