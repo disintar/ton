@@ -38,15 +38,15 @@
 #include <thread>
 #include <algorithm>
 
-
 namespace ton {
 
 namespace validator {
 
 class Dumper {
-public:
+ public:
   explicit Dumper(std::string prefix, const std::size_t buffer_size)
-     : prefix(std::move(prefix)), buffer_size(buffer_size) {}
+      : prefix(std::move(prefix)), buffer_size(buffer_size) {
+  }
 
   ~Dumper() {
     dump();
@@ -57,20 +57,10 @@ public:
 
     auto state = states.find(id);
     if (state == states.end()) {
-      blocks.insert({
-          std::move(id),
-          std::move(block)
-      });
+      blocks.insert({std::move(id), std::move(block)});
     } else {
-      json together = {
-          {"id", id},
-          {"block", std::move(block)},
-          {"state", std::move(state->second)}
-      };
-      joined.insert({
-          std::move(id),
-          std::move(together)
-      });
+      json together = {{"id", id}, {"block", std::move(block)}, {"state", std::move(state->second)}};
+      joined.insert({std::move(id), std::move(together)});
       states.erase(state);
     }
 
@@ -84,20 +74,10 @@ public:
 
     auto block = blocks.find(id);
     if (block == blocks.end()) {
-      states.insert({
-          std::move(id),
-          std::move(state)
-      });
+      states.insert({std::move(id), std::move(state)});
     } else {
-      json together = {
-          {"id", id},
-          {"block", std::move(block->second)},
-          {"state", std::move(state)}
-      };
-      joined.insert({
-          std::move(id),
-          std::move(together)
-      });
+      json together = {{"id", id}, {"block", std::move(block->second)}, {"state", std::move(state)}};
+      joined.insert({std::move(id), std::move(together)});
       blocks.erase(block);
     }
 
@@ -111,31 +91,31 @@ public:
     dump();
   }
 
-public:
+ public:
   void dump() {
     std::lock_guard lock(dump_mtx);
 
     auto to_dump = json::array();
-    for (auto& e : joined) {
+    for (auto &e : joined) {
       to_dump.emplace_back(std::move(e));
     }
     joined.clear();
 
     std::ostringstream oss;
     oss << prefix
-        << std::chrono::duration_cast<std::chrono::seconds>(
-               std::chrono::system_clock::now().time_since_epoch()).count();
+        << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+               .count();
     std::ofstream file(oss.str());
     file << to_dump.dump(4);
   }
 
-private:
+ private:
   const std::string prefix;
   std::mutex store_mtx;
   std::mutex dump_mtx;
   std::map<std::string, json> blocks;
   std::map<std::string, json> states;
-  std::map<std::string, json> joined; // could be vector
+  std::map<std::string, json> joined;  // could be vector
   const std::size_t buffer_size;
 };
 
@@ -149,7 +129,7 @@ class Indexer : public td::actor::Actor {
   int state_padding_ = 0;
   std::mutex display_mtx_;
   bool display_initialized_ = false;
-  Dumper dumper_  = Dumper("dump_", 1000);
+  Dumper dumper_ = Dumper("dump_", 1000);
 
   // store timestamps of parsed blocks for speed measuring
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_blocks_timepoints_;
@@ -763,10 +743,8 @@ class Indexer : public td::actor::Actor {
         }
 
         answer["BlockExtra"] = {
-            {"accounts", std::move(accounts)},
-            {"rand_seed", extra.rand_seed.to_hex()},
-            {"created_by", extra.created_by.to_hex()},
-            {"out_msg_descr", std::move(out_msgs_json)},
+            {"accounts", std::move(accounts)},         {"rand_seed", extra.rand_seed.to_hex()},
+            {"created_by", extra.created_by.to_hex()}, {"out_msg_descr", std::move(out_msgs_json)},
             {"in_msg_descr", std::move(in_msgs_json)},
         };
 
@@ -941,8 +919,7 @@ class Indexer : public td::actor::Actor {
 
         dumper_.storeBlock(
             std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" + std::to_string(blkid.seqno()),
-            std::move(answer)
-        );
+            std::move(answer));
 
         decrease_block_padding();
       }
@@ -952,7 +929,7 @@ class Indexer : public td::actor::Actor {
       }
     });
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
-                                  std::move(P));
+                            std::move(P));
   }
 
   void increase_block_padding() {
@@ -1036,19 +1013,18 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::vector<td::Bits256> accounts_keys) {
-    auto P_st = td::PromiseCreator::lambda([this, SelfId = actor_id(this), accounts_keys = std::move(accounts_keys)](
-                                               td::Result<td::Ref<ShardState>> R) {
+    auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this), handle,
+                                            accounts_keys =
+                                                std::move(accounts_keys)](td::Result<td::Ref<vm::DataCell>> R) {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
-        auto state = R.move_as_ok();
-        auto block_id = state->get_block_id();
+        auto root_cell = R.move_as_ok();
+        auto block_id = handle->id();
         std::ostringstream oss;
+
         oss << std::this_thread::get_id();
         LOG(INFO) << oss.str() << " Parse state: " << block_id.to_str();
-        CHECK(state.not_null());
-
-        auto root_cell = state->root_cell();
 
         block::gen::ShardStateUnsplit::Record shard_state;
         CHECK(tlb::unpack_cell(root_cell, shard_state));
@@ -1140,22 +1116,22 @@ class Indexer : public td::actor::Actor {
         for (const auto &account : accounts_keys) {
           LOG(DEBUG) << "Parse " << account.to_hex();
           auto result = accounts.lookup(account.cbits(), 256);
-//          auto value = result.first;
-//          auto extra = result.second;
+          //          auto value = result.first;
+          //          auto extra = result.second;
           auto value = result;
           if (value.not_null()) {
             block::gen::ShardAccount::Record sa;
-//            block::gen::DepthBalanceInfo::Record dbi;
+            //            block::gen::DepthBalanceInfo::Record dbi;
             block::gen::CurrencyCollection::Record dbi_cc;
             CHECK(tlb::unpack(value.write(), sa));
-//            CHECK(tlb::unpack(extra.write(), dbi));
-//            CHECK(tlb::unpack(dbi.balance.write(), dbi_cc));
+            //            CHECK(tlb::unpack(extra.write(), dbi));
+            //            CHECK(tlb::unpack(dbi.balance.write(), dbi_cc));
 
             json data;
-//            data["balance"] = {
-//                {"split_depth", dbi.split_depth},
-//                {"grams", block::tlb::t_Grams.as_integer(dbi_cc.grams)->to_dec_string()},
-//                {"extra", dbi_cc.other->have_refs() ? parse_extra_currency(dbi_cc.other->prefetch_ref()) : dummy}};
+            //            data["balance"] = {
+            //                {"split_depth", dbi.split_depth},
+            //                {"grams", block::tlb::t_Grams.as_integer(dbi_cc.grams)->to_dec_string()},
+            //                {"extra", dbi_cc.other->have_refs() ? parse_extra_currency(dbi_cc.other->prefetch_ref()) : dummy}};
             data["account_address"] = {{"workchain", block_id.id.workchain}, {"address", account.to_hex()}};
             data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}};
 
@@ -1226,18 +1202,17 @@ class Indexer : public td::actor::Actor {
 
         answer["accounts"] = std::move(accounts_list);
 
-        dumper_.storeState(
-            std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" + std::to_string(block_id.id.seqno),
-            std::move(answer)
-        );
+        dumper_.storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+                               std::to_string(block_id.id.seqno),
+                           std::move(answer));
 
         decrease_state_padding();
       }
     });
 
     increase_state_padding();
-    td::actor::send_closure_later(validator_manager_, &ValidatorManagerInterface::get_shard_state_from_db, handle,
-                                  std::move(P_st));
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle,
+                                  std::move(P));
   }
 };  // namespace validator
 }  // namespace validator
@@ -1304,8 +1279,7 @@ int main(int argc, char **argv) {
   td::actor::Scheduler scheduler({threads});  // contans a bug: threads not initialized by OptionsParser
   scheduler.run_in_context([&] { main = td::actor::create_actor<ton::validator::Indexer>("cool"); });
   scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
-  scheduler.run_in_context(
-      [&] { td::actor::send_closure(main, &ton::validator::Indexer::run); });
+  scheduler.run_in_context([&] { td::actor::send_closure(main, &ton::validator::Indexer::run); });
   scheduler.run();
   scheduler.stop();
   return 0;

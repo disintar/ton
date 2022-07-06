@@ -210,6 +210,7 @@ class RootDb : public Db {
   td::actor::ActorOwn<ArchiveManager> archive_db_;
 
   BlockPublisher publisher_;
+  void get_block_state_root_cell(ConstBlockHandle handle, td::Promise<td::Ref<vm::DataCell>> promise) override;
 };
 
 }  // namespace validator
