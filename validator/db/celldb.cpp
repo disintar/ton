@@ -33,6 +33,7 @@ CellDbIn::CellDbIn(td::actor::ActorId<RootDb> root_db, td::actor::ActorId<CellDb
 }
 
 void CellDbIn::start_up() {
+  LOG(DEBUG) << "Open CellDbIn: " << path_;
   cell_db_ = std::make_shared<td::RocksDb>(td::RocksDb::open(path_, read_only_).move_as_ok());
 
   boc_ = vm::DynamicBagOfCellsDb::create();
