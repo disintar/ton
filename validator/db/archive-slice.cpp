@@ -445,9 +445,10 @@ void ArchiveSlice::get_archive_id(BlockSeqno masterchain_seqno, td::Promise<td::
 }
 
 void ArchiveSlice::start_up() {
-  LOG(DEBUG) << "State ArchiveSlice";
 
   PackageId p_id{archive_id_, key_blocks_only_, temp_};
+
+  LOG(DEBUG) << "Open RocksDb ArchiveSlice: " << p_id.name();
   std::string db_path = PSTRING() << db_root_ << p_id.path() << p_id.name() << ".index";
   kv_ = std::make_shared<td::RocksDb>(td::RocksDb::open(db_path, read_only_).move_as_ok());
 
