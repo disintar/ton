@@ -1261,11 +1261,9 @@ int main(int argc, char **argv) {
   td::actor::Scheduler scheduler({threads});  // contans a bug: threads not initialized by OptionsParser
   scheduler.run_in_context([&] { main = td::actor::create_actor<ton::validator::Indexer>("cool"); });
   scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
-  scheduler.run_in_context_external(
-      [&] {
-        td::actor::send_closure(main, &ton::validator::Indexer::run);
-      });
-  scheduler.run();
+  scheduler.run_in_context(
+      [&] { td::actor::send_closure(main, &ton::validator::Indexer::run, [&]() {}); });
+  scheduler.start();
   scheduler.stop();
   return 0;
 }
