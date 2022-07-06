@@ -125,13 +125,21 @@ class Dumper {
 
     auto blocks_to_dump = json::array();
     for (auto& e : blocks) {
-      blocks_to_dump.emplace_back(std::move(e));
+      json block_json = {
+          {"id", e.first},
+          {"block", std::move(e.second)}
+      };
+      blocks_to_dump.emplace_back(std::move(block_json));
     }
     blocks.clear();
 
     auto states_to_dump = json::array();
     for (auto& e : states) {
-      states_to_dump.emplace_back(std::move(e));
+      json state_json = {
+          {"id", e.first},
+          {"state", std::move(e.second)}
+      };
+      states_to_dump.emplace_back(std::move(state_json));
     }
     states.clear();
 
