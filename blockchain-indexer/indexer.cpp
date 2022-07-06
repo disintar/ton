@@ -1315,7 +1315,6 @@ int main(int argc, char **argv) {
   SET_VERBOSITY_LEVEL(verbosity_DEBUG);
 
   CHECK(vm::init_op_cp0());
-  std::cout << "Metrics:" << std::endl;
 
   td::OptionParser p;
   p.set_description("blockchain indexer");
