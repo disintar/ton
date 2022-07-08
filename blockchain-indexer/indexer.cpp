@@ -1103,6 +1103,8 @@ class Indexer : public td::actor::Actor {
     if (verbosity == 0) {
         std::cout << "\nReady to die" << std::endl;;
     }
+    ///TODO: danger danger
+    std::exit(0);
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::vector<td::Bits256> accounts_keys) {
