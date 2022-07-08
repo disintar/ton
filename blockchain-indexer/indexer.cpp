@@ -192,6 +192,7 @@ class Indexer : public td::actor::Actor {
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_states_timepoints_;
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
   td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
+  bool display_speed_ = false;
   td::Status create_validator_options() {
     TRY_RESULT_PREFIX(conf_data, td::read_file(global_config_), "failed to read: ");
     TRY_RESULT_PREFIX(conf_json, td::json_decode(conf_data.as_slice()), "failed to parse json: ");
@@ -263,6 +264,9 @@ class Indexer : public td::actor::Actor {
   void set_seqno_range(BlockSeqno seqno_first, BlockSeqno seqno_last) {
     seqno_first_ = seqno_first;
     seqno_last_ = seqno_last;
+  }
+  void set_display_speed(bool display_speed) {
+    display_speed_ = display_speed;
   }
 
   void run() {
@@ -1035,9 +1039,6 @@ class Indexer : public td::actor::Actor {
   }
 
   bool display_progress() {
-    if (verbosity != 0) {
-        return true;
-    }
     ///TODO: there should be some standard algorithm to do this
     while (!parsed_blocks_timepoints_.empty()) {
       const auto timepoint = parsed_blocks_timepoints_.front();
@@ -1063,7 +1064,11 @@ class Indexer : public td::actor::Actor {
                std::string("\tpadding:\t") + std::to_string(block_padding_) + std::string("\t") +
                std::string("speed(states/s):\t") + std::to_string(parsed_states_timepoints_.size()) +
                std::string("\tpadding:\t") + std::to_string(state_padding_) + std::string("\t");
-    std::cout << oss.str() << std::flush;
+    if (verbosity == 0) {
+      std::cout << oss.str() << std::flush;
+    } else {
+      LOG(INFO) << oss.str();
+    }
 
     if (display_initialized_) {
       if (display_initialized_ && block_padding_ == 0 && state_padding_ == 0) {
@@ -1286,10 +1291,12 @@ class Indexer : public td::actor::Actor {
                                std::to_string(block_id.id.seqno),
                            std::move(answer));
 
+        LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
         decrease_state_padding();
       }
     });
 
+    LOG(DEBUG) << "getting state from db " << handle->id().to_str();
     increase_state_padding();
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle,
                                   std::move(P));
@@ -1366,6 +1373,18 @@ int main(int argc, char **argv) {
     TRY_RESULT(seqno_last, td::to_integer_safe<ton::BlockSeqno>(arg.substr(pos, arg.size())));
     td::actor::send_closure(indexer, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_last);
     return td::Status::OK();
+  });
+  p.add_checked_option('p', "progress", "display speed true/false", [&](td::Slice arg) {
+    const auto str = arg.str();
+    if (str == "true") {
+      td::actor::send_closure(indexer, &ton::validator::Indexer::set_display_speed, true);
+      return td::Status::OK();
+    } else if (str == "false") {
+      td::actor::send_closure(indexer, &ton::validator::Indexer::set_display_speed, false);
+      return td::Status::OK();
+    } else {
+      return td::Status::Error(ton::ErrorCode::error, "bad value for --progress: not true or false");
+    }
   });
 
   td::actor::set_debug(true);
