@@ -388,7 +388,7 @@ class Indexer : public td::actor::Actor {
                             std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
     LOG(DEBUG) << "Callback installed";
 
-    display_progress();
+    progress_changed();
   }
 
   void sync_complete(const BlockHandle &handle) {
@@ -1012,56 +1012,58 @@ class Indexer : public td::actor::Actor {
   }
 
   void increase_block_padding() {
-    if (!display_speed_) {
-      return;
-    }
     std::unique_lock<std::mutex> lock(display_mtx_);  ///TODO: might cause performance issues
     ++block_padding_;
-    display_progress();
+    progress_changed();
   }
 
   void decrease_block_padding() {
-    if (!display_speed_) {
-      return;
-    }
     std::unique_lock<std::mutex> lock(display_mtx_);  ///TODO: might cause performance issues
 
-    parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
+    if (display_speed_) {
+      parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
+    }
+
     if (block_padding_ == 0) {
       LOG(ERROR) << "decreasing seqno padding but it's zero";
     }
     --block_padding_;
-    display_progress();
+    progress_changed();
   }
 
   void increase_state_padding() {
-    if (!display_speed_) {
-      return;
-    }
     std::unique_lock<std::mutex> lock(display_mtx_);  ///TODO: might cause performance issues
 
     ++state_padding_;
-    display_progress();
+    progress_changed();
   }
 
   void decrease_state_padding() {
-    if (!display_speed_) {
-      return;
-    }
     std::unique_lock<std::mutex> lock(display_mtx_);  ///TODO: might cause performance issues
 
-    parsed_states_timepoints_.emplace(std::chrono::high_resolution_clock::now());
+    if (display_speed_) {
+      parsed_states_timepoints_.emplace(std::chrono::high_resolution_clock::now());
+    }
+
     if (state_padding_ == 0) {
       LOG(ERROR) << "decreasing state padding but it's zero";
     }
     --state_padding_;
-    display_progress();
+    progress_changed();
   }
 
-  bool display_progress() {
-    if (!display_speed_) {
-      return true;
+  void progress_changed() {
+    if (display_speed_) {
+      display_speed();
     }
+
+    if (block_padding_ == 0 && state_padding_ == 0) {
+      LOG(INFO) << "block padding and state padding reached 0";
+      td::actor::send_closure(actor_id(this), &ton::validator::Indexer::shutdown);
+    }
+  }
+
+  void display_speed() {
     ///TODO: there should be some standard algorithm to do this
     while (!parsed_blocks_timepoints_.empty()) {
       const auto timepoint = parsed_blocks_timepoints_.front();
@@ -1077,8 +1079,6 @@ class Indexer : public td::actor::Actor {
       }
       parsed_states_timepoints_.pop();
     }
-
-    // :-)
     std::ostringstream oss;
     oss << "\r";
     for (auto i = 0; i < 112; ++i)
@@ -1092,17 +1092,6 @@ class Indexer : public td::actor::Actor {
     } else {
       LOG(INFO) << oss.str();
     }
-
-    if (display_initialized_) {
-      if (display_initialized_ && block_padding_ == 0 && state_padding_ == 0) {
-        //        finish();
-        return false;
-      }
-    } else {
-      if (block_padding_ != 0 || state_padding_ != 0)
-        display_initialized_ = true;
-    }
-    return true;
   }
 
   void shutdown() {
