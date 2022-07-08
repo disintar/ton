@@ -1082,16 +1082,22 @@ class Indexer : public td::actor::Actor {
       }
       parsed_states_timepoints_.pop();
     }
+
     std::ostringstream oss;
-    oss << "\r";
-    for (auto i = 0; i < 112; ++i)
-      oss << " ";
-    oss << std::string("speed(blocks/s):\t") + std::to_string(parsed_blocks_timepoints_.size()) +
-               std::string("\tpadding:\t") + std::to_string(block_padding_) + std::string("\t") +
-               std::string("speed(states/s):\t") + std::to_string(parsed_states_timepoints_.size()) +
-               std::string("\tpadding:\t") + std::to_string(state_padding_) + std::string("\t");
+
     if (verbosity == 0) {
-      std::cout << '\r' << oss.str() << std::flush;
+      oss << '\r';
+      for (auto i = 0; i < 112; ++i) oss << " ";
+      oss << '\r';
+    }
+
+    oss << "speed(blocks/s):\t" << parsed_blocks_timepoints_.size()
+        << "\tpadding:\t" << block_padding_ << '\t'
+        << "speed(states/s):\t" << parsed_states_timepoints_.size()
+        << "\tpadding:\t" << state_padding_ << '\t';
+
+    if (verbosity == 0) {
+      std::cout << oss.str() << std::flush;
     } else {
       LOG(INFO) << oss.str();
     }
