@@ -433,6 +433,17 @@ class Indexer : public td::actor::Actor {
   }
 
   void start_parse_shards(BlockSeqno seqno, ShardId shard, WorkchainId workchain, bool is_first = false) {
+    {
+      std::lock_guard<std::mutex> lock(parsed_shards_mtx_);
+      const auto id = std::to_string(workchain) + ":" + std::to_string(shard) + ":" +
+                      std::to_string(seqno);
+      if (parsed_shards_.find(id) != parsed_shards_.end()) {
+        LOG(WARNING) << id << " <- already parsed!";
+        return;
+      }
+      parsed_shards_.emplace(id);
+    }
+
     auto P = td::PromiseCreator::lambda([this, workchain_shard = workchain, seqno_shard = seqno, shard_shard = shard,
                                          SelfId = actor_id(this), first = is_first](td::Result<ConstBlockHandle> R) {
       if (R.is_error()) {
@@ -448,17 +459,6 @@ class Indexer : public td::actor::Actor {
         td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, first);
       }
     });
-
-    {
-      std::lock_guard<std::mutex> lock(parsed_shards_mtx_);
-      const auto id = std::to_string(workchain) + ":" + std::to_string(shard) + ":" +
-                      std::to_string(seqno);
-      if (parsed_shards_.find(id) != parsed_shards_.end()) {
-        LOG(WARNING) << workchain << ":" << shard << ":" << seqno << " <- already parsed!";
-        return;
-      }
-      parsed_shards_.emplace(id);
-    }
 
     increase_block_padding();
     ton::AccountIdPrefixFull pfx{workchain, shard};
