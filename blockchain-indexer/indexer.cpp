@@ -108,7 +108,7 @@ class Dumper {
   void dump() {
     std::lock_guard lock(dump_mtx);
 
-    LOG(DEBUG) << "dump start";
+    const auto dumped_amount = joined.size();
 
     auto to_dump = json::array();
     for (auto &e : joined) {
@@ -124,11 +124,14 @@ class Dumper {
     std::ofstream file(oss.str());
     file << to_dump.dump(4);
 
-    LOG(DEBUG) << "dump end";
+    LOG(INFO) << "Dumped " << dumped_amount << "block/state pairs";
   }
 
   void dumpLoners() {
     std::lock_guard lock(dump_mtx);
+
+    const auto lone_blocks_amount = blocks.size();
+    const auto lone_states_amount = states.size();
 
     auto blocks_to_dump = json::array();
     for (auto& e : blocks) {
@@ -155,14 +158,19 @@ class Dumper {
         {"states", std::move(states_to_dump)}
     };
 
-    std::ostringstream oss;
-    oss << prefix
-        << "loners_"
-        << std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::system_clock::now().time_since_epoch()).count()
-        << ".json";
-    std::ofstream file(oss.str());
-    file << to_dump.dump(4);
+    if (lone_blocks_amount != 0 || lone_states_amount != 0) {
+      std::ostringstream oss;
+      oss << prefix
+          << "loners_"
+          << std::chrono::duration_cast<std::chrono::milliseconds>(
+                 std::chrono::system_clock::now().time_since_epoch()).count()
+          << ".json";
+      std::ofstream file(oss.str());
+      file << to_dump.dump(4);
+
+      LOG(WARNING) << "Dumped " << lone_blocks_amount << " blocks without pair";
+      LOG(WARNING) << "Dumped " << lone_states_amount << " states without pair";
+    }
   }
 
  private:
@@ -1083,8 +1091,6 @@ class Indexer : public td::actor::Actor {
   void shutdown() {
     LOG(INFO) << "Shutting down...";
     dumper_.forceDump();
-    LOG(INFO) << "Stored blocks: " << stored_blocks_counter_;
-    LOG(INFO) << "Stored states: " << stored_states_counter_;
     LOG(INFO) << "Ready to die";
     if (verbosity == 0) {
         std::cout << "\nReady to die" << std::endl;;
