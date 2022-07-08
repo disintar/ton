@@ -196,7 +196,7 @@ class Indexer : public td::actor::Actor {
   int block_padding_ = 0;
   int state_padding_ = 0;
   std::mutex display_mtx_;
-  bool display_initialized_ = false;
+  std::size_t padding_reached_zero_ = 0; // in times
   Dumper dumper_ = Dumper("dump_", 1000);
 
   // store timestamps of parsed blocks for speed measuring
@@ -1058,8 +1058,10 @@ class Indexer : public td::actor::Actor {
     }
 
     if (block_padding_ == 0 && state_padding_ == 0) {
-      LOG(INFO) << "block padding and state padding reached 0";
-      td::actor::send_closure(actor_id(this), &ton::validator::Indexer::shutdown);
+      if (++padding_reached_zero_ == 3) {
+        LOG(INFO) << "block padding and state padding reached 0";
+        td::actor::send_closure(actor_id(this), &ton::validator::Indexer::shutdown);
+      }
     }
   }
 
