@@ -1029,7 +1029,7 @@ class Indexer : public td::actor::Actor {
     std::unique_lock<std::mutex> lock(display_mtx_);  ///TODO: might cause performance issues
 
     parsed_states_timepoints_.emplace(std::chrono::high_resolution_clock::now());
-    if (block_padding_ == 0) {
+    if (state_padding_ == 0) {
       LOG(ERROR) << "decreasing state padding but it's zero";
     }
     --state_padding_;
