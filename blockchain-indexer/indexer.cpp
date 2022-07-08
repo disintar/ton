@@ -1060,7 +1060,7 @@ class Indexer : public td::actor::Actor {
 
   bool display_progress() {
     if (!display_speed_) {
-      return;
+      return true;
     }
     ///TODO: there should be some standard algorithm to do this
     while (!parsed_blocks_timepoints_.empty()) {
