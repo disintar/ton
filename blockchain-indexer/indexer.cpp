@@ -1376,7 +1376,7 @@ int main(int argc, char **argv) {
     td::actor::send_closure(indexer, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_last);
     return td::Status::OK();
   });
-  p.add_checked_option('p', "progress", "display speed true/false", [&](td::Slice arg) {
+  p.add_checked_option('S', "speed", "display speed true/false", [&](td::Slice arg) {
     const auto str = arg.str();
     if (str == "true") {
       td::actor::send_closure(indexer, &ton::validator::Indexer::set_display_speed, true);
