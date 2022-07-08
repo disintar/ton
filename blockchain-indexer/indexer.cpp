@@ -396,7 +396,7 @@ class Indexer : public td::actor::Actor {
             LOG(ERROR) << R.move_as_error().to_string();
           } else {
             auto handle = R.move_as_ok();
-            LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
+            LOG(DEBUG) << "got data for block " << handle->id().to_str();
             td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
           }
         });
@@ -408,27 +408,23 @@ class Indexer : public td::actor::Actor {
   }
 
   void parse_other() {
-    if (seqno_last_ != seqno_first_) {
-      for (auto seqno = seqno_first_ + 1; seqno <= seqno_last_; ++seqno) {
-        auto my_seqno = seqno_first_;
+    for (auto seqno = seqno_first_ + 1; seqno <= seqno_last_; ++seqno) {
+      auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this),
+                                           seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
+        if (R.is_error()) {
+          LOG(ERROR) << R.move_as_error().to_string();
+          decrease_block_padding();
+        } else {
+          auto handle = R.move_as_ok();
+          LOG(DEBUG) << "got block from db " << handle->id().to_str();
+          td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
+        }
+      });
 
-        auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this),
-                                             seqno_first = my_seqno](td::Result<ConstBlockHandle> R) {
-          if (R.is_error()) {
-            LOG(ERROR) << R.move_as_error().to_string();
-            decrease_block_padding();
-          } else {
-            auto handle = R.move_as_ok();
-            LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
-            td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
-          }
-        });
-
-        increase_block_padding();
-        ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
-        td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
-                                std::move(P));
-      }
+      increase_block_padding();
+      ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
+      td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
+                              std::move(P));
     }
   }
 
