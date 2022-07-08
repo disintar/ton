@@ -124,7 +124,7 @@ class Dumper {
     std::ofstream file(oss.str());
     file << to_dump.dump(4);
 
-    LOG(INFO) << "Dumped " << dumped_amount << "block/state pairs";
+    LOG(INFO) << "Dumped " << dumped_amount << " block/state pairs";
   }
 
   void dumpLoners() {
