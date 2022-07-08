@@ -258,7 +258,7 @@ class Indexer : public td::actor::Actor {
     opts_.write().set_hardforks(std::move(h));
     return td::Status::OK();
   }
-  std::unordered_set<std::string> parsed_shards_;
+  std::unordered_set<std::string> already_traversed_;
   std::mutex parsed_shards_mtx_;
 
   std::mutex stored_counter_mtx_;
@@ -433,17 +433,6 @@ class Indexer : public td::actor::Actor {
   }
 
   void start_parse_shards(BlockSeqno seqno, ShardId shard, WorkchainId workchain, bool is_first = false) {
-    {
-      std::lock_guard<std::mutex> lock(parsed_shards_mtx_);
-      const auto id = std::to_string(workchain) + ":" + std::to_string(shard) + ":" +
-                      std::to_string(seqno);
-      if (parsed_shards_.find(id) != parsed_shards_.end()) {
-        LOG(WARNING) << id << " <- already parsed!";
-        return;
-      }
-      parsed_shards_.emplace(id);
-    }
-
     auto P = td::PromiseCreator::lambda([this, workchain_shard = workchain, seqno_shard = seqno, shard_shard = shard,
                                          SelfId = actor_id(this), first = is_first](td::Result<ConstBlockHandle> R) {
       if (R.is_error()) {
@@ -467,6 +456,18 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle, bool first = false) {
+    {
+      std::lock_guard<std::mutex> lock(parsed_shards_mtx_);
+      const auto block_id = handle->id().id;
+      const auto id = std::to_string(block_id.workchain) + ":" + std::to_string(block_id.shard) + ":" +
+                      std::to_string(block_id.seqno);
+      if (already_traversed_.find(id) != already_traversed_.end()) {
+        LOG(WARNING) << id << " <- already parsed!";
+        return;
+      }
+      already_traversed_.emplace(id);
+    }
+
     auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this), is_first = first,
                                          block_handle = handle](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
