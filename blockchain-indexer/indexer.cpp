@@ -463,6 +463,17 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle, bool first = false) {
+    {
+      std::lock_guard<std::mutex> lock(parsed_shards_mtx_);
+      const auto block_id = handle->id().id;
+      const auto id = std::to_string(block_id.workchain) + ":" + std::to_string(block_id.shard) + ":" +
+                      std::to_string(block_id.seqno);
+      if (parsed_shards_.find(id) != parsed_shards_.end()) {
+        LOG(WARNING) << id << " <- already parsed!";
+        return;
+      }
+    }
+
     auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this), is_first = first,
                                          block_handle = handle](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
@@ -1095,18 +1106,6 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::vector<td::Bits256> accounts_keys) {
-    // (probably) this should never be called if it is already parsed really
-    {
-      std::lock_guard<std::mutex> lock(parsed_shards_mtx_);
-      const auto block_id = handle->id().id;
-      const auto id = std::to_string(block_id.workchain) + ":" + std::to_string(block_id.shard) + ":" +
-                      std::to_string(block_id.seqno);
-      if (parsed_shards_.find(id) != parsed_shards_.end()) {
-        LOG(WARNING) << id << " <- already parsed!";
-        return;
-      }
-    }
-
     auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this), handle,
                                             accounts_keys =
                                                 std::move(accounts_keys)](td::Result<td::Ref<vm::DataCell>> R) {
