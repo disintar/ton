@@ -462,7 +462,8 @@ class Indexer : public td::actor::Actor {
       const auto id = std::to_string(block_id.workchain) + ":" + std::to_string(block_id.shard) + ":" +
                       std::to_string(block_id.seqno);
       if (already_traversed_.find(id) != already_traversed_.end()) {
-        LOG(WARNING) << id << " <- already parsed!";
+        LOG(WARNING) << id << " <- already traversed!";
+        decrease_block_padding();
         return;
       }
       already_traversed_.emplace(id);
