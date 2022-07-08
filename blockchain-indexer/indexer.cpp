@@ -58,6 +58,8 @@ class Dumper {
   void storeBlock(std::string id, json block) {
     std::lock_guard lock(store_mtx);
 
+    LOG(DEBUG) << "Storing block " << id;
+
     auto state = states.find(id);
     if (state == states.end()) {
       blocks.insert({std::move(id), std::move(block)});
@@ -78,6 +80,8 @@ class Dumper {
 
   void storeState(std::string id, json state) {
     std::lock_guard lock(store_mtx);
+
+    LOG(DEBUG) << "Storing state " << id;
 
     auto block = blocks.find(id);
     if (block == blocks.end()) {
@@ -463,17 +467,6 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle, bool first = false) {
-    {
-      std::lock_guard<std::mutex> lock(parsed_shards_mtx_);
-      const auto block_id = handle->id().id;
-      const auto id = std::to_string(block_id.workchain) + ":" + std::to_string(block_id.shard) + ":" +
-                      std::to_string(block_id.seqno);
-      if (parsed_shards_.find(id) != parsed_shards_.end()) {
-        LOG(WARNING) << id << " <- already parsed!";
-        return;
-      }
-    }
-
     auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this), is_first = first,
                                          block_handle = handle](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
