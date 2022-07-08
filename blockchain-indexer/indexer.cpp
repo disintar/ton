@@ -1087,7 +1087,7 @@ class Indexer : public td::actor::Actor {
 
     if (verbosity == 0) {
       oss << '\r';
-      for (auto i = 0; i < 112; ++i) oss << " ";
+      for (auto i = 0; i < 112; ++i) oss << ' ';
       oss << '\r';
     }
 
@@ -1107,9 +1107,6 @@ class Indexer : public td::actor::Actor {
     LOG(INFO) << "Shutting down...";
     dumper_.forceDump();
     LOG(INFO) << "Ready to die";
-    if (verbosity == 0) {
-        std::cout << "\nReady to die" << std::endl;;
-    }
     ///TODO: danger danger
     LOG(WARNING) << "Calling std::exit(0)";
     std::exit(0);
