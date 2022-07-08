@@ -1012,12 +1012,18 @@ class Indexer : public td::actor::Actor {
   }
 
   void increase_block_padding() {
+    if (!display_speed_) {
+      return;
+    }
     std::unique_lock<std::mutex> lock(display_mtx_);  ///TODO: might cause performance issues
     ++block_padding_;
     display_progress();
   }
 
   void decrease_block_padding() {
+    if (!display_speed_) {
+      return;
+    }
     std::unique_lock<std::mutex> lock(display_mtx_);  ///TODO: might cause performance issues
 
     parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
@@ -1029,6 +1035,9 @@ class Indexer : public td::actor::Actor {
   }
 
   void increase_state_padding() {
+    if (!display_speed_) {
+      return;
+    }
     std::unique_lock<std::mutex> lock(display_mtx_);  ///TODO: might cause performance issues
 
     ++state_padding_;
@@ -1036,6 +1045,9 @@ class Indexer : public td::actor::Actor {
   }
 
   void decrease_state_padding() {
+    if (!display_speed_) {
+      return;
+    }
     std::unique_lock<std::mutex> lock(display_mtx_);  ///TODO: might cause performance issues
 
     parsed_states_timepoints_.emplace(std::chrono::high_resolution_clock::now());
@@ -1047,6 +1059,9 @@ class Indexer : public td::actor::Actor {
   }
 
   bool display_progress() {
+    if (!display_speed_) {
+      return;
+    }
     ///TODO: there should be some standard algorithm to do this
     while (!parsed_blocks_timepoints_.empty()) {
       const auto timepoint = parsed_blocks_timepoints_.front();
