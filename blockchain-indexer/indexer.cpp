@@ -1324,20 +1324,6 @@ class Indexer : public td::actor::Actor {
 
 td::actor::ActorOwn<ton::validator::Indexer> indexer;
 
-void signal_handler(const int signal) {
-  switch (signal) {
-    case SIGINT: {
-      LOG(INFO) << "Received SIGINT";
-      LOG(INFO) << "Shutting down...";
-      td::actor::send_closure(indexer, &ton::validator::Indexer::shutdown);
-      break;
-    }
-    default: {
-      LOG(ERROR) << "signal " << signal << " not supported";
-    }
-  }
-}
-
 int main(int argc, char **argv) {
   SET_VERBOSITY_LEVEL(verbosity_DEBUG);
 
@@ -1408,10 +1394,6 @@ int main(int argc, char **argv) {
   td::actor::Scheduler scheduler({threads});  // contans a bug: threads not initialized by OptionsParser
   scheduler.run_in_context([&] { indexer = td::actor::create_actor<ton::validator::Indexer>("cool"); });
   scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
-  scheduler.run_in_context([&] {
-    LOG(INFO) << "Send SIGINT to shutdown";
-    std::signal(SIGINT, signal_handler);
-  });
   scheduler.run_in_context(
       [&] { td::actor::send_closure(indexer, &ton::validator::Indexer::run); });
   scheduler.run();
