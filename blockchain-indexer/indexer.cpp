@@ -1104,6 +1104,7 @@ class Indexer : public td::actor::Actor {
         std::cout << "\nReady to die" << std::endl;;
     }
     ///TODO: danger danger
+    LOG(WARNING) << "Calling std::exit(0)";
     std::exit(0);
   }
 
