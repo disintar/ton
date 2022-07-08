@@ -1058,9 +1058,9 @@ class Indexer : public td::actor::Actor {
     }
 
     if (block_padding_ == 0 && state_padding_ == 0) {
-      if (++padding_reached_zero_ == 3) {
+      if (padding_reached_zero_++ == 2) {
         LOG(INFO) << "block padding and state padding reached 0";
-        td::actor::send_closure(actor_id(this), &ton::validator::Indexer::shutdown);
+        shutdown();
       }
     }
   }
