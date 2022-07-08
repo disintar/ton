@@ -421,7 +421,7 @@ class Indexer : public td::actor::Actor {
         } else {
           auto handle = R.move_as_ok();
           LOG(DEBUG) << "got block from db " << handle->id().to_str();
-          td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
+          td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
         }
       });
 
@@ -815,7 +815,7 @@ class Indexer : public td::actor::Actor {
         }
 
         if (true /*accounts_keys.size() > 0*/) {
-          td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
+          td::actor::send_closure_later(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
         }
 
         answer["BlockExtra"] = {
