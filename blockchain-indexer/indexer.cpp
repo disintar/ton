@@ -254,7 +254,7 @@ class Indexer : public td::actor::Actor {
     opts_.write().set_hardforks(std::move(h));
     return td::Status::OK();
   }
-  std::set<std::tuple<int, int, int>> parsed_shards_;
+  std::set<std::string> parsed_shards_;
   std::mutex parsed_shards_mtx_;
 
   std::mutex stored_counter_mtx_;
@@ -432,7 +432,7 @@ class Indexer : public td::actor::Actor {
     }
   }
 
-  void start_parse_shards(unsigned int seqno, unsigned long shard, int workchain, bool is_first = false) {
+  void start_parse_shards(BlockSeqno seqno, ShardId shard, WorkchainId workchain, bool is_first = false) {
     auto P = td::PromiseCreator::lambda([this, workchain_shard = workchain, seqno_shard = seqno, shard_shard = shard,
                                          SelfId = actor_id(this), first = is_first](td::Result<ConstBlockHandle> R) {
       if (R.is_error()) {
@@ -451,12 +451,13 @@ class Indexer : public td::actor::Actor {
 
     {
       std::lock_guard<std::mutex> lock(parsed_shards_mtx_);
-      std::tuple<int, int, int> data = {seqno, shard, workchain};
-      if (parsed_shards_.find(data) != parsed_shards_.end()) {
+      const auto id = std::to_string(workchain) + ":" + std::to_string(shard) + ":" +
+                      std::to_string(seqno);
+      if (parsed_shards_.find(id) != parsed_shards_.end()) {
         LOG(WARNING) << workchain << ":" << shard << ":" << seqno << " <- already parsed!";
         return;
       }
-      parsed_shards_.emplace(data);
+      parsed_shards_.emplace(id);
     }
 
     increase_block_padding();
