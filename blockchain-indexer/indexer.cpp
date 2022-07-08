@@ -615,10 +615,10 @@ class Indexer : public td::actor::Actor {
             LOG(DEBUG) << "GO: " << blkid.id.workchain << ":" << blkid.id.shard << ":" << prev_blk_1.seq_no;
             LOG(DEBUG) << "GO: " << blkid.id.workchain << ":" << blkid.id.shard << ":" << prev_blk_2.seq_no;
 
-            td::actor::send_closure(SelfId, &Indexer::start_parse_shards, prev_blk_1.seq_no, blkid.id.shard,
+            td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, prev_blk_1.seq_no, blkid.id.shard,
                                     blkid.id.workchain, false);
 
-            td::actor::send_closure(SelfId, &Indexer::start_parse_shards, prev_blk_2.seq_no, blkid.id.shard,
+            td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, prev_blk_2.seq_no, blkid.id.shard,
                                     blkid.id.workchain, false);
           }
 
@@ -815,7 +815,7 @@ class Indexer : public td::actor::Actor {
         }
 
         if (true /*accounts_keys.size() > 0*/) {
-          td::actor::send_closure_later(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
+          td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
         }
 
         answer["BlockExtra"] = {
