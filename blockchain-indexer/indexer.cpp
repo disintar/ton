@@ -468,9 +468,7 @@ class Indexer : public td::actor::Actor {
 
         auto blkid = block->block_id();
 
-        std::ostringstream oss;
-        oss << std::this_thread::get_id();
-        LOG(INFO) << oss.str() << " Parse block: " << blkid.to_str() << " is_first: " << is_first;
+        LOG(INFO) << "Parse block: " << blkid.to_str() << " is_first: " << is_first;
 
         auto block_root = block->root_cell();
         if (block_root.is_null()) {
@@ -1102,10 +1100,8 @@ class Indexer : public td::actor::Actor {
       } else {
         auto root_cell = R.move_as_ok();
         auto block_id = handle->id();
-        std::ostringstream oss;
 
-        oss << std::this_thread::get_id();
-        LOG(INFO) << oss.str() << " Parse state: " << block_id.to_str();
+        LOG(INFO) << "Parse state: " << block_id.to_str();
 
         block::gen::ShardStateUnsplit::Record shard_state;
         CHECK(tlb::unpack_cell(root_cell, shard_state));
