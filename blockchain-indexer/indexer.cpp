@@ -388,7 +388,10 @@ class Indexer : public td::actor::Actor {
                             std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
     LOG(DEBUG) << "Callback installed";
 
-    progress_changed();
+    if (display_speed_) {
+      std::unique_lock<std::mutex> lock(display_mtx_);
+      display_speed();
+    }
   }
 
   void sync_complete(const BlockHandle &handle) {
@@ -1061,9 +1064,7 @@ class Indexer : public td::actor::Actor {
 
     if (block_padding_ == 0 && state_padding_ == 0) {
       LOG(WARNING) << "Block&State paddings reached 0";
-      if (++padding_reached_zero_ == 2) {
-        shutdown();
-      }
+      shutdown();
     }
   }
 
