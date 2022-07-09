@@ -815,6 +815,7 @@ class Indexer : public td::actor::Actor {
         }
 
         if (true /*accounts_keys.size() > 0*/) {
+          increase_state_padding();
           td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
         }
 
@@ -1013,13 +1014,13 @@ class Indexer : public td::actor::Actor {
   }
 
   void increase_block_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_);  ///TODO: might cause performance issues
+    std::unique_lock<std::mutex> lock(display_mtx_);
     ++block_padding_;
     progress_changed();
   }
 
   void decrease_block_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_);  ///TODO: might cause performance issues
+    std::unique_lock<std::mutex> lock(display_mtx_);
 
     if (display_speed_) {
       parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
@@ -1033,14 +1034,14 @@ class Indexer : public td::actor::Actor {
   }
 
   void increase_state_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_);  ///TODO: might cause performance issues
+    std::unique_lock<std::mutex> lock(display_mtx_);
 
     ++state_padding_;
     progress_changed();
   }
 
   void decrease_state_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_);  ///TODO: might cause performance issues
+    std::unique_lock<std::mutex> lock(display_mtx_);
 
     if (display_speed_) {
       parsed_states_timepoints_.emplace(std::chrono::high_resolution_clock::now());
@@ -1059,15 +1060,14 @@ class Indexer : public td::actor::Actor {
     }
 
     if (block_padding_ == 0 && state_padding_ == 0) {
+      LOG(WARNING) << "Block&State paddings reached 0";
       if (padding_reached_zero_++ == 2) {
-        LOG(INFO) << "block padding and state padding reached 0";
         shutdown();
       }
     }
   }
 
   void display_speed() {
-    ///TODO: there should be some standard algorithm to do this
     while (!parsed_blocks_timepoints_.empty()) {
       const auto timepoint = parsed_blocks_timepoints_.front();
       if (std::chrono::high_resolution_clock::now() - timepoint < std::chrono::seconds(1)) {
@@ -1314,7 +1314,6 @@ class Indexer : public td::actor::Actor {
     });
 
     LOG(DEBUG) << "getting state from db " << handle->id().to_str();
-    increase_state_padding();
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle,
                                   std::move(P));
   }
