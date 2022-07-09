@@ -1061,7 +1061,7 @@ class Indexer : public td::actor::Actor {
 
     if (block_padding_ == 0 && state_padding_ == 0) {
       LOG(WARNING) << "Block&State paddings reached 0";
-      if (padding_reached_zero_++ == 2) {
+      if (++padding_reached_zero_ == 2) {
         shutdown();
       }
     }
