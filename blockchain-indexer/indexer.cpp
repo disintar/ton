@@ -196,7 +196,6 @@ class Indexer : public td::actor::Actor {
   int block_padding_ = 0;
   int state_padding_ = 0;
   std::mutex display_mtx_;
-  std::size_t padding_reached_zero_ = 0; // in times
   Dumper dumper_ = Dumper("dump_", 1000);
 
   // store timestamps of parsed blocks for speed measuring
