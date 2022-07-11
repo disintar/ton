@@ -47,7 +47,7 @@ namespace validator {
 class Dumper {
  public:
   explicit Dumper(std::string prefix, const std::size_t buffer_size)
-     : prefix(std::move(prefix)), buffer_size(buffer_size) {
+      : prefix(std::move(prefix)), buffer_size(buffer_size) {
     joined.reserve(buffer_size);
   }
 
@@ -64,11 +64,7 @@ class Dumper {
     if (state == states.end()) {
       blocks.insert({std::move(id), std::move(block)});
     } else {
-      json together = {
-          {"id", id},
-          {"block", std::move(block)},
-          {"state", std::move(state->second)}
-      };
+      json together = {{"id", id}, {"block", std::move(block)}, {"state", std::move(state->second)}};
       joined.emplace_back(std::move(together));
       states.erase(state);
     }
@@ -87,11 +83,7 @@ class Dumper {
     if (block == blocks.end()) {
       states.insert({std::move(id), std::move(state)});
     } else {
-      json together = {
-          {"id", id},
-          {"block", std::move(block->second)},
-          {"state", std::move(state)}
-      };
+      json together = {{"id", id}, {"block", std::move(block->second)}, {"state", std::move(state)}};
       joined.emplace_back(std::move(together));
       blocks.erase(block);
     }
@@ -122,8 +114,8 @@ class Dumper {
 
     std::ostringstream oss;
     oss << prefix
-        << std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::system_clock::now().time_since_epoch()).count()
+        << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+               .count()
         << ".json";
     std::ofstream file(oss.str());
     file << to_dump.dump(4);
@@ -138,36 +130,26 @@ class Dumper {
     const auto lone_states_amount = states.size();
 
     auto blocks_to_dump = json::array();
-    for (auto& e : blocks) {
-      json block_json = {
-          {"id", e.first},
-          {"block", std::move(e.second)}
-      };
+    for (auto &e : blocks) {
+      json block_json = {{"id", e.first}, {"block", std::move(e.second)}};
       blocks_to_dump.emplace_back(std::move(block_json));
     }
     blocks.clear();
 
     auto states_to_dump = json::array();
-    for (auto& e : states) {
-      json state_json = {
-          {"id", e.first},
-          {"state", std::move(e.second)}
-      };
+    for (auto &e : states) {
+      json state_json = {{"id", e.first}, {"state", std::move(e.second)}};
       states_to_dump.emplace_back(std::move(state_json));
     }
     states.clear();
 
-    json to_dump = {
-        {"blocks", std::move(blocks_to_dump)},
-        {"states", std::move(states_to_dump)}
-    };
+    json to_dump = {{"blocks", std::move(blocks_to_dump)}, {"states", std::move(states_to_dump)}};
 
     if (lone_blocks_amount != 0 || lone_states_amount != 0) {
       std::ostringstream oss;
-      oss << prefix
-          << "loners_"
-          << std::chrono::duration_cast<std::chrono::milliseconds>(
-                 std::chrono::system_clock::now().time_since_epoch()).count()
+      oss << prefix << "loners_"
+          << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+                 .count()
           << ".json";
       std::ofstream file(oss.str());
       file << to_dump.dump(4);
@@ -195,6 +177,9 @@ class Indexer : public td::actor::Actor {
   BlockSeqno seqno_last_ = 0;
   int block_padding_ = 0;
   int state_padding_ = 0;
+  td::uint32 chunk_size_ = 20000;
+  td::uint32 chunk_count_ = 0;
+  td::uint32 chunk_current_ = 0;
   std::mutex display_mtx_;
   Dumper dumper_ = Dumper("dump_", 1000);
 
@@ -261,6 +246,7 @@ class Indexer : public td::actor::Actor {
   std::mutex parsed_shards_mtx_;
 
   std::mutex stored_counter_mtx_;
+
  public:
   std::size_t stored_blocks_counter_ = 0;
   std::size_t stored_states_counter_ = 0;
@@ -275,6 +261,9 @@ class Indexer : public td::actor::Actor {
   void set_seqno_range(BlockSeqno seqno_first, BlockSeqno seqno_last) {
     seqno_first_ = seqno_first;
     seqno_last_ = seqno_last;
+  }
+  void set_chunk_size(td::uint32 size) {
+    chunk_size_ = size;
   }
   void set_display_speed(bool display_speed) {
     display_speed_ = display_speed;
@@ -414,23 +403,37 @@ class Indexer : public td::actor::Actor {
   }
 
   void parse_other() {
-    for (auto seqno = seqno_first_ + 1; seqno <= seqno_last_; ++seqno) {
-      auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this),
-                                           seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
-        if (R.is_error()) {
-          LOG(ERROR) << R.move_as_error().to_string();
-          decrease_block_padding();
-        } else {
-          auto handle = R.move_as_ok();
-          LOG(DEBUG) << "got block from db " << handle->id().to_str();
-          td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
-        }
-      });
+    if (seqno_last_ > seqno_first_) {
+      if (chunk_count_ == 0) {
+        auto blocks_size = seqno_last_ - seqno_first_ + 1;
+        chunk_count_ = (unsigned int)ceil(blocks_size / chunk_size_);
+        LOG(WARNING) << "Total chunks count: " << chunk_count_;
+      }
 
-      increase_block_padding();
-      ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
-      td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
-                              std::move(P));
+      chunk_current_ += 1;
+      auto start = seqno_first_ + 1 + (chunk_size_ * (chunk_current_ - 1));
+      auto end = td::min(seqno_last_, seqno_first_ + 1 + (chunk_size_ * chunk_current_));
+      LOG(WARNING) << "Process chunk (" << chunk_current_ << ") From: " << start << " To: " << end;
+
+      for (auto seqno = start; seqno <= seqno_last_; ++seqno) {
+        auto P = td::PromiseCreator::lambda(
+            [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
+              if (R.is_error()) {
+                LOG(ERROR) << R.move_as_error().to_string();
+                decrease_block_padding();
+              } else {
+                auto handle = R.move_as_ok();
+                LOG(DEBUG) << "got block from db " << handle->id().to_str();
+                td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle,
+                                              handle->id().seqno() == seqno_first);
+              }
+            });
+
+        increase_block_padding();
+        ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
+        td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
+                                std::move(P));
+      }
     }
   }
 
@@ -439,14 +442,15 @@ class Indexer : public td::actor::Actor {
                                          SelfId = actor_id(this), first = is_first](td::Result<ConstBlockHandle> R) {
       if (R.is_error()) {
         LOG(ERROR) << "ERROR IN BLOCK: "
-                   << "Seqno: " << seqno_shard - 1 << " Shard: " << shard_shard << " Worckchain: " << workchain_shard;
+                   << "Seqno: " << seqno_shard << " Shard: " << shard_shard << " Worckchain: " << workchain_shard;
 
         LOG(ERROR) << R.move_as_error().to_string();
         decrease_block_padding();
         return;
       } else {
         auto handle = R.move_as_ok();
-        LOG(DEBUG) << "got block from db " << workchain_shard << ":" << shard_shard << ":" << seqno_shard << " is_first: " << first;
+        LOG(DEBUG) << "got block from db " << workchain_shard << ":" << shard_shard << ":" << seqno_shard
+                   << " is_first: " << first;
         td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, first);
       }
     });
@@ -618,10 +622,10 @@ class Indexer : public td::actor::Actor {
             LOG(DEBUG) << "GO: " << blkid.id.workchain << ":" << blkid.id.shard << ":" << prev_blk_2.seq_no;
 
             td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, prev_blk_1.seq_no, blkid.id.shard,
-                                    blkid.id.workchain, false);
+                                          blkid.id.workchain, false);
 
             td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, prev_blk_2.seq_no, blkid.id.shard,
-                                    blkid.id.workchain, false);
+                                          blkid.id.workchain, false);
           }
 
         } else {
@@ -1063,7 +1067,12 @@ class Indexer : public td::actor::Actor {
 
     if (block_padding_ == 0 && state_padding_ == 0) {
       LOG(WARNING) << "Block&State paddings reached 0";
-      shutdown();
+
+      if (chunk_current_ != chunk_size_) {
+        td::actor::send_closure(actor_id(this), &Indexer::parse_other);
+      } else {
+        shutdown();
+      }
     }
   }
 
@@ -1087,14 +1096,13 @@ class Indexer : public td::actor::Actor {
 
     if (verbosity == 0) {
       oss << '\r';
-      for (auto i = 0; i < 112; ++i) oss << ' ';
+      for (auto i = 0; i < 112; ++i)
+        oss << ' ';
       oss << '\r';
     }
 
-    oss << "speed(blocks/s):\t" << parsed_blocks_timepoints_.size()
-        << "\tpadding:\t" << block_padding_ << '\t'
-        << "speed(states/s):\t" << parsed_states_timepoints_.size()
-        << "\tpadding:\t" << state_padding_ << '\t';
+    oss << "speed(blocks/s):\t" << parsed_blocks_timepoints_.size() << "\tpadding:\t" << block_padding_ << '\t'
+        << "speed(states/s):\t" << parsed_states_timepoints_.size() << "\tpadding:\t" << state_padding_ << '\t';
 
     if (verbosity == 0) {
       std::cout << oss.str() << std::flush;
@@ -1114,8 +1122,8 @@ class Indexer : public td::actor::Actor {
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::vector<td::Bits256> accounts_keys) {
     auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this), handle,
-                                            accounts_keys =
-                                                std::move(accounts_keys)](td::Result<td::Ref<vm::DataCell>> R) {
+                                         accounts_keys =
+                                             std::move(accounts_keys)](td::Result<td::Ref<vm::DataCell>> R) {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string();
       } else {
@@ -1219,17 +1227,10 @@ class Indexer : public td::actor::Actor {
           auto value = result;
           if (value.not_null()) {
             block::gen::ShardAccount::Record sa;
-            //            block::gen::DepthBalanceInfo::Record dbi;
             block::gen::CurrencyCollection::Record dbi_cc;
             CHECK(tlb::unpack(value.write(), sa));
-            //            CHECK(tlb::unpack(extra.write(), dbi));
-            //            CHECK(tlb::unpack(dbi.balance.write(), dbi_cc));
-
             json data;
-            //            data["balance"] = {
-            //                {"split_depth", dbi.split_depth},
-            //                {"grams", block::tlb::t_Grams.as_integer(dbi_cc.grams)->to_dec_string()},
-            //                {"extra", dbi_cc.other->have_refs() ? parse_extra_currency(dbi_cc.other->prefetch_ref()) : dummy}};
+
             data["account_address"] = {{"workchain", block_id.id.workchain}, {"address", account.to_hex()}};
             data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}};
 
@@ -1315,7 +1316,7 @@ class Indexer : public td::actor::Actor {
 
     LOG(DEBUG) << "getting state from db " << handle->id().to_str();
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle,
-                                  std::move(P));
+                            std::move(P));
   }
 };  // namespace validator
 }  // namespace validator
@@ -1364,6 +1365,14 @@ int main(int argc, char **argv) {
         threads = v;
         return td::Status::OK();
       });
+
+  p.add_checked_option('c', "chunk-size", PSTRING() << "number of blocks per chunk (default=20000)",
+                       [&](td::Slice arg) {
+                         TRY_RESULT(size, td::to_integer_safe<ton::BlockSeqno>(arg.str()));
+                         td::actor::send_closure(indexer, &ton::validator::Indexer::set_chunk_size, size);
+                         return td::Status::OK();
+                       });
+
   p.add_checked_option('s', "seqno", "seqno_first[:seqno_last]\tseqno range", [&](td::Slice arg) {
     auto pos = std::min(arg.find(':'), arg.size());
     TRY_RESULT(seqno_first, td::to_integer_safe<ton::BlockSeqno>(arg.substr(0, pos)));
@@ -1393,8 +1402,7 @@ int main(int argc, char **argv) {
   td::actor::Scheduler scheduler({threads});  // contans a bug: threads not initialized by OptionsParser
   scheduler.run_in_context([&] { indexer = td::actor::create_actor<ton::validator::Indexer>("cool"); });
   scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
-  scheduler.run_in_context(
-      [&] { td::actor::send_closure(indexer, &ton::validator::Indexer::run); });
+  scheduler.run_in_context([&] { td::actor::send_closure(indexer, &ton::validator::Indexer::run); });
   scheduler.run();
   scheduler.stop();
   return 0;
