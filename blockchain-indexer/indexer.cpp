@@ -1419,10 +1419,10 @@ class Indexer : public td::actor::Actor {
 
       auto it = pending_blocks_accounts_.find(block_id);
       if (it != pending_blocks_accounts_.end()) {
-        it->second.emplace_back(std::move(data));
+//        it->second.emplace_back(std::move(data));
       } else {  // first parsed account
         std::vector<json> data_for_waiting;
-        data_for_waiting.emplace_back(std::move(data));
+//        data_for_waiting.emplace_back(std::move(data));
 
         auto p = std::make_pair(block_id, data_for_waiting);
         pending_blocks_accounts_.emplace(p);
