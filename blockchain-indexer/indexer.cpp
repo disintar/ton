@@ -1092,7 +1092,7 @@ class Indexer : public td::actor::Actor {
           }
         });
         LOG(DEBUG) << "1";
-        td::actor : send_closure(actor_id(this), &Indexer::increase_block_padding);
+        td::actor::send_closure(actor_id(this), &Indexer::increase_block_padding);
         LOG(DEBUG) << "2";
         ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
         LOG(DEBUG) << "3";
