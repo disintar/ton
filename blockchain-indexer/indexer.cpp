@@ -1353,7 +1353,7 @@ class Indexer : public td::actor::Actor {
         // dump
         auto it_data = pending_blocks_.find(block_id);
         if (it_data != pending_blocks_.end()) {
-          auto answer = (*it_data).second;
+          auto answer = std::move((*it_data).second);
 
           // save parsed accounts
           answer["accounts"] = std::move((*it).second);
@@ -1362,9 +1362,9 @@ class Indexer : public td::actor::Actor {
             std::lock_guard<std::mutex> lock(stored_counter_mtx_);
             ++stored_states_counter_;
           }
-//          dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
-//                                  std::to_string(block_id.id.seqno),
-//                              std::move(answer));
+          //          dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+          //                                  std::to_string(block_id.id.seqno),
+          //                              std::move(answer));
 
           LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
           decrease_state_padding();
