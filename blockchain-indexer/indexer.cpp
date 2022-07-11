@@ -1037,8 +1037,8 @@ class Indexer : public td::actor::Actor {
       ++block_padding_;
     }
 
-//    progress_changed();
-    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
+    progress_changed();
+//    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void decrease_block_padding() {
@@ -1054,8 +1054,8 @@ class Indexer : public td::actor::Actor {
       }
     }
 
-//    progress_changed();
-    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
+    progress_changed();
+//    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void increase_state_padding() {
@@ -1065,8 +1065,8 @@ class Indexer : public td::actor::Actor {
       ++state_padding_;
     }
 
-//    progress_changed();
-    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
+    progress_changed();
+//    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void decrease_state_padding() {
@@ -1082,8 +1082,8 @@ class Indexer : public td::actor::Actor {
       }
     }
 
-//    progress_changed();
-    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
+    progress_changed();
+//    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void progress_changed() {
