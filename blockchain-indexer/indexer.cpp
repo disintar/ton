@@ -1097,7 +1097,10 @@ class Indexer : public td::actor::Actor {
               }
             });
 
-        td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
+        ///TODO: clean this super dirty stuff
+//        td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
+        ++block_padding_;
+
         ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
 
         // parse first mc seqno in chunk to prevent mc seqno leak
