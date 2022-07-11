@@ -424,8 +424,7 @@ class Indexer : public td::actor::Actor {
               } else {
                 auto handle = R.move_as_ok();
                 LOG(DEBUG) << "got block from db " << handle->id().to_str();
-                td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle,
-                                              handle->id().seqno() == seqno_first);
+                td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle, false);
               }
             });
 
@@ -468,7 +467,7 @@ class Indexer : public td::actor::Actor {
       const auto id = std::to_string(block_id.workchain) + ":" + std::to_string(block_id.shard) + ":" +
                       std::to_string(block_id.seqno);
       if (already_traversed_.find(id) != already_traversed_.end()) {
-        LOG(WARNING) << id << " <- already traversed!";
+        LOG(DEBUG) << id << " <- already traversed!";
         decrease_block_padding();
         return;
       }
