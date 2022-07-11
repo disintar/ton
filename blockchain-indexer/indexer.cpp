@@ -421,7 +421,7 @@ class Indexer : public td::actor::Actor {
       auto end = td::min(seqno_last_, seqno_first_ + 1 + (chunk_size_ * chunk_current_));
       LOG(WARNING) << "Process chunk (" << chunk_current_ << ") From: " << start << " To: " << end;
 
-      for (auto seqno = start + 1; seqno <= end; ++seqno) {
+      for (auto seqno = start + 1; seqno <= end - 1; ++seqno) {
         auto P = td::PromiseCreator::lambda(
             [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
               if (R.is_error()) {
@@ -1092,11 +1092,9 @@ class Indexer : public td::actor::Actor {
                 td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle, true);
               }
             });
-        LOG(DEBUG) << "1";
+
         ++block_padding_;
-        LOG(DEBUG) << "2";
         ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
-        LOG(DEBUG) << "3";
         td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                                 std::move(P));
       } else {
