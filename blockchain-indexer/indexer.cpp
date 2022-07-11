@@ -182,7 +182,11 @@ class Indexer : public td::actor::Actor {
   td::uint32 chunk_count_ = 0;
   td::uint32 chunk_current_ = 0;
   std::mutex display_mtx_;
-  Dumper dumper_ = Dumper("dump_", 20000);
+  Dumper dumper_;
+
+  std::map<BlockIdExt, json> pending_blocks_{};
+  std::map<BlockIdExt, td::uint64> pending_blocks_size_{};
+  std::map<BlockIdExt, std::vector<json>> pending_blocks_accounts_{};
 
   // store timestamps of parsed blocks for speed measuring
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_blocks_timepoints_;
@@ -265,6 +269,7 @@ class Indexer : public td::actor::Actor {
   }
   void set_chunk_size(td::uint32 size) {
     chunk_size_ = size;
+    dumper_ = Dumper("dump_", size);
   }
   void set_display_speed(bool display_speed) {
     display_speed_ = display_speed;
@@ -406,17 +411,17 @@ class Indexer : public td::actor::Actor {
   void parse_other() {
     if (seqno_last_ > seqno_first_) {
       if (chunk_count_ == 0) {
-        auto blocks_size = seqno_last_ - seqno_first_ + 1;
+        auto blocks_size = seqno_last_ - seqno_first_;
         chunk_count_ = (unsigned int)ceil(blocks_size / chunk_size_);
         LOG(WARNING) << "Total chunks count: " << chunk_count_;
       }
 
       chunk_current_ += 1;
-      auto start = seqno_first_ + 1 + (chunk_size_ * (chunk_current_ - 1));
+      auto start = seqno_first_ + (chunk_size_ * (chunk_current_ - 1));
       auto end = td::min(seqno_last_, seqno_first_ + 1 + (chunk_size_ * chunk_current_));
       LOG(WARNING) << "Process chunk (" << chunk_current_ << ") From: " << start << " To: " << end;
 
-      for (auto seqno = start; seqno <= end; ++seqno) {
+      for (auto seqno = start + 1; seqno <= end; ++seqno) {
         auto P = td::PromiseCreator::lambda(
             [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
               if (R.is_error()) {
@@ -1071,10 +1076,26 @@ class Indexer : public td::actor::Actor {
 
       if (chunk_current_ != chunk_count_) {
         LOG(WARNING) << "Call parse next chunk";
-        delay_action(
-            [SelfId = actor_id(this)]() {
-              td::actor::send_closure(SelfId, &Indexer::parse_other);
-            }, td::Timestamp::in(0.1));
+
+        auto P = td::PromiseCreator::lambda(
+            [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
+              if (R.is_error()) {
+                LOG(ERROR) << R.move_as_error().to_string();
+                td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+              } else {
+                auto handle = R.move_as_ok();
+                LOG(DEBUG) << "got block from db " << handle->id().to_str();
+                td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle, true);
+              }
+            });
+
+        increase_block_padding();
+        ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
+
+        // parse first mc seqno in chunk to prevent mc seqno leak
+        auto seqno = seqno_first_ + (chunk_size_ * (chunk_current_ - 1));
+        td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
+                                std::move(P));
       } else {
         shutdown();
       }
@@ -1124,199 +1145,230 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::vector<td::Bits256> accounts_keys) {
-    auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this), handle,
-                                         accounts_keys =
-                                             std::move(accounts_keys)](td::Result<td::Ref<vm::DataCell>> R) {
-      if (R.is_error()) {
-        LOG(ERROR) << R.move_as_error().to_string();
-      } else {
-        auto root_cell = R.move_as_ok();
-        auto block_id = handle->id();
-        block::gen::ShardStateUnsplit::Record shard_state;
-        CHECK(tlb::unpack_cell(root_cell, shard_state));
+    auto P =
+        td::PromiseCreator::lambda([this, SelfId = actor_id(this), handle,
+                                    accounts_keys = std::move(accounts_keys)](td::Result<td::Ref<vm::DataCell>> R) {
+          if (R.is_error()) {
+            LOG(ERROR) << R.move_as_error().to_string();
+          } else {
+            auto root_cell = R.move_as_ok();
+            auto block_id = handle->id();
+            block::gen::ShardStateUnsplit::Record shard_state;
+            CHECK(tlb::unpack_cell(root_cell, shard_state));
 
-        std::vector<std::tuple<int, std::string>> dummy;
+            std::vector<std::tuple<int, std::string>> dummy;
 
-        block::gen::CurrencyCollection::Record total_balance_cc;
-        block::gen::CurrencyCollection::Record total_validator_fees_cc;
+            block::gen::CurrencyCollection::Record total_balance_cc;
+            block::gen::CurrencyCollection::Record total_validator_fees_cc;
 
-        CHECK(tlb::unpack(shard_state.r1.total_balance.write(), total_balance_cc))
-        CHECK(tlb::unpack(shard_state.r1.total_validator_fees.write(), total_validator_fees_cc))
+            CHECK(tlb::unpack(shard_state.r1.total_balance.write(), total_balance_cc))
+            CHECK(tlb::unpack(shard_state.r1.total_validator_fees.write(), total_validator_fees_cc))
 
-        json total_balance = {
-            {"grams", block::tlb::t_Grams.as_integer(total_balance_cc.grams)->to_dec_string()},
-            {"extra", total_balance_cc.other->have_refs() ? parse_extra_currency(total_balance_cc.other->prefetch_ref())
-                                                          : dummy}};
+            json total_balance = {{"grams", block::tlb::t_Grams.as_integer(total_balance_cc.grams)->to_dec_string()},
+                                  {"extra", total_balance_cc.other->have_refs()
+                                                ? parse_extra_currency(total_balance_cc.other->prefetch_ref())
+                                                : dummy}};
 
-        json total_validator_fees = {
-            {"grams", block::tlb::t_Grams.as_integer(total_validator_fees_cc.grams)->to_dec_string()},
-            {"extra", total_balance_cc.other->have_refs()
-                          ? parse_extra_currency(total_validator_fees_cc.other->prefetch_ref())
-                          : dummy}};
+            json total_validator_fees = {
+                {"grams", block::tlb::t_Grams.as_integer(total_validator_fees_cc.grams)->to_dec_string()},
+                {"extra", total_balance_cc.other->have_refs()
+                              ? parse_extra_currency(total_validator_fees_cc.other->prefetch_ref())
+                              : dummy}};
 
-        json answer = {
-            {"type", "shard_state"},
-            {"id",
-             {
-                 {"workchain", block_id.id.workchain},
-                 {"seqno", block_id.id.seqno},
-                 {"shard", block_id.id.shard},
-             }},
-            {"seq_no", shard_state.seq_no},
-            {"vert_seq_no", shard_state.vert_seq_no},
-            {"gen_utime", shard_state.gen_utime},
-            {"gen_lt", shard_state.gen_lt},
-            {"min_ref_mc_seqno", shard_state.min_ref_mc_seqno},
-            {"before_split", shard_state.before_split},
-            {"overload_history", shard_state.r1.overload_history},
-            {"underload_history", shard_state.r1.underload_history},
-            {"total_balance", total_balance},
-            {"total_validator_fees", total_validator_fees},
-        };
+            json answer = {
+                {"type", "shard_state"},
+                {"id",
+                 {
+                     {"workchain", block_id.id.workchain},
+                     {"seqno", block_id.id.seqno},
+                     {"shard", block_id.id.shard},
+                 }},
+                {"seq_no", shard_state.seq_no},
+                {"vert_seq_no", shard_state.vert_seq_no},
+                {"gen_utime", shard_state.gen_utime},
+                {"gen_lt", shard_state.gen_lt},
+                {"min_ref_mc_seqno", shard_state.min_ref_mc_seqno},
+                {"before_split", shard_state.before_split},
+                {"overload_history", shard_state.r1.overload_history},
+                {"underload_history", shard_state.r1.underload_history},
+                {"total_balance", total_balance},
+                {"total_validator_fees", total_validator_fees},
+            };
 
-        if (shard_state.r1.libraries->have_refs()) {
-          auto libraries = vm::Dictionary{shard_state.r1.libraries->prefetch_ref(), 256};
+            if (shard_state.r1.libraries->have_refs()) {
+              auto libraries = vm::Dictionary{shard_state.r1.libraries->prefetch_ref(), 256};
 
-          std::vector<json> libs;
-          while (!libraries.is_empty()) {
-            td::BitArray<256> key{};
-            libraries.get_minmax_key(key);
-            auto lib = libraries.lookup_delete(key);
+              std::vector<json> libs;
+              while (!libraries.is_empty()) {
+                td::BitArray<256> key{};
+                libraries.get_minmax_key(key);
+                auto lib = libraries.lookup_delete(key);
 
-            block::gen::LibDescr::Record libdescr;
-            CHECK(tlb::unpack(lib.write(), libdescr));
+                block::gen::LibDescr::Record libdescr;
+                CHECK(tlb::unpack(lib.write(), libdescr));
 
-            std::vector<std::string> publishers;
+                std::vector<std::string> publishers;
 
-            auto libs_publishers = libdescr.publishers.write();
+                auto libs_publishers = libdescr.publishers.write();
 
-            vm::CellBuilder cb;
-            Ref<vm::Cell> cool_cell;
+                vm::CellBuilder cb;
+                Ref<vm::Cell> cool_cell;
 
-            cb.append_cellslice(libs_publishers);
-            cb.finalize_to(cool_cell);
+                cb.append_cellslice(libs_publishers);
+                cb.finalize_to(cool_cell);
 
-            auto publishers_dict = vm::Dictionary{cool_cell, 256};
+                auto publishers_dict = vm::Dictionary{cool_cell, 256};
 
-            while (!publishers_dict.is_empty()) {
-              td::BitArray<256> publisher{};
-              publishers_dict.get_minmax_key(publisher);
-              publishers_dict.lookup_delete(publisher);
+                while (!publishers_dict.is_empty()) {
+                  td::BitArray<256> publisher{};
+                  publishers_dict.get_minmax_key(publisher);
+                  publishers_dict.lookup_delete(publisher);
 
-              publishers.emplace_back(publisher.to_hex());
+                  publishers.emplace_back(publisher.to_hex());
+                }
+
+                json data = {{"hash", key.to_hex()}, {"lib", dump_as_boc(libdescr.lib)}, {"publishers", publishers}};
+                libs.emplace_back(std::move(data));
+              }
+
+              answer["libraries"] = std::move(libs);
             }
 
-            json data = {{"hash", key.to_hex()}, {"lib", dump_as_boc(libdescr.lib)}, {"publishers", publishers}};
-            libs.emplace_back(std::move(data));
-          }
+            vm::AugmentedDictionary accounts{vm::load_cell_slice_ref(shard_state.accounts), 256,
+                                             block::tlb::aug_ShardAccounts};
+            td::actor::send_closure(SelfId, &Indexer::add_done_block, answer, block_id, accounts_keys.size());
+            std::vector<json> accounts_list;
+            accounts_list.reserve(accounts_keys.size());
 
-          answer["libraries"] = std::move(libs);
-        }
+            for (const auto &account : accounts_keys) {
+              auto value = accounts.lookup(account.cbits(), 256);
 
-        vm::AugmentedDictionary accounts{vm::load_cell_slice_ref(shard_state.accounts), 256,
-                                         block::tlb::aug_ShardAccounts};
-
-        std::vector<json> accounts_list;
-        accounts_list.reserve(accounts_keys.size());
-
-        for (const auto &account : accounts_keys) {
-          LOG(DEBUG) << "Parse " << account.to_hex();
-          auto result = accounts.lookup(account.cbits(), 256);
-          //          auto value = result.first;
-          //          auto extra = result.second;
-          auto value = result;
-          if (value.not_null()) {
-            block::gen::ShardAccount::Record sa;
-            block::gen::CurrencyCollection::Record dbi_cc;
-            CHECK(tlb::unpack(value.write(), sa));
-            json data;
-
-            data["account_address"] = {{"workchain", block_id.id.workchain}, {"address", account.to_hex()}};
-            data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}};
-
-            auto account_cell = load_cell_slice(sa.account);
-            auto acc_tag = block::gen::t_Account.get_tag(account_cell);
-
-            if (acc_tag == block::gen::t_Account.account) {
-              block::gen::Account::Record_account acc;
-              block::gen::StorageInfo::Record si;
-              block::gen::AccountStorage::Record as;
-              block::gen::StorageUsed::Record su;
-              block::gen::CurrencyCollection::Record balance;
-
-              CHECK(tlb::unpack(account_cell, acc));
-
-              CHECK(tlb::unpack(acc.storage.write(), as));
-              CHECK(tlb::unpack(acc.storage_stat.write(), si));
-              CHECK(tlb::unpack(si.used.write(), su));
-              CHECK(tlb::unpack(as.balance.write(), balance));
-              data["account"]["addr"] = parse_address(acc.addr.write());
-              std::string due_payment;
-
-              if (si.due_payment->prefetch_ulong(1) > 0) {
-                auto due = si.due_payment.write();
-                due.fetch_bits(1);  // maybe
-                due_payment = block::tlb::t_Grams.as_integer(due)->to_dec_string();
-              }
-
-              data["account"]["storage_stat"] = {{"last_paid", si.last_paid}, {"due_payment", due_payment}};
-
-              data["account"]["storage_stat"]["used"] = {
-                  {"cells", block::tlb::t_VarUInteger_7.as_uint(su.cells.write())},
-                  {"bits", block::tlb::t_VarUInteger_7.as_uint(su.bits.write())},
-                  {"public_cells", block::tlb::t_VarUInteger_7.as_uint(su.public_cells.write())},
-              };
-
-              data["account"]["storage"] = {{"last_trans_lt", as.last_trans_lt}};
-
-              data["account"]["storage"]["balance"] = {
-                  {"grams", block::tlb::t_Grams.as_integer(balance.grams)->to_dec_string()},
-                  {"extra", balance.other->have_refs() ? parse_extra_currency(balance.other->prefetch_ref()) : dummy}};
-
-              auto tag = block::gen::t_AccountState.get_tag(as.state.write());
-
-              if (tag == block::gen::t_AccountState.account_uninit) {
-                data["account"]["state"] = {{"type", "uninit"}};
-              }
-
-              else if (tag == block::gen::t_AccountState.account_active) {
-                block::gen::AccountState::Record_account_active active_account;
-                CHECK(tlb::unpack(as.state.write(), active_account));
-
-                data["account"]["state"] = {{"type", "active"},
-                                            {"state_init", parse_state_init(active_account.x.write())}};
-
-              }
-
-              else if (tag == block::gen::t_AccountState.account_frozen) {
-                block::gen::AccountState::Record_account_frozen f{};
-                CHECK(tlb::unpack(as.state.write(), f))
-                data["account"]["state"] = {{"type", "frozen"}, {"state_hash", f.state_hash.to_hex()}};
+              if (value.not_null()) {
+                td::actor::send_closure(SelfId, &Indexer::parse_account, block_id, value.write(), account.to_hex());
               }
             }
-
-            accounts_list.emplace_back(std::move(data));
           }
-        }
-
-        answer["accounts"] = std::move(accounts_list);
-
-        {
-          std::lock_guard<std::mutex> lock(stored_counter_mtx_);
-          ++stored_states_counter_;
-        }
-        dumper_.storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
-                               std::to_string(block_id.id.seqno),
-                           std::move(answer));
-
-        LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
-        td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
-      }
-    });
+        });
 
     LOG(DEBUG) << "getting state from db " << handle->id().to_str();
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle,
                             std::move(P));
+  }
+
+  void add_done_block(const json &block, BlockIdExt block_id, td::uint64 accounts_count) {
+    auto data = std::make_pair(block_id, block);
+    auto size_data = std::make_pair(block_id, accounts_count);
+
+    pending_blocks_.insert(data);
+    pending_blocks_size_.insert(size_data);
+  }
+
+  void parse_account(BlockIdExt block_id, vm::CellSlice value, const std::string &account_address) {
+    block::gen::ShardAccount::Record sa;
+    block::gen::CurrencyCollection::Record dbi_cc;
+    CHECK(tlb::unpack(value, sa));
+    json data;
+
+    data["account_address"] = {{"workchain", block_id.id.workchain}, {"address", account_address}};
+    data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}};
+
+    auto account_cell = load_cell_slice(sa.account);
+    auto acc_tag = block::gen::t_Account.get_tag(account_cell);
+
+    if (acc_tag == block::gen::t_Account.account) {
+      block::gen::Account::Record_account acc;
+      block::gen::StorageInfo::Record si;
+      block::gen::AccountStorage::Record as;
+      block::gen::StorageUsed::Record su;
+      block::gen::CurrencyCollection::Record balance;
+
+      CHECK(tlb::unpack(account_cell, acc));
+
+      CHECK(tlb::unpack(acc.storage.write(), as));
+      CHECK(tlb::unpack(acc.storage_stat.write(), si));
+      CHECK(tlb::unpack(si.used.write(), su));
+      CHECK(tlb::unpack(as.balance.write(), balance));
+      data["account"]["addr"] = parse_address(acc.addr.write());
+      std::string due_payment;
+
+      if (si.due_payment->prefetch_ulong(1) > 0) {
+        auto due = si.due_payment.write();
+        due.fetch_bits(1);  // maybe
+        due_payment = block::tlb::t_Grams.as_integer(due)->to_dec_string();
+      }
+
+      data["account"]["storage_stat"] = {{"last_paid", si.last_paid}, {"due_payment", due_payment}};
+
+      data["account"]["storage_stat"]["used"] = {
+          {"cells", block::tlb::t_VarUInteger_7.as_uint(su.cells.write())},
+          {"bits", block::tlb::t_VarUInteger_7.as_uint(su.bits.write())},
+          {"public_cells", block::tlb::t_VarUInteger_7.as_uint(su.public_cells.write())},
+      };
+
+      data["account"]["storage"] = {{"last_trans_lt", as.last_trans_lt}};
+
+      data["account"]["storage"]["balance"] = {
+          {"grams", block::tlb::t_Grams.as_integer(balance.grams)->to_dec_string()},
+          {"extra", balance.other->have_refs() ? parse_extra_currency(balance.other->prefetch_ref()) : dummy}};
+
+      auto tag = block::gen::t_AccountState.get_tag(as.state.write());
+
+      if (tag == block::gen::t_AccountState.account_uninit) {
+        data["account"]["state"] = {{"type", "uninit"}};
+      }
+
+      else if (tag == block::gen::t_AccountState.account_active) {
+        block::gen::AccountState::Record_account_active active_account;
+        CHECK(tlb::unpack(as.state.write(), active_account));
+
+        data["account"]["state"] = {{"type", "active"}, {"state_init", parse_state_init(active_account.x.write())}};
+
+      }
+
+      else if (tag == block::gen::t_AccountState.account_frozen) {
+        block::gen::AccountState::Record_account_frozen f{};
+        CHECK(tlb::unpack(as.state.write(), f))
+        data["account"]["state"] = {{"type", "frozen"}, {"state_hash", f.state_hash.to_hex()}};
+      }
+    }
+
+    auto it = pending_blocks_accounts_.find(block_id);
+    if (it != pending_blocks_accounts_.end()) {
+      (*it).second.emplace_back(std::move(data));
+    } else {  // first parsed account
+      std::vector<json> data_for_waiting;
+      data_for_waiting.emplace_back(std::move(data));
+
+      auto p = std::make_pair(block_id, data_for_waiting);
+      pending_blocks_accounts_.insert(p);
+    }
+
+    auto it_cnt = pending_blocks_size_.find(block_id);
+    if (it_cnt != pending_blocks_size_.end()) {
+      if ((*it_cnt).second == 1) {
+        // dump
+        auto it_data = pending_blocks_.find(block_id);
+        if (it_data != pending_blocks_.end()) {
+          auto answer = (*it_data).second;
+
+          // save parsed accounts
+          answer["accounts"] = std::move((*it).second);
+
+          {
+            std::lock_guard<std::mutex> lock(stored_counter_mtx_);
+            ++stored_states_counter_;
+          }
+          dumper_.storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+                                 std::to_string(block_id.id.seqno),
+                             std::move(answer));
+
+          LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
+          td::actor::send_closure(actor_id(this), &Indexer::decrease_state_padding);
+        }
+      } else {
+        (*it_cnt).second = (*it_cnt).second - 1;
+      }
+    }
   }
 };  // namespace validator
 }  // namespace validator
