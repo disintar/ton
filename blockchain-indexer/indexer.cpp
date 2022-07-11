@@ -1097,7 +1097,7 @@ class Indexer : public td::actor::Actor {
               }
             });
 
-        increase_block_padding();
+        td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
         ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
 
         // parse first mc seqno in chunk to prevent mc seqno leak
@@ -1247,6 +1247,10 @@ class Indexer : public td::actor::Actor {
             td::actor::send_closure(SelfId, &Indexer::add_done_block, answer, block_id, accounts_keys.size());
             std::vector<json> accounts_list;
             accounts_list.reserve(accounts_keys.size());
+
+            if (!accounts_keys.empty()) {
+              ///TODO:
+            }
 
             for (const auto &account : accounts_keys) {
               auto value = accounts.lookup(account.cbits(), 256);
