@@ -1078,20 +1078,19 @@ class Indexer : public td::actor::Actor {
         LOG(WARNING) << "Call parse next chunk";
 
         // parse first mc seqno in chunk to prevent mc seqno leak
-        auto seqno = seqno_first_ + (chunk_size_ * (chunk_current_ - 1));
+        auto seqno = td::min(seqno_last_, seqno_first_ + (chunk_size_ * chunk_current_));
         LOG(DEBUG) << "Start with MC block: " << seqno;
 
-        auto P = td::PromiseCreator::lambda(
-            [this, SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
-              if (R.is_error()) {
-                LOG(ERROR) << R.move_as_error().to_string();
-                td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
-              } else {
-                auto handle = R.move_as_ok();
-                LOG(DEBUG) << "got block from db " << handle->id().to_str();
-                td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle, true);
-              }
-            });
+        auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
+          if (R.is_error()) {
+            LOG(ERROR) << R.move_as_error().to_string();
+            td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+          } else {
+            auto handle = R.move_as_ok();
+            LOG(DEBUG) << "got block from db " << handle->id().to_str();
+            td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle, true);
+          }
+        });
 
         ++block_padding_;
         ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
