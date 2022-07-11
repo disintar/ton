@@ -388,7 +388,7 @@ class Indexer : public td::actor::Actor {
     auto P = td::PromiseCreator::lambda(
         [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
           if (R.is_error()) {
-            decrease_block_padding();
+            td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
             LOG(ERROR) << R.move_as_error().to_string();
           } else {
             auto handle = R.move_as_ok();
@@ -421,7 +421,7 @@ class Indexer : public td::actor::Actor {
             [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
               if (R.is_error()) {
                 LOG(ERROR) << R.move_as_error().to_string();
-                decrease_block_padding();
+                td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
               } else {
                 auto handle = R.move_as_ok();
                 LOG(DEBUG) << "got block from db " << handle->id().to_str();
@@ -445,7 +445,7 @@ class Indexer : public td::actor::Actor {
                    << "Seqno: " << seqno_shard << " Shard: " << shard_shard << " Worckchain: " << workchain_shard;
 
         LOG(ERROR) << R.move_as_error().to_string();
-        decrease_block_padding();
+        td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
         return;
       } else {
         auto handle = R.move_as_ok();
@@ -1008,7 +1008,7 @@ class Indexer : public td::actor::Actor {
             std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" + std::to_string(blkid.seqno()),
             std::move(answer));
 
-        decrease_block_padding();
+        td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
 
         if (is_first && !info.not_master) {
           td::actor::send_closure(SelfId, &Indexer::parse_other);
@@ -1313,7 +1313,7 @@ class Indexer : public td::actor::Actor {
                            std::move(answer));
 
         LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
-        decrease_state_padding();
+        td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
       }
     });
 
