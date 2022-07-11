@@ -1383,9 +1383,9 @@ class Indexer : public td::actor::Actor {
                           std::move(it_data->second));
 
       // clean up
-      if (it == pending_blocks_accounts_.end()) {
-        it = pending_blocks_accounts_.find(block_id);
-      }
+//      if (it == pending_blocks_accounts_.end()) {
+      it = pending_blocks_accounts_.find(block_id);
+//      }
       pending_blocks_accounts_.erase(it);
       pending_blocks_size_.erase(it_cnt);
       pending_blocks_.erase(it_data);
