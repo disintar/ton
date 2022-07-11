@@ -1094,6 +1094,7 @@ class Indexer : public td::actor::Actor {
 
         // parse first mc seqno in chunk to prevent mc seqno leak
         auto seqno = seqno_first_ + (chunk_size_ * (chunk_current_ - 1));
+        LOG(DEBUG) << "Start with MC block: " << seqno;
         td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                                 std::move(P));
       } else {
