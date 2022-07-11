@@ -1069,7 +1069,7 @@ class Indexer : public td::actor::Actor {
       LOG(WARNING) << "Block&State paddings reached 0";
 
       if (chunk_current_ != chunk_size_) {
-        td::actor::send_closure(actor_id(this), &Indexer::parse_other);
+        parse_other();
       } else {
         shutdown();
       }
