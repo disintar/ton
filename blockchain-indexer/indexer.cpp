@@ -184,9 +184,10 @@ class Indexer : public td::actor::Actor {
   std::mutex display_mtx_;
   std::unique_ptr<Dumper> dumper_;
 
-  std::map<BlockIdExt, json> pending_blocks_{};
-  std::map<BlockIdExt, td::uint64> pending_blocks_size_{};
-  std::map<BlockIdExt, std::vector<json>> pending_blocks_accounts_{};
+  std::map<BlockIdExt, json> pending_blocks_;
+  std::map<BlockIdExt, td::uint64> pending_blocks_size_;
+  std::map<BlockIdExt, std::vector<json>> pending_blocks_accounts_;
+  std::mutex pending_blocks_mtx_;
 
   // store timestamps of parsed blocks for speed measuring
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_blocks_timepoints_;
@@ -1256,10 +1257,12 @@ class Indexer : public td::actor::Actor {
   }
 
   void add_done_block(const json &block, BlockIdExt block_id, td::uint64 accounts_count) {
+    std::lock_guard<std::mutex> lock(pending_blocks_mtx_);
+
     auto data = std::make_pair(block_id, block);
     auto size_data = std::make_pair(block_id, accounts_count);
 
-    pending_blocks_.insert(data);
+    pending_blocks_.emplace(data);
     pending_blocks_size_.insert(size_data);
   }
 
@@ -1333,43 +1336,57 @@ class Indexer : public td::actor::Actor {
       }
     }
 
+    std::lock_guard<std::mutex> lock(pending_blocks_mtx_);
+
     auto it = pending_blocks_accounts_.find(block_id);
     if (it != pending_blocks_accounts_.end()) {
-      (*it).second.emplace_back(std::move(data));
+      it->second.emplace_back(std::move(data));
     } else {  // first parsed account
       std::vector<json> data_for_waiting;
       data_for_waiting.emplace_back(std::move(data));
 
       auto p = std::make_pair(block_id, data_for_waiting);
-      pending_blocks_accounts_.insert(p);
+      pending_blocks_accounts_.emplace(p);
     }
 
     auto it_cnt = pending_blocks_size_.find(block_id);
-    if (it_cnt != pending_blocks_size_.end()) {
-      if ((*it_cnt).second == 1) {
-        // dump
-        auto it_data = pending_blocks_.find(block_id);
-        if (it_data != pending_blocks_.end()) {
-          auto answer = (*it_data).second;
-
-          // save parsed accounts
-          answer["accounts"] = std::move((*it).second);
-
-          {
-            std::lock_guard<std::mutex> lock(stored_counter_mtx_);
-            ++stored_states_counter_;
-          }
-          dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
-                                 std::to_string(block_id.id.seqno),
-                             std::move(answer));
-
-          LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
-          td::actor::send_closure(actor_id(this), &Indexer::decrease_state_padding);
-        }
-      } else {
-        (*it_cnt).second = (*it_cnt).second - 1;
-      }
+    if (it_cnt == pending_blocks_size_.end()) {
+      return;
     }
+
+    if (it_cnt->second != 1) {
+      it_cnt->second -= 1;
+    } else {
+      // dump
+      auto it_data = pending_blocks_.find(block_id);
+      if (it_data == pending_blocks_.end()) {
+        return;
+      }
+      auto answer = it_data->second;
+
+      // save parsed accounts
+      answer["accounts"] = std::move(it->second);
+
+      {
+        std::lock_guard<std::mutex> lock(stored_counter_mtx_);
+        ++stored_states_counter_;
+      }
+      dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+                              std::to_string(block_id.id.seqno),
+                          std::move(answer));
+
+      // clean up
+      if (it == pending_blocks_accounts_.end()) {
+        it = pending_blocks_accounts_.find(block_id);
+      }
+      pending_blocks_accounts_.erase(it);
+      pending_blocks_size_.erase(it_cnt);
+      pending_blocks_.erase(it_data);
+
+      LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
+      td::actor::send_closure(actor_id(this), &Indexer::decrease_state_padding);
+    }
+
   }
 };  // namespace validator
 }  // namespace validator
