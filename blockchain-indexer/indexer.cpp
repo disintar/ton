@@ -1034,7 +1034,8 @@ class Indexer : public td::actor::Actor {
     std::lock_guard<std::mutex> lock(display_mtx_);
 
     ++block_padding_;
-    progress_changed();
+//    progress_changed();
+    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void decrease_block_padding() {
@@ -1048,14 +1049,16 @@ class Indexer : public td::actor::Actor {
       LOG(ERROR) << "decreasing seqno padding but it's zero";
     }
     --block_padding_;
-    progress_changed();
+//    progress_changed();
+    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void increase_state_padding() {
     std::lock_guard<std::mutex> lock(display_mtx_);
 
     ++state_padding_;
-    progress_changed();
+//    progress_changed();
+    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void decrease_state_padding() {
@@ -1069,7 +1072,8 @@ class Indexer : public td::actor::Actor {
       LOG(ERROR) << "decreasing state padding but it's zero";
     }
     --state_padding_;
-    progress_changed();
+//    progress_changed();
+    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void progress_changed() {
@@ -1099,8 +1103,8 @@ class Indexer : public td::actor::Actor {
 
         LOG(DEBUG) << "1";
         ///TODO: clean this super dirty stuff
-//        td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
-        ++block_padding_;
+        td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
+//        ++block_padding_;
         LOG(DEBUG) << "2";
 
         ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
