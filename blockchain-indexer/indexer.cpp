@@ -385,14 +385,14 @@ class Indexer : public td::actor::Actor {
   void sync_complete(const BlockHandle &handle) {
     // separate first parse seqno to prevent WC shard seqno leak
     auto P = td::PromiseCreator::lambda(
-        [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
+        [this, SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
           if (R.is_error()) {
             decrease_block_padding();
             LOG(ERROR) << R.move_as_error().to_string();
           } else {
             auto handle = R.move_as_ok();
             LOG(DEBUG) << "got data for block " << handle->id().to_str();
-            td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
+            td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, true);
           }
         });
 
@@ -423,7 +423,6 @@ class Indexer : public td::actor::Actor {
                 decrease_block_padding();
               } else {
                 auto handle = R.move_as_ok();
-                LOG(DEBUG) << "got block from db " << handle->id().to_str();
                 td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle, false);
               }
             });
@@ -436,9 +435,9 @@ class Indexer : public td::actor::Actor {
     }
   }
 
-  void start_parse_shards(BlockSeqno seqno, ShardId shard, WorkchainId workchain, bool is_first = false) {
+  void start_parse_shards(BlockSeqno seqno, ShardId shard, WorkchainId workchain) {
     auto P = td::PromiseCreator::lambda([this, workchain_shard = workchain, seqno_shard = seqno, shard_shard = shard,
-                                         SelfId = actor_id(this), first = is_first](td::Result<ConstBlockHandle> R) {
+                                         SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
       if (R.is_error()) {
         LOG(ERROR) << "ERROR IN BLOCK: "
                    << "Seqno: " << seqno_shard << " Shard: " << shard_shard << " Worckchain: " << workchain_shard;
@@ -448,9 +447,8 @@ class Indexer : public td::actor::Actor {
         return;
       } else {
         auto handle = R.move_as_ok();
-        LOG(DEBUG) << "got block from db " << workchain_shard << ":" << shard_shard << ":" << seqno_shard
-                   << " is_first: " << first;
-        td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, first);
+        LOG(DEBUG) << "got block from db " << workchain_shard << ":" << shard_shard << ":" << seqno_shard;
+        td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, false);
       }
     });
 
@@ -621,10 +619,10 @@ class Indexer : public td::actor::Actor {
             LOG(DEBUG) << "GO: " << blkid.id.workchain << ":" << blkid.id.shard << ":" << prev_blk_2.seq_no;
 
             td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, prev_blk_1.seq_no, blkid.id.shard,
-                                          blkid.id.workchain, false);
+                                          blkid.id.workchain);
 
             td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, prev_blk_2.seq_no, blkid.id.shard,
-                                          blkid.id.workchain, false);
+                                          blkid.id.workchain);
           }
 
         } else {
@@ -645,7 +643,7 @@ class Indexer : public td::actor::Actor {
             LOG(DEBUG) << "GO: " << blkid.id.workchain << ":" << blkid.id.shard << ":" << prev_blk.seq_no;
 
             td::actor::send_closure(SelfId, &Indexer::start_parse_shards, prev_blk.seq_no, blkid.id.shard,
-                                    blkid.id.workchain, false);
+                                    blkid.id.workchain);
           }
         }
 
@@ -976,8 +974,7 @@ class Indexer : public td::actor::Actor {
             LOG(DEBUG) << "FOR: " << blkid.to_str() << " first: " << is_first;
             LOG(DEBUG) << "GO: " << shard_workchain << ":" << shard_shard << ":" << shard_seqno;
 
-            td::actor::send_closure(SelfId, &Indexer::start_parse_shards, shard_seqno, shard_shard, shard_workchain,
-                                    is_first);
+            td::actor::send_closure(SelfId, &Indexer::start_parse_shards, shard_seqno, shard_shard, shard_workchain);
 
             return 1;
           };
