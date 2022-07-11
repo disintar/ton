@@ -451,7 +451,8 @@ class Indexer : public td::actor::Actor {
                    << "Seqno: " << seqno_shard << " Shard: " << shard_shard << " Worckchain: " << workchain_shard;
 
         LOG(ERROR) << R.move_as_error().to_string();
-        td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
+//        td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
+        decrease_state_padding();
         return;
       } else {
         auto handle = R.move_as_ok();
@@ -1384,7 +1385,8 @@ class Indexer : public td::actor::Actor {
       pending_blocks_.erase(it_data);
 
       LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
-      td::actor::send_closure(actor_id(this), &Indexer::decrease_state_padding);
+//      td::actor::send_closure(actor_id(this), &Indexer::decrease_state_padding);
+      decrease_state_padding();
     }
 
   }
