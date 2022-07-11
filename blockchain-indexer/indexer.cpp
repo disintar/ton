@@ -1284,6 +1284,8 @@ class Indexer : public td::actor::Actor {
   }
 
   void skip_account(BlockIdExt block_id) {
+    LOG(WARNING) << "Skip account in block: " << block_id.to_str();
+
     auto it_cnt = pending_blocks_size_.find(block_id);
     if (it_cnt != pending_blocks_size_.end()) {
       if ((*it_cnt).second == 1) {
