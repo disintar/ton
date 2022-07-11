@@ -935,6 +935,8 @@ void ArchiveManager::start_up() {
 }
 
 void ArchiveManager::run_gc(UnixTime ts, UnixTime archive_ttl) {
+  LOG(DEBUG) << "Run garbage collector";
+
   auto p = get_temp_package_id_by_unixtime(ts);
   std::vector<PackageId> vec;
   for (auto &x : temp_files_) {
