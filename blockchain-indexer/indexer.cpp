@@ -1263,6 +1263,7 @@ class Indexer : public td::actor::Actor {
                   td::actor::send_closure(SelfId, &Indexer::parse_account, block_id, value.write(), account.to_hex());
                 } else {
                   LOG(ERROR) << account.to_hex() << " NOT FOUND IN BLOCK " << block_id.to_str();
+                  td::actor::send_closure(SelfId, &Indexer::skip_account, block_id);
                 }
               }
             }
@@ -1280,6 +1281,13 @@ class Indexer : public td::actor::Actor {
 
     pending_blocks_.insert(data);
     pending_blocks_size_.insert(size_data);
+  }
+
+  void skip_account(BlockIdExt block_id) {
+    auto it_cnt = pending_blocks_size_.find(block_id);
+    if (it_cnt != pending_blocks_size_.end()) {
+      (*it_cnt).second = (*it_cnt).second - 1;
+    }
   }
 
   void parse_account(BlockIdExt block_id, vm::CellSlice value, std::string account_address) {
