@@ -1069,7 +1069,7 @@ class Indexer : public td::actor::Actor {
       LOG(WARNING) << "Block&State paddings reached 0; Dump json files;";
       dumper_.forceDump();
 
-      if (chunk_current_ != chunk_size_) {
+      if (chunk_current_ != chunk_count_) {
         LOG(WARNING) << "Call parse next chunk";
         delay_action(
             [SelfId = actor_id(this)]() {
