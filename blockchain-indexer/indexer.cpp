@@ -184,9 +184,10 @@ class Indexer : public td::actor::Actor {
   std::mutex display_mtx_;
   std::unique_ptr<Dumper> dumper_;
 
-  std::map<BlockIdExt, json> pending_blocks_{};
-  std::map<BlockIdExt, td::uint64> pending_blocks_size_{};
-  std::map<BlockIdExt, std::vector<json>> pending_blocks_accounts_{};
+  std::map<BlockIdExt, json> pending_blocks_;
+  std::map<BlockIdExt, td::uint64> pending_blocks_size_;
+  std::map<BlockIdExt, std::vector<json>> pending_blocks_accounts_;
+  std::mutex pending_blocks_mtx_;
 
   // store timestamps of parsed blocks for speed measuring
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_blocks_timepoints_;
@@ -394,6 +395,7 @@ class Indexer : public td::actor::Actor {
         [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
           if (R.is_error()) {
             td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+//            decrease_block_padding();
             LOG(ERROR) << R.move_as_error().to_string();
           } else {
             auto handle = R.move_as_ok();
@@ -427,6 +429,7 @@ class Indexer : public td::actor::Actor {
               if (R.is_error()) {
                 LOG(ERROR) << R.move_as_error().to_string();
                 td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+//                decrease_block_padding();
               } else {
                 auto handle = R.move_as_ok();
                 LOG(DEBUG) << "got block from db " << handle->id().to_str();
@@ -451,6 +454,7 @@ class Indexer : public td::actor::Actor {
 
         LOG(ERROR) << R.move_as_error().to_string();
         td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
+//        decrease_state_padding();
         return;
       } else {
         auto handle = R.move_as_ok();
@@ -826,7 +830,8 @@ class Indexer : public td::actor::Actor {
         }
 
         if (true /*accounts_keys.size() > 0*/) {
-          increase_state_padding();
+//          increase_state_padding();
+          td::actor::send_closure(SelfId, &Indexer::increase_state_padding);
           td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
         }
 
@@ -1014,6 +1019,7 @@ class Indexer : public td::actor::Actor {
             std::move(answer));
 
         td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+//        decrease_block_padding();
 
         if (is_first && !info.not_master) {
           td::actor::send_closure(SelfId, &Indexer::parse_other);
@@ -1025,75 +1031,97 @@ class Indexer : public td::actor::Actor {
   }
 
   void increase_block_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_);
-    ++block_padding_;
-    progress_changed();
+    {
+      std::lock_guard<std::mutex> lock(display_mtx_);
+
+      ++block_padding_;
+    }
+
+//    progress_changed();
+    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void decrease_block_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_);
+    {
+      std::lock_guard<std::mutex> lock(display_mtx_);
 
-    if (display_speed_) {
-      parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
+      if (display_speed_) {
+        parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
+      }
+
+      if (block_padding_-- == 0) {
+        LOG(ERROR) << "decreasing seqno padding but it's zero";
+      }
     }
 
-    if (block_padding_ == 0) {
-      LOG(ERROR) << "decreasing seqno padding but it's zero";
-    }
-    --block_padding_;
-    progress_changed();
+//    progress_changed();
+    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void increase_state_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_);
+    {
+      std::lock_guard<std::mutex> lock(display_mtx_);
 
-    ++state_padding_;
-    progress_changed();
+      ++state_padding_;
+    }
+
+//    progress_changed();
+    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void decrease_state_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_);
+    {
+      std::lock_guard<std::mutex> lock(display_mtx_);
 
-    if (display_speed_) {
-      parsed_states_timepoints_.emplace(std::chrono::high_resolution_clock::now());
+      if (display_speed_) {
+        parsed_states_timepoints_.emplace(std::chrono::high_resolution_clock::now());
+      }
+
+      if (state_padding_-- == 0) {
+        LOG(ERROR) << "decreasing state padding but it's zero";
+      }
     }
 
-    if (state_padding_ == 0) {
-      LOG(ERROR) << "decreasing state padding but it's zero";
-    }
-    --state_padding_;
-    progress_changed();
+//    progress_changed();
+    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void progress_changed() {
     if (display_speed_) {
+      std::lock_guard<std::mutex> lock(display_mtx_);
       display_speed();
     }
 
-    if (block_padding_ == 0 && state_padding_ == 0) {
+    if (block_padding_ == 0 && state_padding_ == 0) { // TODO: add some mutexes
       LOG(WARNING) << "Block&State paddings reached 0; Dump json files;";
       dumper_->forceDump();
 
       if (chunk_current_ != chunk_count_) {
         LOG(WARNING) << "Call parse next chunk";
 
+        auto P = td::PromiseCreator::lambda(
+            [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
+              if (R.is_error()) {
+                LOG(ERROR) << R.move_as_error().to_string();
+                td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+//                decrease_block_padding();
+              } else {
+                auto handle = R.move_as_ok();
+                LOG(DEBUG) << "got block from db " << handle->id().to_str();
+                td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle, true);
+              }
+            });
+
+        ///TODO: clean this super dirty stuff
+        td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
+//        ++block_padding_;
+
+        ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
+
         // parse first mc seqno in chunk to prevent mc seqno leak
         auto seqno = td::min(seqno_last_, seqno_first_ + (chunk_size_ * chunk_current_));
         LOG(DEBUG) << "Start with MC block: " << seqno;
 
-        auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
-          if (R.is_error()) {
-            LOG(ERROR) << R.move_as_error().to_string();
-            td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
-          } else {
-            auto handle = R.move_as_ok();
-            LOG(DEBUG) << "got block from db " << handle->id().to_str();
-            td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle, true);
-          }
-        });
-
-        ++block_padding_;
-        ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
         td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                                 std::move(P));
       } else {
@@ -1276,10 +1304,12 @@ class Indexer : public td::actor::Actor {
   }
 
   void add_done_block(const json &block, BlockIdExt block_id, td::uint64 accounts_count) {
+    std::lock_guard<std::mutex> lock(pending_blocks_mtx_);
+
     auto data = std::make_pair(block_id, block);
     auto size_data = std::make_pair(block_id, accounts_count);
 
-    pending_blocks_.insert(data);
+    pending_blocks_.emplace(data);
     pending_blocks_size_.insert(size_data);
   }
 
@@ -1384,46 +1414,58 @@ class Indexer : public td::actor::Actor {
       }
     }
 
-    auto it = pending_blocks_accounts_.find(block_id);
-    if (it != pending_blocks_accounts_.end()) {
-      (*it).second.emplace_back(std::move(data));
-    } else {  // first parsed account
-      std::vector<json> data_for_waiting;
-      data_for_waiting.emplace_back(std::move(data));
+    {
+      std::lock_guard<std::mutex> lock(pending_blocks_mtx_);
 
-      auto p = std::make_pair(block_id, data_for_waiting);
-      pending_blocks_accounts_.insert(p);
-    }
+      auto it = pending_blocks_accounts_.find(block_id);
+      if (it != pending_blocks_accounts_.end()) {
+        it->second.emplace_back(std::move(data));
+      } else {  // first parsed account
+        std::vector<json> data_for_waiting;
+        data_for_waiting.emplace_back(std::move(data));
 
-    auto it_cnt = pending_blocks_size_.find(block_id);
-    if (it_cnt != pending_blocks_size_.end()) {
-      if ((*it_cnt).second == 1) {
-        LOG(DEBUG) << "Dump Block: " << block_id.to_str();
-
-        // dump
-        auto it_data = pending_blocks_.find(block_id);
-        if (it_data != pending_blocks_.end()) {
-          auto answer = (*it_data).second;
-
-          // save parsed accounts
-          answer["accounts"] = (*it).second;
-
-          {
-            std::lock_guard<std::mutex> lock(stored_counter_mtx_);
-            ++stored_states_counter_;
-          }
-          dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
-                                  std::to_string(block_id.id.seqno),
-                              std::move(answer));
-
-          LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
-          decrease_state_padding();
-        }
-      } else {
-        (*it_cnt).second = (*it_cnt).second - 1;
-        LOG(DEBUG) << "Block: " << block_id.to_str() << " Accounts: " << (*it_cnt).second;
+        auto p = std::make_pair(block_id, data_for_waiting);
+        pending_blocks_accounts_.emplace(p);
       }
+
+      auto it_cnt = pending_blocks_size_.find(block_id);
+      if (it_cnt == pending_blocks_size_.end()) {
+        return;
+      }
+      if (it_cnt->second != 1) {
+        it_cnt->second -= 1;
+        return;
+      }
+
+      // dump
+      auto it_data = pending_blocks_.find(block_id);
+      if (it_data == pending_blocks_.end()) {
+        return;
+      }
+      // save parsed accounts
+      it_data->second["accounts"] = it->second;
+
+      {
+        std::lock_guard<std::mutex> lock_internal(stored_counter_mtx_);
+        ++stored_states_counter_;
+      }
+      dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+                              std::to_string(block_id.id.seqno),
+                          it_data->second);
+
+      // clean up
+//      if (it == pending_blocks_accounts_.end()) {
+      it = pending_blocks_accounts_.find(block_id);
+//      }
+      pending_blocks_accounts_.erase(it);
+      pending_blocks_size_.erase(it_cnt);
+      pending_blocks_.erase(it_data);
+
+      LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
+      td::actor::send_closure(actor_id(this), &Indexer::decrease_state_padding);
+      //      decrease_state_padding();
     }
+
   }
 };  // namespace validator
 }  // namespace validator
