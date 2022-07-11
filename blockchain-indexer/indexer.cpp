@@ -1027,13 +1027,14 @@ class Indexer : public td::actor::Actor {
   }
 
   void increase_block_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_);
+    std::lock_guard<std::mutex> lock(display_mtx_);
+
     ++block_padding_;
     progress_changed();
   }
 
   void decrease_block_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_);
+    std::lock_guard<std::mutex> lock(display_mtx_);
 
     if (display_speed_) {
       parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
@@ -1047,14 +1048,14 @@ class Indexer : public td::actor::Actor {
   }
 
   void increase_state_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_);
+    std::lock_guard<std::mutex> lock(display_mtx_);
 
     ++state_padding_;
     progress_changed();
   }
 
   void decrease_state_padding() {
-    std::unique_lock<std::mutex> lock(display_mtx_);
+    std::lock_guard<std::mutex> lock(display_mtx_);
 
     if (display_speed_) {
       parsed_states_timepoints_.emplace(std::chrono::high_resolution_clock::now());
