@@ -1372,7 +1372,7 @@ class Indexer : public td::actor::Actor {
         return;
       }
       // save parsed accounts
-      it_data->second["accounts"] = std::move(it->second);
+      it_data->second["accounts"] = it->second;
 
       {
         std::lock_guard<std::mutex> lock_internal(stored_counter_mtx_);
@@ -1380,7 +1380,7 @@ class Indexer : public td::actor::Actor {
       }
       dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
                               std::to_string(block_id.id.seqno),
-                          std::move(it_data->second));
+                          it_data->second);
 
       // clean up
 //      if (it == pending_blocks_accounts_.end()) {
