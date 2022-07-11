@@ -1265,7 +1265,8 @@ class Indexer : public td::actor::Actor {
     pending_blocks_size_.insert(size_data);
   }
 
-  void parse_account(BlockIdExt block_id, vm::CellSlice value, const std::string &account_address) {
+  void parse_account(BlockIdExt block_id, vm::CellSlice value, std::string account_address) {
+    LOG(DEBUG) << "Parse account: (" << block_id.to_str() << ":" << account_address << ")";
     block::gen::ShardAccount::Record sa;
     block::gen::CurrencyCollection::Record dbi_cc;
     std::vector<std::tuple<int, std::string>> dummy;
@@ -1366,7 +1367,7 @@ class Indexer : public td::actor::Actor {
                               std::move(answer));
 
           LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
-//          decrease_state_padding();
+          decrease_state_padding();
         }
       } else {
         (*it_cnt).second = (*it_cnt).second - 1;
