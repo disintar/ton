@@ -1243,10 +1243,10 @@ class Indexer : public td::actor::Actor {
             for (const auto &account : accounts_keys) {
               auto value = accounts.lookup(account.cbits(), 256);
 
-              if (value.not_null()) { // todo: value could be null (?) and indexer will infinity waiting it
+              if (value.not_null()) {  // todo: value could be null (?) and indexer will infinity waiting it
                 td::actor::send_closure(SelfId, &Indexer::parse_account, block_id, value.write(), account.to_hex());
               } else {
-
+                LOG(ERROR) << account.to_hex() << " NOT FOUND IN BLOCK " << block_id.to_str();
               }
             }
           }
@@ -1362,11 +1362,11 @@ class Indexer : public td::actor::Actor {
             ++stored_states_counter_;
           }
           dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
-                                 std::to_string(block_id.id.seqno),
-                             std::move(answer));
+                                  std::to_string(block_id.id.seqno),
+                              std::move(answer));
 
           LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
-          decrease_state_padding();
+//          decrease_state_padding();
         }
       } else {
         (*it_cnt).second = (*it_cnt).second - 1;
