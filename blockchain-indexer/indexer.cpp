@@ -1065,9 +1065,11 @@ class Indexer : public td::actor::Actor {
     }
 
     if (block_padding_ == 0 && state_padding_ == 0) {
-      LOG(WARNING) << "Block&State paddings reached 0";
+      LOG(WARNING) << "Block&State paddings reached 0; Dump json files;";
+      dumper_.forceDump();
 
       if (chunk_current_ != chunk_size_) {
+        LOG(WARNING) << "Call parse next chunk";
         parse_other();
       } else {
         shutdown();
@@ -1111,8 +1113,6 @@ class Indexer : public td::actor::Actor {
   }
 
   void shutdown() {
-    LOG(INFO) << "Shutting down...";
-    dumper_.forceDump();
     LOG(INFO) << "Ready to die";
     ///TODO: danger danger
     LOG(WARNING) << "Calling std::exit(0)";
