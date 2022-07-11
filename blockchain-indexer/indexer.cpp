@@ -1243,7 +1243,7 @@ class Indexer : public td::actor::Actor {
             for (const auto &account : accounts_keys) {
               auto value = accounts.lookup(account.cbits(), 256);
 
-              if (value.not_null()) {
+              if (value.not_null()) { // todo: value could be null (?) and indexer will infinity waiting it
                 td::actor::send_closure(SelfId, &Indexer::parse_account, block_id, value.write(), account.to_hex());
               }
             }
