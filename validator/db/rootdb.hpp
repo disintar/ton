@@ -72,7 +72,7 @@ namespace validator {
 
 class BlockPublisher {
 public:
-  explicit BlockPublisher(const std::string& endpoint = "tcp://127.0.0.1:5001");
+  explicit BlockPublisher(const std::string& endpoint = "tcp://127.0.0.1:5002");
 
   void storeBlockData(BlockHandle handle, td::Ref<BlockData> block);
 
