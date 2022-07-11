@@ -1097,9 +1097,11 @@ class Indexer : public td::actor::Actor {
               }
             });
 
+        LOG(DEBUG) << "1";
         ///TODO: clean this super dirty stuff
 //        td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
         ++block_padding_;
+        LOG(DEBUG) << "2";
 
         ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
 
@@ -1107,6 +1109,7 @@ class Indexer : public td::actor::Actor {
         auto seqno = seqno_first_ + (chunk_size_ * (chunk_current_ - 1));
         td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                                 std::move(P));
+        LOG(DEBUG) << "3";
       } else {
         shutdown();
       }
