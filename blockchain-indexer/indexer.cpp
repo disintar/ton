@@ -1427,6 +1427,7 @@ class Indexer : public td::actor::Actor {
         auto p = std::make_pair(block_id, data_for_waiting);
         pending_blocks_accounts_.emplace(p);
       }
+      it = pending_blocks_accounts_.find(block_id);
 
       auto it_cnt = pending_blocks_size_.find(block_id);
       if (it_cnt == pending_blocks_size_.end()) {
@@ -1454,9 +1455,6 @@ class Indexer : public td::actor::Actor {
                           it_data->second);
 
       // clean up
-//      if (it == pending_blocks_accounts_.end()) {
-      it = pending_blocks_accounts_.find(block_id);
-//      }
       pending_blocks_accounts_.erase(it);
       pending_blocks_size_.erase(it_cnt);
       pending_blocks_.erase(it_data);
