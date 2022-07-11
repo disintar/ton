@@ -182,7 +182,7 @@ class Indexer : public td::actor::Actor {
   td::uint32 chunk_count_ = 0;
   td::uint32 chunk_current_ = 0;
   std::mutex display_mtx_;
-  Dumper dumper_ = Dumper("dump_", 1000);
+  Dumper dumper_ = Dumper("dump_", 20000);
 
   // store timestamps of parsed blocks for speed measuring
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_blocks_timepoints_;
