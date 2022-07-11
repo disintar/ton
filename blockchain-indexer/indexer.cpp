@@ -428,7 +428,8 @@ class Indexer : public td::actor::Actor {
             [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
               if (R.is_error()) {
                 LOG(ERROR) << R.move_as_error().to_string();
-                td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+//                td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+                decrease_block_padding();
               } else {
                 auto handle = R.move_as_ok();
                 LOG(DEBUG) << "got block from db " << handle->id().to_str();
@@ -1016,7 +1017,8 @@ class Indexer : public td::actor::Actor {
             std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" + std::to_string(blkid.seqno()),
             std::move(answer));
 
-        td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+//        td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+        decrease_block_padding();
 
         if (is_first && !info.not_master) {
           td::actor::send_closure(SelfId, &Indexer::parse_other);
@@ -1085,7 +1087,8 @@ class Indexer : public td::actor::Actor {
             [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
               if (R.is_error()) {
                 LOG(ERROR) << R.move_as_error().to_string();
-                td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+//                td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+                decrease_block_padding();
               } else {
                 auto handle = R.move_as_ok();
                 LOG(DEBUG) << "got block from db " << handle->id().to_str();
