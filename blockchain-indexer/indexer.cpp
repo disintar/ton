@@ -418,7 +418,7 @@ class Indexer : public td::actor::Actor {
 
       chunk_current_ += 1;
       auto start = seqno_first_ + (chunk_size_ * (chunk_current_ - 1));
-      auto end = td::min(seqno_last_, seqno_first_ + 1 + (chunk_size_ * chunk_current_));
+      auto end = td::min(seqno_last_, seqno_first_ + (chunk_size_ * chunk_current_));
       LOG(WARNING) << "Process chunk (" << chunk_current_ << ") From: " << start << " To: " << end;
 
       for (auto seqno = start + 1; seqno <= end - 1; ++seqno) {
