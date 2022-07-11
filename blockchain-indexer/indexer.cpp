@@ -1303,12 +1303,12 @@ class Indexer : public td::actor::Actor {
           //                                            std::to_string(block_id.id.seqno),
           //                                        std::move(answer));
 
-          LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
+          LOG(WARNING) << "received & parsed state from db " << block_id.to_str();
           decrease_state_padding();
-        } else {
-          (*it_cnt).second = (*it_cnt).second - 1;
-          LOG(WARNING) << "Skip account in block: " << block_id.to_str() << " Accounts: " << (*it_cnt).second;
         }
+      } else {
+        (*it_cnt).second = (*it_cnt).second - 1;
+        LOG(WARNING) << "Skip account in block: " << block_id.to_str() << " Accounts: " << (*it_cnt).second;
       }
     }
   }
