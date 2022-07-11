@@ -37,6 +37,7 @@
 #include <chrono>
 #include <thread>
 #include <csignal>
+#include "common/delay.h"
 
 int verbosity = 0;
 
@@ -1070,7 +1071,10 @@ class Indexer : public td::actor::Actor {
 
       if (chunk_current_ != chunk_size_) {
         LOG(WARNING) << "Call parse next chunk";
-        parse_other();
+        delay_action(
+            [SelfId = actor_id(this)]() {
+              td::actor::send_closure(SelfId, &Indexer::parse_other);
+            }, td::Timestamp::in(0.1));
       } else {
         shutdown();
       }
