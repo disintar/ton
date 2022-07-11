@@ -1361,40 +1361,38 @@ class Indexer : public td::actor::Actor {
       if (it_cnt == pending_blocks_size_.end()) {
         return;
       }
-
       if (it_cnt->second != 1) {
         it_cnt->second -= 1;
-      } else {
-        // dump
-        auto it_data = pending_blocks_.find(block_id);
-        if (it_data == pending_blocks_.end()) {
-          return;
-        }
-        auto answer = it_data->second;
-
-        // save parsed accounts
-        answer["accounts"] = std::move(it->second);
-
-        {
-          std::lock_guard<std::mutex> lock_internal(stored_counter_mtx_);
-          ++stored_states_counter_;
-        }
-        dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
-                                std::to_string(block_id.id.seqno),
-                            std::move(answer));
-
-        // clean up
-        if (it == pending_blocks_accounts_.end()) {
-          it = pending_blocks_accounts_.find(block_id);
-        }
-        pending_blocks_accounts_.erase(it);
-        pending_blocks_size_.erase(it_cnt);
-        pending_blocks_.erase(it_data);
-
-        LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
-        td::actor::send_closure(actor_id(this), &Indexer::decrease_state_padding);
-        //      decrease_state_padding();
+        return;
       }
+
+      // dump
+      auto it_data = pending_blocks_.find(block_id);
+      if (it_data == pending_blocks_.end()) {
+        return;
+      }
+      // save parsed accounts
+      it_data->second["accounts"] = std::move(it->second);
+
+      {
+        std::lock_guard<std::mutex> lock_internal(stored_counter_mtx_);
+        ++stored_states_counter_;
+      }
+      dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+                              std::to_string(block_id.id.seqno),
+                          std::move(it_data->second));
+
+      // clean up
+      if (it == pending_blocks_accounts_.end()) {
+        it = pending_blocks_accounts_.find(block_id);
+      }
+      pending_blocks_accounts_.erase(it);
+      pending_blocks_size_.erase(it_cnt);
+      pending_blocks_.erase(it_data);
+
+      LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
+      td::actor::send_closure(actor_id(this), &Indexer::decrease_state_padding);
+      //      decrease_state_padding();
     }
 
   }
