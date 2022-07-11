@@ -1237,16 +1237,33 @@ class Indexer : public td::actor::Actor {
             vm::AugmentedDictionary accounts{vm::load_cell_slice_ref(shard_state.accounts), 256,
                                              block::tlb::aug_ShardAccounts};
             td::actor::send_closure(SelfId, &Indexer::add_done_block, answer, block_id, accounts_keys.size());
-            std::vector<json> accounts_list;
-            accounts_list.reserve(accounts_keys.size());
 
-            for (const auto &account : accounts_keys) {
-              auto value = accounts.lookup(account.cbits(), 256);
+            if (accounts_keys.empty()) {
+              // save parsed accounts
+              std::vector<json> accounts_parsed;
+              answer["accounts"] = accounts_parsed;
 
-              if (value.not_null()) {  // todo: value could be null (?) and indexer will infinity waiting it
-                td::actor::send_closure(SelfId, &Indexer::parse_account, block_id, value.write(), account.to_hex());
-              } else {
-                LOG(ERROR) << account.to_hex() << " NOT FOUND IN BLOCK " << block_id.to_str();
+              {
+                std::lock_guard<std::mutex> lock(stored_counter_mtx_);
+                ++stored_states_counter_;
+              }
+
+              dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) +
+                                      ":" + std::to_string(block_id.id.seqno),
+                                  std::move(answer));
+
+              LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
+              decrease_state_padding();
+
+            } else {
+              for (const auto &account : accounts_keys) {
+                auto value = accounts.lookup(account.cbits(), 256);
+
+                if (value.not_null()) {  // todo: value could be null (?) and indexer will infinity waiting it
+                  td::actor::send_closure(SelfId, &Indexer::parse_account, block_id, value.write(), account.to_hex());
+                } else {
+                  LOG(ERROR) << account.to_hex() << " NOT FOUND IN BLOCK " << block_id.to_str();
+                }
               }
             }
           }
