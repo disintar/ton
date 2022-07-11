@@ -1349,22 +1349,24 @@ class Indexer : public td::actor::Actor {
 
     auto it_cnt = pending_blocks_size_.find(block_id);
     if (it_cnt != pending_blocks_size_.end()) {
+      LOG(DEBUG) << "Block: " << block_id.to_str() << " Accounts: " << (*it_cnt).second;
+
       if ((*it_cnt).second == 1) {
         // dump
         auto it_data = pending_blocks_.find(block_id);
         if (it_data != pending_blocks_.end()) {
-          auto answer = std::move((*it_data).second);
-
-          // save parsed accounts
-          answer["accounts"] = std::move((*it).second);
-
-          {
-            std::lock_guard<std::mutex> lock(stored_counter_mtx_);
-            ++stored_states_counter_;
-          }
-          //          dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
-          //                                  std::to_string(block_id.id.seqno),
-          //                              std::move(answer));
+          //          auto answer = std::move((*it_data).second);
+          //
+          //          // save parsed accounts
+          //          answer["accounts"] = std::move((*it).second);
+          //
+          //          {
+          //            std::lock_guard<std::mutex> lock(stored_counter_mtx_);
+          //            ++stored_states_counter_;
+          //          }
+          //                    dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+          //                                            std::to_string(block_id.id.seqno),
+          //                                        std::move(answer));
 
           LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
           decrease_state_padding();
