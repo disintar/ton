@@ -1009,7 +1009,7 @@ class Indexer : public td::actor::Actor {
           std::lock_guard<std::mutex> lock(stored_counter_mtx_);
           ++stored_blocks_counter_;
         }
-        dumper_.storeBlock(
+        dumper_->storeBlock(
             std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" + std::to_string(blkid.seqno()),
             std::move(answer));
 
@@ -1072,7 +1072,7 @@ class Indexer : public td::actor::Actor {
 
     if (block_padding_ == 0 && state_padding_ == 0) {
       LOG(WARNING) << "Block&State paddings reached 0; Dump json files;";
-      dumper_.forceDump();
+      dumper_->forceDump();
 
       if (chunk_current_ != chunk_count_) {
         LOG(WARNING) << "Call parse next chunk";
@@ -1266,6 +1266,7 @@ class Indexer : public td::actor::Actor {
   void parse_account(BlockIdExt block_id, vm::CellSlice value, const std::string &account_address) {
     block::gen::ShardAccount::Record sa;
     block::gen::CurrencyCollection::Record dbi_cc;
+    std::vector<std::tuple<int, std::string>> dummy;
     CHECK(tlb::unpack(value, sa));
     json data;
 
@@ -1358,7 +1359,7 @@ class Indexer : public td::actor::Actor {
             std::lock_guard<std::mutex> lock(stored_counter_mtx_);
             ++stored_states_counter_;
           }
-          dumper_.storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+          dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
                                  std::to_string(block_id.id.seqno),
                              std::move(answer));
 
