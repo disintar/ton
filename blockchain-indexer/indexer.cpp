@@ -394,7 +394,8 @@ class Indexer : public td::actor::Actor {
     auto P = td::PromiseCreator::lambda(
         [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
           if (R.is_error()) {
-            td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+//            td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+            decrease_block_padding();
             LOG(ERROR) << R.move_as_error().to_string();
           } else {
             auto handle = R.move_as_ok();
