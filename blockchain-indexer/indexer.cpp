@@ -1077,8 +1077,12 @@ class Indexer : public td::actor::Actor {
       if (chunk_current_ != chunk_count_) {
         LOG(WARNING) << "Call parse next chunk";
 
+        // parse first mc seqno in chunk to prevent mc seqno leak
+        auto seqno = seqno_first_ + (chunk_size_ * (chunk_current_ - 1));
+        LOG(DEBUG) << "Start with MC block: " << seqno;
+
         auto P = td::PromiseCreator::lambda(
-            [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
+            [this, SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
               if (R.is_error()) {
                 LOG(ERROR) << R.move_as_error().to_string();
                 td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
@@ -1088,13 +1092,11 @@ class Indexer : public td::actor::Actor {
                 td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle, true);
               }
             });
-
+        LOG(DEBUG) << "1";
         increase_block_padding();
+        LOG(DEBUG) << "2";
         ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
-
-        // parse first mc seqno in chunk to prevent mc seqno leak
-        auto seqno = seqno_first_ + (chunk_size_ * (chunk_current_ - 1));
-        LOG(DEBUG) << "Start with MC block: " << seqno;
+        LOG(DEBUG) << "3";
         td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                                 std::move(P));
       } else {
