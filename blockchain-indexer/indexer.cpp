@@ -1031,57 +1031,68 @@ class Indexer : public td::actor::Actor {
   }
 
   void increase_block_padding() {
-    std::lock_guard<std::mutex> lock(display_mtx_);
+    {
+      std::lock_guard<std::mutex> lock(display_mtx_);
 
-    ++block_padding_;
+      ++block_padding_;
+    }
+
 //    progress_changed();
     td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void decrease_block_padding() {
-    std::lock_guard<std::mutex> lock(display_mtx_);
+    {
+      std::lock_guard<std::mutex> lock(display_mtx_);
 
-    if (display_speed_) {
-      parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
+      if (display_speed_) {
+        parsed_blocks_timepoints_.emplace(std::chrono::high_resolution_clock::now());
+      }
+
+      if (block_padding_-- == 0) {
+        LOG(ERROR) << "decreasing seqno padding but it's zero";
+      }
     }
 
-    if (block_padding_ == 0) {
-      LOG(ERROR) << "decreasing seqno padding but it's zero";
-    }
-    --block_padding_;
 //    progress_changed();
     td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void increase_state_padding() {
-    std::lock_guard<std::mutex> lock(display_mtx_);
+    {
+      std::lock_guard<std::mutex> lock(display_mtx_);
 
-    ++state_padding_;
+      ++state_padding_;
+    }
+
 //    progress_changed();
     td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void decrease_state_padding() {
-    std::lock_guard<std::mutex> lock(display_mtx_);
+    {
+      std::lock_guard<std::mutex> lock(display_mtx_);
 
-    if (display_speed_) {
-      parsed_states_timepoints_.emplace(std::chrono::high_resolution_clock::now());
+      if (display_speed_) {
+        parsed_states_timepoints_.emplace(std::chrono::high_resolution_clock::now());
+      }
+
+      if (state_padding_-- == 0) {
+        LOG(ERROR) << "decreasing state padding but it's zero";
+      }
     }
 
-    if (state_padding_ == 0) {
-      LOG(ERROR) << "decreasing state padding but it's zero";
-    }
-    --state_padding_;
 //    progress_changed();
     td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void progress_changed() {
     if (display_speed_) {
+      std::lock_guard<std::mutex> lock(display_mtx_);
       display_speed();
     }
 
-    if (block_padding_ == 0 && state_padding_ == 0) {
+    if (block_padding_ == 0 && state_padding_ == 0) { // TODO: add some mutexes
       LOG(WARNING) << "Block&State paddings reached 0; Dump json files;";
       dumper_->forceDump();
 
