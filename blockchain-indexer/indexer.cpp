@@ -1343,56 +1343,58 @@ class Indexer : public td::actor::Actor {
       }
     }
 
-    std::lock_guard<std::mutex> lock(pending_blocks_mtx_);
+    {
+      std::lock_guard<std::mutex> lock(pending_blocks_mtx_);
 
-    auto it = pending_blocks_accounts_.find(block_id);
-    if (it != pending_blocks_accounts_.end()) {
-      it->second.emplace_back(std::move(data));
-    } else {  // first parsed account
-      std::vector<json> data_for_waiting;
-      data_for_waiting.emplace_back(std::move(data));
+      auto it = pending_blocks_accounts_.find(block_id);
+      if (it != pending_blocks_accounts_.end()) {
+        it->second.emplace_back(std::move(data));
+      } else {  // first parsed account
+        std::vector<json> data_for_waiting;
+        data_for_waiting.emplace_back(std::move(data));
 
-      auto p = std::make_pair(block_id, data_for_waiting);
-      pending_blocks_accounts_.emplace(p);
-    }
+        auto p = std::make_pair(block_id, data_for_waiting);
+        pending_blocks_accounts_.emplace(p);
+      }
 
-    auto it_cnt = pending_blocks_size_.find(block_id);
-    if (it_cnt == pending_blocks_size_.end()) {
-      return;
-    }
-
-    if (it_cnt->second != 1) {
-      it_cnt->second -= 1;
-    } else {
-      // dump
-      auto it_data = pending_blocks_.find(block_id);
-      if (it_data == pending_blocks_.end()) {
+      auto it_cnt = pending_blocks_size_.find(block_id);
+      if (it_cnt == pending_blocks_size_.end()) {
         return;
       }
-      auto answer = it_data->second;
 
-      // save parsed accounts
-      answer["accounts"] = std::move(it->second);
+      if (it_cnt->second != 1) {
+        it_cnt->second -= 1;
+      } else {
+        // dump
+        auto it_data = pending_blocks_.find(block_id);
+        if (it_data == pending_blocks_.end()) {
+          return;
+        }
+        auto answer = it_data->second;
 
-      {
-        std::lock_guard<std::mutex> lock(stored_counter_mtx_);
-        ++stored_states_counter_;
+        // save parsed accounts
+        answer["accounts"] = std::move(it->second);
+
+        {
+          std::lock_guard<std::mutex> lock_internal(stored_counter_mtx_);
+          ++stored_states_counter_;
+        }
+        dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+                                std::to_string(block_id.id.seqno),
+                            std::move(answer));
+
+        // clean up
+        if (it == pending_blocks_accounts_.end()) {
+          it = pending_blocks_accounts_.find(block_id);
+        }
+        pending_blocks_accounts_.erase(it);
+        pending_blocks_size_.erase(it_cnt);
+        pending_blocks_.erase(it_data);
+
+        LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
+        td::actor::send_closure(actor_id(this), &Indexer::decrease_state_padding);
+        //      decrease_state_padding();
       }
-      dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
-                              std::to_string(block_id.id.seqno),
-                          std::move(answer));
-
-      // clean up
-      if (it == pending_blocks_accounts_.end()) {
-        it = pending_blocks_accounts_.find(block_id);
-      }
-      pending_blocks_accounts_.erase(it);
-      pending_blocks_size_.erase(it_cnt);
-      pending_blocks_.erase(it_data);
-
-      LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
-      td::actor::send_closure(actor_id(this), &Indexer::decrease_state_padding);
-//      decrease_state_padding();
     }
 
   }
