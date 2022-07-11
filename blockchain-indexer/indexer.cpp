@@ -1443,7 +1443,7 @@ class Indexer : public td::actor::Actor {
         return;
       }
       // save parsed accounts
-      it_data->second["accounts"] = it->second;
+//      it_data->second["accounts"] = it->second;
 
       {
         std::lock_guard<std::mutex> lock_internal(stored_counter_mtx_);
