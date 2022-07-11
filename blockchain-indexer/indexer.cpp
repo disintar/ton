@@ -1132,9 +1132,6 @@ class Indexer : public td::actor::Actor {
       } else {
         auto root_cell = R.move_as_ok();
         auto block_id = handle->id();
-
-        LOG(INFO) << "Parse state: " << block_id.to_str();
-
         block::gen::ShardStateUnsplit::Record shard_state;
         CHECK(tlb::unpack_cell(root_cell, shard_state));
 
