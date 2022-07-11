@@ -182,7 +182,7 @@ class Indexer : public td::actor::Actor {
   td::uint32 chunk_count_ = 0;
   td::uint32 chunk_current_ = 0;
   std::mutex display_mtx_;
-  Dumper dumper_;
+  std::unique_ptr<Dumper> dumper_;
 
   std::map<BlockIdExt, json> pending_blocks_{};
   std::map<BlockIdExt, td::uint64> pending_blocks_size_{};
@@ -269,7 +269,7 @@ class Indexer : public td::actor::Actor {
   }
   void set_chunk_size(td::uint32 size) {
     chunk_size_ = size;
-    dumper_ = Dumper("dump_", size);
+    dumper_ = std::make_unique<Dumper>("dump_", size);
   }
   void set_display_speed(bool display_speed) {
     display_speed_ = display_speed;
