@@ -833,6 +833,14 @@ class Indexer : public td::actor::Actor {
           //          increase_state_padding();
           td::actor::send_closure(SelfId, &Indexer::increase_state_padding);
           td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
+        } else {
+          auto key = std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+                     std::to_string(block_id.id.seqno);
+          LOG(DEBUG) << "Skip state: " << key;
+
+          json skip;
+          skip["skip"] = true;
+          dumper_->storeState(key, std::move(skip));
         }
 
         answer["BlockExtra"] = {
