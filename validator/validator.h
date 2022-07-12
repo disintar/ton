@@ -33,6 +33,7 @@
 #include "interfaces/block.h"
 #include "interfaces/proof.h"
 #include "interfaces/shard.h"
+#include "validator/db/BlockPublisher.hpp"
 #include "catchain/catchain-types.h"
 
 namespace ton {
@@ -210,6 +211,8 @@ class ValidatorManagerInterface : public td::actor::Actor {
   virtual void get_archive_id(BlockSeqno masterchain_seqno, td::Promise<td::uint64> promise) = 0;
   virtual void get_archive_slice(td::uint64 archive_id, td::uint64 offset, td::uint32 limit,
                                  td::Promise<td::BufferSlice> promise) = 0;
+
+  virtual void set_block_publisher(std::unique_ptr<IBlockPublisher> publisher) {} ///TODO: make it pure virtual
 
   virtual void run_ext_query(td::BufferSlice data, td::Promise<td::BufferSlice> promise) = 0;
   virtual void prepare_stats(td::Promise<std::vector<std::pair<std::string, std::string>>> promise) = 0;

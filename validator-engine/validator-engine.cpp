@@ -3539,6 +3539,11 @@ int main(int argc, char *argv[]) {
         return td::Status::OK();
       });
   p.add_checked_option('u', "user", "change user", [&](td::Slice user) { return td::change_user(user.str()); });
+  p.add_checked_option('P', "publish", "publish blocks/states to message queue", [&](td::Slice arg) {
+      acts.push_back([&x, endpoint = arg.str()](){ td::actor::send_closure(x, &ValidatorEngine::set_block_publisher, std::make_unique<ton::validator::BlockPublisher>(endpoint)); });
+    return td::Status::OK();
+  });
+
   auto S = p.run(argc, argv);
   if (S.is_error()) {
     LOG(ERROR) << "failed to parse options: " << S.move_as_error();

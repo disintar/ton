@@ -367,6 +367,10 @@ class
     UNREACHABLE();
   }
 
+  void set_block_publisher(std::unique_ptr<IBlockPublisher> publisher) override {
+    td::actor::send_closure(db_, &Db::set_block_publisher, std::move(publisher));
+  }
+
  private:
   PublicKeyHash local_id_;
 

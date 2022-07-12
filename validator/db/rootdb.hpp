@@ -26,7 +26,6 @@
 #include "statedb.hpp"
 #include "staticfilesdb.hpp"
 #include "archive-manager.hpp"
-#include <zmq.hpp>
 #include "validator/fabric.h"
 #include "archiver.hpp"
 
@@ -66,41 +65,22 @@
 #include "vm/boc.h"
 #include "crypto/block/mc-config.h"
 
+#include "BlockPublisher.hpp"
+
+
 namespace ton {
 
 namespace validator {
-
-class BlockPublisher {
-public:
-  explicit BlockPublisher(const std::string& endpoint = "tcp://127.0.0.1:5002");
-
-  void storeBlockData(BlockHandle handle, td::Ref<BlockData> block);
-
-  void storeBlockState(BlockHandle handle, td::Ref<ShardState> state);
-
-private:
-  void gotState(BlockHandle handle, td::Ref<ShardState> state, std::vector<td::Bits256> accounts_keys);
-
-  void publishBlockData(const std::string& json);
-
-  void publishBlockState(const std::string& json);
-
-private:
-  zmq::context_t ctx;
-  zmq::socket_t socket;
-  std::mutex net_mtx;
-
-  std::mutex maps_mtx;
-  std::map<std::string, std::pair<BlockHandle, td::Ref<ShardState>>> states_;
-  std::map<std::string, std::vector<td::Bits256>> accounts_keys_;
-};
-
 
 class RootDb : public Db {
  public:
   enum class Flags : td::uint32 { f_started = 1, f_ready = 2, f_switched = 4, f_archived = 8 };
   RootDb(td::actor::ActorId<ValidatorManager> validator_manager, std::string root_path, bool read_only = false)
-      : validator_manager_(validator_manager), root_path_(std::move(root_path)), read_only_(read_only){
+      : validator_manager_(validator_manager), root_path_(std::move(root_path)), read_only_(read_only) {
+  }
+
+  void set_block_publisher(std::unique_ptr<IBlockPublisher> publisher) override {
+    publisher_ = std::move(publisher);
   }
 
   void start_up() override;
@@ -209,7 +189,7 @@ class RootDb : public Db {
   td::actor::ActorOwn<StaticFilesDb> static_files_db_;
   td::actor::ActorOwn<ArchiveManager> archive_db_;
 
-  BlockPublisher publisher_;
+  std::unique_ptr<IBlockPublisher> publisher_ = std::make_unique<BlockPublisherIgnore>();
   void get_block_state_root_cell(ConstBlockHandle handle, td::Promise<td::Ref<vm::DataCell>> promise) override;
 };
 

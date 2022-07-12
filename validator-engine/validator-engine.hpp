@@ -42,6 +42,8 @@
 #include "auto/tl/ton_api_json.h"
 #include "auto/tl/ton_api.hpp"
 
+#include "validator/db/BlockPublisher.hpp"
+
 enum ValidatorEnginePermissions : td::uint32 { vep_default = 1, vep_modify = 2, vep_unsafe = 4 };
 
 using AdnlCategory = td::uint8;
@@ -249,6 +251,10 @@ class ValidatorEngine : public td::actor::Actor {
   void add_key_to_set(ton::PublicKey key) {
     keys_[key.compute_short_id()] = key;
   }
+  void set_block_publisher(std::unique_ptr<ton::validator::IBlockPublisher> publihser) {
+    td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::set_block_publisher, std::move(publisher));
+  }
+
   void start_up() override;
   void got_result();
   ValidatorEngine() {

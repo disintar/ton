@@ -90,7 +90,7 @@ set(VALIDATOR_SOURCE
   ${VALIDATOR_DB_SOURCE}
 
   ${VALIDATOR_HEADERS}
-)
+        db/BlockPublisher.hpp db/BlockPublisher.cpp)
 
 set(DISK_VALIDATOR_SOURCE
   apply-block.cpp
