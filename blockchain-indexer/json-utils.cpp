@@ -29,8 +29,25 @@ std::map<std::string, std::variant<int, std::string>> parse_anycast(vm::CellSlic
   return {{"depth", anycast_parsed.depth}, {"rewrite_pfx", anycast_parsed.rewrite_pfx->to_binary()}};
 };
 
+std::unordered_map<vm::CellHash, std::string> cache;
+std::mutex cache_mtx;
+
 std::string dump_as_boc(Ref<vm::Cell> root_cell) {
-  return td::base64_encode(std_boc_serialize(std::move(root_cell), 31).move_as_ok());
+  std::lock_guard<std::mutex> lock(cache_mtx);
+
+  auto hash = root_cell->get_hash();
+  auto it = cache.find(hash);
+
+  if (it != cache.end()){
+    return it->second;
+  } else {
+    auto s = td::base64_encode(std_boc_serialize(std::move(root_cell), 31).move_as_ok());
+    cache.insert({hash, s});
+
+    return s;
+  }
+
+
 }
 
 json parse_address(vm::CellSlice address) {
