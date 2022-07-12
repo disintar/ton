@@ -252,6 +252,7 @@ class ValidatorEngine : public td::actor::Actor {
     keys_[key.compute_short_id()] = key;
   }
   void set_block_publisher(std::unique_ptr<ton::validator::IBlockPublisher> publisher) {
+    LOG(DEBUG) << "ValidatorEngine publisher";
     td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::set_block_publisher, std::move(publisher));
   }
 

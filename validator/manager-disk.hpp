@@ -368,6 +368,7 @@ class
   }
 
   void set_block_publisher(std::unique_ptr<IBlockPublisher> publisher) override {
+    LOG(DEBUG) << "ManagerDisk publisher";
     td::actor::send_closure(db_, &Db::set_block_publisher, std::move(publisher));
   }
 
