@@ -33,21 +33,30 @@ std::unordered_map<vm::CellHash, std::string> cache;
 std::mutex cache_mtx;
 
 std::string dump_as_boc(Ref<vm::Cell> root_cell) {
-  std::lock_guard<std::mutex> lock(cache_mtx);
-
   auto hash = root_cell->get_hash();
-  auto it = cache.find(hash);
 
-  if (it != cache.end()){
-    return it->second;
-  } else {
-    auto s = td::base64_encode(std_boc_serialize(std::move(root_cell), 31).move_as_ok());
-    cache.insert({hash, s});
+  {
+    std::lock_guard<std::mutex> lock(cache_mtx);
+    auto it = cache.find(hash);
 
-    return s;
+    if (it != cache.end()) {
+      return it->second;
+    }
   }
 
+  auto s = td::base64_encode(std_boc_serialize(std::move(root_cell), 31).move_as_ok());
 
+  {
+    std::lock_guard<std::mutex> lock(cache_mtx);
+    cache.insert({hash, s});
+  }
+  return s;
+}
+
+bool clear_cache() {
+  std::lock_guard<std::mutex> lock(cache_mtx);
+
+  cache.clear();
 }
 
 json parse_address(vm::CellSlice address) {

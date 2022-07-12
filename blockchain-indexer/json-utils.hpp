@@ -64,4 +64,6 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain);
 
 json parse_out_msg_descr(vm::CellSlice out_msg, int workchain);
 
+bool clear_cache();
+
 #endif  //TON_JSON_UTILS_HPP

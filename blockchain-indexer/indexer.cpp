@@ -1118,6 +1118,9 @@ class Indexer : public td::actor::Actor {
       LOG(WARNING) << "Block&State paddings reached 0; Dump json files;";
       dumper_->forceDump();
 
+      // clear boc (lib & data & account) cache
+      clear_cache();
+
       if (chunk_current_ != chunk_count_) {
         LOG(WARNING) << "Call parse next chunk";
 
