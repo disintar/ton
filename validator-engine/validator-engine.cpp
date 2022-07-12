@@ -3540,7 +3540,8 @@ int main(int argc, char *argv[]) {
       });
   p.add_checked_option('u', "user", "change user", [&](td::Slice user) { return td::change_user(user.str()); });
   p.add_checked_option('P', "publish", "publish blocks/states to message queue", [&](td::Slice arg) {
-      acts.push_back([&x, endpoint = arg.str()](){ td::actor::send_closure(x, &ValidatorEngine::set_block_publisher, std::make_unique<ton::validator::BlockPublisher>(endpoint)); });
+    LOG(DEBUG) << "--publish " << arg.str();
+    acts.push_back([&x, endpoint = arg.str()](){ td::actor::send_closure(x, &ValidatorEngine::set_block_publisher, std::make_unique<ton::validator::BlockPublisher>(endpoint)); });
     return td::Status::OK();
   });
 
