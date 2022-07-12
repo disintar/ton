@@ -37,7 +37,6 @@
 #include <chrono>
 #include <thread>
 
-
 int verbosity = 0;
 
 namespace ton {
@@ -47,11 +46,13 @@ namespace validator {
 void execute_async(std::function<void()> f) {
   class Runner : public td::actor::Actor {
    public:
-    explicit Runner(std::function<void()> f) : f_(std::move(f)) {}
+    explicit Runner(std::function<void()> f) : f_(std::move(f)) {
+    }
     void start_up() {
       f_();
       stop();
     }
+
    private:
     std::function<void()> f_;
   };
@@ -1309,8 +1310,8 @@ class Indexer : public td::actor::Actor {
                 auto value = accounts.lookup(account.cbits(), 256);
 
                 if (value.not_null()) {  // todo: value could be null (?) and indexer will infinity waiting it
-                  execute_async([=, value_write=value.write()](){
-//                    td::actor::send_closure(SelfId, &Indexer::parse_account, block_id, value.write(), account.to_hex());
+                  execute_async([=, value_write = value.write()]() {
+                    //                    td::actor::send_closure(SelfId, &Indexer::parse_account, block_id, value.write(), account.to_hex());
                     parse_account(block_id, value_write, account.to_hex());
                   });
                 } else {
@@ -1484,8 +1485,8 @@ class Indexer : public td::actor::Actor {
       pending_blocks_.erase(it_data);
 
       LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
-      td::actor::send_closure(actor_id(this), &Indexer::decrease_state_padding);
-      //      decrease_state_padding();
+      //      td::actor::send_closure(actor_id(this), &Indexer::decrease_state_padding);
+      decrease_state_padding();
     }
   }
 };  // namespace validator
