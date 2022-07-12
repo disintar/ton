@@ -3542,7 +3542,7 @@ int main(int argc, char *argv[]) {
   p.add_checked_option('P', "publish", "publish blocks/states to message queue", [&](td::Slice arg) {
     LOG(DEBUG) << "--publish " << arg.str();
 //    acts.push_back([&x, endpoint = arg.str()](){ td::actor::send_closure(x, &ValidatorEngine::set_block_publisher, std::make_unique<ton::validator::BlockPublisher>(endpoint)); });
-    acts.push_back([&x, endpoint = arg.str()](){ td::actor::send_closure(x, &ValidatorEngine::set_block_publisher, nullptr); });
+//    acts.push_back([&x, endpoint = arg.str()](){ td::actor::send_closure(x, &ValidatorEngine::set_block_publisher, nullptr); });
     return td::Status::OK();
   });
 
