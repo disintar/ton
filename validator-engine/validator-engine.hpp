@@ -143,6 +143,7 @@ class ValidatorEngine : public td::actor::Actor {
   ton::PublicKeyHash default_dht_node_ = ton::PublicKeyHash::zero();
   td::actor::ActorOwn<ton::overlay::Overlays> overlay_manager_;
   td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
+  std::unique_ptr<ton::validator::IBlockPublisher> publisher_temp_;
   td::actor::ActorOwn<ton::adnl::AdnlExtClient> full_node_client_;
   td::actor::ActorOwn<ton::validator::fullnode::FullNode> full_node_;
   std::map<td::uint16, td::actor::ActorOwn<ton::validator::fullnode::FullNodeMaster>> full_node_masters_;
@@ -253,7 +254,7 @@ class ValidatorEngine : public td::actor::Actor {
   }
   void set_block_publisher(std::unique_ptr<ton::validator::IBlockPublisher> publisher) {
     LOG(DEBUG) << "ValidatorEngine publisher";
-    td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::set_block_publisher, std::move(publisher));
+    publisher_temp_ = std::move(publisher);
   }
 
   void start_up() override;

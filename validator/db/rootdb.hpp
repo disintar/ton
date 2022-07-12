@@ -81,6 +81,9 @@ class RootDb : public Db {
 
   void set_block_publisher(std::unique_ptr<IBlockPublisher> publisher) override {
     LOG(DEBUG) << "RootDb publisher";
+    if (publisher == nullptr) {
+      publisher = std::make_unique<ton::validator::BlockPublisherIgnore>();
+    }
     publisher_ = std::move(publisher);
   }
 
