@@ -1325,7 +1325,6 @@ class Indexer : public td::actor::Actor {
             //                }
 
             if (value.not_null()) {
-              LOG(DEBUG) << "Parse account: (" << block_id.to_str() << ":" << account.to_hex() << ")";
               block::gen::ShardAccount::Record sa;
               block::gen::CurrencyCollection::Record dbi_cc;
               CHECK(tlb::unpack(value.write(), sa));
@@ -1399,9 +1398,8 @@ class Indexer : public td::actor::Actor {
               }
             }
           }
-          LOG(DEBUG) << "Accounts parsed!";
           answer["accounts"] = json_accounts;
-          LOG(DEBUG) << "Dump!";
+
           dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
                                   std::to_string(block_id.id.seqno),
                               std::move(answer));
