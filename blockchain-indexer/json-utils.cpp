@@ -168,45 +168,52 @@ json parse_state_init(vm::CellSlice state_init) {
   json answer;
 
   block::gen::StateInit::Record state_init_parsed;
-  CHECK(tlb::unpack(state_init, state_init_parsed));
+  auto is_good = tlb::unpack(state_init, state_init_parsed));
 
-  if ((int)state_init_parsed.split_depth->prefetch_ulong(1) == 1) {
-    auto sd = state_init_parsed.split_depth.write();
-    sd.skip_first(1);
-    answer["split_depth"] = (int)sd.prefetch_ulong(5);
+  if (is_good) {
+    if ((int)state_init_parsed.split_depth->prefetch_ulong(1) == 1) {
+      auto sd = state_init_parsed.split_depth.write();
+      sd.skip_first(1);
+      answer["split_depth"] = (int)sd.prefetch_ulong(5);
+    }
+
+    if ((int)state_init_parsed.special->prefetch_ulong(1) == 1) {
+      auto s = state_init_parsed.special.write();
+      s.skip_first(1);
+
+      block::gen::TickTock::Record tiktok{};
+      CHECK(tlb::unpack(s, tiktok));
+
+      answer["special"] = {
+          {"tick", tiktok.tick},
+          {"tock", tiktok.tock},
+      };
+    }
+
+    if ((int)state_init_parsed.code->prefetch_ulong(1) == 1) {
+      auto code = state_init_parsed.code->prefetch_ref();
+
+      answer["code_hash"] = code->get_hash().to_hex();
+      answer["code"] = dump_as_boc(code);
+    }
+
+    if ((int)state_init_parsed.data->prefetch_ulong(1) == 1) {
+      auto data = state_init_parsed.data->prefetch_ref();
+
+      answer["data"] = dump_as_boc(data);
+    }
+
+    if ((int)state_init_parsed.library->prefetch_ulong(1) == 1) {  // if not empty
+      answer["libs"] = parse_libraries(state_init_parsed.library->prefetch_ref());
+    }
+
+    answer["type"] = "success";
+
+    return answer;
+  } else {
+    answer["type"] = "unsuccess";
+    return answer;
   }
-
-  if ((int)state_init_parsed.special->prefetch_ulong(1) == 1) {
-    auto s = state_init_parsed.special.write();
-    s.skip_first(1);
-
-    block::gen::TickTock::Record tiktok{};
-    CHECK(tlb::unpack(s, tiktok));
-
-    answer["special"] = {
-        {"tick", tiktok.tick},
-        {"tock", tiktok.tock},
-    };
-  }
-
-  if ((int)state_init_parsed.code->prefetch_ulong(1) == 1) {
-    auto code = state_init_parsed.code->prefetch_ref();
-
-    answer["code_hash"] = code->get_hash().to_hex();
-    answer["code"] = dump_as_boc(code);
-  }
-
-  if ((int)state_init_parsed.data->prefetch_ulong(1) == 1) {
-    auto data = state_init_parsed.data->prefetch_ref();
-
-    answer["data"] = dump_as_boc(data);
-  }
-
-  if ((int)state_init_parsed.library->prefetch_ulong(1) == 1) {  // if not empty
-    answer["libs"] = parse_libraries(state_init_parsed.library->prefetch_ref());
-  }
-
-  return answer;
 }
 
 json parse_message(Ref<vm::Cell> message_any) {
