@@ -36,14 +36,27 @@
 #include <queue>
 #include <chrono>
 #include <thread>
-#include <csignal>
-#include "common/delay.h"
+
 
 int verbosity = 0;
 
 namespace ton {
 
 namespace validator {
+
+void execute_async(std::function<void()> f) {
+  class Runner : public td::actor::Actor {
+   public:
+    explicit Runner(std::function<void()> f) : f_(std::move(f)) {}
+    void start_up() {
+      f_();
+      stop();
+    }
+   private:
+    std::function<void()> f_;
+  };
+  td::actor::create_actor<Runner>("indexer-executeasync", std::move(f)).release();
+}
 
 class Dumper {
  public:
@@ -1296,7 +1309,10 @@ class Indexer : public td::actor::Actor {
                 auto value = accounts.lookup(account.cbits(), 256);
 
                 if (value.not_null()) {  // todo: value could be null (?) and indexer will infinity waiting it
-                  td::actor::send_closure(SelfId, &Indexer::parse_account, block_id, value.write(), account.to_hex());
+                  execute_async([=, value_write=value.write()](){
+//                    td::actor::send_closure(SelfId, &Indexer::parse_account, block_id, value.write(), account.to_hex());
+                    parse_account(block_id, value_write, account.to_hex());
+                  });
                 } else {
                   LOG(ERROR) << account.to_hex() << " NOT FOUND IN BLOCK " << block_id.to_str();
                   td::actor::send_closure(SelfId, &Indexer::skip_account, block_id);
