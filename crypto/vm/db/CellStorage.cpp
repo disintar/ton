@@ -127,7 +127,7 @@ CellLoader::CellLoader(std::shared_ptr<KeyValueReader> reader) : reader_(std::mo
 }
 
 td::Result<CellLoader::LoadResult> CellLoader::load(td::Slice hash, bool need_data, ExtCellCreator &ext_cell_creator) {
-  LOG(ERROR) << "Storage: load cell " << hash.size() << " " << td::base64_encode(hash);
+//  LOG(ERROR) << "Storage: load cell " << hash.size() << " " << td::base64_encode(hash);
   LoadResult res;
   std::string serialized;
 
