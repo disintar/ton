@@ -1771,7 +1771,7 @@ void ValidatorEngine::start_validator() {
     }
   }
 
-  td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::set_block_publisher, std::move(publisher_))publisher-_temp_
+  td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::set_block_publisher, std::move(publisher_temp_));
   started_validator();
 }
 
