@@ -130,21 +130,29 @@ td::Result<CellLoader::LoadResult> CellLoader::load(td::Slice hash, bool need_da
   LOG(ERROR) << "Storage: load cell " << hash.size() << " " << td::base64_encode(hash);
   LoadResult res;
   std::string serialized;
+  LOG(DEBUG) << "Get status";
   TRY_RESULT(get_status, reader_->get(hash, serialized));
+  LOG(DEBUG) << "Is ok?";
   if (get_status != KeyValue::GetStatus::Ok) {
     DCHECK(get_status == KeyValue::GetStatus::NotFound);
     return res;
   }
-
+  LOG(DEBUG) << "OK!";
   res.status = LoadResult::Ok;
 
+  LOG(DEBUG) << "Parse 1!";
   RefcntCellParser refcnt_cell(need_data);
+  LOG(DEBUG) << "Parse 2!";
   td::TlParser parser(serialized);
+  LOG(DEBUG) << "Parse 3!";
   refcnt_cell.parse(parser, ext_cell_creator);
+  LOG(DEBUG) << "Parse 4!";
   TRY_STATUS(parser.get_status());
-
+  LOG(DEBUG) << "Parse 5!";
   res.refcnt_ = refcnt_cell.refcnt;
+  LOG(DEBUG) << "Parse 6!";
   res.cell_ = std::move(refcnt_cell.cell);
+  LOG(DEBUG) << "Parse 7!";
   //CHECK(res.cell_->get_hash() == hash);
 
   return res;

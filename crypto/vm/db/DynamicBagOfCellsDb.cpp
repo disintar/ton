@@ -105,7 +105,7 @@ class DynamicBagOfCellsDbImpl : public DynamicBagOfCellsDb, private ExtCellCreat
     executor->execute_async(
         [executor, loader = *loader_, hash = CellHash::from_slice(hash), db = this,
          ext_cell_creator = std::move(ext_cell_creator), promise = std::move(promise_ptr)]() mutable {
-          auto r_name = (loader.load(hash.as_slice(), true, ext_cell_creator));
+          auto r_name = loader.load(hash.as_slice(), true, ext_cell_creator);
           if (r_name.is_error()) {
             (*promise).set_error(r_name.move_as_error());
             return;
