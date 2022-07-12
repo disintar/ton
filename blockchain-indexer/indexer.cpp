@@ -395,7 +395,7 @@ class Indexer : public td::actor::Actor {
         [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
           if (R.is_error()) {
             td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
-//            decrease_block_padding();
+            //            decrease_block_padding();
             LOG(ERROR) << R.move_as_error().to_string();
           } else {
             auto handle = R.move_as_ok();
@@ -429,7 +429,7 @@ class Indexer : public td::actor::Actor {
               if (R.is_error()) {
                 LOG(ERROR) << R.move_as_error().to_string();
                 td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
-//                decrease_block_padding();
+                //                decrease_block_padding();
               } else {
                 auto handle = R.move_as_ok();
                 LOG(DEBUG) << "got block from db " << handle->id().to_str();
@@ -454,7 +454,7 @@ class Indexer : public td::actor::Actor {
 
         LOG(ERROR) << R.move_as_error().to_string();
         td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
-//        decrease_state_padding();
+        //        decrease_state_padding();
         return;
       } else {
         auto handle = R.move_as_ok();
@@ -829,8 +829,8 @@ class Indexer : public td::actor::Actor {
           accounts.emplace_back(account_block_parsed);
         }
 
-        if (true /*accounts_keys.size() > 0*/) {
-//          increase_state_padding();
+        if (!accounts_keys.empty()) {
+          //          increase_state_padding();
           td::actor::send_closure(SelfId, &Indexer::increase_state_padding);
           td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
         }
@@ -1019,7 +1019,7 @@ class Indexer : public td::actor::Actor {
             std::move(answer));
 
         td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
-//        decrease_block_padding();
+        //        decrease_block_padding();
 
         if (is_first && !info.not_master) {
           td::actor::send_closure(SelfId, &Indexer::parse_other);
@@ -1038,7 +1038,7 @@ class Indexer : public td::actor::Actor {
     }
 
     progress_changed();
-//    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
+    //    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void decrease_block_padding() {
@@ -1055,7 +1055,7 @@ class Indexer : public td::actor::Actor {
     }
 
     progress_changed();
-//    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
+    //    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void increase_state_padding() {
@@ -1066,7 +1066,7 @@ class Indexer : public td::actor::Actor {
     }
 
     progress_changed();
-//    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
+    //    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void decrease_state_padding() {
@@ -1083,7 +1083,7 @@ class Indexer : public td::actor::Actor {
     }
 
     progress_changed();
-//    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
+    //    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
   void progress_changed() {
@@ -1092,7 +1092,7 @@ class Indexer : public td::actor::Actor {
       display_speed();
     }
 
-    if (block_padding_ == 0 && state_padding_ == 0) { // TODO: add some mutexes
+    if (block_padding_ == 0 && state_padding_ == 0) {  // TODO: add some mutexes
       LOG(WARNING) << "Block&State paddings reached 0; Dump json files;";
       dumper_->forceDump();
 
@@ -1104,7 +1104,7 @@ class Indexer : public td::actor::Actor {
               if (R.is_error()) {
                 LOG(ERROR) << R.move_as_error().to_string();
                 td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
-//                decrease_block_padding();
+                //                decrease_block_padding();
               } else {
                 auto handle = R.move_as_ok();
                 LOG(DEBUG) << "got block from db " << handle->id().to_str();
@@ -1114,7 +1114,7 @@ class Indexer : public td::actor::Actor {
 
         ///TODO: clean this super dirty stuff
         td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
-//        ++block_padding_;
+        //        ++block_padding_;
 
         ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
 
@@ -1419,10 +1419,10 @@ class Indexer : public td::actor::Actor {
 
       auto it = pending_blocks_accounts_.find(block_id);
       if (it != pending_blocks_accounts_.end()) {
-//        it->second.emplace_back(std::move(data));
+        //        it->second.emplace_back(std::move(data));
       } else {  // first parsed account
         std::vector<json> data_for_waiting;
-//        data_for_waiting.emplace_back(std::move(data));
+        //        data_for_waiting.emplace_back(std::move(data));
 
         auto p = std::make_pair(block_id, data_for_waiting);
         pending_blocks_accounts_.emplace(p);
@@ -1444,7 +1444,7 @@ class Indexer : public td::actor::Actor {
         return;
       }
       // save parsed accounts
-//      it_data->second["accounts"] = it->second;
+      //      it_data->second["accounts"] = it->second;
 
       {
         std::lock_guard<std::mutex> lock_internal(stored_counter_mtx_);
@@ -1463,7 +1463,6 @@ class Indexer : public td::actor::Actor {
       td::actor::send_closure(actor_id(this), &Indexer::decrease_state_padding);
       //      decrease_state_padding();
     }
-
   }
 };  // namespace validator
 }  // namespace validator
