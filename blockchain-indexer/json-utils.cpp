@@ -168,7 +168,7 @@ json parse_state_init(vm::CellSlice state_init) {
   json answer;
 
   block::gen::StateInit::Record state_init_parsed;
-  auto is_good = tlb::unpack(state_init, state_init_parsed));
+  auto is_good = tlb::unpack(state_init, state_init_parsed);
 
   if (is_good) {
     if ((int)state_init_parsed.split_depth->prefetch_ulong(1) == 1) {
