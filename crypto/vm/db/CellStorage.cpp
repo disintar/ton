@@ -147,7 +147,14 @@ td::Result<CellLoader::LoadResult> CellLoader::load(td::Slice hash, bool need_da
   LOG(DEBUG) << "Parse 3!";
   refcnt_cell.parse(parser, ext_cell_creator);
   LOG(DEBUG) << "Parse 4!";
-  TRY_STATUS(parser.get_status());
+  auto try_status = parser.get_status();
+  if (try_status.is_error()) {
+    LOG(ERROR) << try_status.error().to_string();
+    LOG(ERROR) << try_status.error().public_message();
+    auto e = try_status.move_as_error();
+    LOG(ERROR) << e;
+    return e;
+  }
   LOG(DEBUG) << "Parse 5!";
   res.refcnt_ = refcnt_cell.refcnt;
   LOG(DEBUG) << "Parse 6!";
