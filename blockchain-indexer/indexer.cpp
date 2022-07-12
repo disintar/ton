@@ -1286,7 +1286,7 @@ class Indexer : public td::actor::Actor {
 
             vm::AugmentedDictionary accounts{vm::load_cell_slice_ref(shard_state.accounts), 256,
                                              block::tlb::aug_ShardAccounts};
-            td::actor::send_closure(SelfId, &Indexer::add_done_block, answer, block_id, accounts_keys.size());
+//            td::actor::send_closure(SelfId, &Indexer::add_done_block, answer, block_id, accounts_keys.size());
 
             if (accounts_keys.empty()) {
               // save parsed accounts
@@ -1324,7 +1324,7 @@ class Indexer : public td::actor::Actor {
                 LOG(DEBUG) << "Parse account: (" << block_id.to_str() << ":" << account.to_hex() << ")";
                 block::gen::ShardAccount::Record sa;
                 block::gen::CurrencyCollection::Record dbi_cc;
-                CHECK(tlb::unpack(value, sa));
+                CHECK(tlb::unpack(value.write(), sa));
                 json data;
 
                 data["account_address"] = {{"workchain", block_id.id.workchain}, {"address", account.to_hex()}};
