@@ -90,7 +90,7 @@ set(VALIDATOR_SOURCE
   ${VALIDATOR_DB_SOURCE}
 
   ${VALIDATOR_HEADERS}
-        db/BlockPublisher.hpp db/BlockPublisher.cpp)
+)
 
 set(DISK_VALIDATOR_SOURCE
   apply-block.cpp
@@ -190,17 +190,16 @@ target_include_directories(full-node PUBLIC
   ${OPENSSL_INCLUDE_DIR}
   )
 
-find_package(Threads)
-find_package(cppzmq)
+
 
 target_link_libraries(validator PRIVATE tdutils tdactor adnl rldp tl_api dht tdfec
-  overlay catchain validatorsession ton_crypto ton_block ton_db cppzmq Threads::Threads)
+  overlay catchain validatorsession ton_crypto ton_block ton_db)
 
 target_link_libraries(validator-disk PRIVATE ton_validator tdutils tdactor adnl rldp tl_api dht tdfec
-  overlay catchain validatorsession ton_crypto ton_block ton_db cppzmq Threads::Threads)
+  overlay catchain validatorsession ton_crypto ton_block ton_db)
 
 target_link_libraries(validator-hardfork PRIVATE tdutils tdactor adnl rldp tl_api dht tdfec
-  overlay catchain validatorsession ton_crypto ton_block ton_db cppzmq Threads::Threads)
+  overlay catchain validatorsession ton_crypto ton_block ton_db)
 
 target_link_libraries(full-node PRIVATE tdutils tdactor adnl rldp tl_api dht tdfec
-  overlay catchain validatorsession ton_crypto ton_block ton_db cppzmq Threads::Threads)
+  overlay catchain validatorsession ton_crypto ton_block ton_db)

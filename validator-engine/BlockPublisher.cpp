@@ -3,11 +3,9 @@
 
 namespace ton::validator {
 
-BlockPublisher::BlockPublisher(const std::string& endpoint) : socket(ctx, zmq::socket_type::pub) {
-  socket.bind(endpoint);
-}
+// BlockPublisherParser
 
-void BlockPublisher::storeBlockData(BlockHandle handle, td::Ref<BlockData> block) {
+void BlockPublisherParser::storeBlockData(BlockHandle handle, td::Ref<BlockData> block) {
   LOG(WARNING) << "Store block: " << block->block_id().to_str();
   CHECK(block.not_null());
 
@@ -543,7 +541,7 @@ void BlockPublisher::storeBlockData(BlockHandle handle, td::Ref<BlockData> block
   publishBlockData(answer.dump());
 }
 
-void BlockPublisher::storeBlockState(BlockHandle handle, td::Ref<ShardState> state) {
+void BlockPublisherParser::storeBlockState(BlockHandle handle, td::Ref<ShardState> state) {
   std::lock_guard<std::mutex> lock(maps_mtx);
   const auto block_id = state->get_block_id();
   const std::string key = std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
@@ -557,7 +555,7 @@ void BlockPublisher::storeBlockState(BlockHandle handle, td::Ref<ShardState> sta
   }
 }
 
-void BlockPublisher::gotState(BlockHandle handle, td::Ref<ShardState> state, std::vector<td::Bits256> accounts_keys) {
+void BlockPublisherParser::gotState(BlockHandle handle, td::Ref<ShardState> state, std::vector<td::Bits256> accounts_keys) {
   auto block_id = state->get_block_id();
   LOG(WARNING) << "Parse state: " << block_id.to_str();
   CHECK(state.not_null());
@@ -742,16 +740,47 @@ void BlockPublisher::gotState(BlockHandle handle, td::Ref<ShardState> state, std
   publishBlockState(answer.dump());
 }
 
-void BlockPublisher::publishBlockData(const std::string& json) {
+// BlockPublisherZMQ
+
+BlockPublisherZMQ::BlockPublisherZMQ(const std::string& endpoint) : socket(ctx, zmq::socket_type::pub) {
+  socket.bind(endpoint);
+}
+
+void BlockPublisherZMQ::publishBlockData(const std::string& json) {
   std::lock_guard<std::mutex> guard(net_mtx);
   socket.send(zmq::str_buffer("block/data"), zmq::send_flags::sndmore);
   socket.send(zmq::message_t(json.c_str(), json.size()));
 }
 
-void BlockPublisher::publishBlockState(const std::string& json) {
+void BlockPublisherZMQ::publishBlockState(const std::string& json) {
   std::lock_guard<std::mutex> guard(net_mtx);
   socket.send(zmq::str_buffer("block/state"), zmq::send_flags::sndmore);
   socket.send(zmq::message_t(json.c_str(), json.size()));
+}
+
+// BlockPublisherZMQ
+
+BlockPublisherRMQ::BlockPublisherRMQ(const std::string& endpoint)
+  : amqp(endpoint), exchange(amqp.createExchange("BlockPublisher")),
+      queue_data(amqp.createQueue("block/data")),
+      queue_state(amqp.createQueue("block/state")) {
+  exchange->Declare("BlockPublisher", "direct");
+  queue_data->Declare();
+  queue_data->Bind("BlockPublisher", "");
+  queue_state->Declare();
+  queue_state->Bind("BlockPublisher", "");
+}
+
+void BlockPublisherRMQ::publishBlockData(const std::string& json) {
+  std::lock_guard<std::mutex> guard(net_mtx);
+
+  exchange->Publish(json, "block/data");
+}
+
+void BlockPublisherRMQ::publishBlockState(const std::string& json) {
+  std::lock_guard<std::mutex> guard(net_mtx);
+
+  exchange->Publish(json, "block/state");
 }
 
 }  // namespace ton::validator

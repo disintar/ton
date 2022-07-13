@@ -4,15 +4,22 @@ if (NOT OPENSSL_FOUND)
   find_package(OpenSSL REQUIRED)
 endif()
 
-
 set(VALIDATOR_ENGINE_SOURCE
   validator-engine.hpp
   validator-engine.cpp
+  BlockPublisher.hpp
+  BlockPublisher.cpp
 )
 
 add_executable(validator-engine ${VALIDATOR_ENGINE_SOURCE})
 target_link_libraries(validator-engine overlay tdutils tdactor adnl tl_api dht
   rldp catchain validatorsession full-node validator ton_validator validator
   fift-lib memprof git ${JEMALLOC_LIBRARIES})
+
+find_package(Threads)
+find_package(cppzmq)
+target_link_libraries(validator-engine cppzmq Threads::Threads)
+
+target_link_libraries(validator-engine amqpcpp)
 
 install(TARGETS validator-engine RUNTIME DESTINATION bin)

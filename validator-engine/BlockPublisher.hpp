@@ -4,6 +4,7 @@
 #include <map>
 #include <string>
 #include <zmq.hpp>
+#include <AMQPcpp.h>
 #include "validator/interfaces/block-handle.h"
 #include "validator/interfaces/block.h"
 #include "validator/interfaces/shard.h"
@@ -24,26 +25,53 @@ class BlockPublisherIgnore : public IBlockPublisher {
   void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) override {};
 };
 
-class BlockPublisher : public IBlockPublisher {
+// helper class, do not use it
+class BlockPublisherParser : public IBlockPublisher {
  public:
-  explicit BlockPublisher(const std::string& endpoint);
-
   void storeBlockData(BlockHandle handle, td::Ref<BlockData> block) override;
   void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) override;
-
  private:
   void gotState(BlockHandle handle, td::Ref<ShardState> state, std::vector<td::Bits256> accounts_keys);
-  void publishBlockData(const std::string& json);
-  void publishBlockState(const std::string& json);
+
+  virtual void publishBlockData(const std::string& json) = 0;
+  virtual void publishBlockState(const std::string& json) = 0;
+
+ private:
+  std::mutex maps_mtx;
+  std::map<std::string, std::pair<BlockHandle, td::Ref<ShardState>>> states_;
+  std::map<std::string, std::vector<td::Bits256>> accounts_keys_;
+};
+
+// TODO: separate files
+
+class BlockPublisherZMQ : public BlockPublisherParser {
+ public:
+  explicit BlockPublisherZMQ(const std::string& endpoint);
+
+ private:
+  void publishBlockData(const std::string& json) override;
+  void publishBlockState(const std::string& json) override;
 
  private:
   zmq::context_t ctx;
   zmq::socket_t socket;
   std::mutex net_mtx;
+};
 
-  std::mutex maps_mtx;
-  std::map<std::string, std::pair<BlockHandle, td::Ref<ShardState>>> states_;
-  std::map<std::string, std::vector<td::Bits256>> accounts_keys_;
+class BlockPublisherRMQ : public BlockPublisherParser {
+ public:
+  explicit BlockPublisherRMQ(const std::string& endpoint);
+
+ private:
+  void publishBlockData(const std::string& json) override;
+  void publishBlockState(const std::string& json) override;
+
+ private:
+  AMQP amqp;
+  std::unique_ptr<AMQPExchange> exchange;
+  std::unique_ptr<AMQPQueue> queue_data;
+  std::unique_ptr<AMQPQueue> queue_state;
+  std::mutex net_mtx;
 };
 
 }
