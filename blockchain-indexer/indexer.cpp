@@ -1118,6 +1118,9 @@ class Indexer : public td::actor::Actor {
       LOG(WARNING) << "Block&State paddings reached 0; Dump json files;";
       dumper_->forceDump();
 
+      // clear boc (lib & data & account) cache
+      clear_cache();
+
       if (chunk_current_ != chunk_count_) {
         LOG(WARNING) << "Call parse next chunk";
 
@@ -1195,300 +1198,386 @@ class Indexer : public td::actor::Actor {
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::vector<td::Bits256> accounts_keys) {
-    auto P =
-        td::PromiseCreator::lambda([this, SelfId = actor_id(this), handle,
-                                    accounts_keys = std::move(accounts_keys)](td::Result<td::Ref<vm::DataCell>> R) {
-          if (R.is_error()) {
-            LOG(ERROR) << R.move_as_error().to_string();
-          } else {
-            auto root_cell = R.move_as_ok();
-            auto block_id = handle->id();
-            block::gen::ShardStateUnsplit::Record shard_state;
-            CHECK(tlb::unpack_cell(root_cell, shard_state));
+    auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this), handle,
+                                         accounts_keys =
+                                             std::move(accounts_keys)](td::Result<td::Ref<vm::DataCell>> R) {
+      if (R.is_error()) {
+        LOG(ERROR) << R.move_as_error().to_string();
+      } else {
+        auto root_cell = R.move_as_ok();
+        auto block_id = handle->id();
+        block::gen::ShardStateUnsplit::Record shard_state;
+        CHECK(tlb::unpack_cell(root_cell, shard_state));
 
-            std::vector<std::tuple<int, std::string>> dummy;
+        std::vector<std::tuple<int, std::string>> dummy;
 
-            block::gen::CurrencyCollection::Record total_balance_cc;
-            block::gen::CurrencyCollection::Record total_validator_fees_cc;
+        block::gen::CurrencyCollection::Record total_balance_cc;
+        block::gen::CurrencyCollection::Record total_validator_fees_cc;
 
-            CHECK(tlb::unpack(shard_state.r1.total_balance.write(), total_balance_cc))
-            CHECK(tlb::unpack(shard_state.r1.total_validator_fees.write(), total_validator_fees_cc))
+        CHECK(tlb::unpack(shard_state.r1.total_balance.write(), total_balance_cc))
+        CHECK(tlb::unpack(shard_state.r1.total_validator_fees.write(), total_validator_fees_cc))
 
-            json total_balance = {{"grams", block::tlb::t_Grams.as_integer(total_balance_cc.grams)->to_dec_string()},
-                                  {"extra", total_balance_cc.other->have_refs()
-                                                ? parse_extra_currency(total_balance_cc.other->prefetch_ref())
-                                                : dummy}};
+        json total_balance = {
+            {"grams", block::tlb::t_Grams.as_integer(total_balance_cc.grams)->to_dec_string()},
+            {"extra", total_balance_cc.other->have_refs() ? parse_extra_currency(total_balance_cc.other->prefetch_ref())
+                                                          : dummy}};
 
-            json total_validator_fees = {
-                {"grams", block::tlb::t_Grams.as_integer(total_validator_fees_cc.grams)->to_dec_string()},
-                {"extra", total_balance_cc.other->have_refs()
-                              ? parse_extra_currency(total_validator_fees_cc.other->prefetch_ref())
-                              : dummy}};
+        json total_validator_fees = {
+            {"grams", block::tlb::t_Grams.as_integer(total_validator_fees_cc.grams)->to_dec_string()},
+            {"extra", total_balance_cc.other->have_refs()
+                          ? parse_extra_currency(total_validator_fees_cc.other->prefetch_ref())
+                          : dummy}};
 
-            json answer = {
-                {"type", "shard_state"},
-                {"id",
-                 {
-                     {"workchain", block_id.id.workchain},
-                     {"seqno", block_id.id.seqno},
-                     {"shard", block_id.id.shard},
-                 }},
-                {"seq_no", shard_state.seq_no},
-                {"vert_seq_no", shard_state.vert_seq_no},
-                {"gen_utime", shard_state.gen_utime},
-                {"gen_lt", shard_state.gen_lt},
-                {"min_ref_mc_seqno", shard_state.min_ref_mc_seqno},
-                {"before_split", shard_state.before_split},
-                {"overload_history", shard_state.r1.overload_history},
-                {"underload_history", shard_state.r1.underload_history},
-                {"total_balance", total_balance},
-                {"total_validator_fees", total_validator_fees},
-            };
+        json answer = {
+            {"type", "shard_state"},
+            {"id",
+             {
+                 {"workchain", block_id.id.workchain},
+                 {"seqno", block_id.id.seqno},
+                 {"shard", block_id.id.shard},
+             }},
+            {"seq_no", shard_state.seq_no},
+            {"vert_seq_no", shard_state.vert_seq_no},
+            {"gen_utime", shard_state.gen_utime},
+            {"gen_lt", shard_state.gen_lt},
+            {"min_ref_mc_seqno", shard_state.min_ref_mc_seqno},
+            {"before_split", shard_state.before_split},
+            {"overload_history", shard_state.r1.overload_history},
+            {"underload_history", shard_state.r1.underload_history},
+            {"total_balance", total_balance},
+            {"total_validator_fees", total_validator_fees},
+        };
 
-            if (shard_state.r1.libraries->have_refs()) {
-              auto libraries = vm::Dictionary{shard_state.r1.libraries->prefetch_ref(), 256};
+        if (shard_state.r1.libraries->have_refs()) {
+          auto libraries = vm::Dictionary{shard_state.r1.libraries->prefetch_ref(), 256};
 
-              std::vector<json> libs;
-              while (!libraries.is_empty()) {
-                td::BitArray<256> key{};
-                libraries.get_minmax_key(key);
-                auto lib = libraries.lookup_delete(key);
+          std::vector<json> libs;
+          while (!libraries.is_empty()) {
+            td::BitArray<256> key{};
+            libraries.get_minmax_key(key);
+            auto lib = libraries.lookup_delete(key);
 
-                block::gen::LibDescr::Record libdescr;
-                CHECK(tlb::unpack(lib.write(), libdescr));
+            block::gen::LibDescr::Record libdescr;
+            CHECK(tlb::unpack(lib.write(), libdescr));
 
-                std::vector<std::string> publishers;
+            std::vector<std::string> publishers;
 
-                auto libs_publishers = libdescr.publishers.write();
+            auto libs_publishers = libdescr.publishers.write();
 
-                vm::CellBuilder cb;
-                Ref<vm::Cell> cool_cell;
+            vm::CellBuilder cb;
+            Ref<vm::Cell> cool_cell;
 
-                cb.append_cellslice(libs_publishers);
-                cb.finalize_to(cool_cell);
+            cb.append_cellslice(libs_publishers);
+            cb.finalize_to(cool_cell);
 
-                auto publishers_dict = vm::Dictionary{cool_cell, 256};
+            auto publishers_dict = vm::Dictionary{cool_cell, 256};
 
-                while (!publishers_dict.is_empty()) {
-                  td::BitArray<256> publisher{};
-                  publishers_dict.get_minmax_key(publisher);
-                  publishers_dict.lookup_delete(publisher);
+            while (!publishers_dict.is_empty()) {
+              td::BitArray<256> publisher{};
+              publishers_dict.get_minmax_key(publisher);
+              publishers_dict.lookup_delete(publisher);
 
-                  publishers.emplace_back(publisher.to_hex());
-                }
-
-                json data = {{"hash", key.to_hex()}, {"lib", dump_as_boc(libdescr.lib)}, {"publishers", publishers}};
-                libs.emplace_back(std::move(data));
-              }
-
-              answer["libraries"] = std::move(libs);
+              publishers.emplace_back(publisher.to_hex());
             }
 
-            vm::AugmentedDictionary accounts{vm::load_cell_slice_ref(shard_state.accounts), 256,
-                                             block::tlb::aug_ShardAccounts};
-            td::actor::send_closure(SelfId, &Indexer::add_done_block, answer, block_id, accounts_keys.size());
+            json data = {{"hash", key.to_hex()}, {"lib", dump_as_boc(libdescr.lib)}, {"publishers", publishers}};
+            libs.emplace_back(std::move(data));
+          }
 
-            if (accounts_keys.empty()) {
-              // save parsed accounts
-              std::vector<json> accounts_parsed;
-              answer["accounts"] = accounts_parsed;
+          answer["libraries"] = std::move(libs);
+        }
 
-              {
-                std::lock_guard<std::mutex> lock(stored_counter_mtx_);
-                ++stored_states_counter_;
-              }
+        vm::AugmentedDictionary accounts{vm::load_cell_slice_ref(shard_state.accounts), 256,
+                                         block::tlb::aug_ShardAccounts};
+        //            td::actor::send_closure(SelfId, &Indexer::add_done_block, answer, block_id, accounts_keys.size());
 
-              dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) +
-                                      ":" + std::to_string(block_id.id.seqno),
-                                  std::move(answer));
+        if (accounts_keys.empty()) {
+          // save parsed accounts
+          std::vector<json> accounts_parsed;
+          answer["accounts"] = accounts_parsed;
 
-              LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
-              decrease_state_padding();
+          {
+            std::lock_guard<std::mutex> lock(stored_counter_mtx_);
+            ++stored_states_counter_;
+          }
 
-            } else {
-              for (const auto &account : accounts_keys) {
-                auto value = accounts.lookup(account.cbits(), 256);
+          dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+                                  std::to_string(block_id.id.seqno),
+                              std::move(answer));
 
-                if (value.not_null()) {  // todo: value could be null (?) and indexer will infinity waiting it
-                  execute_async([=, value_write = value.write()]() {
-                    //                    td::actor::send_closure(SelfId, &Indexer::parse_account, block_id, value.write(), account.to_hex());
-                    parse_account(block_id, value_write, account.to_hex());
-                  });
-                } else {
-                  LOG(ERROR) << account.to_hex() << " NOT FOUND IN BLOCK " << block_id.to_str();
-                  td::actor::send_closure(SelfId, &Indexer::skip_account, block_id);
+          LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
+          decrease_state_padding();
+
+        } else {
+          std::vector<json> json_accounts;
+
+          for (const auto &account : accounts_keys) {
+            auto value = accounts.lookup(account.cbits(), 256);
+            //                TODO: maybe async is faster
+            //                if (value.not_null()) {  // todo: value could be null (?) and indexer will infinity waiting it
+            //                  //                  execute_async([=, value_write = value.write()]() {
+            //                  td::actor::send_closure(SelfId, &Indexer::parse_account, block_id, value.write(), account.to_hex());
+            //                  //                    parse_account(block_id, value_write, account.to_hex());
+            //                  //                  });
+            //                } else {
+            //                  LOG(ERROR) << account.to_hex() << " NOT FOUND IN BLOCK " << block_id.to_str();
+            //                  td::actor::send_closure(SelfId, &Indexer::skip_account, block_id);
+            //                }
+
+            if (value.not_null()) {
+              block::gen::ShardAccount::Record sa;
+              block::gen::CurrencyCollection::Record dbi_cc;
+              CHECK(tlb::unpack(value.write(), sa));
+              json data;
+
+              data["account_address"] = {{"workchain", block_id.id.workchain}, {"address", account.to_hex()}};
+              data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}};
+
+              auto account_cell = load_cell_slice(sa.account);
+              auto acc_tag = block::gen::t_Account.get_tag(account_cell);
+
+              if (acc_tag == block::gen::t_Account.account) {
+                block::gen::Account::Record_account acc;
+                block::gen::StorageInfo::Record si;
+                block::gen::AccountStorage::Record as;
+                block::gen::StorageUsed::Record su;
+                block::gen::CurrencyCollection::Record balance;
+
+                CHECK(tlb::unpack(account_cell, acc));
+
+                CHECK(tlb::unpack(acc.storage.write(), as));
+                CHECK(tlb::unpack(acc.storage_stat.write(), si));
+                CHECK(tlb::unpack(si.used.write(), su));
+                CHECK(tlb::unpack(as.balance.write(), balance));
+                data["account"]["addr"] = parse_address(acc.addr.write());
+                std::string due_payment;
+
+                if (si.due_payment->prefetch_ulong(1) > 0) {
+                  auto due = si.due_payment.write();
+                  due.fetch_bits(1);  // maybe
+                  due_payment = block::tlb::t_Grams.as_integer(due)->to_dec_string();
                 }
+
+                data["account"]["storage_stat"] = {{"last_paid", si.last_paid}, {"due_payment", due_payment}};
+
+                data["account"]["storage_stat"]["used"] = {
+                    {"cells", block::tlb::t_VarUInteger_7.as_uint(su.cells.write())},
+                    {"bits", block::tlb::t_VarUInteger_7.as_uint(su.bits.write())},
+                    {"public_cells", block::tlb::t_VarUInteger_7.as_uint(su.public_cells.write())},
+                };
+
+                data["account"]["storage"] = {{"last_trans_lt", as.last_trans_lt}};
+
+                data["account"]["storage"]["balance"] = {
+                    {"grams", block::tlb::t_Grams.as_integer(balance.grams)->to_dec_string()},
+                    {"extra",
+                     balance.other->have_refs() ? parse_extra_currency(balance.other->prefetch_ref()) : dummy}};
+
+                auto tag = block::gen::t_AccountState.get_tag(as.state.write());
+
+                if (tag == block::gen::t_AccountState.account_uninit) {
+                  data["account"]["state"] = {{"type", "uninit"}};
+                }
+
+                else if (tag == block::gen::t_AccountState.account_active) {
+                  block::gen::AccountState::Record_account_active active_account;
+                  CHECK(tlb::unpack(as.state.write(), active_account));
+
+                  data["account"]["state"] = {{"type", "active"},
+                                              {"state_init", parse_state_init(active_account.x.write())}};
+
+                }
+
+                else if (tag == block::gen::t_AccountState.account_frozen) {
+                  block::gen::AccountState::Record_account_frozen f{};
+                  CHECK(tlb::unpack(as.state.write(), f))
+                  data["account"]["state"] = {{"type", "frozen"}, {"state_hash", f.state_hash.to_hex()}};
+                }
+
+                json_accounts.emplace_back(data);
               }
             }
           }
-        });
+          answer["accounts"] = json_accounts;
 
-    LOG(DEBUG) << "getting state from db " << handle->id().to_str();
+          dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+                                  std::to_string(block_id.id.seqno),
+                              std::move(answer));
+
+          LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
+          td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
+          //              decrease_state_padding();
+        }
+      }
+    });
+
+    LOG(DEBUG) << "getting state from db " << handle->id().to_str() << " "
+               << td::base64_encode(handle->id().root_hash.as_slice());
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle,
                             std::move(P));
   }
 
-  void add_done_block(const json &block, BlockIdExt block_id, td::uint64 accounts_count) {
-    std::lock_guard<std::mutex> lock(pending_blocks_mtx_);
-
-    auto data = std::make_pair(block_id, block);
-    auto size_data = std::make_pair(block_id, accounts_count);
-
-    pending_blocks_.emplace(data);
-    pending_blocks_size_.insert(size_data);
-  }
-
-  void skip_account(BlockIdExt block_id) {
-    auto it_cnt = pending_blocks_size_.find(block_id);
-    if (it_cnt != pending_blocks_size_.end()) {
-      if ((*it_cnt).second == 1) {
-        // dump
-        auto it_data = pending_blocks_.find(block_id);
-        if (it_data != pending_blocks_.end()) {
-          //          auto answer = std::move((*it_data).second);
-          //
-          //          // save parsed accounts
-          //          answer["accounts"] = std::move((*it).second);
-          //
-          //          {
-          //            std::lock_guard<std::mutex> lock(stored_counter_mtx_);
-          //            ++stored_states_counter_;
-          //          }
-          //                    dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
-          //                                            std::to_string(block_id.id.seqno),
-          //                                        std::move(answer));
-
-          LOG(WARNING) << "received & parsed state from db " << block_id.to_str();
-          decrease_state_padding();
-        }
-      } else {
-        (*it_cnt).second = (*it_cnt).second - 1;
-        LOG(WARNING) << "Skip account in block: " << block_id.to_str() << " Accounts: " << (*it_cnt).second;
-      }
-    }
-  }
-
-  void parse_account(BlockIdExt block_id, vm::CellSlice value, std::string account_address) {
-    LOG(DEBUG) << "Parse account: (" << block_id.to_str() << ":" << account_address << ")";
-    block::gen::ShardAccount::Record sa;
-    block::gen::CurrencyCollection::Record dbi_cc;
-    std::vector<std::tuple<int, std::string>> dummy;
-    CHECK(tlb::unpack(value, sa));
-    json data;
-
-    data["account_address"] = {{"workchain", block_id.id.workchain}, {"address", account_address}};
-    data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}};
-
-    auto account_cell = load_cell_slice(sa.account);
-    auto acc_tag = block::gen::t_Account.get_tag(account_cell);
-
-    if (acc_tag == block::gen::t_Account.account) {
-      block::gen::Account::Record_account acc;
-      block::gen::StorageInfo::Record si;
-      block::gen::AccountStorage::Record as;
-      block::gen::StorageUsed::Record su;
-      block::gen::CurrencyCollection::Record balance;
-
-      CHECK(tlb::unpack(account_cell, acc));
-
-      CHECK(tlb::unpack(acc.storage.write(), as));
-      CHECK(tlb::unpack(acc.storage_stat.write(), si));
-      CHECK(tlb::unpack(si.used.write(), su));
-      CHECK(tlb::unpack(as.balance.write(), balance));
-      data["account"]["addr"] = parse_address(acc.addr.write());
-      std::string due_payment;
-
-      if (si.due_payment->prefetch_ulong(1) > 0) {
-        auto due = si.due_payment.write();
-        due.fetch_bits(1);  // maybe
-        due_payment = block::tlb::t_Grams.as_integer(due)->to_dec_string();
-      }
-
-      data["account"]["storage_stat"] = {{"last_paid", si.last_paid}, {"due_payment", due_payment}};
-
-      data["account"]["storage_stat"]["used"] = {
-          {"cells", block::tlb::t_VarUInteger_7.as_uint(su.cells.write())},
-          {"bits", block::tlb::t_VarUInteger_7.as_uint(su.bits.write())},
-          {"public_cells", block::tlb::t_VarUInteger_7.as_uint(su.public_cells.write())},
-      };
-
-      data["account"]["storage"] = {{"last_trans_lt", as.last_trans_lt}};
-
-      data["account"]["storage"]["balance"] = {
-          {"grams", block::tlb::t_Grams.as_integer(balance.grams)->to_dec_string()},
-          {"extra", balance.other->have_refs() ? parse_extra_currency(balance.other->prefetch_ref()) : dummy}};
-
-      auto tag = block::gen::t_AccountState.get_tag(as.state.write());
-
-      if (tag == block::gen::t_AccountState.account_uninit) {
-        data["account"]["state"] = {{"type", "uninit"}};
-      }
-
-      else if (tag == block::gen::t_AccountState.account_active) {
-        block::gen::AccountState::Record_account_active active_account;
-        CHECK(tlb::unpack(as.state.write(), active_account));
-
-        data["account"]["state"] = {{"type", "active"}, {"state_init", parse_state_init(active_account.x.write())}};
-
-      }
-
-      else if (tag == block::gen::t_AccountState.account_frozen) {
-        block::gen::AccountState::Record_account_frozen f{};
-        CHECK(tlb::unpack(as.state.write(), f))
-        data["account"]["state"] = {{"type", "frozen"}, {"state_hash", f.state_hash.to_hex()}};
-      }
-    }
-
-    {
-      std::lock_guard<std::mutex> lock(pending_blocks_mtx_);
-
-      auto it = pending_blocks_accounts_.find(block_id);
-      if (it != pending_blocks_accounts_.end()) {
-        //        it->second.emplace_back(std::move(data));
-      } else {  // first parsed account
-        std::vector<json> data_for_waiting;
-        //        data_for_waiting.emplace_back(std::move(data));
-
-        auto p = std::make_pair(block_id, data_for_waiting);
-        pending_blocks_accounts_.emplace(p);
-      }
-      it = pending_blocks_accounts_.find(block_id);
-
-      auto it_cnt = pending_blocks_size_.find(block_id);
-      if (it_cnt == pending_blocks_size_.end()) {
-        return;
-      }
-      if (it_cnt->second != 1) {
-        it_cnt->second -= 1;
-        return;
-      }
-
-      // dump
-      auto it_data = pending_blocks_.find(block_id);
-      if (it_data == pending_blocks_.end()) {
-        return;
-      }
-      // save parsed accounts
-      //      it_data->second["accounts"] = it->second;
-
-      {
-        std::lock_guard<std::mutex> lock_internal(stored_counter_mtx_);
-        ++stored_states_counter_;
-      }
-      dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
-                              std::to_string(block_id.id.seqno),
-                          it_data->second);
-
-      // clean up
-      pending_blocks_accounts_.erase(it);
-      pending_blocks_size_.erase(it_cnt);
-      pending_blocks_.erase(it_data);
-
-      LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
-      //      td::actor::send_closure(actor_id(this), &Indexer::decrease_state_padding);
-      decrease_state_padding();
-    }
-  }
+  //  void add_done_block(const json &block, BlockIdExt block_id, td::uint64 accounts_count) {
+  //    std::lock_guard<std::mutex> lock(pending_blocks_mtx_);
+  //
+  //    auto data = std::make_pair(block_id, block);
+  //    auto size_data = std::make_pair(block_id, accounts_count);
+  //
+  //    pending_blocks_.emplace(data);
+  //    pending_blocks_size_.insert(size_data);
+  //  }
+  //
+  //  void skip_account(BlockIdExt block_id) {
+  //    auto it_cnt = pending_blocks_size_.find(block_id);
+  //    if (it_cnt != pending_blocks_size_.end()) {
+  //      if ((*it_cnt).second == 1) {
+  //        // dump
+  //        auto it_data = pending_blocks_.find(block_id);
+  //        if (it_data != pending_blocks_.end()) {
+  //          //          auto answer = std::move((*it_data).second);
+  //          //
+  //          //          // save parsed accounts
+  //          //          answer["accounts"] = std::move((*it).second);
+  //          //
+  //          //          {
+  //          //            std::lock_guard<std::mutex> lock(stored_counter_mtx_);
+  //          //            ++stored_states_counter_;
+  //          //          }
+  //          //                    dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+  //          //                                            std::to_string(block_id.id.seqno),
+  //          //                                        std::move(answer));
+  //
+  //          LOG(WARNING) << "received & parsed state from db " << block_id.to_str();
+  //          decrease_state_padding();
+  //        }
+  //      } else {
+  //        (*it_cnt).second = (*it_cnt).second - 1;
+  //        LOG(WARNING) << "Skip account in block: " << block_id.to_str() << " Accounts: " << (*it_cnt).second;
+  //      }
+  //    }
+  //  }
+  //
+  //  void parse_account(BlockIdExt block_id, vm::CellSlice value, std::string account_address) {
+  //    LOG(DEBUG) << "Parse account: (" << block_id.to_str() << ":" << account_address << ")";
+  //    block::gen::ShardAccount::Record sa;
+  //    block::gen::CurrencyCollection::Record dbi_cc;
+  //    std::vector<std::tuple<int, std::string>> dummy;
+  //    CHECK(tlb::unpack(value, sa));
+  //    json data;
+  //
+  //    data["account_address"] = {{"workchain", block_id.id.workchain}, {"address", account_address}};
+  //    data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}};
+  //
+  //    auto account_cell = load_cell_slice(sa.account);
+  //    auto acc_tag = block::gen::t_Account.get_tag(account_cell);
+  //
+  //    if (acc_tag == block::gen::t_Account.account) {
+  //      block::gen::Account::Record_account acc;
+  //      block::gen::StorageInfo::Record si;
+  //      block::gen::AccountStorage::Record as;
+  //      block::gen::StorageUsed::Record su;
+  //      block::gen::CurrencyCollection::Record balance;
+  //
+  //      CHECK(tlb::unpack(account_cell, acc));
+  //
+  //      CHECK(tlb::unpack(acc.storage.write(), as));
+  //      CHECK(tlb::unpack(acc.storage_stat.write(), si));
+  //      CHECK(tlb::unpack(si.used.write(), su));
+  //      CHECK(tlb::unpack(as.balance.write(), balance));
+  //      data["account"]["addr"] = parse_address(acc.addr.write());
+  //      std::string due_payment;
+  //
+  //      if (si.due_payment->prefetch_ulong(1) > 0) {
+  //        auto due = si.due_payment.write();
+  //        due.fetch_bits(1);  // maybe
+  //        due_payment = block::tlb::t_Grams.as_integer(due)->to_dec_string();
+  //      }
+  //
+  //      data["account"]["storage_stat"] = {{"last_paid", si.last_paid}, {"due_payment", due_payment}};
+  //
+  //      data["account"]["storage_stat"]["used"] = {
+  //          {"cells", block::tlb::t_VarUInteger_7.as_uint(su.cells.write())},
+  //          {"bits", block::tlb::t_VarUInteger_7.as_uint(su.bits.write())},
+  //          {"public_cells", block::tlb::t_VarUInteger_7.as_uint(su.public_cells.write())},
+  //      };
+  //
+  //      data["account"]["storage"] = {{"last_trans_lt", as.last_trans_lt}};
+  //
+  //      data["account"]["storage"]["balance"] = {
+  //          {"grams", block::tlb::t_Grams.as_integer(balance.grams)->to_dec_string()},
+  //          {"extra", balance.other->have_refs() ? parse_extra_currency(balance.other->prefetch_ref()) : dummy}};
+  //
+  //      auto tag = block::gen::t_AccountState.get_tag(as.state.write());
+  //
+  //      if (tag == block::gen::t_AccountState.account_uninit) {
+  //        data["account"]["state"] = {{"type", "uninit"}};
+  //      }
+  //
+  //      else if (tag == block::gen::t_AccountState.account_active) {
+  //        block::gen::AccountState::Record_account_active active_account;
+  //        CHECK(tlb::unpack(as.state.write(), active_account));
+  //
+  //        data["account"]["state"] = {{"type", "active"}, {"state_init", parse_state_init(active_account.x.write())}};
+  //
+  //      }
+  //
+  //      else if (tag == block::gen::t_AccountState.account_frozen) {
+  //        block::gen::AccountState::Record_account_frozen f{};
+  //        CHECK(tlb::unpack(as.state.write(), f))
+  //        data["account"]["state"] = {{"type", "frozen"}, {"state_hash", f.state_hash.to_hex()}};
+  //      }
+  //    }
+  //
+  //    {
+  //      std::lock_guard<std::mutex> lock(pending_blocks_mtx_);
+  //
+  //      auto it = pending_blocks_accounts_.find(block_id);
+  //      if (it != pending_blocks_accounts_.end()) {
+  //        //        it->second.emplace_back(std::move(data));
+  //      } else {  // first parsed account
+  //        std::vector<json> data_for_waiting;
+  //        //        data_for_waiting.emplace_back(std::move(data));
+  //
+  //        auto p = std::make_pair(block_id, data_for_waiting);
+  //        pending_blocks_accounts_.emplace(p);
+  //      }
+  //      it = pending_blocks_accounts_.find(block_id);
+  //
+  //      auto it_cnt = pending_blocks_size_.find(block_id);
+  //      if (it_cnt == pending_blocks_size_.end()) {
+  //        return;
+  //      }
+  //      if (it_cnt->second != 1) {
+  //        it_cnt->second -= 1;
+  //        return;
+  //      }
+  //
+  //      // dump
+  //      auto it_data = pending_blocks_.find(block_id);
+  //      if (it_data == pending_blocks_.end()) {
+  //        return;
+  //      }
+  //      // save parsed accounts
+  //      //      it_data->second["accounts"] = it->second;
+  //
+  //      {
+  //        std::lock_guard<std::mutex> lock_internal(stored_counter_mtx_);
+  //        ++stored_states_counter_;
+  //      }
+  //      dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+  //                              std::to_string(block_id.id.seqno),
+  //                          it_data->second);
+  //
+  //      // clean up
+  //      pending_blocks_accounts_.erase(it);
+  //      pending_blocks_size_.erase(it_cnt);
+  //      pending_blocks_.erase(it_data);
+  //
+  //      LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
+  //      //      td::actor::send_closure(actor_id(this), &Indexer::decrease_state_padding);
+  //      decrease_state_padding();
+  //    }
+  //  }
 };  // namespace validator
 }  // namespace validator
 }  // namespace ton
