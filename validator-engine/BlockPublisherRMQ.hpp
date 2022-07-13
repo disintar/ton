@@ -16,9 +16,9 @@ class BlockPublisherRMQ : public BlockPublisherParser {
 
  private:
   AMQP amqp;
-  std::unique_ptr<AMQPExchange> exchange;
-  std::unique_ptr<AMQPQueue> queue_data;
-  std::unique_ptr<AMQPQueue> queue_state;
+  AMQPExchange* exchange;
+  AMQPQueue* queue_data;
+  AMQPQueue* queue_state;
   std::mutex net_mtx;
 };
 
