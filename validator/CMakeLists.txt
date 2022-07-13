@@ -190,16 +190,14 @@ target_include_directories(full-node PUBLIC
   ${OPENSSL_INCLUDE_DIR}
   )
 
-find_package(Threads)
-
 target_link_libraries(validator PRIVATE tdutils tdactor adnl rldp tl_api dht tdfec
-  overlay catchain validatorsession ton_crypto ton_block ton_db Threads::Threads)
+  overlay catchain validatorsession ton_crypto ton_block ton_db)
 
 target_link_libraries(validator-disk PRIVATE ton_validator tdutils tdactor adnl rldp tl_api dht tdfec
-  overlay catchain validatorsession ton_crypto ton_block ton_db Threads::Threads)
+  overlay catchain validatorsession ton_crypto ton_block ton_db)
 
 target_link_libraries(validator-hardfork PRIVATE tdutils tdactor adnl rldp tl_api dht tdfec
-  overlay catchain validatorsession ton_crypto ton_block ton_db Threads::Threads)
+  overlay catchain validatorsession ton_crypto ton_block ton_db)
 
 target_link_libraries(full-node PRIVATE tdutils tdactor adnl rldp tl_api dht tdfec
-  overlay catchain validatorsession ton_crypto ton_block ton_db Threads::Threads)
+  overlay catchain validatorsession ton_crypto ton_block ton_db)
