@@ -1771,7 +1771,7 @@ void ValidatorEngine::start_validator() {
     }
   }
 
-  LOG(ERROR) << "set_block_publisher";
+//  LOG(ERROR) << "set_block_publisher";
   td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::set_block_publisher, std::move(publisher_temp_));
   started_validator();
 }

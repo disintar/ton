@@ -84,6 +84,7 @@ class RootDb : public Db {
     if (publisher == nullptr) {
       LOG(ERROR) << "Received nullptr IBlockPublisher";
       publisher = std::make_unique<ton::validator::BlockPublisherIgnore>();
+      return;
     }
     publisher_ = std::move(publisher);
   }

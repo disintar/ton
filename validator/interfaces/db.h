@@ -30,7 +30,7 @@ class Db : public td::actor::Actor {
  public:
   virtual ~Db() = default;
   virtual void set_block_publisher(std::unique_ptr<IBlockPublisher> publisher) {
-    LOG(ERROR) << "set_block_publisher";
+//    LOG(ERROR) << "set_block_publisher";
   }
 
   virtual void store_block_data(BlockHandle handle, td::Ref<BlockData> data, td::Promise<td::Unit> promise) = 0;

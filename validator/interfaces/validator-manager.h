@@ -165,7 +165,7 @@ class ValidatorManager : public ValidatorManagerInterface {
   virtual void wait_shard_client_state(BlockSeqno seqno, td::Timestamp timeout, td::Promise<td::Unit> promise) = 0;
 
   void set_block_publisher(std::unique_ptr<IBlockPublisher> publisher) override {
-    LOG(ERROR) << "set_block_publisher";
+//    LOG(ERROR) << "set_block_publisher";
   } ///TODO: make it pure virtual
 
   static bool is_persistent_state(UnixTime ts, UnixTime prev_ts) {
