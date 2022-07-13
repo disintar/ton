@@ -42,7 +42,7 @@
 #include "auto/tl/ton_api_json.h"
 #include "auto/tl/ton_api.hpp"
 
-#include "BlockPublisher.hpp"
+#include "IBlockPublisher.hpp"
 
 enum ValidatorEnginePermissions : td::uint32 { vep_default = 1, vep_modify = 2, vep_unsafe = 4 };
 

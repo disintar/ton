@@ -59,6 +59,8 @@
 
 #include "dht/dht.hpp"
 
+#include "BlockPublisherRMQ.hpp"
+
 #if TD_DARWIN || TD_LINUX
 #include <unistd.h>
 #endif

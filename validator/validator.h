@@ -33,7 +33,7 @@
 #include "interfaces/block.h"
 #include "interfaces/proof.h"
 #include "interfaces/shard.h"
-#include "validator-engine/BlockPublisher.hpp"
+#include "validator-engine/IBlockPublisher.hpp"
 #include "catchain/catchain-types.h"
 
 namespace ton {

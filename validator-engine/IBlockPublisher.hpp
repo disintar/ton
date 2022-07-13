@@ -1,10 +1,8 @@
-#ifndef TON_BLOCKPUBLISHER_HPP
-#define TON_BLOCKPUBLISHER_HPP
+#ifndef TON_IBLOCKPUBLISHER_HPP
+#define TON_IBLOCKPUBLISHER_HPP
 
 #include <map>
 #include <string>
-#include <zmq.hpp>
-#include <AMQPcpp.h>
 #include "validator/interfaces/block-handle.h"
 #include "validator/interfaces/block.h"
 #include "validator/interfaces/shard.h"
@@ -42,37 +40,5 @@ class BlockPublisherParser : public IBlockPublisher {
   std::map<std::string, std::vector<td::Bits256>> accounts_keys_;
 };
 
-// TODO: separate files
-
-class BlockPublisherZMQ : public BlockPublisherParser {
- public:
-  explicit BlockPublisherZMQ(const std::string& endpoint);
-
- private:
-  void publishBlockData(const std::string& json) override;
-  void publishBlockState(const std::string& json) override;
-
- private:
-  zmq::context_t ctx;
-  zmq::socket_t socket;
-  std::mutex net_mtx;
-};
-
-class BlockPublisherRMQ : public BlockPublisherParser {
- public:
-  explicit BlockPublisherRMQ(const std::string& endpoint);
-
- private:
-  void publishBlockData(const std::string& json) override;
-  void publishBlockState(const std::string& json) override;
-
- private:
-  AMQP amqp;
-  std::unique_ptr<AMQPExchange> exchange;
-  std::unique_ptr<AMQPQueue> queue_data;
-  std::unique_ptr<AMQPQueue> queue_state;
-  std::mutex net_mtx;
-};
-
 }
-#endif  //TON_BLOCKPUBLISHER_HPP
+#endif  //TON_IBLOCKPUBLISHER_HPP

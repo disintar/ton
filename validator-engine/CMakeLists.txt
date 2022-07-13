@@ -7,18 +7,22 @@ endif()
 set(VALIDATOR_ENGINE_SOURCE
   validator-engine.hpp
   validator-engine.cpp
-  BlockPublisher.hpp
-  BlockPublisher.cpp
-)
+        IBlockPublisher.hpp
+        IBlockPublisher.cpp
+        BlockPublisherZMQ.cpp BlockPublisherZMQ.hpp BlockPublisherRMQ.cpp BlockPublisherRMQ.hpp)
 
 add_executable(validator-engine ${VALIDATOR_ENGINE_SOURCE})
 target_link_libraries(validator-engine overlay tdutils tdactor adnl tl_api dht
   rldp catchain validatorsession full-node validator ton_validator validator
   fift-lib memprof git ${JEMALLOC_LIBRARIES})
 
+# TODO: option or smth
+
 find_package(Threads)
 find_package(cppzmq)
 target_link_libraries(validator-engine cppzmq Threads::Threads)
+
+# TODO: option or smth
 
 target_link_libraries(validator-engine amqpcpp)
 

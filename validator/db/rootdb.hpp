@@ -65,7 +65,7 @@
 #include "vm/boc.h"
 #include "crypto/block/mc-config.h"
 
-#include "validator-engine/BlockPublisher.hpp"
+#include "validator-engine/IBlockPublisher.hpp"
 
 namespace ton {
 
