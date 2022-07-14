@@ -26,6 +26,7 @@ target_link_libraries(validator-engine cppzmq Threads::Threads)
 
 # TODO: option or smth
 
+target_include_directories(validator-engine PRIVATE ${AMQPCPP_INCLUDE_DIRECTORIES})
 target_link_libraries(validator-engine amqpcpp)
 
 install(TARGETS validator-engine RUNTIME DESTINATION bin)
