@@ -57,6 +57,7 @@ bool clear_cache() {
   std::lock_guard<std::mutex> lock(cache_mtx);
 
   cache.clear();
+  return true;
 }
 
 json parse_address(vm::CellSlice address) {
