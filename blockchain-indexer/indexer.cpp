@@ -186,8 +186,8 @@ class Dumper {
 
 class Indexer : public td::actor::Actor {
  private:
-  std::string db_root_ = "/mnt/ton/ton-node/db";
-  std::string global_config_ /*; = db_root_ + "/global-config.json"*/;
+  std::string db_root_;
+  std::string global_config_;
   BlockSeqno seqno_first_ = 0;
   BlockSeqno seqno_last_ = 0;
   int block_padding_ = 0;
