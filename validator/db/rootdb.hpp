@@ -85,6 +85,7 @@ class RootDb : public Db {
       return;
     }
     publisher_ = std::move(publisher);
+    LOG(INFO) << "Received BlockPublisher";
   }
 
   void start_up() override;
