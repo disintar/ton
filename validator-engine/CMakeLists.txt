@@ -10,7 +10,7 @@ set(VALIDATOR_ENGINE_SOURCE
   IBlockPublisher.hpp
   IBlockPublisher.cpp
   BlockPublisherZMQ.cpp BlockPublisherZMQ.hpp
-#  BlockPublisherRMQ.cpp BlockPublisherRMQ.hpp
+  BlockPublisherRMQ.cpp BlockPublisherRMQ.hpp
 )
 
 add_executable(validator-engine ${VALIDATOR_ENGINE_SOURCE})
@@ -26,6 +26,6 @@ target_link_libraries(validator-engine cppzmq Threads::Threads)
 
 # TODO: option or smth
 
-#target_link_libraries(validator-engine amqpcpp)
+target_link_libraries(validator-engine amqpcpp)
 
 install(TARGETS validator-engine RUNTIME DESTINATION bin)
