@@ -160,6 +160,10 @@ class DynamicBagOfCellsDbImpl : public DynamicBagOfCellsDb, private ExtCellCreat
     to_dec_.push_back(cell);
   }
 
+  void clear_cache() override {
+    hash_table_.clear(); // or maybe: hash_table_ = {};
+  }
+
   bool is_prepared_for_commit() {
     return to_inc_.empty() && to_dec_.empty();
   }

@@ -215,6 +215,9 @@ class ValidatorManagerInterface : public td::actor::Actor {
   virtual void set_block_publisher(std::unique_ptr<IBlockPublisher> publisher) {
 //    LOG(ERROR) << "set_block_publisher";
   } ///TODO: make it pure virtual
+  virtual void clear_celldb_boc_cache() {
+//    LOG(ERROR) << "clear_celldb_boc_cache";
+  } ///TODO: make it pure virtual
 
   virtual void run_ext_query(td::BufferSlice data, td::Promise<td::BufferSlice> promise) = 0;
   virtual void prepare_stats(td::Promise<std::vector<std::pair<std::string, std::string>>> promise) = 0;

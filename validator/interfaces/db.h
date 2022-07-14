@@ -32,6 +32,9 @@ class Db : public td::actor::Actor {
   virtual void set_block_publisher(std::unique_ptr<IBlockPublisher> publisher) {
 //    LOG(ERROR) << "set_block_publisher";
   }
+  virtual void clear_boc_cache() {
+
+  }
 
   virtual void store_block_data(BlockHandle handle, td::Ref<BlockData> data, td::Promise<td::Unit> promise) = 0;
   virtual void get_block_data(ConstBlockHandle handle, td::Promise<td::Ref<BlockData>> promise) = 0;

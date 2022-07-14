@@ -371,6 +371,10 @@ class
 //    LOG(ERROR) << "set_block_publisher";
     td::actor::send_closure(db_, &Db::set_block_publisher, std::move(publisher));
   }
+  void clear_celldb_boc_cache() override {
+    //    LOG(ERROR) << "clear_celldb_boc_cache";
+    td::actor::send_closure(db_, &Db::clear_boc_cache);
+  }
 
  private:
   PublicKeyHash local_id_;

@@ -50,6 +50,8 @@ class DynamicBagOfCellsDb {
   virtual void inc(const Ref<Cell> &old_root) = 0;
   virtual void dec(const Ref<Cell> &old_root) = 0;
 
+  virtual void clear_cache() = 0;
+
   virtual td::Status prepare_commit() = 0;
   virtual Stats get_stats_diff() = 0;
   virtual td::Status commit(CellStorer &) = 0;

@@ -1180,6 +1180,8 @@ class Indexer : public td::actor::Actor {
 
       // clear boc (lib & data & account) cache
       clear_cache();
+      // another clear cache
+      td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::clear_celldb_boc_cache);
 
       if (chunk_current_ != chunk_count_) {
         LOG(WARNING) << "Call parse next chunk";

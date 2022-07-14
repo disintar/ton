@@ -108,6 +108,9 @@ class CellDb : public CellDbBase {
     started_ = true;
     boc_->set_loader(std::make_unique<vm::CellLoader>(std::move(snapshot))).ensure();
   }
+  void clear_boc_cache() {
+    boc_->clear_cache();
+  }
 
   CellDb(td::actor::ActorId<RootDb> root_db, std::string path, bool read_only=false)
       : root_db_(root_db), path_(path), read_only_(read_only) {

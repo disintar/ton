@@ -88,6 +88,10 @@ class RootDb : public Db {
     LOG(INFO) << "Received BlockPublisher";
   }
 
+  void clear_boc_cache() override {
+    td::actor::send_closure(cell_db_, &CellDb::clear_boc_cache);
+  }
+
   void start_up() override;
 
   void store_block_data(BlockHandle handle, td::Ref<BlockData> block, td::Promise<td::Unit> promise) override;
