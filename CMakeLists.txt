@@ -156,6 +156,10 @@ endif()
 #add_subdirectory(third-party/amqpcpp)
 #get_target_property(AMQPCPP_INCLUDE_DIRECTORIES amqpcpp INCLUDE_DIRECTORIES)
 
+# TODO: add option or smth
+add_subdirectory(third-party/cppkafka)
+set(CPPKAFKA_INCLUDE_DIRECTORIES third-party/cppkafka/include)
+
 message("Add ton")
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake" ${CMAKE_MODULE_PATH})
 

@@ -60,7 +60,8 @@
 #include "dht/dht.hpp"
 
 //#include "BlockPublisherRMQ.hpp"
-#include "BlockPublisherZMQ.hpp"
+//#include "BlockPublisherZMQ.hpp"
+#include "BlockPublisherKafka.hpp"
 
 #if TD_DARWIN || TD_LINUX
 #include <unistd.h>
@@ -3547,9 +3548,10 @@ int main(int argc, char *argv[]) {
       });
   p.add_checked_option('u', "user", "change user", [&](td::Slice user) { return td::change_user(user.str()); });
   p.add_checked_option('P', "publish", "publish blocks/states to message queue <endpoint>", [&](td::Slice arg) {
-    // TODO: zmq/rmq choice
+    // TODO: zmq/rmq/kafka choice
 //    acts.push_back([&x, endpoint = arg.str()](){ td::actor::send_closure(x, &ValidatorEngine::set_block_publisher, std::make_unique<ton::validator::BlockPublisherRMQ>(endpoint)); });
-    acts.push_back([&x, endpoint = arg.str()](){ td::actor::send_closure(x, &ValidatorEngine::set_block_publisher, std::make_unique<ton::validator::BlockPublisherZMQ>(endpoint)); });
+//    acts.push_back([&x, endpoint = arg.str()](){ td::actor::send_closure(x, &ValidatorEngine::set_block_publisher, std::make_unique<ton::validator::BlockPublisherZMQ>(endpoint)); });
+    acts.push_back([&x, endpoint = arg.str()](){ td::actor::send_closure(x, &ValidatorEngine::set_block_publisher, std::make_unique<ton::validator::BlockPublisherKafka>(endpoint)); });
     return td::Status::OK();
   });
 
