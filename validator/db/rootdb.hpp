@@ -85,7 +85,7 @@ class RootDb : public Db {
       return;
     }
     publisher_ = std::move(publisher);
-    LOG(INFO) << "Received BlockPublisher";
+//    LOG(INFO) << "Received BlockPublisher";
   }
 
   void clear_boc_cache() override {
