@@ -13,3 +13,6 @@
 [submodule "third-party/amqpcpp"]
 	path = third-party/amqpcpp
 	url = https://github.com/akalend/amqpcpp.git
+[submodule "third-party/cppkafka"]
+	path = third-party/cppkafka
+	url = https://github.com/mfontanini/cppkafka.git
