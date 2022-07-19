@@ -2,11 +2,11 @@
 
 namespace ton::validator {
 
-    BlockPublisherKafka::BlockPublisherKafka(const std::string& endpoint) : producer(
-        cppkafka::Configuration{
-            { "metadata.broker.list", endpoint }
-        }
-    ) {}
+BlockPublisherKafka::BlockPublisherKafka(const std::string& endpoint) : producer(
+    cppkafka::Configuration{
+        { "metadata.broker.list", endpoint }
+    }
+) {}
 
 void BlockPublisherKafka::publishBlockData(const std::string& json) {
   std::lock_guard<std::mutex> guard(net_mtx);
