@@ -29,7 +29,11 @@ target_link_libraries(validator-engine overlay tdutils tdactor adnl tl_api dht
 #target_link_libraries(validator-engine amqpcpp)
 
 # TODO: option or smth
-target_include_directories(validator-engine PRIVATE ${CPPKAFKA_INCLUDE_DIRECTORIES})
+#target_include_directories(validator-engine PRIVATE ${CPPKAFKA_INCLUDE_DIRECTORIES})
 target_link_libraries(validator-engine cppkafka)
+#message("DANGER DANGER DANGER")
+#file(GLOB QWE ${CPPKAFKA_INCLUDE_DIRECTORIES}/*)
+#message("${QWE}")
+#message("DANGER DANGER DANGER")
 
 install(TARGETS validator-engine RUNTIME DESTINATION bin)
