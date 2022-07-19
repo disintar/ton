@@ -159,9 +159,7 @@ endif()
 # TODO: add option or smth
 add_subdirectory(third-party/cppkafka)
 set(CPPKAFKA_INCLUDE_DIRECTORIES third-party/cppkafka/include)
-message("DANGER DANGER DANGER")
-include_directories(${CPPKAFKA_INCLUDE_DIRECTORIES})
-message("DANGER DANGER DANGER")
+include_directories(${CPPKAFKA_INCLUDE_DIRECTORIES}) # I feel bad for doing this, could not manage to do the proper way
 
 message("Add ton")
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake" ${CMAKE_MODULE_PATH})
