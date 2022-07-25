@@ -754,17 +754,17 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
   if (tag == block::gen::t_InMsg.msg_import_ext) {
     answer["type"] = "msg_import_ext";
 
-    block::gen::InMsg::Record_msg_import_ext msg_import_ext;
-    CHECK(tlb::unpack(in_msg, msg_import_ext));
-
-    {
-      vm::CellBuilder cb;
-      cb.store_ref(msg_import_ext.transaction);
-      const auto body_cell = cb.finalize();
-      const auto csr = load_cell_slice_ref(body_cell);
-
-      answer["transaction"] = parse_transaction(csr, workchain);
-    }
+//    block::gen::InMsg::Record_msg_import_ext msg_import_ext;
+//    CHECK(tlb::unpack(in_msg, msg_import_ext));
+//
+//    {
+//      vm::CellBuilder cb;
+//      cb.store_ref(msg_import_ext.transaction);
+//      const auto body_cell = cb.finalize();
+//      const auto csr = load_cell_slice_ref(body_cell);
+//
+//      answer["transaction"] = parse_transaction(csr, workchain);
+//    }
 //    {
 //      vm::CellBuilder cb;
 //      cb.store_ref(msg_import_ext.msg);
@@ -777,23 +777,10 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
   else if (tag == block::gen::t_InMsg.msg_import_ihr) {
     answer["type"] = "msg_import_ihr";
 
-    block::gen::InMsg::Record_msg_import_ihr msg_import_ihr;
-    CHECK(tlb::unpack(in_msg, msg_import_ihr));
-    {
-      vm::CellBuilder cb;
-      cb.store_ref(msg_import_ihr.transaction);
-      const auto body_cell = cb.finalize();
-      const auto csr = load_cell_slice_ref(body_cell);
-
-      answer["transaction"] = parse_transaction(csr, workchain);
-    }
-
-
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_imm) {
     answer["type"] = "msg_import_imm";
-
 
   }
 
@@ -805,20 +792,16 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
   else if (tag == block::gen::t_InMsg.msg_import_tr) {
     answer["type"] = "msg_import_tr";
 
-    block::gen::InMsg::Record_msg_import_tr msg_import_tr;
-    CHECK(tlb::unpack(in_msg, msg_import_tr));
-
-    // TODO: parse
   }
 
   else if (tag == block::gen::t_InMsg.msg_discard_fin) {
     answer["type"] = "msg_discard_fin";
 
-
   }
 
   else if (tag == block::gen::t_InMsg.msg_discard_tr) {
     answer["type"] = "msg_discard_tr";
+
   }
 
   else {
