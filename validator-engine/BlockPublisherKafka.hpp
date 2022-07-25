@@ -15,6 +15,8 @@ class BlockPublisherKafka : public BlockPublisherParser {
   void publishBlockData(const std::string& json) override;
   void publishBlockState(const std::string& json) override;
 
+  void publishBlockError(const std::string& id, const std::string& error);
+
  private:
   std::mutex net_mtx;
   cppkafka::Producer producer;
