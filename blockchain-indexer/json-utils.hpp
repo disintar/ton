@@ -60,8 +60,6 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr);
 
 json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain);
 
-json parse_message_envelope()
-
 json parse_in_msg_descr(vm::CellSlice in_msg, int workchain);
 
 json parse_out_msg_descr(vm::CellSlice out_msg, int workchain);
