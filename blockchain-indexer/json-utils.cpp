@@ -729,6 +729,8 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
   return transaction;
 }
 
+
+
 json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
   //  //
   //  msg_import_ext$000 msg:^(Message Any) transaction:^Transaction
@@ -770,7 +772,11 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
       cb.store_ref(msg_import_ext.msg);
       const auto body_cell = cb.finalize();
 
-      answer["msg"] = parse_message(body_cell);
+        block::gen::Message::Record in_message;
+
+        block::gen::MessageAny messageAny;
+        CHECK(tlb::type_unpack_cell(body_cell, block::gen::t_Message_Any, in_message));
+//      answer["msg"] = parse_message(body_cell);
     }
   }
 
