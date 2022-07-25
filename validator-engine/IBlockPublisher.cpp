@@ -533,10 +533,13 @@ void BlockPublisherParser::storeBlockData(BlockHandle handle, td::Ref<BlockData>
 
   answer["ShardState"] = {{"state_old_hash", state_old_hash}, {"state_hash", state_hash}};
 
-  answer["filename"] = std::string("block_") + std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" +
-                       std::to_string(blkid.seqno());
 
-  publishBlockData(answer.dump());
+  json to_dump = {
+      {"id", std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" + std::to_string(blkid.seqno())},
+      {"data", answer}
+  };
+
+  publishBlockData(to_dump.dump());
 }
 
 void BlockPublisherParser::storeBlockState(BlockHandle handle, td::Ref<ShardState> state) {
@@ -733,9 +736,12 @@ void BlockPublisherParser::gotState(BlockHandle handle, td::Ref<ShardState> stat
 
   answer["accounts"] = accounts_list;
 
-  answer["filename"] = std::string("state_") + std::to_string(block_id.id.workchain) + ":" +
-                       std::to_string(block_id.id.shard) + ":" + std::to_string(block_id.id.seqno);
-  publishBlockState(answer.dump());
+  json to_dump = {
+    {"id", std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" + std::to_string(block_id.id.seqno)},
+    {"data", answer}
+  };
+  
+  publishBlockState(to_dump.dump());
 }
 
 }  // namespace ton::validator
