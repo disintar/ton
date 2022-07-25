@@ -5,7 +5,8 @@ namespace ton::validator {
 
 BlockPublisherKafka::BlockPublisherKafka(const std::string& endpoint) : producer(
     cppkafka::Configuration{
-        { "metadata.broker.list", endpoint }
+        { "metadata.broker.list", endpoint },
+        { "message.max.bytes", "2147483648"}    // 2 GB
     }
 ) {}
 
