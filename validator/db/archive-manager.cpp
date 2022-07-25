@@ -157,7 +157,7 @@ void ArchiveManager::get_handle(BlockIdExt block_id, td::Promise<BlockHandle> pr
 
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), block_id, idx = get_max_temp_file_desc_idx(),
                                          promise = std::move(promise)](td::Result<BlockHandle> R) mutable {
-      LOG(DEBUG) << "Hendle received";
+      LOG(DEBUG) << "Handle received";
 
       if (R.is_ok()) {
         promise.set_value(R.move_as_ok());
