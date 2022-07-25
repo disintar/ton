@@ -754,24 +754,24 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
   if (tag == block::gen::t_InMsg.msg_import_ext) {
     answer["type"] = "msg_import_ext";
 
-//    block::gen::InMsg::Record_msg_import_ext msg_import_ext;
-//    CHECK(tlb::unpack(in_msg, msg_import_ext));
-//
-//    {
-//      vm::CellBuilder cb;
-//      cb.store_ref(msg_import_ext.transaction);
-//      const auto body_cell = cb.finalize();
-//      const auto csr = load_cell_slice_ref(body_cell);
-//
-//      answer["transaction"] = parse_transaction(csr, workchain);
-//    }
-//    {
-//      vm::CellBuilder cb;
-//      cb.store_ref(msg_import_ext.msg);
-//      const auto body_cell = cb.finalize();
-//
-//      answer["msg"] = parse_message(body_cell);
-//    }
+    block::gen::InMsg::Record_msg_import_ext msg_import_ext;
+    CHECK(tlb::unpack(in_msg, msg_import_ext));
+
+    {
+      vm::CellBuilder cb;
+      cb.store_ref(msg_import_ext.transaction);
+      const auto body_cell = cb.finalize();
+      const auto csr = load_cell_slice_ref(body_cell);
+
+      answer["transaction"] = parse_transaction(csr, workchain);
+    }
+    {
+      vm::CellBuilder cb;
+      cb.store_ref(msg_import_ext.msg);
+      const auto body_cell = cb.finalize();
+
+      answer["msg"] = parse_message(body_cell);
+    }
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_ihr) {
