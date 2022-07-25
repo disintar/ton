@@ -43,22 +43,6 @@ namespace ton {
 
 namespace validator {
 
-void execute_async(std::function<void()> f) {
-  class Runner : public td::actor::Actor {
-   public:
-    explicit Runner(std::function<void()> f) : f_(std::move(f)) {
-    }
-    void start_up() {
-      f_();
-      stop();
-    }
-
-   private:
-    std::function<void()> f_;
-  };
-  td::actor::create_actor<Runner>("indexer-executeasync", std::move(f)).release();
-}
-
 class Dumper {
  public:
   explicit Dumper(std::string prefix, const std::size_t buffer_size)
@@ -256,7 +240,7 @@ class Indexer : public td::actor::Actor {
   std::map<BlockIdExt, json> pending_blocks_;
   std::map<BlockIdExt, td::uint64> pending_blocks_size_;
   std::map<BlockIdExt, std::vector<json>> pending_blocks_accounts_;
-  std::mutex pending_blocks_mtx_;
+  std::mutex pending_blocks_mtx_; // TODO: not used
 
   // store timestamps of parsed blocks for speed measuring
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_blocks_timepoints_;
