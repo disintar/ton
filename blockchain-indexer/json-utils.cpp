@@ -623,7 +623,7 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
     answer["type"] = "trans_split_install";
     answer["installed"] = parsed.installed;
     answer["split_info"] = parse_split_prepare(parsed.split_info.write());
-    // todo: parse
+    // TODO: parse
     // answer["prepare_transaction"] = "need_to_be_parsed"
 
   }
@@ -648,7 +648,7 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr) {
     answer["split_info"] = parse_split_prepare(parsed.split_info.write());
     answer["compute_ph"] = parse_compute_ph(parsed.compute_ph.write());
 
-    // todo: parse
+    // TODO: parse
     // answer["prepare_transaction"] = "need_to_be_parsed"
 
     if ((int)parsed.storage_ph->prefetch_ulong(1) == 1) {  // Maybe TrStoragePhase
@@ -753,26 +753,68 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
 
   if (tag == block::gen::t_InMsg.msg_import_ext) {
     answer["type"] = "msg_import_ext";
+
+    block::gen::InMsg::Record_msg_import_ext msg_import_ext;
+    CHECK(tlb::unpack(in_msg, msg_import_ext));
+
+    {
+      vm::CellBuilder cb;
+      cb.store_ref(msg_import_ext.transaction);
+      const auto body_cell = cb.finalize();
+      const auto csr = load_cell_slice_ref(body_cell);
+
+      answer["transaction"] = parse_transaction(csr, workchain);
+    }
+    {
+      vm::CellBuilder cb;
+      cb.store_ref(msg_import_ext.msg);
+      const auto body_cell = cb.finalize();
+
+      answer["msg"] = parse_message(body_cell);
+    }
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_ihr) {
     answer["type"] = "msg_import_ihr";
+
+    block::gen::InMsg::Record_msg_import_ihr msg_import_ihr;
+    CHECK(tlb::unpack(in_msg, msg_import_ihr));
+    {
+      vm::CellBuilder cb;
+      cb.store_ref(msg_import_ihr.transaction);
+      const auto body_cell = cb.finalize();
+      const auto csr = load_cell_slice_ref(body_cell);
+
+      answer["transaction"] = parse_transaction(csr, workchain);
+    }
+
+
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_imm) {
     answer["type"] = "msg_import_imm";
+
+
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_fin) {
     answer["type"] = "msg_import_fin";
+
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_tr) {
     answer["type"] = "msg_import_tr";
+
+    block::gen::InMsg::Record_msg_import_tr msg_import_tr;
+    CHECK(tlb::unpack(in_msg, msg_import_tr));
+
+    // TODO: parse
   }
 
   else if (tag == block::gen::t_InMsg.msg_discard_fin) {
     answer["type"] = "msg_discard_fin";
+
+
   }
 
   else if (tag == block::gen::t_InMsg.msg_discard_tr) {
@@ -815,7 +857,7 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     block::gen::OutMsg::Record_msg_export_ext data;
     CHECK(tlb::unpack(out_msg, data));
 
-    vm::CellBuilder cb;  // TODO: fixme
+    vm::CellBuilder cb;
     cb.store_ref(data.transaction);
     auto body_cell = cb.finalize();
     auto csr = load_cell_slice_ref(body_cell);
@@ -831,7 +873,7 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
 
     auto t = load_cell_slice_ref(data.transaction);
 
-    vm::CellBuilder cb;  // TODO: fixme
+    vm::CellBuilder cb;
     cb.store_ref(data.transaction);
     auto body_cell = cb.finalize();
     auto csr = load_cell_slice_ref(body_cell);
@@ -845,7 +887,7 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     block::gen::OutMsg::Record_msg_export_new data;
     CHECK(tlb::unpack(out_msg, data));
 
-    vm::CellBuilder cb;  // TODO: fixme
+    vm::CellBuilder cb;
     cb.store_ref(data.transaction);
     auto body_cell = cb.finalize();
     auto csr = load_cell_slice_ref(body_cell);
