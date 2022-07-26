@@ -319,6 +319,72 @@ json parse_message(Ref<vm::Cell> message_any) {
   return answer;
 }
 
+json parse_intermediate_address(vm::CellSlice intermediate_address) {
+//  interm_addr_regular$0 use_dest_bits:(#<= 96)
+//  = IntermediateAddress;
+//  interm_addr_simple$10 workchain_id:int8 addr_pfx:uint64
+//                                                       = IntermediateAddress;
+//  interm_addr_ext$11 workchain_id:int32 addr_pfx:uint64
+//                                                     = IntermediateAddress;
+
+  json answer;
+
+  const auto tag = block::gen::t_IntermediateAddress.get_tag(intermediate_address);
+
+  if (tag == block::gen::IntermediateAddress::interm_addr_regular) {
+    answer["type"] = "interm_addr_regular";
+
+    block::gen::IntermediateAddress::Record_interm_addr_regular interm_addr_regular;
+    CHECK(tlb::unpack(intermediate_address, interm_addr_regular));
+    answer["use_dest_bits"] = interm_addr_regular.use_dest_bits; // WARNING: isn't int too small?
+  }
+
+  else if (tag == block::gen::IntermediateAddress::interm_addr_simple) {
+    answer["type"] = "interm_addr_simple";
+
+    block::gen::IntermediateAddress::Record_interm_addr_simple interm_addr_simple;
+    CHECK(tlb::unpack(intermediate_address, interm_addr_simple));
+    answer["workchain_id"] = interm_addr_simple.workchain_id;
+    answer["addr_pfx"] = interm_addr_simple.addr_pfx;
+  }
+
+  else if (tag == block::gen::IntermediateAddress::interm_addr_ext) {
+    answer["type"] = "interm_addr_ext";
+
+    block::gen::IntermediateAddress::Record_interm_addr_ext interm_addr_ext;
+    CHECK(tlb::unpack(intermediate_address, interm_addr_ext));
+    answer["workchain_id"] = interm_addr_ext.workchain_id;
+    answer["addr_pfx"] = interm_addr_ext.addr_pfx;
+  }
+
+  else {
+    answer["type"] = "undefined";
+  }
+
+  return answer;
+}
+
+json parse_msg_envelope(Ref<vm::Cell> message_envelope) {
+/*
+  msg_envelope#4 cur_addr:IntermediateAddress
+  next_addr:IntermediateAddress fwd_fee_remaining:Grams
+  msg:^(Message Any) = MsgEnvelope;
+*/
+
+  json answer;
+
+  block::gen::MsgEnvelope::Record msgEnvelope;
+  CHECK(tlb::type_unpack_cell(std::move(message_envelope), block::gen::t_MsgEnvelope, msgEnvelope));
+
+  answer["cur_addr"] = parse_intermediate_address(msgEnvelope.cur_addr.write());
+  answer["next_addr"] = parse_intermediate_address(msgEnvelope.next_addr.write());
+  answer["fwd_fee_remaining"] = block::tlb::t_Grams.as_integer(msgEnvelope.fwd_fee_remaining.write())->to_dec_string();
+  answer["msg"] = parse_message(msgEnvelope.msg);
+
+  return answer;
+}
+
+
 std::string parse_type(char type) {
   if (type == block::gen::t_AccountStatus.acc_state_active) {
     return "active";
@@ -772,7 +838,7 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
     answer["transaction"] = insert_parsed_transaction(msg_import_ext.transaction, workchain);
 
     // TODO:
-//    msg_import_ext.msg
+//    msg_import_ext.msg - msg:^(Message Any)
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_ihr) {
@@ -785,7 +851,7 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
     answer["ihr_fee"] = block::tlb::t_Grams.as_integer(msg_import_ihr.ihr_fee.write())->to_dec_string();
 
     // TODO:
-//    msg_import_ihr.msg
+//    msg_import_ihr.msg - msg:^(Message Any)
 //    msg_import_ihr.proof_created - proof_created:^Cell
   }
 
@@ -797,9 +863,7 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
 
     answer["transaction"] = insert_parsed_transaction(msg_import_imm.transaction, workchain);
     answer["fwd_fee"] = block::tlb::t_Grams.as_integer(msg_import_imm.fwd_fee.write())->to_dec_string();
-
-    // TODO:
-//    msg_import_imm.in_msg
+    answer["in_msg"] = parse_msg_envelope(msg_import_imm.in_msg);
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_fin) {
@@ -810,9 +874,7 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
 
     answer["transaction"] = insert_parsed_transaction(msg_import_fin.transaction, workchain);
     answer["fwd_fee"] = block::tlb::t_Grams.as_integer(msg_import_fin.fwd_fee.write())->to_dec_string();
-
-    // TODO:
-//    msg_import_fin.in_msg
+    answer["in_msg"] = parse_msg_envelope(msg_import_fin.in_msg);
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_tr) {
@@ -822,10 +884,8 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
     CHECK(tlb::unpack(in_msg, msg_import_tr))
 
     answer["transit_fee"] = block::tlb::t_Grams.as_integer(msg_import_tr.transit_fee.write())->to_dec_string();
-
-    // TODO:
-//    msg_import_tr.in_msg
-//    msg_import_tr.out_msg
+    answer["in_msg"] = parse_msg_envelope(msg_import_tr.in_msg);
+    answer["out_msg"] = parse_msg_envelope(msg_import_tr.out_msg);
   }
 
   else if (tag == block::gen::t_InMsg.msg_discard_fin) {
@@ -836,9 +896,7 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
 
     answer["transaction_id"] = msg_discard_fin.transaction_id;
     answer["fwd_fee"] = block::tlb::t_Grams.as_integer(msg_discard_fin.fwd_fee.write())->to_dec_string();
-
-    // TODO:
-//    msg_discard_fin.in_msg
+    answer["in_msg"] = parse_msg_envelope(msg_discard_fin.in_msg);
   }
 
   else if (tag == block::gen::t_InMsg.msg_discard_tr) {
@@ -849,10 +907,10 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
 
     answer["transaction_id"] = msg_discard_tr.transaction_id;
     answer["fwd_fee"] = block::tlb::t_Grams.as_integer(msg_discard_tr.fwd_fee.write())->to_dec_string();
+    answer["in_msg"] = parse_msg_envelope(msg_discard_tr.in_msg);
 
     // TODO:
-//    msg_discard_tr.in_msg
-//    msg_discard_tr.proof_delivered
+//    msg_discard_tr.proof_delivered - proof_delivered:^Cell
   }
 
   else {
