@@ -786,7 +786,7 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
 
     // TODO:
 //    msg_import_ihr.msg
-//    msg_import_ihr.proof_created
+//    msg_import_ihr.proof_created - proof_created:^Cell
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_imm) {
@@ -821,10 +821,11 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
     block::gen::InMsg::Record_msg_import_tr msg_import_tr;
     CHECK(tlb::unpack(in_msg, msg_import_tr))
 
+    answer["transit_fee"] = block::tlb::t_Grams.as_integer(msg_import_tr.transit_fee.write())->to_dec_string();
+
     // TODO:
 //    msg_import_tr.in_msg
 //    msg_import_tr.out_msg
-//    msg_import_tr.transit_fee
   }
 
   else if (tag == block::gen::t_InMsg.msg_discard_fin) {
