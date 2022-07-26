@@ -751,20 +751,25 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
 
   json answer;
 
+  const auto insert_parsed_transaction
+      = [](const Ref<vm::Cell>& transaction, const auto workchain) -> json {
+    vm::CellBuilder cb;
+    cb.store_ref(transaction);
+    const auto body_cell = cb.finalize();
+    const auto csr = load_cell_slice_ref(body_cell);
+
+    return parse_transaction(csr, workchain);
+  };
+
   auto tag = block::gen::t_InMsg.check_tag(in_msg);
 
   if (tag == block::gen::t_InMsg.msg_import_ext) {
     answer["type"] = "msg_import_ext";
 
     block::gen::InMsg::Record_msg_import_ext msg_import_ext;
-    CHECK(tlb::unpack(in_msg, msg_import_ext));
+    CHECK(tlb::unpack(in_msg, msg_import_ext))
 
-    vm::CellBuilder cb;
-    cb.store_ref(msg_import_ext.transaction);
-    const auto body_cell = cb.finalize();
-    const auto csr = load_cell_slice_ref(body_cell);
-
-    answer["transaction"] = parse_transaction(csr, workchain);
+    answer["transaction"] = insert_parsed_transaction(msg_import_ext.transaction, workchain);
 
     // TODO:
 //    msg_import_ext.msg
@@ -774,12 +779,13 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
     answer["type"] = "msg_import_ihr";
 
     block::gen::InMsg::Record_msg_import_ihr msg_import_ihr;
-    CHECK(tlb::unpack(in_msg, msg_import_ihr));
+    CHECK(tlb::unpack(in_msg, msg_import_ihr))
+
+    answer["transaction"] = insert_parsed_transaction(msg_import_ihr.transaction, workchain);
 
     // TODO:
 //    msg_import_ihr.msg
 //    msg_import_ihr.proof_created
-//    msg_import_ihr.transaction
 //    msg_import_ihr.ihr_fee
   }
 
@@ -787,10 +793,11 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
     answer["type"] = "msg_import_imm";
 
     block::gen::InMsg::Record_msg_import_imm msg_import_imm;
-    CHECK(tlb::unpack(in_msg, msg_import_imm));
+    CHECK(tlb::unpack(in_msg, msg_import_imm))
+
+    answer["transaction"] = insert_parsed_transaction(msg_import_imm.transaction, workchain);
 
     // TODO:
-//    msg_import_imm.transaction
 //    msg_import_imm.fwd_fee
 //    msg_import_imm.in_msg
   }
@@ -799,19 +806,20 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
     answer["type"] = "msg_import_fin";
 
     block::gen::InMsg::Record_msg_import_fin msg_import_fin;
-    CHECK(tlb::unpack(in_msg, msg_import_fin));
+    CHECK(tlb::unpack(in_msg, msg_import_fin))
+
+    answer["transaction"] = insert_parsed_transaction(msg_import_fin.transaction, workchain);
 
     // TODO:
 //    msg_import_fin.in_msg
 //    msg_import_fin.fwd_fee
-//    msg_import_fin.transaction
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_tr) {
     answer["type"] = "msg_import_tr";
 
     block::gen::InMsg::Record_msg_import_tr msg_import_tr;
-    CHECK(tlb::unpack(in_msg, msg_import_tr));
+    CHECK(tlb::unpack(in_msg, msg_import_tr))
 
     // TODO:
 //    msg_import_tr.in_msg
@@ -823,7 +831,7 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
     answer["type"] = "msg_discard_fin";
 
     block::gen::InMsg::Record_msg_discard_fin msg_discard_fin;
-    CHECK(tlb::unpack(in_msg, msg_discard_fin));
+    CHECK(tlb::unpack(in_msg, msg_discard_fin))
 
     // TODO:
 //    msg_discard_fin.in_msg
@@ -835,7 +843,7 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
     answer["type"] = "msg_discard_tr";
 
     block::gen::InMsg::Record_msg_discard_tr msg_discard_tr;
-    CHECK(tlb::unpack(in_msg, msg_discard_tr));
+    CHECK(tlb::unpack(in_msg, msg_discard_tr))
 
     // TODO:
 //    msg_discard_tr.transaction_id
