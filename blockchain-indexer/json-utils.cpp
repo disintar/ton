@@ -782,11 +782,11 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
     CHECK(tlb::unpack(in_msg, msg_import_ihr))
 
     answer["transaction"] = insert_parsed_transaction(msg_import_ihr.transaction, workchain);
+    answer["ihr_fee"] = block::tlb::t_Grams.as_integer(msg_import_ihr.ihr_fee.write())->to_dec_string();
 
     // TODO:
 //    msg_import_ihr.msg
 //    msg_import_ihr.proof_created
-//    msg_import_ihr.ihr_fee
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_imm) {
@@ -796,9 +796,9 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
     CHECK(tlb::unpack(in_msg, msg_import_imm))
 
     answer["transaction"] = insert_parsed_transaction(msg_import_imm.transaction, workchain);
+    answer["fwd_fee"] = block::tlb::t_Grams.as_integer(msg_import_imm.fwd_fee.write())->to_dec_string();
 
     // TODO:
-//    msg_import_imm.fwd_fee
 //    msg_import_imm.in_msg
   }
 
@@ -809,10 +809,10 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
     CHECK(tlb::unpack(in_msg, msg_import_fin))
 
     answer["transaction"] = insert_parsed_transaction(msg_import_fin.transaction, workchain);
+    answer["fwd_fee"] = block::tlb::t_Grams.as_integer(msg_import_fin.fwd_fee.write())->to_dec_string();
 
     // TODO:
 //    msg_import_fin.in_msg
-//    msg_import_fin.fwd_fee
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_tr) {
@@ -834,10 +834,10 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
     CHECK(tlb::unpack(in_msg, msg_discard_fin))
 
     answer["transaction_id"] = msg_discard_fin.transaction_id;
+    answer["fwd_fee"] = block::tlb::t_Grams.as_integer(msg_discard_fin.fwd_fee.write())->to_dec_string();
 
     // TODO:
 //    msg_discard_fin.in_msg
-//    msg_discard_fin.fwd_fee
   }
 
   else if (tag == block::gen::t_InMsg.msg_discard_tr) {
@@ -847,9 +847,9 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
     CHECK(tlb::unpack(in_msg, msg_discard_tr))
 
     answer["transaction_id"] = msg_discard_tr.transaction_id;
+    answer["fwd_fee"] = block::tlb::t_Grams.as_integer(msg_discard_tr.fwd_fee.write())->to_dec_string();
 
     // TODO:
-//    msg_discard_tr.fwd_fee
 //    msg_discard_tr.in_msg
 //    msg_discard_tr.proof_delivered
   }
