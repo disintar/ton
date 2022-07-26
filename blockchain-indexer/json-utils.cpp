@@ -833,10 +833,11 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
     block::gen::InMsg::Record_msg_discard_fin msg_discard_fin;
     CHECK(tlb::unpack(in_msg, msg_discard_fin))
 
+    answer["transaction_id"] = msg_discard_fin.transaction_id;
+
     // TODO:
 //    msg_discard_fin.in_msg
 //    msg_discard_fin.fwd_fee
-//    msg_discard_fin.transaction_id
   }
 
   else if (tag == block::gen::t_InMsg.msg_discard_tr) {
@@ -845,8 +846,9 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
     block::gen::InMsg::Record_msg_discard_tr msg_discard_tr;
     CHECK(tlb::unpack(in_msg, msg_discard_tr))
 
+    answer["transaction_id"] = msg_discard_tr.transaction_id;
+
     // TODO:
-//    msg_discard_tr.transaction_id
 //    msg_discard_tr.fwd_fee
 //    msg_discard_tr.in_msg
 //    msg_discard_tr.proof_delivered
