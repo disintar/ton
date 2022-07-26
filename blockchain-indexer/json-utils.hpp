@@ -38,6 +38,10 @@ json parse_state_init(vm::CellSlice state_init);
 
 json parse_message(Ref<vm::Cell> message_any);
 
+json parse_intermediate_address(vm::CellSlice intermediate_address);
+
+json parse_msg_envelope(Ref<vm::Cell> message_envelope);
+
 std::string parse_type(char type);
 
 std::string parse_status_change(char type);
