@@ -767,15 +767,15 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
 
       answer["transaction"] = parse_transaction(csr, workchain);
     }
-    {
-      vm::CellBuilder cb;
-      cb.store_ref(msg_import_ext.msg);
-      const auto body_cell = cb.finalize();
-
-      block::gen::Message::Record in_message;
-
-      answer["msg"] = parse_message(body_cell);
-    }
+//    {
+//      vm::CellBuilder cb;
+//      cb.store_ref(msg_import_ext.msg);
+//      const auto body_cell = cb.finalize();
+//
+//      block::gen::Message::Record in_message;
+//
+//      answer["msg"] = parse_message(body_cell);
+//    }
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_ihr) {
