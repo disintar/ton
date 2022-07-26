@@ -836,9 +836,7 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
     CHECK(tlb::unpack(in_msg, msg_import_ext))
 
     answer["transaction"] = insert_parsed_transaction(msg_import_ext.transaction, workchain);
-
-    // TODO:
-//    msg_import_ext.msg - msg:^(Message Any)
+    answer["msg"] = parse_message(msg_import_ext.msg);
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_ihr) {
@@ -849,9 +847,9 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
 
     answer["transaction"] = insert_parsed_transaction(msg_import_ihr.transaction, workchain);
     answer["ihr_fee"] = block::tlb::t_Grams.as_integer(msg_import_ihr.ihr_fee.write())->to_dec_string();
+    answer["msg"] = parse_message(msg_import_ihr.msg);
 
     // TODO:
-//    msg_import_ihr.msg - msg:^(Message Any)
 //    msg_import_ihr.proof_created - proof_created:^Cell
   }
 
