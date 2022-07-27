@@ -797,7 +797,7 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
 
 
 
-json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
+json parse_in_msg(vm::CellSlice in_msg, int workchain) {
   //  //
   //  msg_import_ext$000 msg:^(Message Any) transaction:^Transaction
   //                                                       = InMsg;
@@ -918,7 +918,7 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
   return answer;
 }
 
-json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {
+json parse_out_msg(vm::CellSlice out_msg, int workchain) {
 
   //
   //  msg_import_ext$000 msg:^(Message Any) transaction:^Transaction
@@ -946,14 +946,15 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {
 
           return parse_transaction(csr, workchain);
       };
+
   const auto insert_parsed_in_msg
       = [](const Ref<vm::Cell>& in_msg, const auto workchain) -> json {
           vm::CellBuilder cb;
           cb.store_ref(in_msg);
           const auto body_cell = cb.finalize();
-          const auto csr = load_cell_slice_ref(body_cell);
+          const auto cs = load_cell_slice(body_cell);
 
-          return parse_in_msg_descr(*csr, workchain);
+          return parse_in_msg(cs, workchain);
       };
 
   json answer;
