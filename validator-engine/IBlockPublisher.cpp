@@ -539,7 +539,7 @@ void BlockPublisherParser::storeBlockData(BlockHandle handle, td::Ref<BlockData>
       {"data", answer}
   };
 
-  publishBlockData(to_dump.dump());
+  enqueuePublishBlockData(to_dump.dump());
 }
 
 void BlockPublisherParser::storeBlockState(BlockHandle handle, td::Ref<ShardState> state) {
@@ -741,7 +741,21 @@ void BlockPublisherParser::gotState(BlockHandle handle, td::Ref<ShardState> stat
     {"data", answer}
   };
   
-  publishBlockState(to_dump.dump());
+  enqueuePublishBlockState(to_dump.dump());
+}
+
+void BlockPublisherParser::enqueuePublishBlockData(std::string json) {
+  // TODO:
+  td::Timer timer;
+  publishBlockData(json);
+  LOG(ERROR) << "PUBLISH BLOCK DATA TIME: " << timer.elapsed();
+}
+
+void BlockPublisherParser::enqueuePublishBlockState(std::string json) {
+  // TODO:
+  td::Timer timer;
+  publishBlockState(json);
+  LOG(ERROR) << "PUBLISH BLOCK DATA TIME: " << timer.elapsed();
 }
 
 }  // namespace ton::validator
