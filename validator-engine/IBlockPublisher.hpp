@@ -29,7 +29,7 @@ class BlockPublisherIgnore : public IBlockPublisher {
 
 // helper class, do not use it
 class BlockPublisherParser : public IBlockPublisher {
-private:
+public:
     BlockPublisherParser();
     ~BlockPublisherParser() override;
 
