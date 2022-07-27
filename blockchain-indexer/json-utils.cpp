@@ -979,7 +979,7 @@ json parse_out_msg(vm::CellSlice out_msg, int workchain) {
 
     answer["transaction"] = insert_parsed_transaction(data.transaction, workchain);
     answer["out_msg"] = parse_msg_envelope(data.out_msg);
-    answer["reimport"] = insert_parsed_in_msg(data.reimport, workchain);
+    answer["reimport"] = insert_parsed_in_msg(data.reimport, workchain);  // TODO: undefined
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_new) {
@@ -999,7 +999,7 @@ json parse_out_msg(vm::CellSlice out_msg, int workchain) {
     CHECK(tlb::unpack(out_msg, data))
 
     answer["out_msg"] = parse_msg_envelope(data.out_msg);
-    answer["imported"] = insert_parsed_in_msg(data.imported, workchain);
+    answer["imported"] = insert_parsed_in_msg(data.imported, workchain);  // TODO: undefined
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_deq) {
@@ -1031,7 +1031,7 @@ json parse_out_msg(vm::CellSlice out_msg, int workchain) {
     CHECK(tlb::unpack(out_msg, data))
 
     answer["out_msg"] = parse_msg_envelope(data.out_msg);
-    answer["imported"] = insert_parsed_in_msg(data.imported, workchain);
+    answer["imported"] = insert_parsed_in_msg(data.imported, workchain);  // TODO: undefined
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_deq_imm) {
@@ -1041,7 +1041,7 @@ json parse_out_msg(vm::CellSlice out_msg, int workchain) {
     CHECK(tlb::unpack(out_msg, data))
 
     answer["out_msg"] = parse_msg_envelope(data.out_msg);
-    answer["reimport"] = insert_parsed_in_msg(data.reimport, workchain);
+    answer["reimport"] = insert_parsed_in_msg(data.reimport, workchain);  // TODO: undefined
   }
 
   else {
