@@ -26,10 +26,13 @@ class BlockPublisherIgnore : public IBlockPublisher {
 // helper class, do not use it
 class BlockPublisherParser : public IBlockPublisher {
  public:
-  void storeBlockData(BlockHandle handle, td::Ref<BlockData> block) override;
-  void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) override;
+  void storeBlockData(BlockHandle handle, td::Ref<BlockData> block) override final;
+  void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) override final;
  private:
   void gotState(BlockHandle handle, td::Ref<ShardState> state, std::vector<td::Bits256> accounts_keys);
+
+  void enqueuePublishBlockData(std::string json);
+  void enqueuePublishBlockState(std::string json);
 
   virtual void publishBlockData(const std::string& json) = 0;
   virtual void publishBlockState(const std::string& json) = 0;
