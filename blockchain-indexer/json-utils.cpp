@@ -945,7 +945,7 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     answer["type"] = "msg_export_ext";
 
     block::gen::OutMsg::Record_msg_export_ext data;
-    CHECK(tlb::unpack(out_msg, data));
+    CHECK(tlb::unpack(out_msg, data))
 
     vm::CellBuilder cb;
     cb.store_ref(data.transaction);
@@ -953,13 +953,14 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     auto csr = load_cell_slice_ref(body_cell);
 
     answer["transaction"] = parse_transaction(csr, workchain);
+    answer["msg"] = parse_message(data.msg);
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_imm) {
     answer["type"] = "msg_export_imm";
 
     block::gen::OutMsg::Record_msg_export_imm data;
-    CHECK(tlb::unpack(out_msg, data));
+    CHECK(tlb::unpack(out_msg, data))
 
     auto t = load_cell_slice_ref(data.transaction);
 
@@ -969,13 +970,16 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     auto csr = load_cell_slice_ref(body_cell);
 
     answer["transaction"] = parse_transaction(csr, workchain);
+    answer["out_msg"] = parse_msg_envelope(data.out_msg);
+
+    // TODO: reimport:^InMsg
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_new) {
     answer["type"] = "msg_export_new";
 
     block::gen::OutMsg::Record_msg_export_new data;
-    CHECK(tlb::unpack(out_msg, data));
+    CHECK(tlb::unpack(out_msg, data))
 
     vm::CellBuilder cb;
     cb.store_ref(data.transaction);
@@ -983,26 +987,62 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     auto csr = load_cell_slice_ref(body_cell);
 
     answer["transaction"] = parse_transaction(csr, workchain);
+    answer["out_msg"] = parse_msg_envelope(data.out_msg);
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_tr) {
     answer["type"] = "msg_export_tr";
+
+    block::gen::OutMsg::Record_msg_export_tr data;
+    CHECK(tlb::unpack(out_msg, data))
+
+    answer["out_msg"] = parse_msg_envelope(data.out_msg);
+
+    // TODO: imported:^InMsg
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_deq) {
     answer["type"] = "msg_export_deq";
+
+    block::gen::OutMsg::Record_msg_export_deq data;
+    CHECK(tlb::unpack(out_msg, data))
+
+    answer["out_msg"] = parse_msg_envelope(data.out_msg);
+    answer["import_block_lt"] = data.import_block_lt;
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_deq_short) {
     answer["type"] = "msg_export_deq_short";
+
+    block::gen::OutMsg::Record_msg_export_deq_short data;
+    CHECK(tlb::unpack(out_msg, data))
+
+    answer["msg_env_hash"] = data.msg_env_hash.to_hex();
+    answer["next_workchain"] = data.next_workchain;
+    answer["next_addr_pfx"] = data.next_addr_pfx;
+    answer["import_block_lt"] = data.import_block_lt;
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_tr_req) {
     answer["type"] = "msg_export_tr_req";
+
+    block::gen::OutMsg::Record_msg_export_tr_req data;
+    CHECK(tlb::unpack(out_msg, data))
+
+    answer["out_msg"] = parse_msg_envelope(data.out_msg);
+
+    // TODO: imported:^InMsg
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_deq_imm) {
     answer["type"] = "msg_export_deq_imm";
+
+    block::gen::OutMsg::Record_msg_export_deq_imm data;
+    CHECK(tlb::unpack(out_msg, data))
+
+    answer["out_msg"] = parse_msg_envelope(data.out_msg);
+
+    // TODO: reimport:^InMsg
   }
 
   else {
