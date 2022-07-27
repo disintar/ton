@@ -38,6 +38,10 @@ json parse_state_init(vm::CellSlice state_init);
 
 json parse_message(Ref<vm::Cell> message_any);
 
+json parse_intermediate_address(vm::CellSlice intermediate_address);
+
+json parse_msg_envelope(Ref<vm::Cell> message_envelope);
+
 std::string parse_type(char type);
 
 std::string parse_status_change(char type);
@@ -60,9 +64,9 @@ json parse_transaction_descr(const Ref<vm::Cell> &transaction_descr);
 
 json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain);
 
-json parse_in_msg_descr(vm::CellSlice in_msg, int workchain);
+json parse_in_msg(vm::CellSlice in_msg, int workchain);
 
-json parse_out_msg_descr(vm::CellSlice out_msg, int workchain);
+json parse_out_msg(vm::CellSlice out_msg, int workchain);
 
 bool clear_cache();
 

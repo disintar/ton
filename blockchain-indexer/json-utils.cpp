@@ -319,6 +319,72 @@ json parse_message(Ref<vm::Cell> message_any) {
   return answer;
 }
 
+json parse_intermediate_address(vm::CellSlice intermediate_address) {
+//  interm_addr_regular$0 use_dest_bits:(#<= 96)
+//  = IntermediateAddress;
+//  interm_addr_simple$10 workchain_id:int8 addr_pfx:uint64
+//                                                       = IntermediateAddress;
+//  interm_addr_ext$11 workchain_id:int32 addr_pfx:uint64
+//                                                     = IntermediateAddress;
+
+  json answer;
+
+  const auto tag = block::gen::t_IntermediateAddress.get_tag(intermediate_address);
+
+  if (tag == block::gen::IntermediateAddress::interm_addr_regular) {
+    answer["type"] = "interm_addr_regular";
+
+    block::gen::IntermediateAddress::Record_interm_addr_regular interm_addr_regular;
+    CHECK(tlb::unpack(intermediate_address, interm_addr_regular));
+    answer["use_dest_bits"] = interm_addr_regular.use_dest_bits; // WARNING: isn't int too small?
+  }
+
+  else if (tag == block::gen::IntermediateAddress::interm_addr_simple) {
+    answer["type"] = "interm_addr_simple";
+
+    block::gen::IntermediateAddress::Record_interm_addr_simple interm_addr_simple;
+    CHECK(tlb::unpack(intermediate_address, interm_addr_simple));
+    answer["workchain_id"] = interm_addr_simple.workchain_id;
+    answer["addr_pfx"] = interm_addr_simple.addr_pfx;
+  }
+
+  else if (tag == block::gen::IntermediateAddress::interm_addr_ext) {
+    answer["type"] = "interm_addr_ext";
+
+    block::gen::IntermediateAddress::Record_interm_addr_ext interm_addr_ext;
+    CHECK(tlb::unpack(intermediate_address, interm_addr_ext));
+    answer["workchain_id"] = interm_addr_ext.workchain_id;
+    answer["addr_pfx"] = interm_addr_ext.addr_pfx;
+  }
+
+  else {
+    answer["type"] = "undefined";
+  }
+
+  return answer;
+}
+
+json parse_msg_envelope(Ref<vm::Cell> message_envelope) {
+/*
+  msg_envelope#4 cur_addr:IntermediateAddress
+  next_addr:IntermediateAddress fwd_fee_remaining:Grams
+  msg:^(Message Any) = MsgEnvelope;
+*/
+
+  json answer;
+
+  block::gen::MsgEnvelope::Record msgEnvelope;
+  CHECK(tlb::type_unpack_cell(std::move(message_envelope), block::gen::t_MsgEnvelope, msgEnvelope));
+
+  answer["cur_addr"] = parse_intermediate_address(msgEnvelope.cur_addr.write());
+  answer["next_addr"] = parse_intermediate_address(msgEnvelope.next_addr.write());
+  answer["fwd_fee_remaining"] = block::tlb::t_Grams.as_integer(msgEnvelope.fwd_fee_remaining.write())->to_dec_string();
+  answer["msg"] = parse_message(msgEnvelope.msg);
+
+  return answer;
+}
+
+
 std::string parse_type(char type) {
   if (type == block::gen::t_AccountStatus.acc_state_active) {
     return "active";
@@ -731,7 +797,7 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
 
 
 
-json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
+json parse_in_msg(vm::CellSlice in_msg, int workchain) {
   //  //
   //  msg_import_ext$000 msg:^(Message Any) transaction:^Transaction
   //                                                       = InMsg;
@@ -751,61 +817,98 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
 
   json answer;
 
+  const auto insert_parsed_transaction
+      = [](const Ref<vm::Cell>& transaction, const auto workchain) -> json {
+    vm::CellBuilder cb;
+    cb.store_ref(transaction);
+    const auto body_cell = cb.finalize();
+    const auto csr = load_cell_slice_ref(body_cell);
+
+    return parse_transaction(csr, workchain);
+  };
+
   auto tag = block::gen::t_InMsg.check_tag(in_msg);
 
   if (tag == block::gen::t_InMsg.msg_import_ext) {
     answer["type"] = "msg_import_ext";
 
     block::gen::InMsg::Record_msg_import_ext msg_import_ext;
-    CHECK(tlb::unpack(in_msg, msg_import_ext));
+    CHECK(tlb::unpack(in_msg, msg_import_ext))
 
-    {
-      vm::CellBuilder cb;
-      cb.store_ref(msg_import_ext.transaction);
-      const auto body_cell = cb.finalize();
-      const auto csr = load_cell_slice_ref(body_cell);
-
-      answer["transaction"] = parse_transaction(csr, workchain);
-    }
-//    {
-//      vm::CellBuilder cb;
-//      cb.store_ref(msg_import_ext.msg);
-//      const auto body_cell = cb.finalize();
-//
-//      block::gen::Message::Record in_message;
-//
-//      answer["msg"] = parse_message(body_cell);
-//    }
+    answer["transaction"] = insert_parsed_transaction(msg_import_ext.transaction, workchain);
+    answer["msg"] = parse_message(msg_import_ext.msg);
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_ihr) {
     answer["type"] = "msg_import_ihr";
 
+    block::gen::InMsg::Record_msg_import_ihr msg_import_ihr;
+    CHECK(tlb::unpack(in_msg, msg_import_ihr))
+
+    answer["transaction"] = insert_parsed_transaction(msg_import_ihr.transaction, workchain);
+    answer["ihr_fee"] = block::tlb::t_Grams.as_integer(msg_import_ihr.ihr_fee.write())->to_dec_string();
+    answer["msg"] = parse_message(msg_import_ihr.msg);
+
+    // TODO:
+//    msg_import_ihr.proof_created - proof_created:^Cell
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_imm) {
     answer["type"] = "msg_import_imm";
 
+    block::gen::InMsg::Record_msg_import_imm msg_import_imm;
+    CHECK(tlb::unpack(in_msg, msg_import_imm))
+
+    answer["transaction"] = insert_parsed_transaction(msg_import_imm.transaction, workchain);
+    answer["fwd_fee"] = block::tlb::t_Grams.as_integer(msg_import_imm.fwd_fee.write())->to_dec_string();
+    answer["in_msg"] = parse_msg_envelope(msg_import_imm.in_msg);
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_fin) {
     answer["type"] = "msg_import_fin";
 
+    block::gen::InMsg::Record_msg_import_fin msg_import_fin;
+    CHECK(tlb::unpack(in_msg, msg_import_fin))
+
+    answer["transaction"] = insert_parsed_transaction(msg_import_fin.transaction, workchain);
+    answer["fwd_fee"] = block::tlb::t_Grams.as_integer(msg_import_fin.fwd_fee.write())->to_dec_string();
+    answer["in_msg"] = parse_msg_envelope(msg_import_fin.in_msg);
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_tr) {
     answer["type"] = "msg_import_tr";
 
+    block::gen::InMsg::Record_msg_import_tr msg_import_tr;
+    CHECK(tlb::unpack(in_msg, msg_import_tr))
+
+    answer["transit_fee"] = block::tlb::t_Grams.as_integer(msg_import_tr.transit_fee.write())->to_dec_string();
+    answer["in_msg"] = parse_msg_envelope(msg_import_tr.in_msg);
+    answer["out_msg"] = parse_msg_envelope(msg_import_tr.out_msg);
   }
 
   else if (tag == block::gen::t_InMsg.msg_discard_fin) {
     answer["type"] = "msg_discard_fin";
 
+    block::gen::InMsg::Record_msg_discard_fin msg_discard_fin;
+    CHECK(tlb::unpack(in_msg, msg_discard_fin))
+
+    answer["transaction_id"] = msg_discard_fin.transaction_id;
+    answer["fwd_fee"] = block::tlb::t_Grams.as_integer(msg_discard_fin.fwd_fee.write())->to_dec_string();
+    answer["in_msg"] = parse_msg_envelope(msg_discard_fin.in_msg);
   }
 
   else if (tag == block::gen::t_InMsg.msg_discard_tr) {
     answer["type"] = "msg_discard_tr";
 
+    block::gen::InMsg::Record_msg_discard_tr msg_discard_tr;
+    CHECK(tlb::unpack(in_msg, msg_discard_tr))
+
+    answer["transaction_id"] = msg_discard_tr.transaction_id;
+    answer["fwd_fee"] = block::tlb::t_Grams.as_integer(msg_discard_tr.fwd_fee.write())->to_dec_string();
+    answer["in_msg"] = parse_msg_envelope(msg_discard_tr.in_msg);
+
+    // TODO:
+//    msg_discard_tr.proof_delivered - proof_delivered:^Cell
   }
 
   else {
@@ -815,7 +918,7 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
   return answer;
 }
 
-json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
+json parse_out_msg(vm::CellSlice out_msg, int workchain) {
 
   //
   //  msg_import_ext$000 msg:^(Message Any) transaction:^Transaction
@@ -834,6 +937,26 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
   //                                                                fwd_fee:Grams proof_delivered:^Cell = InMsg;
   //
 
+  const auto insert_parsed_transaction
+      = [](const Ref<vm::Cell>& transaction, const auto workchain) -> json {
+          vm::CellBuilder cb;
+          cb.store_ref(transaction);
+          const auto body_cell = cb.finalize();
+          const auto csr = load_cell_slice_ref(body_cell);
+
+          return parse_transaction(csr, workchain);
+      };
+
+  const auto insert_parsed_in_msg
+      = [](const Ref<vm::Cell>& in_msg, const auto workchain) -> json {
+          vm::CellBuilder cb;
+          cb.store_ref(in_msg);
+          const auto body_cell = cb.finalize();
+          const auto cs = load_cell_slice(body_cell);
+
+          return parse_in_msg(cs, workchain);
+      };
+
   json answer;
 
   auto tag = block::gen::t_OutMsg.check_tag(out_msg);
@@ -842,64 +965,83 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     answer["type"] = "msg_export_ext";
 
     block::gen::OutMsg::Record_msg_export_ext data;
-    CHECK(tlb::unpack(out_msg, data));
+    CHECK(tlb::unpack(out_msg, data))
 
-    vm::CellBuilder cb;
-    cb.store_ref(data.transaction);
-    auto body_cell = cb.finalize();
-    auto csr = load_cell_slice_ref(body_cell);
-
-    answer["transaction"] = parse_transaction(csr, workchain);
+    answer["transaction"] = insert_parsed_transaction(data.transaction, workchain);
+    answer["msg"] = parse_message(data.msg);
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_imm) {
     answer["type"] = "msg_export_imm";
 
     block::gen::OutMsg::Record_msg_export_imm data;
-    CHECK(tlb::unpack(out_msg, data));
+    CHECK(tlb::unpack(out_msg, data))
 
-    auto t = load_cell_slice_ref(data.transaction);
-
-    vm::CellBuilder cb;
-    cb.store_ref(data.transaction);
-    auto body_cell = cb.finalize();
-    auto csr = load_cell_slice_ref(body_cell);
-
-    answer["transaction"] = parse_transaction(csr, workchain);
+    answer["transaction"] = insert_parsed_transaction(data.transaction, workchain);
+    answer["out_msg"] = parse_msg_envelope(data.out_msg);
+    answer["reimport"] = insert_parsed_in_msg(data.reimport, workchain);  // TODO: undefined
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_new) {
     answer["type"] = "msg_export_new";
 
     block::gen::OutMsg::Record_msg_export_new data;
-    CHECK(tlb::unpack(out_msg, data));
+    CHECK(tlb::unpack(out_msg, data))
 
-    vm::CellBuilder cb;
-    cb.store_ref(data.transaction);
-    auto body_cell = cb.finalize();
-    auto csr = load_cell_slice_ref(body_cell);
-
-    answer["transaction"] = parse_transaction(csr, workchain);
+    answer["transaction"] = insert_parsed_transaction(data.transaction, workchain);
+    answer["out_msg"] = parse_msg_envelope(data.out_msg);
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_tr) {
     answer["type"] = "msg_export_tr";
+
+    block::gen::OutMsg::Record_msg_export_tr data;
+    CHECK(tlb::unpack(out_msg, data))
+
+    answer["out_msg"] = parse_msg_envelope(data.out_msg);
+    answer["imported"] = insert_parsed_in_msg(data.imported, workchain);  // TODO: undefined
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_deq) {
     answer["type"] = "msg_export_deq";
+
+    block::gen::OutMsg::Record_msg_export_deq data;
+    CHECK(tlb::unpack(out_msg, data))
+
+    answer["out_msg"] = parse_msg_envelope(data.out_msg);
+    answer["import_block_lt"] = data.import_block_lt;
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_deq_short) {
     answer["type"] = "msg_export_deq_short";
+
+    block::gen::OutMsg::Record_msg_export_deq_short data;
+    CHECK(tlb::unpack(out_msg, data))
+
+    answer["msg_env_hash"] = data.msg_env_hash.to_hex();
+    answer["next_workchain"] = data.next_workchain;
+    answer["next_addr_pfx"] = data.next_addr_pfx;
+    answer["import_block_lt"] = data.import_block_lt;
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_tr_req) {
     answer["type"] = "msg_export_tr_req";
+
+    block::gen::OutMsg::Record_msg_export_tr_req data;
+    CHECK(tlb::unpack(out_msg, data))
+
+    answer["out_msg"] = parse_msg_envelope(data.out_msg);
+    answer["imported"] = insert_parsed_in_msg(data.imported, workchain);  // TODO: undefined
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_deq_imm) {
     answer["type"] = "msg_export_deq_imm";
+
+    block::gen::OutMsg::Record_msg_export_deq_imm data;
+    CHECK(tlb::unpack(out_msg, data))
+
+    answer["out_msg"] = parse_msg_envelope(data.out_msg);
+    answer["reimport"] = insert_parsed_in_msg(data.reimport, workchain);  // TODO: undefined
   }
 
   else {

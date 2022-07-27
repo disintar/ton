@@ -796,7 +796,7 @@ class Indexer : public td::actor::Actor {
             in_msg_dict->get_minmax_key(last_key);
             Ref<vm::CellSlice> data = in_msg_dict->lookup_delete(last_key);
 
-            json parsed = {{"hash", last_key.to_hex()}, {"message", parse_in_msg_descr(data.write(), workchain)}};
+            json parsed = {{"hash", last_key.to_hex()}, {"message", parse_in_msg(data.write(), workchain)}};
             in_msgs_json.emplace_back(std::move(parsed));
           }
 
@@ -810,7 +810,7 @@ class Indexer : public td::actor::Actor {
             out_msg_dict->get_minmax_key(last_key);
             Ref<vm::CellSlice> data = out_msg_dict->lookup_delete(last_key);
 
-            json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg_descr(data.write(), workchain)}};
+            json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg(data.write(), workchain)}};
             out_msgs_json.emplace_back(std::move(parsed));
           }
 
@@ -974,12 +974,12 @@ class Indexer : public td::actor::Actor {
 
             if (extra_mc.r1.mint_msg->have_refs()) {
               answer["BlockExtra"]["custom"]["mint_msg"] =
-                  parse_in_msg_descr(load_cell_slice(extra_mc.r1.mint_msg->prefetch_ref()), workchain);
+                  parse_in_msg(load_cell_slice(extra_mc.r1.mint_msg->prefetch_ref()), workchain);
             }
 
             if (extra_mc.r1.recover_create_msg->have_refs()) {
               answer["BlockExtra"]["custom"]["recover_create_msg"] =
-                  parse_in_msg_descr(load_cell_slice(extra_mc.r1.recover_create_msg->prefetch_ref()), workchain);
+                  parse_in_msg(load_cell_slice(extra_mc.r1.recover_create_msg->prefetch_ref()), workchain);
             }
 
             if (extra_mc.r1.prev_blk_signatures->have_refs()) {
