@@ -2,7 +2,11 @@
 #define TON_IBLOCKPUBLISHER_HPP
 
 #include <map>
+#include <queue>
 #include <string>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
 #include "validator/interfaces/block-handle.h"
 #include "validator/interfaces/block.h"
 #include "validator/interfaces/shard.h"
@@ -25,9 +29,14 @@ class BlockPublisherIgnore : public IBlockPublisher {
 
 // helper class, do not use it
 class BlockPublisherParser : public IBlockPublisher {
+private:
+    BlockPublisherParser();
+    ~BlockPublisherParser() override;
+
  public:
-  void storeBlockData(BlockHandle handle, td::Ref<BlockData> block) override final;
-  void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) override final;
+  void storeBlockData(BlockHandle handle, td::Ref<BlockData> block) final;
+  void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) final;
+
  private:
   void gotState(BlockHandle handle, td::Ref<ShardState> state, std::vector<td::Bits256> accounts_keys);
 
@@ -37,10 +46,27 @@ class BlockPublisherParser : public IBlockPublisher {
   virtual void publishBlockData(const std::string& json) = 0;
   virtual void publishBlockState(const std::string& json) = 0;
 
+  void publish_blocks_worker();
+  void publish_states_worker();
+
  private:
-  std::mutex maps_mtx;
-  std::map<std::string, std::pair<BlockHandle, td::Ref<ShardState>>> states_;
-  std::map<std::string, std::vector<td::Bits256>> accounts_keys_;
+  std::mutex maps_mtx_;
+  std::map<std::string, std::pair<BlockHandle, td::Ref<ShardState>>> stored_states_;
+  std::map<std::string, std::vector<td::Bits256>> stored_accounts_keys_;
+
+  // mb rewrite with https://github.com/andreiavrammsd/cpp-channel
+
+  std::atomic_bool running_ = true; // TODO: stop_token when c++20
+
+  std::mutex publish_blocks_mtx_;
+  std::condition_variable publish_blocks_cv_;
+  std::queue<std::string> publish_blocks_queue_;
+  std::thread publish_blocks_thread_;
+
+  std::mutex publish_states_mtx_;
+  std::condition_variable publish_states_cv_;
+  std::queue<std::string> publish_states_queue_;
+  std::thread publish_states_thread_;
 };
 
 }

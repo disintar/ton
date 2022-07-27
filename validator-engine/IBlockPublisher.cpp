@@ -3,6 +3,19 @@
 
 namespace ton::validator {
 
+BlockPublisherParser::BlockPublisherParser() :
+    publish_blocks_thread_(&BlockPublisherParser::publish_blocks_worker, this),
+    publish_states_thread_(&BlockPublisherParser::publish_states_worker, this)
+  {}
+
+BlockPublisherParser::~BlockPublisherParser() {
+  running_ = false;
+  publish_blocks_cv_.notify_all();
+  publish_states_cv_.notify_all();
+  publish_blocks_thread_.join();
+  publish_states_thread_.join();
+}
+
 void BlockPublisherParser::storeBlockData(BlockHandle handle, td::Ref<BlockData> block) {
   LOG(WARNING) << "Store block: " << block->block_id().to_str();
   CHECK(block.not_null());
@@ -344,15 +357,15 @@ void BlockPublisherParser::storeBlockData(BlockHandle handle, td::Ref<BlockData>
   }
 
   if (true /*accounts_keys.size() > 0*/) {
-    std::lock_guard<std::mutex> lock(maps_mtx);
+    std::lock_guard<std::mutex> lock(maps_mtx_);
     const std::string key =
         std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" + std::to_string(blkid.seqno());
-    auto state_iter = states_.find(key);
-    if (state_iter == states_.end()) {
-      accounts_keys_.insert({key, accounts_keys});
+    auto state_iter = stored_states_.find(key);
+    if (state_iter == stored_states_.end()) {
+      stored_accounts_keys_.insert({key, accounts_keys});
     } else {
       gotState(state_iter->second.first, state_iter->second.second, accounts_keys);
-      states_.erase(state_iter);
+      stored_states_.erase(state_iter);
     }
   }
 
@@ -543,16 +556,16 @@ void BlockPublisherParser::storeBlockData(BlockHandle handle, td::Ref<BlockData>
 }
 
 void BlockPublisherParser::storeBlockState(BlockHandle handle, td::Ref<ShardState> state) {
-  std::lock_guard<std::mutex> lock(maps_mtx);
+  std::lock_guard<std::mutex> lock(maps_mtx_);
   const auto block_id = state->get_block_id();
   const std::string key = std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
                           std::to_string(block_id.id.seqno);
-  auto accounts = accounts_keys_.find(key);
-  if (accounts == accounts_keys_.end()) {
-    states_.insert({key, {handle, state}});
+  auto accounts = stored_accounts_keys_.find(key);
+  if (accounts == stored_accounts_keys_.end()) {
+    stored_states_.insert({key, {handle, state}});
   } else {
     gotState(handle, state, accounts->second);
-    accounts_keys_.erase(accounts);
+    stored_accounts_keys_.erase(accounts);
   }
 }
 
@@ -745,17 +758,51 @@ void BlockPublisherParser::gotState(BlockHandle handle, td::Ref<ShardState> stat
 }
 
 void BlockPublisherParser::enqueuePublishBlockData(std::string json) {
-  // TODO:
-  td::Timer timer;
-  publishBlockData(json);
-  LOG(ERROR) << "PUBLISH BLOCK DATA TIME: " << timer.elapsed();
+  std::unique_lock lock(publish_blocks_mtx_);
+  publish_blocks_queue_.emplace(json);
+  lock.unlock();
+  publish_blocks_cv_.notify_one();
 }
 
 void BlockPublisherParser::enqueuePublishBlockState(std::string json) {
-  // TODO:
-  td::Timer timer;
-  publishBlockState(json);
-  LOG(ERROR) << "PUBLISH BLOCK DATA TIME: " << timer.elapsed();
+  std::unique_lock lock(publish_states_mtx_);
+  publish_states_queue_.emplace(json);
+  lock.unlock();
+  publish_states_cv_.notify_one();
+}
+
+void BlockPublisherParser::publish_blocks_worker() {
+  bool should_run = running_;
+  while (should_run) {
+    std::unique_lock lock(publish_blocks_mtx_);
+    publish_blocks_cv_.wait(lock, [this]{ return !publish_blocks_queue_.empty() || !running_; });
+    if (publish_blocks_queue_.empty()) return;
+
+    auto block = std::move(publish_blocks_queue_.front());
+    publish_blocks_queue_.pop();
+
+    should_run = running_ || !publish_blocks_queue_.empty();
+    lock.unlock();
+
+    publishBlockData(block);
+  }
+}
+
+void BlockPublisherParser::publish_states_worker() {
+  bool should_run = running_;
+  while (should_run) {
+    std::unique_lock lock(publish_states_mtx_);
+    publish_states_cv_.wait(lock, [this]{ return !publish_states_queue_.empty() || !running_; });
+    if (publish_states_queue_.empty()) return;
+
+    auto state = std::move(publish_states_queue_.front());
+    publish_states_queue_.pop();
+
+    should_run = running_ || !publish_states_queue_.empty();
+    lock.unlock();
+
+    publishBlockState(state);
+  }
 }
 
 }  // namespace ton::validator
