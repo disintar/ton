@@ -918,7 +918,7 @@ json parse_in_msg_descr(vm::CellSlice in_msg, int workchain) {
   return answer;
 }
 
-json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
+json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {
 
   //
   //  msg_import_ext$000 msg:^(Message Any) transaction:^Transaction
@@ -937,6 +937,25 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
   //                                                                fwd_fee:Grams proof_delivered:^Cell = InMsg;
   //
 
+  const auto insert_parsed_transaction
+      = [](const Ref<vm::Cell>& transaction, const auto workchain) -> json {
+          vm::CellBuilder cb;
+          cb.store_ref(transaction);
+          const auto body_cell = cb.finalize();
+          const auto csr = load_cell_slice_ref(body_cell);
+
+          return parse_transaction(csr, workchain);
+      };
+  const auto insert_parsed_in_msg
+      = [](const Ref<vm::Cell>& in_msg, const auto workchain) -> json {
+          vm::CellBuilder cb;
+          cb.store_ref(in_msg);
+          const auto body_cell = cb.finalize();
+          const auto csr = load_cell_slice_ref(body_cell);
+
+          return parse_in_msg_descr(*csr, workchain);
+      };
+
   json answer;
 
   auto tag = block::gen::t_OutMsg.check_tag(out_msg);
@@ -947,12 +966,7 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     block::gen::OutMsg::Record_msg_export_ext data;
     CHECK(tlb::unpack(out_msg, data))
 
-    vm::CellBuilder cb;
-    cb.store_ref(data.transaction);
-    auto body_cell = cb.finalize();
-    auto csr = load_cell_slice_ref(body_cell);
-
-    answer["transaction"] = parse_transaction(csr, workchain);
+    answer["transaction"] = insert_parsed_transaction(data.transaction, workchain);
     answer["msg"] = parse_message(data.msg);
   }
 
@@ -962,17 +976,9 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     block::gen::OutMsg::Record_msg_export_imm data;
     CHECK(tlb::unpack(out_msg, data))
 
-    auto t = load_cell_slice_ref(data.transaction);
-
-    vm::CellBuilder cb;
-    cb.store_ref(data.transaction);
-    auto body_cell = cb.finalize();
-    auto csr = load_cell_slice_ref(body_cell);
-
-    answer["transaction"] = parse_transaction(csr, workchain);
+    answer["transaction"] = insert_parsed_transaction(data.transaction, workchain);
     answer["out_msg"] = parse_msg_envelope(data.out_msg);
-
-    // TODO: reimport:^InMsg
+    answer["reimport"] = insert_parsed_in_msg(data.reimport, workchain);
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_new) {
@@ -981,12 +987,7 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     block::gen::OutMsg::Record_msg_export_new data;
     CHECK(tlb::unpack(out_msg, data))
 
-    vm::CellBuilder cb;
-    cb.store_ref(data.transaction);
-    auto body_cell = cb.finalize();
-    auto csr = load_cell_slice_ref(body_cell);
-
-    answer["transaction"] = parse_transaction(csr, workchain);
+    answer["transaction"] = insert_parsed_transaction(data.transaction, workchain);
     answer["out_msg"] = parse_msg_envelope(data.out_msg);
   }
 
@@ -997,8 +998,7 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     CHECK(tlb::unpack(out_msg, data))
 
     answer["out_msg"] = parse_msg_envelope(data.out_msg);
-
-    // TODO: imported:^InMsg
+    answer["imported"] = insert_parsed_in_msg(data.imported, workchain);
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_deq) {
@@ -1030,8 +1030,7 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     CHECK(tlb::unpack(out_msg, data))
 
     answer["out_msg"] = parse_msg_envelope(data.out_msg);
-
-    // TODO: imported:^InMsg
+    answer["imported"] = insert_parsed_in_msg(data.imported, workchain);
   }
 
   else if (tag == block::gen::t_OutMsg.msg_export_deq_imm) {
@@ -1041,8 +1040,7 @@ json parse_out_msg_descr(vm::CellSlice out_msg, int workchain) {  // TODO: parse
     CHECK(tlb::unpack(out_msg, data))
 
     answer["out_msg"] = parse_msg_envelope(data.out_msg);
-
-    // TODO: reimport:^InMsg
+    answer["reimport"] = insert_parsed_in_msg(data.reimport, workchain);
   }
 
   else {
