@@ -15,11 +15,12 @@ void BlockPublisherKafka::publishBlockData(const std::string& json) {
   std::lock_guard<std::mutex> guard(net_mtx);
   LOG(INFO) << "Sending " << json.size() << " bytes to Kafka";
   try {
-      producer.produce(cppkafka::MessageBuilder("block-data").partition(0).payload(json));
-      producer.flush();
+    producer.produce(cppkafka::MessageBuilder("block-data").partition(0).payload(json));
+    producer.flush();
   } catch (std::exception& e) {
-      LOG(ERROR) << "Error while sending block data to kafka: " << e.what();
-      publishBlockError(json::parse(json)["id"], e.what());
+    const auto id = to_string(json::parse(json)["id"]);
+    LOG(ERROR) << "Error while sending block data (" << id << ") to kafka: " << e.what();
+    publishBlockError(id, e.what());
   }
 }
 
@@ -30,24 +31,25 @@ void BlockPublisherKafka::publishBlockState(const std::string& json) {
     producer.produce(cppkafka::MessageBuilder("block-state").partition(0).payload(json));
     producer.flush();
   } catch (std::exception& e) {
-    LOG(ERROR) << "Error while sending block state to kafka: " << e.what();
-    publishBlockError(json::parse(json)["id"], e.what());
+    const auto id = to_string(json::parse(json)["id"]);
+    LOG(ERROR) << "Error while sending block state (" << id << ") to kafka: " << e.what();
+    publishBlockError(id, e.what());
   }
 }
 
 void BlockPublisherKafka::publishBlockError(const std::string& id, const std::string& error) {
-    const json json = {
-        {"id", id},
-        {"error", error}
-    };
-    const std::string dump = json.dump();
+  const json json = {
+      {"id", id},
+      {"error", error}
+  };
+  const std::string dump = json.dump();
 
-    try {
-        producer.produce(cppkafka::MessageBuilder("block-error").partition(0).payload(dump));
-        producer.flush();
-    } catch (std::exception& e) {
-        LOG(ERROR) << "Error while sending block error to kafka: " << e.what();
-    }
+  try {
+    producer.produce(cppkafka::MessageBuilder("block-error").partition(0).payload(dump));
+    producer.flush();
+  } catch (std::exception& e) {
+    LOG(ERROR) << "Error while sending block (" << id << ") error (" << error << ") to kafka: " << e.what();
+  }
 }
 
 }
