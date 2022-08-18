@@ -16,7 +16,7 @@ void BlockPublisherKafka::publishBlockData(const std::string& json) {
   LOG(INFO) << "Sending " << json.size() << " bytes to Kafka";
   try {
     producer.produce(cppkafka::MessageBuilder("block-data").partition(0).payload(json));
-    producer.flush();
+    producer.flush(std::chrono::milliseconds(10000));
   } catch (std::exception& e) {
     const auto id = to_string(json::parse(json)["id"]);
     LOG(ERROR) << "Error while sending block data (" << id << ") to kafka: " << e.what();
@@ -29,7 +29,7 @@ void BlockPublisherKafka::publishBlockState(const std::string& json) {
   LOG(INFO) << "Sending " << json.size() << " bytes to Kafka";
   try {
     producer.produce(cppkafka::MessageBuilder("block-state").partition(0).payload(json));
-    producer.flush();
+    producer.flush(std::chrono::milliseconds(10000));
   } catch (std::exception& e) {
     const auto id = to_string(json::parse(json)["id"]);
     LOG(ERROR) << "Error while sending block state (" << id << ") to kafka: " << e.what();
@@ -46,7 +46,7 @@ void BlockPublisherKafka::publishBlockError(const std::string& id, const std::st
 
   try {
     producer.produce(cppkafka::MessageBuilder("block-error").partition(0).payload(dump));
-    producer.flush();
+    producer.flush(std::chrono::milliseconds(10000));
   } catch (std::exception& e) {
     LOG(ERROR) << "Error while sending block (" << id << ") error (" << error << ") to kafka: " << e.what();
   }
