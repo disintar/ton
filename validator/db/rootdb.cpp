@@ -231,13 +231,16 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
       } else {
         handle->set_state_root_hash(root_hash);
         handle->set_state_boc();
+
         auto S = create_shard_state(handle->id(), R.move_as_ok());
         S.ensure();
+
         auto P = td::PromiseCreator::lambda(
             [promise = std::move(promise), state = S.move_as_ok()](td::Result<td::Unit> R) mutable {
               R.ensure();
               promise.set_value(std::move(state));
             });
+
         td::actor::send_closure(b, &ArchiveManager::update_handle, std::move(handle), std::move(P));
       }
     });
@@ -279,6 +282,10 @@ void RootDb::get_block_state_root_cell(ConstBlockHandle handle, td::Promise<td::
   } else {
     promise.set_error(td::Status::Error(ErrorCode::notready, "state not in db"));
   }
+}
+
+void RootDb::get_cell_db_reader(td::Promise<std::shared_ptr<vm::CellDbReader>> promise) {
+  td::actor::send_closure(cell_db_, &CellDb::get_cell_db_reader, std::move(promise));
 }
 
 void RootDb::store_persistent_state_file(BlockIdExt block_id, BlockIdExt masterchain_block_id, td::BufferSlice state,

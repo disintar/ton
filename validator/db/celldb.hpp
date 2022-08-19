@@ -51,6 +51,7 @@ class CellDbIn : public CellDbBase {
 
   void load_cell(RootHash hash, td::Promise<td::Ref<vm::DataCell>> promise);
   void store_cell(BlockIdExt block_id, td::Ref<vm::Cell> cell, td::Promise<td::Ref<vm::DataCell>> promise);
+  void get_cell_db_reader(td::Promise<std::shared_ptr<vm::CellDbReader>> promise);
 
   CellDbIn(td::actor::ActorId<RootDb> root_db, td::actor::ActorId<CellDb> parent, std::string path, bool read_only=false);
 
@@ -108,6 +109,7 @@ class CellDb : public CellDbBase {
     started_ = true;
     boc_->set_loader(std::make_unique<vm::CellLoader>(std::move(snapshot))).ensure();
   }
+  void get_cell_db_reader(td::Promise<std::shared_ptr<vm::CellDbReader>> promise);
   void clear_boc_cache() {
     boc_->clear_cache();
   }

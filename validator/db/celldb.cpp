@@ -64,6 +64,42 @@ void CellDbBase::execute_sync(std::function<void()> f) {
 
 CellDbIn::CellDbIn(td::actor::ActorId<RootDb> root_db, td::actor::ActorId<CellDb> parent, std::string path, bool read_only)
     : root_db_(root_db), parent_(parent), path_(std::move(path)), read_only_(read_only) {
+class CellDbAsyncExecutor : public vm::DynamicBagOfCellsDb::AsyncExecutor {
+ public:
+  explicit CellDbAsyncExecutor(td::actor::ActorId<CellDbBase> cell_db) : cell_db_(std::move(cell_db)) {
+  }
+
+  void execute_async(std::function<void()> f) {
+    class Runner : public td::actor::Actor {
+     public:
+      explicit Runner(std::function<void()> f) : f_(std::move(f)) {}
+      void start_up() {
+        f_();
+        stop();
+      }
+     private:
+      std::function<void()> f_;
+    };
+    td::actor::create_actor<Runner>("executeasync", std::move(f)).release();
+  }
+
+  void execute_sync(std::function<void()> f) {
+    td::actor::send_closure(cell_db_, &CellDbBase::execute_sync, std::move(f));
+  }
+ private:
+  td::actor::ActorId<CellDbBase> cell_db_;
+};
+
+void CellDbBase::start_up() {
+  async_executor = std::make_shared<CellDbAsyncExecutor>(actor_id(this));
+}
+
+void CellDbBase::execute_sync(std::function<void()> f) {
+  f();
+}
+
+CellDbIn::CellDbIn(td::actor::ActorId<RootDb> root_db, td::actor::ActorId<CellDb> parent, std::string path)
+    : root_db_(root_db), parent_(parent), path_(std::move(path)) {
 }
 
 void CellDbIn::start_up() {
@@ -135,6 +171,10 @@ void CellDbIn::store_cell(BlockIdExt block_id, td::Ref<vm::Cell> cell, td::Promi
   td::actor::send_closure(parent_, &CellDb::update_snapshot, cell_db_->snapshot());
 
   promise.set_result(boc_->load_cell(cell->get_hash().as_slice()));
+}
+
+void CellDbIn::get_cell_db_reader(td::Promise<std::shared_ptr<vm::CellDbReader>> promise) {
+  promise.set_result(boc_->get_cell_db_reader());
 }
 
 void CellDbIn::alarm() {
@@ -300,6 +340,10 @@ void CellDb::load_cell(RootHash hash, td::Promise<td::Ref<vm::DataCell>> promise
 
 void CellDb::store_cell(BlockIdExt block_id, td::Ref<vm::Cell> cell, td::Promise<td::Ref<vm::DataCell>> promise) {
   td::actor::send_closure(cell_db_, &CellDbIn::store_cell, block_id, std::move(cell), std::move(promise));
+}
+
+void CellDb::get_cell_db_reader(td::Promise<std::shared_ptr<vm::CellDbReader>> promise) {
+  td::actor::send_closure(cell_db_, &CellDbIn::get_cell_db_reader, std::move(promise));
 }
 
 void CellDb::start_up() {
