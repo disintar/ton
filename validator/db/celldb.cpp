@@ -63,44 +63,7 @@ void CellDbBase::execute_sync(std::function<void()> f) {
 }
 
 CellDbIn::CellDbIn(td::actor::ActorId<RootDb> root_db, td::actor::ActorId<CellDb> parent, std::string path, bool read_only)
-    : root_db_(root_db), parent_(parent), path_(std::move(path)), read_only_(read_only) {
-class CellDbAsyncExecutor : public vm::DynamicBagOfCellsDb::AsyncExecutor {
- public:
-  explicit CellDbAsyncExecutor(td::actor::ActorId<CellDbBase> cell_db) : cell_db_(std::move(cell_db)) {
-  }
-
-  void execute_async(std::function<void()> f) {
-    class Runner : public td::actor::Actor {
-     public:
-      explicit Runner(std::function<void()> f) : f_(std::move(f)) {}
-      void start_up() {
-        f_();
-        stop();
-      }
-     private:
-      std::function<void()> f_;
-    };
-    td::actor::create_actor<Runner>("executeasync", std::move(f)).release();
-  }
-
-  void execute_sync(std::function<void()> f) {
-    td::actor::send_closure(cell_db_, &CellDbBase::execute_sync, std::move(f));
-  }
- private:
-  td::actor::ActorId<CellDbBase> cell_db_;
-};
-
-void CellDbBase::start_up() {
-  async_executor = std::make_shared<CellDbAsyncExecutor>(actor_id(this));
-}
-
-void CellDbBase::execute_sync(std::function<void()> f) {
-  f();
-}
-
-CellDbIn::CellDbIn(td::actor::ActorId<RootDb> root_db, td::actor::ActorId<CellDb> parent, std::string path)
-    : root_db_(root_db), parent_(parent), path_(std::move(path)) {
-}
+    : root_db_(root_db), parent_(parent), path_(std::move(path)), read_only_(read_only) {}
 
 void CellDbIn::start_up() {
   LOG(DEBUG) << "Open CellDbIn: " << path_;
