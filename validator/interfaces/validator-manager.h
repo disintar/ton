@@ -170,7 +170,9 @@ class ValidatorManager : public ValidatorManagerInterface {
 //    LOG(ERROR) << "set_block_publisher";
   } ///TODO: make it pure virtual
 
-  virtual IBlockPublisher* get_block_publisher() = 0;
+  virtual IBlockPublisher* get_block_publisher() {
+    // TODO: make it pure virtual
+  }
 
   static bool is_persistent_state(UnixTime ts, UnixTime prev_ts) {
     return ts / (1 << 17) != prev_ts / (1 << 17);
