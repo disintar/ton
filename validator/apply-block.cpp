@@ -257,6 +257,7 @@ void ApplyBlock::applied_prev() {
 
 void ApplyBlock::applied_set() {
   VLOG(VALIDATOR_DEBUG) << "apply block: setting apply bit for " << id_;
+  handle_->set_block_publisher(manager_.get_actor_unsafe().get_block_publisher());
   handle_->set_applied();
   if (handle_->id().seqno() > 0) {
     CHECK(handle_->handle_moved_to_archive());

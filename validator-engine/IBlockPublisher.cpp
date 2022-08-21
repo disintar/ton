@@ -4,6 +4,7 @@
 namespace ton::validator {
 
 BlockPublisherParser::BlockPublisherParser() :
+    publish_applied_thread_(&BlockPublisherParser::publish_applied_worker, this),
     publish_blocks_thread_(&BlockPublisherParser::publish_blocks_worker, this),
     publish_states_thread_(&BlockPublisherParser::publish_states_worker, this)
   {}
@@ -14,6 +15,22 @@ BlockPublisherParser::~BlockPublisherParser() {
   publish_states_cv_.notify_all();
   publish_blocks_thread_.join();
   publish_states_thread_.join();
+}
+
+void BlockPublisherParser::storeBlockApplied(BlockIdExt id) {
+  json to_dump = {
+    {"file_hash", id.file_hash.to_hex()},
+    {"root_hash", id.root_hash.to_hex()},
+    {"id",
+      {
+        {"workchain", id.id.workchain},
+        {"seqno", id.id.seqno},
+        {"shard", id.id.shard},
+      }
+    }
+  };
+
+  enqueuePublishBlockApplied(to_dump.dump());
 }
 
 void BlockPublisherParser::storeBlockData(BlockHandle handle, td::Ref<BlockData> block) {
@@ -758,11 +775,11 @@ void BlockPublisherParser::gotState(BlockHandle handle, td::Ref<ShardState> stat
   enqueuePublishBlockState(to_dump.dump());
 }
 
-void BlockPublisherParser::enqueuePublishBlockData(std::string json) {
-  std::unique_lock lock(publish_blocks_mtx_);
-  publish_blocks_queue_.emplace(json);
+void BlockPublisherParser::enqueuePublishBlockApplied(std::string json) {
+  std::unique_lock lock(publish_applied_mtx_);
+  publish_applied_queue_.emplace(json);
   lock.unlock();
-  publish_blocks_cv_.notify_one();
+  publish_applied_cv_.notify_one();
 }
 
 void BlockPublisherParser::enqueuePublishBlockState(std::string json) {
@@ -770,6 +787,23 @@ void BlockPublisherParser::enqueuePublishBlockState(std::string json) {
   publish_states_queue_.emplace(json);
   lock.unlock();
   publish_states_cv_.notify_one();
+}
+
+void BlockPublisherParser::publish_applied_worker() {
+  bool should_run = running_;
+  while (should_run) {
+    std::unique_lock lock(publish_applied_mtx_);
+    publish_applied_cv_.wait(lock, [this]{ return !publish_applied_queue_.empty() || !running_; });
+    if (publish_applied_queue_.empty()) return;
+
+    auto block = std::move(publish_applied_queue_.front());
+    publish_applied_queue_.pop();
+
+    should_run = running_ || !publish_applied_queue_.empty();
+    lock.unlock();
+
+    publishBlockData(block);
+  }
 }
 
 void BlockPublisherParser::publish_blocks_worker() {

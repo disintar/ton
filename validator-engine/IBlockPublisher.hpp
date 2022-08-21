@@ -17,12 +17,14 @@ class IBlockPublisher {
  public:
   virtual ~IBlockPublisher() = default;
 
+  virtual void storeBlockApplied(BlockIdExt id) = 0;
   virtual void storeBlockData(BlockHandle handle, td::Ref<BlockData> block) = 0;
   virtual void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) = 0;
 };
 
 class BlockPublisherIgnore : public IBlockPublisher {
  public:
+  void storeBlockApplied(BlockIdExt id) override {};
   void storeBlockData(BlockHandle handle, td::Ref<BlockData> block) override {};
   void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) override {};
 };
@@ -34,18 +36,22 @@ public:
     ~BlockPublisherParser() override;
 
  public:
+  void storeBlockApplied(BlockIdExt id) final;
   void storeBlockData(BlockHandle handle, td::Ref<BlockData> block) final;
   void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) final;
 
  private:
   void gotState(BlockHandle handle, td::Ref<ShardState> state, std::vector<td::Bits256> accounts_keys);
 
+  void enqueuePublishBlockApplied(std::string json);
   void enqueuePublishBlockData(std::string json);
   void enqueuePublishBlockState(std::string json);
 
+  virtual void publishBlockApplied(const std::string& json) = 0;
   virtual void publishBlockData(const std::string& json) = 0;
   virtual void publishBlockState(const std::string& json) = 0;
 
+  void publish_applied_worker();
   void publish_blocks_worker();
   void publish_states_worker();
 
@@ -57,6 +63,11 @@ public:
   // mb rewrite with https://github.com/andreiavrammsd/cpp-channel
 
   std::atomic_bool running_ = true; // TODO: stop_token when c++20
+
+  std::mutex publish_applied_mtx_;
+  std::condition_variable publish_applied_cv_;
+  std::queue<std::string> publish_applied_queue_;
+  std::thread publish_applied_thread_;
 
   std::mutex publish_blocks_mtx_;
   std::condition_variable publish_blocks_cv_;

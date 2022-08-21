@@ -78,13 +78,12 @@ class RootDb : public Db {
       : validator_manager_(validator_manager), root_path_(std::move(root_path)), read_only_(read_only) {
   }
 
-  void set_block_publisher(std::unique_ptr<IBlockPublisher> publisher) override {
+  void set_block_publisher(IBlockPublisher* publisher) override {
     if (publisher == nullptr) {
       LOG(ERROR) << "Received nullptr IBlockPublisher";
-      publisher_ = std::make_unique<ton::validator::BlockPublisherIgnore>();
       return;
     }
-    publisher_ = std::move(publisher);
+    publisher_ = publisher;
 //    LOG(INFO) << "Received BlockPublisher";
   }
 
@@ -199,7 +198,7 @@ class RootDb : public Db {
   td::actor::ActorOwn<StaticFilesDb> static_files_db_;
   td::actor::ActorOwn<ArchiveManager> archive_db_;
 
-  std::unique_ptr<IBlockPublisher> publisher_ = std::make_unique<BlockPublisherIgnore>();
+  IBlockPublisher* publisher_ = nullptr;
   void get_block_state_root_cell(ConstBlockHandle handle, td::Promise<td::Ref<vm::DataCell>> promise) override;
 };
 

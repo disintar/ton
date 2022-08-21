@@ -209,7 +209,9 @@ void ValidatorManagerImpl::prevalidate_block(BlockBroadcast broadcast, td::Promi
     return;
   }
   td::actor::create_actor<ValidateBroadcast>("broadcast", std::move(broadcast), last_masterchain_block_handle_,
-                                             last_masterchain_state_, last_known_key_block_handle_, actor_id(this),
+                                             last_masterchain_state_, last_known_key_block_handle_,
+                                             publisher_.get(),
+                                             actor_id(this),
                                              td::Timestamp::in(2.0), std::move(promise))
       .release();
 }

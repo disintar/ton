@@ -12,6 +12,7 @@ class BlockPublisherKafka : public BlockPublisherParser {
   explicit BlockPublisherKafka(const std::string& endpoint);
 
  private:
+  void publishBlockApplied(const std::string& json) override;
   void publishBlockData(const std::string& json) override;
   void publishBlockState(const std::string& json) override;
 

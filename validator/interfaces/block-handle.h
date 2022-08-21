@@ -22,6 +22,11 @@
 #include "td/actor/PromiseFuture.h"
 #include "td/actor/actor.h"
 
+namespace ton::validator {
+  class IBlockPublisher;
+}
+
+
 namespace ton {
 
 namespace validator {
@@ -97,6 +102,7 @@ struct BlockHandleInterface {
   virtual void set_archived() = 0;
   virtual void set_applied() = 0;
   virtual void set_masterchain_ref_block(BlockSeqno seqno) = 0;
+  virtual void set_block_publisher(ton::validator::IBlockPublisher* publisher) = 0;
 
   virtual void unsafe_clear_applied() = 0;
   virtual void unsafe_clear_next() = 0;

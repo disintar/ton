@@ -370,12 +370,16 @@ class
 
   void set_block_publisher(std::unique_ptr<IBlockPublisher> publisher) override {
 //    LOG(ERROR) << "set_block_publisher";
-    td::actor::send_closure(db_, &Db::set_block_publisher, std::move(publisher));
+    publisher_ = std::move(publisher);
+    td::actor::send_closure(db_, &Db::set_block_publisher, publisher_.get());
   }
   void clear_celldb_boc_cache() override {
     //    LOG(ERROR) << "clear_celldb_boc_cache";
     td::actor::send_closure(db_, &Db::clear_boc_cache);
   }
+
+ private:
+  std::unique_ptr<IBlockPublisher> publisher_;
 
  private:
   PublicKeyHash local_id_;

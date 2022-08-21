@@ -31,7 +31,9 @@ namespace ton {
 namespace validator {
 
 void RootDb::store_block_data(BlockHandle handle, td::Ref<BlockData> block, td::Promise<td::Unit> promise) {
-  publisher_->storeBlockData(handle, block);
+  if (publisher_) {
+    publisher_->storeBlockData(handle, block);
+  }
 
   if (handle->received()) {
     promise.set_value(td::Unit());
@@ -218,7 +220,10 @@ void RootDb::get_block_candidate(PublicKey source, BlockIdExt id, FileHash colla
 
 void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
                                td::Promise<td::Ref<ShardState>> promise) {
-  publisher_->storeBlockState(handle, state);
+  if (publisher_) {
+    publisher_->storeBlockState(handle, state);
+  }
+
   if (handle->moved_to_archive()) {
     promise.set_value(std::move(state));
     return;

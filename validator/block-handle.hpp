@@ -74,6 +74,7 @@ struct BlockHandleImpl : public BlockHandleInterface {
   UnixTime ts_;
   RootHash state_;
   BlockSeqno masterchain_ref_seqno_;
+  IBlockPublisher* publisher_ = nullptr;
 
   static constexpr td::uint64 lock_const() {
     return static_cast<td::uint64>(1) << 32;
@@ -482,7 +483,9 @@ struct BlockHandleImpl : public BlockHandleInterface {
     }
   }
   void set_applied() override {
-    LOG(WARNING) << "Apply: " << id_.id.shard << ":" << id_.id.workchain << ":" << id_.id.seqno;
+    if (publisher_) {
+      publisher_->storeBlockApplied(id_);
+    }
 
     if (!is_applied()) {
       lock();
@@ -497,6 +500,10 @@ struct BlockHandleImpl : public BlockHandleInterface {
       flags_ |= Flags::dbf_inited_masterchain_ref_block;
       unlock();
     }
+  }
+
+  void set_block_publisher(IBlockPublisher* publisher) override {
+    publisher_ = publisher;
   }
 
   void unsafe_clear_applied() override {

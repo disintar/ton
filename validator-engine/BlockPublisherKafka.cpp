@@ -11,6 +11,19 @@ BlockPublisherKafka::BlockPublisherKafka(const std::string& endpoint) : producer
     }
 ) {}
 
+void BlockPublisherKafka::publishBlockApplied(const std::string& json) {
+  std::lock_guard<std::mutex> guard(net_mtx);
+  LOG(INFO) << "Sending " << json.size() << " bytes to Kafka";
+  try {
+    producer.produce(cppkafka::MessageBuilder("block-applied").partition(0).payload(json));
+    producer.flush(std::chrono::milliseconds(10000));
+  } catch (std::exception& e) {
+    const auto id = to_string(json::parse(json)["id"]);
+    LOG(ERROR) << "Error while sending block applied (" << id << ") to kafka: " << e.what();
+    publishBlockError(id, e.what());
+  }
+}
+
 void BlockPublisherKafka::publishBlockData(const std::string& json) {
   std::lock_guard<std::mutex> guard(net_mtx);
   LOG(INFO) << "Sending " << json.size() << " bytes to Kafka";
