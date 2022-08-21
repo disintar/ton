@@ -34,6 +34,7 @@ void BlockPublisherParser::storeBlockData(BlockHandle handle, td::Ref<BlockData>
 
   json answer;
   answer["type"] = "block_data";
+  answer["is_applied"] = handle->is_applied();
 
   auto workchain = blkid.id.workchain;
 
