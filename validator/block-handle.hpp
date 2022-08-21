@@ -482,6 +482,8 @@ struct BlockHandleImpl : public BlockHandleInterface {
     }
   }
   void set_applied() override {
+    LOG(WARNING) << "Apply: " << id_.id.shard << ":" << id_.id.workchain << ":" << id_.id.seqno;
+
     if (!is_applied()) {
       lock();
       flags_ |= Flags::dbf_applied;
