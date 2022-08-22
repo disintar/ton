@@ -192,6 +192,10 @@ void DownloadShardState::written_shard_state(td::Ref<ShardState> state) {
   handle_->set_is_key_block(block_id_.is_masterchain());
   handle_->set_logical_time(state_->get_logical_time());
   handle_->set_applied();
+  auto publisher = manager_.get_actor_unsafe().get_block_publisher();
+  if (publisher) {
+    publisher->storeBlockApplied(handle_->id());
+  }
   handle_->set_split(state_->before_split());
   if (!block_id_.is_masterchain()) {
     handle_->set_masterchain_ref_block(masterchain_block_id_.seqno());
