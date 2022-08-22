@@ -782,6 +782,13 @@ void BlockPublisherParser::enqueuePublishBlockApplied(std::string json) {
   publish_applied_cv_.notify_one();
 }
 
+void BlockPublisherParser::enqueuePublishBlockData(std::string json) {
+  std::unique_lock lock(publish_blocks_mtx_);
+  publish_blocks_queue_.emplace(json);
+  lock.unlock();
+  publish_blocks_cv_.notify_one();
+}
+
 void BlockPublisherParser::enqueuePublishBlockState(std::string json) {
   std::unique_lock lock(publish_states_mtx_);
   publish_states_queue_.emplace(json);
