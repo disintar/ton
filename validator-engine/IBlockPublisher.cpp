@@ -809,7 +809,7 @@ void BlockPublisherParser::publish_applied_worker() {
     should_run = running_ || !publish_applied_queue_.empty();
     lock.unlock();
 
-    publishBlockData(block);
+    publishBlockApplied(block);
   }
 }
 
