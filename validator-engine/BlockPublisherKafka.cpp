@@ -13,7 +13,7 @@ BlockPublisherKafka::BlockPublisherKafka(const std::string& endpoint) : producer
 
 void BlockPublisherKafka::publishBlockApplied(const std::string& json) {
   std::lock_guard<std::mutex> guard(net_mtx);
-  LOG(INFO) << "Sending " << json.size() << " bytes to Kafka";
+  LOG(INFO) << "[block-applied] Sending " << json.size() << " bytes to Kafka";
   try {
     producer.produce(cppkafka::MessageBuilder("block-applied").partition(0).payload(json));
     producer.flush(std::chrono::milliseconds(10000));
@@ -26,7 +26,7 @@ void BlockPublisherKafka::publishBlockApplied(const std::string& json) {
 
 void BlockPublisherKafka::publishBlockData(const std::string& json) {
   std::lock_guard<std::mutex> guard(net_mtx);
-  LOG(INFO) << "Sending " << json.size() << " bytes to Kafka";
+  LOG(INFO) << "[block-data] Sending " << json.size() << " bytes to Kafka";
   try {
     producer.produce(cppkafka::MessageBuilder("block-data").partition(0).payload(json));
     producer.flush(std::chrono::milliseconds(10000));
@@ -39,7 +39,7 @@ void BlockPublisherKafka::publishBlockData(const std::string& json) {
 
 void BlockPublisherKafka::publishBlockState(const std::string& json) {
   std::lock_guard<std::mutex> guard(net_mtx);
-  LOG(INFO) << "Sending " << json.size() << " bytes to Kafka";
+  LOG(INFO) << "[block-state] Sending " << json.size() << " bytes to Kafka";
   try {
     producer.produce(cppkafka::MessageBuilder("block-state").partition(0).payload(json));
     producer.flush(std::chrono::milliseconds(10000));
@@ -58,6 +58,7 @@ void BlockPublisherKafka::publishBlockError(const std::string& id, const std::st
   const std::string dump = json.dump();
 
   try {
+    LOG(WARNING) << "[block-error] Sending " << json.size() << " bytes to Kafka";
     producer.produce(cppkafka::MessageBuilder("block-error").partition(0).payload(dump));
     producer.flush(std::chrono::milliseconds(10000));
   } catch (std::exception& e) {
