@@ -3566,7 +3566,7 @@ td::Status TonlibClient::do_request(const tonlib_api::disasm& request, td::Promi
       return res.move_as_error();
     } else {
       auto disasm_out = output.str();
-      // cheap no-brainer based gigachad move
+      // cheap no-brainer
       std::string_view pattern = " ok\n";
       std::string::size_type n = pattern.length();
       for (std::string::size_type i = disasm_out.find(pattern); i != std::string::npos; i = disasm_out.find(pattern)) {
