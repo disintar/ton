@@ -38,6 +38,7 @@
 #include <thread>
 #include "validator-engine/IBlockParser.hpp"
 #include "validator-engine/BlockPublisherKafka.hpp"
+#include "validator-engine/BlockPublisherFS.hpp"
 
 int verbosity = 0;
 
@@ -45,7 +46,7 @@ namespace ton {
 
 namespace validator {
 
-std::unique_ptr<IBLockPublisher> publisher_/* = std::make_unique<BlockPublisherFS>*/; // TODO:
+std::unique_ptr<IBLockPublisher> publisher_ = std::make_unique<BlockPublisherFS>(); // TODO:
 
 
 class Dumper {
@@ -1735,7 +1736,6 @@ int main(int argc, char **argv) {
     }
   });
   p.add_checked_option('P', "publish", "publish blocks/states to message queue <endpoint>", [&](td::Slice arg) {
-    // TODO: zmq/rmq/kafka/etc choice
     const auto endpoint = arg.str();
     td::actor::send_closure(indexer, &ton::validator::Indexer::set_block_publisher, std::make_unique<ton::validator::BlockPublisherKafka>(endpoint));
     return td::Status::OK();
