@@ -565,7 +565,7 @@ class Indexer : public td::actor::Actor {
       if (R.is_error()) {
         dumper_->addError(block_id_string, "block", R.move_as_error().to_string());
       } else {
-        try {
+//        try {
           auto block = R.move_as_ok();
           CHECK(block.not_null());
 
@@ -1114,9 +1114,9 @@ class Indexer : public td::actor::Actor {
           if (is_first && !info.not_master) {
             td::actor::send_closure(SelfId, &Indexer::parse_other);
           }
-        } catch (std::exception& e) {
-          dumper_->addError(block_id_string, "block", std::string("exception: ") + e.what());
-        }
+//        } catch (std::exception& e) {
+//          dumper_->addError(block_id_string, "block", std::string("exception: ") + e.what());
+//        }
       }
     });
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
@@ -1281,7 +1281,7 @@ class Indexer : public td::actor::Actor {
       if (R.is_error()) {
         dumper_->addError(block_id_string, "state", R.move_as_error().to_string());
       } else {
-        try {
+//        try {
           auto root_cell = R.move_as_ok();
           auto block_id = handle->id();
           block::gen::ShardStateUnsplit::Record shard_state;
@@ -1487,9 +1487,9 @@ class Indexer : public td::actor::Actor {
             td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
             //              decrease_state_padding();
           }
-        } catch (std::exception& e) {
-          dumper_->addError(block_id_string, "state", std::string("exception: ") + e.what());
-        }
+//        } catch (std::exception& e) {
+//          dumper_->addError(block_id_string, "state", std::string("exception: ") + e.what());
+//        }
       }
     });
 
