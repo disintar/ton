@@ -130,13 +130,13 @@ class Dumper {
       to_dump_ids.emplace_back(e["id"]);
 
       auto data = json {
-          {"id", e["id"]},
+          {"id", to_string(e["id"])},
           {"data", e["block"]}
       };
       publisher_->publishBlockData(data.dump());
 
       auto state = json {
-          {"id", e["id"]},
+          {"id", to_string(e["id"])},
           {"data", e["state"]}
       };
       publisher_->publishBlockState(state.dump());
