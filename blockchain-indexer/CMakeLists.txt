@@ -5,7 +5,14 @@ if (NOT OPENSSL_FOUND)
     find_package(OpenSSL REQUIRED)
 endif ()
 
-set(INDEXER_SOURCE indexer.cpp json.hpp json-utils.cpp json-utils.hpp)
+set(INDEXER_SOURCE indexer.cpp json.hpp json-utils.cpp json-utils.hpp
+        ../validator-engine/IBlockParser.hpp
+        ../validator-engine/IBlockParser.cpp
+        ../validator-engine/BlockPublisherFS.hpp
+        ../validator-engine/BlockPublisherFS.cpp
+        ../validator-engine/BlockPublisherKafka.hpp
+        ../validator-engine/BlockPublisherKafka.cpp
+)
 
 add_executable(blockchain-indexer ${INDEXER_SOURCE})
 
