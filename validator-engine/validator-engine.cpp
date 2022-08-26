@@ -3551,7 +3551,7 @@ int main(int argc, char *argv[]) {
     // TODO: zmq/rmq/kafka choice
 //    acts.push_back([&x, endpoint = arg.str()](){ td::actor::send_closure(x, &ValidatorEngine::set_block_publisher, std::make_unique<ton::validator::BlockPublisherRMQ>(endpoint)); });
 //    acts.push_back([&x, endpoint = arg.str()](){ td::actor::send_closure(x, &ValidatorEngine::set_block_publisher, std::make_unique<ton::validator::BlockPublisherZMQ>(endpoint)); });
-    acts.push_back([&x, endpoint = arg.str()](){ td::actor::send_closure(x, &ValidatorEngine::set_block_publisher, std::make_unique<ton::validator::BlockPublisherKafka>(endpoint)); });
+    acts.push_back([&x, endpoint = arg.str()](){ td::actor::send_closure(x, &ValidatorEngine::set_block_publisher, std::make_unique<ton::validator::BlockParser>(std::make_unique<ton::validator::BlockPublisherKafka>(endpoint))); });
     return td::Status::OK();
   });
 

@@ -3,8 +3,8 @@
 
 namespace ton::validator {
 
-BlockParser::BlockParser() :
-    publisher_(std::make_unique<BLockPublisherIgnore>()),
+BlockParser::BlockParser(std::unique_ptr<IBLockPublisher> publisher) :
+    publisher_(std::move(publisher)),
     publish_applied_thread_(&BlockParser::publish_applied_worker, this),
     publish_blocks_thread_(&BlockParser::publish_blocks_worker, this),
     publish_states_thread_(&BlockParser::publish_states_worker, this)
@@ -16,10 +16,6 @@ BlockParser::~BlockParser() {
   publish_states_cv_.notify_all();
   publish_blocks_thread_.join();
   publish_states_thread_.join();
-}
-
-void BlockParser::setBlockPublisher(std::unique_ptr<IBLockPublisher> publisher) {
-  publisher_ = std::move(publisher);
 }
 
 void BlockParser::storeBlockApplied(BlockIdExt id) {

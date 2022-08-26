@@ -22,18 +22,9 @@ class IBLockPublisher {
   virtual void publishBlockState(std::string json) = 0;
 };
 
-class BLockPublisherIgnore : public IBLockPublisher {
- public:
-  void publishBlockApplied(std::string json) override {};
-  void publishBlockData(std::string json) override {};
-  void publishBlockState(std::string json) override {};
-};
-
 class IBlockParser {
  public:
   virtual ~IBlockParser() = default;
-
-  virtual void setBlockPublisher(std::unique_ptr<IBLockPublisher> publisher) = 0;
 
   virtual void storeBlockApplied(BlockIdExt id) = 0;
   virtual void storeBlockData(BlockHandle handle, td::Ref<BlockData> block) = 0;
@@ -43,12 +34,10 @@ class IBlockParser {
 
 class BlockParser : public IBlockParser {
 public:
-    BlockParser();
+    explicit BlockParser(std::unique_ptr<IBLockPublisher> publisher);
     ~BlockParser() override;
 
  public:
-  void setBlockPublisher(std::unique_ptr<IBLockPublisher> publisher) final;
-
   void storeBlockApplied(BlockIdExt id) final;
   void storeBlockData(BlockHandle handle, td::Ref<BlockData> block) final;
   void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) final;
