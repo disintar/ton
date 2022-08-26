@@ -1110,8 +1110,8 @@ class Indexer : public td::actor::Actor {
           if (is_first && !info.not_master) {
             td::actor::send_closure(SelfId, &Indexer::parse_other);
           }
-        } catch (...) {
-          dumper_->addError(block_id_string, "block", "unknown error");
+        } catch (std::exception& e) {
+          dumper_->addError(block_id_string, "block", std::string("exception: ") + e.what());
         }
       }
     });
@@ -1483,8 +1483,8 @@ class Indexer : public td::actor::Actor {
             td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
             //              decrease_state_padding();
           }
-        } catch (...) {
-          dumper_->addError(block_id_string, "state", "unknown error");
+        } catch (std::exception& e) {
+          dumper_->addError(block_id_string, "state", std::string("exception: ") + e.what());
         }
       }
     });
