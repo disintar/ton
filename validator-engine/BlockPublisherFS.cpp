@@ -14,8 +14,7 @@ void BlockPublisherFS::publishBlockApplied(std::string j) {
 }
 
 void BlockPublisherFS::publishBlockData(std::string j) {
-  const auto json_id = json::parse(j)["id"];
-  const auto id = json_id.dump();
+  const auto id = json::parse(j)["id"];
   std::ostringstream oss;
   oss << "data" << "_" << id << ".json";
   std::ofstream file(oss.str());
@@ -23,8 +22,7 @@ void BlockPublisherFS::publishBlockData(std::string j) {
 }
 
 void BlockPublisherFS::publishBlockState(std::string j) {
-  const auto json_id = json::parse(j)["id"];
-  const auto id = json_id.dump();
+  const auto id = json::parse(j)["id"];
   std::ostringstream oss;
   oss << "state" << "_" << id << ".json";
   std::ofstream file(oss.str());
