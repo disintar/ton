@@ -587,15 +587,19 @@ class Indexer : public td::actor::Actor {
 
           auto workchain = blkid.id.workchain;
 
-          answer["BlockIdExt"] = {{"file_hash", blkid.file_hash.to_hex()},
-                                  {"root_hash", blkid.root_hash.to_hex()},
-                                  {"id",
-                                   {
-                                       {"workchain", workchain},
-                                       {"seqno", blkid.id.seqno},
-                                       {"shard", blkid.id.shard},
-                                   }}};
-          publisher_->publishBlockApplied(answer["BlockIdExt"].dump());
+          const auto json_block_id_ext = json {
+            {"file_hash", blkid.file_hash.to_hex()},
+              {"root_hash", blkid.root_hash.to_hex()},
+              {"id",
+                {
+                  {"workchain", workchain},
+                  {"seqno", blkid.id.seqno},
+                  {"shard", blkid.id.shard},
+                }
+              }
+          };
+          answer["BlockIdExt"] = json_block_id_ext;
+          publisher_->publishBlockApplied(json_block_id_ext.dump());
 
           block::gen::Block::Record blk;
           block::gen::BlockInfo::Record info;
