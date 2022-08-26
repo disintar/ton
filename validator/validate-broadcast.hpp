@@ -34,7 +34,7 @@ class ValidateBroadcast : public td::actor::Actor {
 
   ProofLink::BasicHeaderInfo header_info_;
 
-  IBlockPublisher* publisher_;
+  IBlockParser* publisher_;
   td::actor::ActorId<ValidatorManager> manager_;
   td::Timestamp timeout_;
   td::Promise<td::Unit> promise_;
@@ -54,7 +54,7 @@ class ValidateBroadcast : public td::actor::Actor {
  public:
   ValidateBroadcast(BlockBroadcast broadcast, BlockHandle last_masterchain_block_handle,
                     td::Ref<MasterchainState> last_masterchain_state, BlockHandle last_known_masterchain_block_handle,
-                    IBlockPublisher* publisher,
+                    IBlockParser* publisher,
                     td::actor::ActorId<ValidatorManager> manager, td::Timestamp timeout, td::Promise<td::Unit> promise)
       : broadcast_(std::move(broadcast))
       , last_masterchain_block_handle_(std::move(last_masterchain_block_handle))

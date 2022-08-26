@@ -33,7 +33,7 @@
 #include "interfaces/block.h"
 #include "interfaces/proof.h"
 #include "interfaces/shard.h"
-#include "validator-engine/IBlockPublisher.hpp"
+#include "validator-engine/IBlockParser.hpp"
 #include "catchain/catchain-types.h"
 
 namespace ton {
@@ -212,7 +212,7 @@ class ValidatorManagerInterface : public td::actor::Actor {
   virtual void get_archive_slice(td::uint64 archive_id, td::uint64 offset, td::uint32 limit,
                                  td::Promise<td::BufferSlice> promise) = 0;
 
-  virtual void set_block_publisher(std::unique_ptr<IBlockPublisher> publisher) {
+  virtual void set_block_publisher(std::unique_ptr<IBlockParser> publisher) {
 //    LOG(ERROR) << "set_block_publisher";
   } ///TODO: make it pure virtual
   virtual void clear_celldb_boc_cache() {

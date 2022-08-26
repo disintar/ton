@@ -1,21 +1,21 @@
 #ifndef TON_BLOCKPUBLISHERKAFKA_HPP
 #define TON_BLOCKPUBLISHERKAFKA_HPP
 
-#include "IBlockPublisher.hpp"
+#include "IBlockParser.hpp"
 #include <cppkafka/cppkafka.h>
 
 
 namespace ton::validator {
 
-class BlockPublisherKafka : public BlockPublisherParser {
+class BlockPublisherKafka : public IBLockPublisher {
  public:
   explicit BlockPublisherKafka(const std::string& endpoint);
 
- private:
-  void publishBlockApplied(const std::string& json) override;
-  void publishBlockData(const std::string& json) override;
-  void publishBlockState(const std::string& json) override;
+  void publishBlockApplied(std::string json) override;
+  void publishBlockData(std::string json) override;
+  void publishBlockState(std::string json) override;
 
+ private:
   void publishBlockError(const std::string& id, const std::string& error);
 
  private:

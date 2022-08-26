@@ -65,7 +65,7 @@
 #include "vm/boc.h"
 #include "crypto/block/mc-config.h"
 
-#include "validator-engine/IBlockPublisher.hpp"
+#include "validator-engine/IBlockParser.hpp"
 
 namespace ton {
 
@@ -78,7 +78,7 @@ class RootDb : public Db {
       : validator_manager_(validator_manager), root_path_(std::move(root_path)), read_only_(read_only) {
   }
 
-  void set_block_publisher(IBlockPublisher* publisher) override {
+  void set_block_publisher(IBlockParser* publisher) override {
     if (publisher == nullptr) {
       LOG(ERROR) << "Received nullptr IBlockPublisher";
       return;
@@ -198,7 +198,7 @@ class RootDb : public Db {
   td::actor::ActorOwn<StaticFilesDb> static_files_db_;
   td::actor::ActorOwn<ArchiveManager> archive_db_;
 
-  IBlockPublisher* publisher_ = nullptr;
+  IBlockParser* publisher_ = nullptr;
   void get_block_state_root_cell(ConstBlockHandle handle, td::Promise<td::Ref<vm::DataCell>> promise) override;
 };
 

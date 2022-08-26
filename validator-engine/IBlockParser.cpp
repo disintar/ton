@@ -1,15 +1,16 @@
-#include "IBlockPublisher.hpp"
+#include "IBlockParser.hpp"
 #include "blockchain-indexer/json-utils.hpp"
 
 namespace ton::validator {
 
-BlockPublisherParser::BlockPublisherParser() :
-    publish_applied_thread_(&BlockPublisherParser::publish_applied_worker, this),
-    publish_blocks_thread_(&BlockPublisherParser::publish_blocks_worker, this),
-    publish_states_thread_(&BlockPublisherParser::publish_states_worker, this)
+BlockParser::BlockParser() :
+    publisher_(std::make_unique<BLockPublisherIgnore>()),
+    publish_applied_thread_(&BlockParser::publish_applied_worker, this),
+    publish_blocks_thread_(&BlockParser::publish_blocks_worker, this),
+    publish_states_thread_(&BlockParser::publish_states_worker, this)
   {}
 
-BlockPublisherParser::~BlockPublisherParser() {
+BlockParser::~BlockParser() {
   running_ = false;
   publish_blocks_cv_.notify_all();
   publish_states_cv_.notify_all();
@@ -17,7 +18,11 @@ BlockPublisherParser::~BlockPublisherParser() {
   publish_states_thread_.join();
 }
 
-void BlockPublisherParser::storeBlockApplied(BlockIdExt id) {
+void BlockParser::setBlockPublisher(std::unique_ptr<IBLockPublisher> publisher) {
+  publisher_ = std::move(publisher);
+}
+
+void BlockParser::storeBlockApplied(BlockIdExt id) {
   json to_dump = {
     {"file_hash", id.file_hash.to_hex()},
     {"root_hash", id.root_hash.to_hex()},
@@ -33,7 +38,7 @@ void BlockPublisherParser::storeBlockApplied(BlockIdExt id) {
   enqueuePublishBlockApplied(to_dump.dump());
 }
 
-void BlockPublisherParser::storeBlockData(BlockHandle handle, td::Ref<BlockData> block) {
+void BlockParser::storeBlockData(BlockHandle handle, td::Ref<BlockData> block) {
   LOG(WARNING) << "Store block: " << block->block_id().to_str();
   CHECK(block.not_null());
 
@@ -573,7 +578,7 @@ void BlockPublisherParser::storeBlockData(BlockHandle handle, td::Ref<BlockData>
   enqueuePublishBlockData(to_dump.dump());
 }
 
-void BlockPublisherParser::storeBlockState(BlockHandle handle, td::Ref<ShardState> state) {
+void BlockParser::storeBlockState(BlockHandle handle, td::Ref<ShardState> state) {
   std::lock_guard<std::mutex> lock(maps_mtx_);
   const auto block_id = state->get_block_id();
   const std::string key = std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
@@ -587,7 +592,7 @@ void BlockPublisherParser::storeBlockState(BlockHandle handle, td::Ref<ShardStat
   }
 }
 
-void BlockPublisherParser::gotState(BlockHandle handle, td::Ref<ShardState> state, std::vector<td::Bits256> accounts_keys) {
+void BlockParser::gotState(BlockHandle handle, td::Ref<ShardState> state, std::vector<td::Bits256> accounts_keys) {
   auto block_id = state->get_block_id();
   LOG(WARNING) << "Parse state: " << block_id.to_str();
   CHECK(state.not_null());
@@ -775,28 +780,28 @@ void BlockPublisherParser::gotState(BlockHandle handle, td::Ref<ShardState> stat
   enqueuePublishBlockState(to_dump.dump());
 }
 
-void BlockPublisherParser::enqueuePublishBlockApplied(std::string json) {
+void BlockParser::enqueuePublishBlockApplied(std::string json) {
   std::unique_lock lock(publish_applied_mtx_);
   publish_applied_queue_.emplace(json);
   lock.unlock();
   publish_applied_cv_.notify_one();
 }
 
-void BlockPublisherParser::enqueuePublishBlockData(std::string json) {
+void BlockParser::enqueuePublishBlockData(std::string json) {
   std::unique_lock lock(publish_blocks_mtx_);
   publish_blocks_queue_.emplace(json);
   lock.unlock();
   publish_blocks_cv_.notify_one();
 }
 
-void BlockPublisherParser::enqueuePublishBlockState(std::string json) {
+void BlockParser::enqueuePublishBlockState(std::string json) {
   std::unique_lock lock(publish_states_mtx_);
   publish_states_queue_.emplace(json);
   lock.unlock();
   publish_states_cv_.notify_one();
 }
 
-void BlockPublisherParser::publish_applied_worker() {
+void BlockParser::publish_applied_worker() {
   bool should_run = running_;
   while (should_run) {
     std::unique_lock lock(publish_applied_mtx_);
@@ -809,11 +814,11 @@ void BlockPublisherParser::publish_applied_worker() {
     should_run = running_ || !publish_applied_queue_.empty();
     lock.unlock();
 
-    publishBlockApplied(block);
+    publisher_->publishBlockApplied(block);
   }
 }
 
-void BlockPublisherParser::publish_blocks_worker() {
+void BlockParser::publish_blocks_worker() {
   bool should_run = running_;
   while (should_run) {
     std::unique_lock lock(publish_blocks_mtx_);
@@ -826,11 +831,11 @@ void BlockPublisherParser::publish_blocks_worker() {
     should_run = running_ || !publish_blocks_queue_.empty();
     lock.unlock();
 
-    publishBlockData(block);
+    publisher_->publishBlockData(block);
   }
 }
 
-void BlockPublisherParser::publish_states_worker() {
+void BlockParser::publish_states_worker() {
   bool should_run = running_;
   while (should_run) {
     std::unique_lock lock(publish_states_mtx_);
@@ -843,7 +848,7 @@ void BlockPublisherParser::publish_states_worker() {
     should_run = running_ || !publish_states_queue_.empty();
     lock.unlock();
 
-    publishBlockState(state);
+    publisher_->publishBlockState(state);
   }
 }
 

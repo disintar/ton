@@ -531,17 +531,17 @@ class ValidatorManagerImpl : public ValidatorManager {
 
   void wait_shard_client_state(BlockSeqno seqno, td::Timestamp timeout, td::Promise<td::Unit> promise) override;
 
-  void set_block_publisher(std::unique_ptr<IBlockPublisher> publisher) override {
+  void set_block_publisher(std::unique_ptr<IBlockParser> publisher) override {
     publisher_ = std::move(publisher);
     td::actor::send_closure(db_, &Db::set_block_publisher, publisher_.get());
   }
 
-  IBlockPublisher* get_block_publisher() override {
+  IBlockParser* get_block_publisher() override {
     return publisher_.get();
   }
 
  private:
-  std::unique_ptr<IBlockPublisher> publisher_;
+  std::unique_ptr<IBlockParser> publisher_;
 
  private:
   td::Timestamp resend_shard_blocks_at_;

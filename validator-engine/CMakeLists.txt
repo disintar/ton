@@ -7,8 +7,8 @@ endif()
 set(VALIDATOR_ENGINE_SOURCE
   validator-engine.hpp
   validator-engine.cpp
-  IBlockPublisher.hpp
-  IBlockPublisher.cpp
+        IBlockParser.hpp
+        IBlockParser.cpp
 #  BlockPublisherZMQ.cpp BlockPublisherZMQ.hpp
 #  BlockPublisherRMQ.cpp BlockPublisherRMQ.hpp
   BlockPublisherKafka.cpp BlockPublisherKafka.hpp

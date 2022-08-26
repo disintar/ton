@@ -368,12 +368,12 @@ class
     UNREACHABLE();
   }
 
-  void set_block_publisher(std::unique_ptr<IBlockPublisher> publisher) override {
+  void set_block_publisher(std::unique_ptr<IBlockParser> publisher) override {
 //    LOG(ERROR) << "set_block_publisher";
     publisher_ = std::move(publisher);
     td::actor::send_closure(db_, &Db::set_block_publisher, publisher_.get());
   }
-  IBlockPublisher* get_block_publisher() override {
+  IBlockParser* get_block_publisher() override {
     return publisher_.get();
   }
   void clear_celldb_boc_cache() override {
@@ -382,7 +382,7 @@ class
   }
 
  private:
-  std::unique_ptr<IBlockPublisher> publisher_;
+  std::unique_ptr<IBlockParser> publisher_;
 
  private:
   PublicKeyHash local_id_;

@@ -1,5 +1,5 @@
-#ifndef TON_IBLOCKPUBLISHER_HPP
-#define TON_IBLOCKPUBLISHER_HPP
+#ifndef TON_IBLOCKPARSER_HPP
+#define TON_IBLOCKPARSER_HPP
 
 #include <map>
 #include <queue>
@@ -13,29 +13,42 @@
 
 namespace ton::validator {
 
-class IBlockPublisher {
+class IBLockPublisher {
  public:
-  virtual ~IBlockPublisher() = default;
+  virtual ~IBLockPublisher() = default;
+
+  virtual void publishBlockApplied(std::string json) = 0;
+  virtual void publishBlockData(std::string json) = 0;
+  virtual void publishBlockState(std::string json) = 0;
+};
+
+class BLockPublisherIgnore : public IBLockPublisher {
+ public:
+  void publishBlockApplied(std::string json) override {};
+  void publishBlockData(std::string json) override {};
+  void publishBlockState(std::string json) override {};
+};
+
+class IBlockParser {
+ public:
+  virtual ~IBlockParser() = default;
+
+  virtual void setBlockPublisher(std::unique_ptr<IBLockPublisher> publisher) = 0;
 
   virtual void storeBlockApplied(BlockIdExt id) = 0;
   virtual void storeBlockData(BlockHandle handle, td::Ref<BlockData> block) = 0;
   virtual void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) = 0;
 };
 
-class BlockPublisherIgnore : public IBlockPublisher {
- public:
-  void storeBlockApplied(BlockIdExt id) override {};
-  void storeBlockData(BlockHandle handle, td::Ref<BlockData> block) override {};
-  void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) override {};
-};
 
-// helper class, do not use it
-class BlockPublisherParser : public IBlockPublisher {
+class BlockParser : public IBlockParser {
 public:
-    BlockPublisherParser();
-    ~BlockPublisherParser() override;
+    BlockParser();
+    ~BlockParser() override;
 
  public:
+  void setBlockPublisher(std::unique_ptr<IBLockPublisher> publisher) final;
+
   void storeBlockApplied(BlockIdExt id) final;
   void storeBlockData(BlockHandle handle, td::Ref<BlockData> block) final;
   void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) final;
@@ -47,15 +60,13 @@ public:
   void enqueuePublishBlockData(std::string json);
   void enqueuePublishBlockState(std::string json);
 
-  virtual void publishBlockApplied(const std::string& json) = 0;
-  virtual void publishBlockData(const std::string& json) = 0;
-  virtual void publishBlockState(const std::string& json) = 0;
-
   void publish_applied_worker();
   void publish_blocks_worker();
   void publish_states_worker();
 
  private:
+  std::unique_ptr<IBLockPublisher> publisher_;
+
   std::mutex maps_mtx_;
   std::map<std::string, std::pair<BlockHandle, td::Ref<ShardState>>> stored_states_;
   std::map<std::string, std::vector<td::Bits256>> stored_accounts_keys_;
@@ -81,4 +92,4 @@ public:
 };
 
 }
-#endif  //TON_IBLOCKPUBLISHER_HPP
+#endif  //TON_IBLOCKPARSER_HPP

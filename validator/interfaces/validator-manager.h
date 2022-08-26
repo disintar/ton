@@ -166,11 +166,11 @@ class ValidatorManager : public ValidatorManagerInterface {
 
   virtual void wait_shard_client_state(BlockSeqno seqno, td::Timestamp timeout, td::Promise<td::Unit> promise) = 0;
 
-  void set_block_publisher(std::unique_ptr<IBlockPublisher> publisher) override {
+  void set_block_publisher(std::unique_ptr<IBlockParser> publisher) override {
 //    LOG(ERROR) << "set_block_publisher";
   } ///TODO: make it pure virtual
 
-  virtual IBlockPublisher* get_block_publisher() {
+  virtual IBlockParser* get_block_publisher() {
     // TODO: make it pure virtual
   }
 

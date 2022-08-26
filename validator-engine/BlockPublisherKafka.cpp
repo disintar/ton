@@ -11,7 +11,7 @@ BlockPublisherKafka::BlockPublisherKafka(const std::string& endpoint) : producer
     }
 ) {}
 
-void BlockPublisherKafka::publishBlockApplied(const std::string& json) {
+void BlockPublisherKafka::publishBlockApplied(std::string json) {
   std::lock_guard<std::mutex> guard(net_mtx);
   LOG(INFO) << "[block-applied] Sending " << json.size() << " bytes to Kafka";
   try {
@@ -24,7 +24,7 @@ void BlockPublisherKafka::publishBlockApplied(const std::string& json) {
   }
 }
 
-void BlockPublisherKafka::publishBlockData(const std::string& json) {
+void BlockPublisherKafka::publishBlockData(std::string json) {
   std::lock_guard<std::mutex> guard(net_mtx);
   LOG(INFO) << "[block-data] Sending " << json.size() << " bytes to Kafka";
   try {
@@ -37,7 +37,7 @@ void BlockPublisherKafka::publishBlockData(const std::string& json) {
   }
 }
 
-void BlockPublisherKafka::publishBlockState(const std::string& json) {
+void BlockPublisherKafka::publishBlockState(std::string json) {
   std::lock_guard<std::mutex> guard(net_mtx);
   LOG(INFO) << "[block-state] Sending " << json.size() << " bytes to Kafka";
   try {
