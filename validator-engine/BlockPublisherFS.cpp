@@ -6,7 +6,6 @@ namespace ton::validator {
 
 void BlockPublisherFS::publishBlockApplied(std::string j) {
   const auto json_id = json::parse(j)["id"];
-  LOG(ERROR) << "applied: " << json_id.dump();
   const auto id = to_string(json_id["workchain"]) + ":" + to_string(json_id["shard"]) + ":" + to_string(json_id["seqno"]);
   std::ostringstream oss;
   oss << "applied" << "_" << id << ".json";
@@ -16,8 +15,7 @@ void BlockPublisherFS::publishBlockApplied(std::string j) {
 
 void BlockPublisherFS::publishBlockData(std::string j) {
   const auto json_id = json::parse(j)["id"];
-  LOG(ERROR) << "data: " << json_id.dump();
-  const auto id = to_string(json_id["workchain"]) + ":" + to_string(json_id["shard"]) + ":" + to_string(json_id["seqno"]);
+  const auto id = json_id.dump();
   std::ostringstream oss;
   oss << "data" << "_" << id << ".json";
   std::ofstream file(oss.str());
@@ -26,8 +24,7 @@ void BlockPublisherFS::publishBlockData(std::string j) {
 
 void BlockPublisherFS::publishBlockState(std::string j) {
   const auto json_id = json::parse(j)["id"];
-  LOG(ERROR) << "state: " << json_id.dump();
-  const auto id = to_string(json_id["workchain"]) + ":" + to_string(json_id["shard"]) + ":" + to_string(json_id["seqno"]);
+  const auto id = json_id.dump();
   std::ostringstream oss;
   oss << "state" << "_" << id << ".json";
   std::ofstream file(oss.str());
