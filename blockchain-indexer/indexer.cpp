@@ -565,7 +565,7 @@ class Indexer : public td::actor::Actor {
       if (R.is_error()) {
         dumper_->addError(block_id_string, "block", R.move_as_error().to_string());
       } else {
-//        try {
+        try {
           auto block = R.move_as_ok();
           CHECK(block.not_null());
 
@@ -618,7 +618,9 @@ class Indexer : public td::actor::Actor {
         extra:^BlockExtra = Block;
       */
 
+          LOG(ERROR) << 1;
           answer["global_id"] = blk.global_id;
+          LOG(ERROR) << 2;
           auto now = info.gen_utime;
           auto start_lt = info.start_lt;
 
@@ -644,6 +646,7 @@ class Indexer : public td::actor::Actor {
             prev_vert_ref:vert_seqno_incr?^(BlkPrevInfo 0)
             = BlockInfo;
       */
+          LOG(ERROR) << 3;
           answer["BlockInfo"] = {
               {"version", info.version},
               {"not_master", info.not_master},
@@ -665,17 +668,20 @@ class Indexer : public td::actor::Actor {
               {"min_ref_mc_seqno", info.min_ref_mc_seqno},
               {"prev_key_block_seqno", info.prev_key_block_seqno},
           };
+          LOG(ERROR) << 4;
 
           if (info.vert_seqno_incr) {
             block::gen::ExtBlkRef::Record prev_vert_blk{};
             CHECK(tlb::unpack_cell(info.prev_vert_ref, prev_vert_blk));
 
+            LOG(ERROR) << 5;
             answer["BlockInfo"]["prev_vert_ref"] = {
                 {"end_lt", prev_vert_blk.end_lt},
                 {"seq_no", prev_vert_blk.seq_no},
                 {"root_hash", prev_vert_blk.root_hash.to_hex()},
                 {"file_hash", prev_vert_blk.file_hash.to_hex()},
             };
+            LOG(ERROR) << 6;
           }
 
           if (info.after_merge) {
@@ -689,6 +695,7 @@ class Indexer : public td::actor::Actor {
             CHECK(tlb::unpack_cell(blk1, prev_blk_1));
             CHECK(tlb::unpack_cell(blk2, prev_blk_2));
 
+            LOG(ERROR) << 7;
             answer["BlockInfo"]["prev_ref"] = {
                 {"type", "1"},
                 {"data",
@@ -706,6 +713,7 @@ class Indexer : public td::actor::Actor {
                      {"file_hash", prev_blk_2.file_hash.to_hex()},
                  }},
             };
+            LOG(ERROR) << 8;
 
             if (info.not_master && !is_first) {
               LOG(DEBUG) << "FOR: " << blkid.to_str() << " first: " << is_first;
@@ -723,6 +731,7 @@ class Indexer : public td::actor::Actor {
             block::gen::ExtBlkRef::Record prev_blk{};
             CHECK(tlb::unpack_cell(info.prev_ref, prev_blk));
 
+            LOG(ERROR) << 9;
             answer["BlockInfo"]["prev_ref"] = {{"type", "0"},
                                                {"data",
                                                 {
@@ -731,6 +740,7 @@ class Indexer : public td::actor::Actor {
                                                     {"root_hash", prev_blk.root_hash.to_hex()},
                                                     {"file_hash", prev_blk.file_hash.to_hex()},
                                                 }}};
+            LOG(ERROR) << 10;
 
             if (info.not_master && !is_first) {
               LOG(DEBUG) << "FOR: " << blkid.to_str();
@@ -746,19 +756,23 @@ class Indexer : public td::actor::Actor {
             auto csr = load_cell_slice(info.master_ref);
             CHECK(tlb::unpack(csr, master));
 
+            LOG(ERROR) << 11;
             answer["BlockInfo"]["master_ref"] = {
                 {"end_lt", master.end_lt},
                 {"seq_no", master.seq_no},
                 {"root_hash", master.root_hash.to_hex()},
                 {"file_hash", master.file_hash.to_hex()},
             };
+            LOG(ERROR) << 12;
           }
 
           if (info.gen_software.not_null()) {
+            LOG(ERROR) << 13;
             answer["BlockInfo"]["gen_software"] = {
                 {"version", info.gen_software->prefetch_ulong(32)},
                 {"capabilities", info.gen_software->prefetch_ulong(64)},
             };
+            LOG(ERROR) << 14;
           }
 
           auto value_flow_root = blk.value_flow;
@@ -783,6 +797,7 @@ class Indexer : public td::actor::Actor {
                       ] = ValueFlow;
       */
 
+          LOG(ERROR) << 15;
           answer["ValueFlow"] = {};
 
           answer["ValueFlow"]["from_prev_blk"] = {{"grams", value_flow.from_prev_blk.grams->to_dec_string()},
@@ -803,7 +818,7 @@ class Indexer : public td::actor::Actor {
                                             {"extra", parse_extra_currency(value_flow.created.extra)}};
           answer["ValueFlow"]["minted"] = {{"grams", value_flow.minted.grams->to_dec_string()},
                                            {"extra", parse_extra_currency(value_flow.minted.extra)}};
-
+          LOG(ERROR) << 16;
           /* tlb
        block_extra in_msg_descr:^InMsgDescr
         out_msg_descr:^OutMsgDescr
@@ -925,11 +940,13 @@ class Indexer : public td::actor::Actor {
             dumper_->storeState(key, std::move(skip));
           }
 
+          LOG(ERROR) << 17;
           answer["BlockExtra"] = {
               {"accounts", std::move(accounts)},         {"rand_seed", extra.rand_seed.to_hex()},
               {"created_by", extra.created_by.to_hex()}, {"out_msg_descr", std::move(out_msgs_json)},
               {"in_msg_descr", std::move(in_msgs_json)},
           };
+          LOG(ERROR) << 18;
 
           if ((int)extra.custom->prefetch_ulong(1) == 1) {
             auto mc_extra = extra.custom->prefetch_ref();
@@ -937,15 +954,19 @@ class Indexer : public td::actor::Actor {
             block::gen::McBlockExtra::Record extra_mc;
             CHECK(tlb::unpack_cell(mc_extra, extra_mc));
 
+            LOG(ERROR) << 19;
             answer["BlockExtra"]["custom"] = {
                 {"key_block", extra_mc.key_block},
             };
+            LOG(ERROR) << 20;
 
             if (extra_mc.key_block) {
               block::gen::ConfigParams::Record cp;
               CHECK(tlb::unpack(extra_mc.config.write(), cp));
 
+              LOG(ERROR) << 21;
               answer["BlockExtra"]["custom"]["config_addr"] = cp.config_addr.to_hex();
+              LOG(ERROR) << 22;
 
               std::map<long long, std::string> configs;
 
@@ -961,7 +982,9 @@ class Indexer : public td::actor::Actor {
                 configs[key.to_long()] = dump_as_boc(tvalue);
               };
 
+              LOG(ERROR) << 23;
               answer["BlockExtra"]["custom"]["configs"] = configs;
+              LOG(ERROR) << 24;
             };
 
             //          vm::Dictionary shard_fees_dict{extra_mc.shard_fees->prefetch_ref(), 96};
@@ -999,6 +1022,7 @@ class Indexer : public td::actor::Actor {
             //
             //          answer["BlockExtra"]["custom"]["shard_fees"] = shard_fees;
 
+            LOG(ERROR) << 25;
             if (extra_mc.r1.mint_msg->have_refs()) {
               answer["BlockExtra"]["custom"]["mint_msg"] =
                   parse_in_msg(load_cell_slice(extra_mc.r1.mint_msg->prefetch_ref()), workchain);
@@ -1008,6 +1032,7 @@ class Indexer : public td::actor::Actor {
               answer["BlockExtra"]["custom"]["recover_create_msg"] =
                   parse_in_msg(load_cell_slice(extra_mc.r1.recover_create_msg->prefetch_ref()), workchain);
             }
+            LOG(ERROR) << 26;
 
             if (extra_mc.r1.prev_blk_signatures->have_refs()) {
               vm::Dictionary prev_blk_signatures{extra_mc.r1.prev_blk_signatures->prefetch_ref(), 16};
@@ -1038,7 +1063,9 @@ class Indexer : public td::actor::Actor {
                 prev_blk_signatures_json.emplace_back(std::move(data));
               };
 
+              LOG(ERROR) << 27;
               answer["BlockExtra"]["custom"]["prev_blk_signatures"] = std::move(prev_blk_signatures_json);
+              LOG(ERROR) << 28;
             };
 
             block::ShardConfig shards;
@@ -1084,7 +1111,9 @@ class Indexer : public td::actor::Actor {
             };
 
             shards.process_shard_hashes(f);
+            LOG(ERROR) << 28;
             answer["BlockExtra"]["custom"]["shards"] = shards_json;
+            LOG(ERROR) << 29;
           }
 
           vm::CellSlice upd_cs{vm::NoVmSpec(), blk.state_update};
@@ -1098,8 +1127,9 @@ class Indexer : public td::actor::Actor {
           auto state_old_hash = upd_cs.prefetch_ref(0)->get_hash(0).to_hex();
           auto state_hash = upd_cs.prefetch_ref(1)->get_hash(0).to_hex();
 
+          LOG(ERROR) << 30;
           answer["ShardState"] = {{"state_old_hash", state_old_hash}, {"state_hash", state_hash}};
-
+          LOG(ERROR) << 31;
           {
             std::lock_guard<std::mutex> lock(stored_counter_mtx_);
             ++stored_blocks_counter_;
@@ -1114,9 +1144,9 @@ class Indexer : public td::actor::Actor {
           if (is_first && !info.not_master) {
             td::actor::send_closure(SelfId, &Indexer::parse_other);
           }
-//        } catch (std::exception& e) {
-//          dumper_->addError(block_id_string, "block", std::string("exception: ") + e.what());
-//        }
+        } catch (std::exception& e) {
+          dumper_->addError(block_id_string, "block", std::string("exception: ") + e.what());
+        }
       }
     });
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
@@ -1281,7 +1311,7 @@ class Indexer : public td::actor::Actor {
       if (R.is_error()) {
         dumper_->addError(block_id_string, "state", R.move_as_error().to_string());
       } else {
-//        try {
+        try {
           auto root_cell = R.move_as_ok();
           auto block_id = handle->id();
           block::gen::ShardStateUnsplit::Record shard_state;
@@ -1487,9 +1517,9 @@ class Indexer : public td::actor::Actor {
             td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
             //              decrease_state_padding();
           }
-//        } catch (std::exception& e) {
-//          dumper_->addError(block_id_string, "state", std::string("exception: ") + e.what());
-//        }
+        } catch (std::exception& e) {
+          dumper_->addError(block_id_string, "state", std::string("exception: ") + e.what());
+        }
       }
     });
 
