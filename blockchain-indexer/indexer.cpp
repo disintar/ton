@@ -36,12 +36,17 @@
 #include <queue>
 #include <chrono>
 #include <thread>
+#include "validator-engine/IBlockParser.hpp"
+#include "validator-engine/BlockPublisherKafka.hpp"
 
 int verbosity = 0;
 
 namespace ton {
 
 namespace validator {
+
+std::unique_ptr<IBLockPublisher> publisher_/* = std::make_unique<BlockPublisherFS>*/; // TODO:
+
 
 class Dumper {
  public:
@@ -122,6 +127,19 @@ class Dumper {
 
     for (auto &e : joined) {
       to_dump_ids.emplace_back(e["id"]);
+
+      auto data = json {
+          {"id", e["id"]},
+          {"data", e["block"]}
+      };
+      publisher_->publishBlockData(data.dump());
+      auto state = json {
+          {"id", e["id"]},
+          {"data", e["state"]}
+      };
+      publisher_->publishBlockState(state.dump());
+
+
       to_dump.emplace_back(std::move(e));
     }
     joined.clear();
@@ -323,10 +341,13 @@ class Indexer : public td::actor::Actor {
   }
   void set_chunk_size(td::uint32 size) {
     chunk_size_ = size;
-    dumper_ = std::make_unique<Dumper>("dump_", size);
+    dumper_ = std::make_unique<Dumper>("dump_", size); // TODO: unrelated
   }
   void set_display_speed(bool display_speed) {
     display_speed_ = display_speed;
+  }
+  void set_block_publisher(std::unique_ptr<IBLockPublisher> publisher) {
+    publisher_ = std::move(publisher);
   }
 
   void run() {
@@ -573,6 +594,7 @@ class Indexer : public td::actor::Actor {
                                        {"seqno", blkid.id.seqno},
                                        {"shard", blkid.id.shard},
                                    }}};
+          publisher_->publishBlockApplied(answer["BlockIdExt"].dump());
 
           block::gen::Block::Record blk;
           block::gen::BlockInfo::Record info;
@@ -1711,6 +1733,12 @@ int main(int argc, char **argv) {
     } else {
       return td::Status::Error(ton::ErrorCode::error, "bad value for --progress: not true or false");
     }
+  });
+  p.add_checked_option('P', "publish", "publish blocks/states to message queue <endpoint>", [&](td::Slice arg) {
+    // TODO: zmq/rmq/kafka/etc choice
+    const auto endpoint = arg.str();
+    td::actor::send_closure(indexer, &ton::validator::Indexer::set_block_publisher, std::make_unique<ton::validator::BlockPublisherKafka>(endpoint));
+    return td::Status::OK();
   });
 
   td::actor::set_debug(true);
