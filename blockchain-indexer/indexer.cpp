@@ -98,8 +98,8 @@ class Dumper {
     }
   }
 
-  void addError(std::string id, std::string type) {
-    LOG(ERROR) << "We have error in " << id << " in " << type;
+  void addError(std::string id, std::string type, std::string e) {
+    LOG(ERROR) << "We have error in " << id << " in " << type << ": " << e;
     json data;
     data = {
         {"id", id},
@@ -134,12 +134,12 @@ class Dumper {
           {"data", e["block"]}
       };
       publisher_->publishBlockData(data.dump());
+
       auto state = json {
           {"id", e["id"]},
           {"data", e["state"]}
       };
       publisher_->publishBlockState(state.dump());
-
 
       to_dump.emplace_back(std::move(e));
     }
@@ -563,7 +563,7 @@ class Indexer : public td::actor::Actor {
     auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this), is_first = first, block_handle = handle,
                                          block_id_string = id](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
-        dumper_->addError(block_id_string, "block");
+        dumper_->addError(block_id_string, "block", R.move_as_error().to_string());
       } else {
         try {
           auto block = R.move_as_ok();
@@ -1111,7 +1111,7 @@ class Indexer : public td::actor::Actor {
             td::actor::send_closure(SelfId, &Indexer::parse_other);
           }
         } catch (...) {
-          dumper_->addError(block_id_string, "block");
+          dumper_->addError(block_id_string, "block", "unknown error");
         }
       }
     });
@@ -1275,7 +1275,7 @@ class Indexer : public td::actor::Actor {
                                          accounts_keys =
                                              std::move(accounts_keys)](td::Result<td::Ref<vm::DataCell>> R) {
       if (R.is_error()) {
-        dumper_->addError(block_id_string, "state");
+        dumper_->addError(block_id_string, "state", R.move_as_error().to_string());
       } else {
         try {
           auto root_cell = R.move_as_ok();
@@ -1484,7 +1484,7 @@ class Indexer : public td::actor::Actor {
             //              decrease_state_padding();
           }
         } catch (...) {
-          dumper_->addError(block_id_string, "state");
+          dumper_->addError(block_id_string, "state", "unknown error");
         }
       }
     });
