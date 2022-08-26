@@ -23,4 +23,8 @@ target_link_libraries(blockchain-indexer overlay tdutils tdactor adnl tl_api dht
         rldp catchain validatorsession full-node validator-disk validator-hardfork ton_validator
         validator-hardfork fift-lib memprof ${JEMALLOC_LIBRARIES})
 
+# TODO: option or smth
+#target_include_directories(blockchain-indexer PRIVATE ${CPPKAFKA_INCLUDE_DIRECTORIES})
+target_link_libraries(blockchain-indexer cppkafka)
+
 install(TARGETS blockchain-indexer RUNTIME DESTINATION bin)
