@@ -39,12 +39,12 @@
 #include "validator-engine/IBlockParser.hpp"
 #include "validator-engine/BlockPublisherKafka.hpp"
 #include "validator-engine/BlockPublisherFS.hpp"
+#include "validator-engine/IBlockRequestReceiver.hpp"
+#include "validator-engine/BlockRequestReceiverKafka.hpp"
 
 int verbosity = 0;
 
-namespace ton {
-
-namespace validator {
+namespace ton::validator {
 
 std::unique_ptr<IBLockPublisher> publisher_ = std::make_unique<BlockPublisherFS>(); // TODO:
 
@@ -255,6 +255,8 @@ class Indexer : public td::actor::Actor {
   td::uint32 chunk_current_ = 0;
   std::mutex display_mtx_;
   std::unique_ptr<Dumper> dumper_ = std::make_unique<Dumper>("dump_", 1);
+  bool daemon_mode_ = false;
+  std::unique_ptr<IBlockRequestReceiver> request_receiver_ = nullptr;
 
   std::map<BlockIdExt, json> pending_blocks_;
   std::map<BlockIdExt, td::uint64> pending_blocks_size_;
@@ -267,59 +269,6 @@ class Indexer : public td::actor::Actor {
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
   td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
   bool display_speed_ = false;
-  td::Status create_validator_options() {
-    TRY_RESULT_PREFIX(conf_data, td::read_file(global_config_), "failed to read: ");
-    TRY_RESULT_PREFIX(conf_json, td::json_decode(conf_data.as_slice()), "failed to parse json: ");
-
-    ton::ton_api::config_global conf;
-    TRY_STATUS_PREFIX(ton::ton_api::from_json(conf, conf_json.get_object()), "json does not fit TL scheme: ");
-
-    auto zero_state = ton::create_block_id(conf.validator_->zero_state_);
-    ton::BlockIdExt init_block;
-    if (!conf.validator_->init_block_) {
-      LOG(INFO) << "no init block readOnlyin config. using zero state";
-      init_block = zero_state;
-    } else {
-      init_block = ton::create_block_id(conf.validator_->init_block_);
-    }
-
-    std::function<bool(ton::ShardIdFull, ton::CatchainSeqno, ton::validator::ValidatorManagerOptions::ShardCheckMode)>
-        check_shard = [](ton::ShardIdFull, ton::CatchainSeqno,
-                         ton::validator::ValidatorManagerOptions::ShardCheckMode) { return true; };
-    bool allow_blockchain_init = false;
-    double sync_blocks_before = 86400;
-    double block_ttl = 86400 * 7;
-    double state_ttl = 3600;
-    double archive_ttl = 86400 * 365;
-    double key_proof_ttl = 86400 * 3650;
-    double max_mempool_num = 999999;
-    bool initial_sync_disabled = true;
-
-    opts_ = ton::validator::ValidatorManagerOptions::create(zero_state, init_block, check_shard, allow_blockchain_init,
-                                                            sync_blocks_before, block_ttl, state_ttl, archive_ttl,
-                                                            key_proof_ttl, max_mempool_num, initial_sync_disabled);
-
-    std::vector<ton::BlockIdExt> h;
-    h.reserve(conf.validator_->hardforks_.size());
-    for (auto &x : conf.validator_->hardforks_) {
-      auto b = ton::create_block_id(x);
-      if (!b.is_masterchain()) {
-        return td::Status::Error(ton::ErrorCode::error,
-                                 "[validator/hardforks] section contains not masterchain block id");
-      }
-      if (!b.is_valid_full()) {
-        return td::Status::Error(ton::ErrorCode::error, "[validator/hardforks] section contains invalid block_id");
-      }
-      for (auto &y : h) {
-        if (y.is_valid() && y.seqno() >= b.seqno()) {
-          y.invalidate();
-        }
-      }
-      h.emplace_back(std::move(b));
-    }
-    opts_.write().set_hardforks(std::move(h));
-    return td::Status::OK();
-  }
   std::unordered_set<std::string> already_traversed_;
   std::mutex parsed_shards_mtx_;
 
@@ -328,6 +277,61 @@ class Indexer : public td::actor::Actor {
  public:
   std::size_t stored_blocks_counter_ = 0;
   std::size_t stored_states_counter_ = 0;
+
+ private:
+  td::Status create_validator_options() {
+      TRY_RESULT_PREFIX(conf_data, td::read_file(global_config_), "failed to read: ");
+      TRY_RESULT_PREFIX(conf_json, td::json_decode(conf_data.as_slice()), "failed to parse json: ");
+
+      ton::ton_api::config_global conf;
+      TRY_STATUS_PREFIX(ton::ton_api::from_json(conf, conf_json.get_object()), "json does not fit TL scheme: ");
+
+      auto zero_state = ton::create_block_id(conf.validator_->zero_state_);
+      ton::BlockIdExt init_block;
+      if (!conf.validator_->init_block_) {
+        LOG(INFO) << "no init block readOnlyin config. using zero state";
+        init_block = zero_state;
+      } else {
+        init_block = ton::create_block_id(conf.validator_->init_block_);
+      }
+
+      std::function<bool(ton::ShardIdFull, ton::CatchainSeqno, ton::validator::ValidatorManagerOptions::ShardCheckMode)>
+          check_shard = [](ton::ShardIdFull, ton::CatchainSeqno,
+                           ton::validator::ValidatorManagerOptions::ShardCheckMode) { return true; };
+      bool allow_blockchain_init = false;
+      double sync_blocks_before = 86400;
+      double block_ttl = 86400 * 7;
+      double state_ttl = 3600;
+      double archive_ttl = 86400 * 365;
+      double key_proof_ttl = 86400 * 3650;
+      double max_mempool_num = 999999;
+      bool initial_sync_disabled = true;
+
+      opts_ = ton::validator::ValidatorManagerOptions::create(zero_state, init_block, check_shard, allow_blockchain_init,
+                                                              sync_blocks_before, block_ttl, state_ttl, archive_ttl,
+                                                              key_proof_ttl, max_mempool_num, initial_sync_disabled);
+
+      std::vector<ton::BlockIdExt> h;
+      h.reserve(conf.validator_->hardforks_.size());
+      for (auto &x : conf.validator_->hardforks_) {
+        auto b = ton::create_block_id(x);
+        if (!b.is_masterchain()) {
+          return td::Status::Error(ton::ErrorCode::error,
+                                   "[validator/hardforks] section contains not masterchain block id");
+        }
+        if (!b.is_valid_full()) {
+          return td::Status::Error(ton::ErrorCode::error, "[validator/hardforks] section contains invalid block_id");
+        }
+        for (auto &y : h) {
+          if (y.is_valid() && y.seqno() >= b.seqno()) {
+            y.invalidate();
+          }
+        }
+        h.emplace_back(std::move(b));
+      }
+      opts_.write().set_hardforks(std::move(h));
+      return td::Status::OK();
+    }
 
  public:
   void set_db_root(std::string db_root) {
@@ -349,6 +353,10 @@ class Indexer : public td::actor::Actor {
   }
   void set_block_publisher(std::unique_ptr<IBLockPublisher> publisher) {
     publisher_ = std::move(publisher);
+  }
+  void set_daemon_mode(std::unique_ptr<IBlockRequestReceiver> request_receiver) {
+    daemon_mode_ = true;
+    request_receiver_ = std::move(request_receiver);
   }
 
   void run() {
@@ -465,6 +473,11 @@ class Indexer : public td::actor::Actor {
   }
 
   void sync_complete(const BlockHandle &handle) {
+    if (daemon_mode_) {
+      td::actor::send_closure(actor_id(this), &Indexer::daemon);
+      return;
+    }
+
     // separate first parse seqno to prevent WC shard seqno leak
     auto P = td::PromiseCreator::lambda(
         [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
@@ -483,6 +496,63 @@ class Indexer : public td::actor::Actor {
     ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                             seqno_first_, std::move(P));
+  }
+
+  void daemon() {
+    auto parser_publisher = std::make_unique<BlockParser>(std::move(publisher_));
+
+    while (true) {
+      auto R = request_receiver_->getRequest();
+      if (R.is_error()) {
+        LOG(ERROR) << "Failed to receive request" << R.move_as_error();
+        std::abort(); // TODO:
+      }
+      const auto request = R.move_as_ok();
+
+      td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db,
+                              ton::AccountIdPrefixFull {request.workchain, request.shard}, request.seqno,
+                              td::PromiseCreator::lambda(
+      [this, SelfId = actor_id(this), &parser_publisher](td::Result<ConstBlockHandle> R) {
+            if (R.is_error()) {
+              LOG(ERROR) << "Failed to receive request" << R.move_as_error();
+            } else {
+              const auto const_handle = R.move_as_ok();
+              const auto handle = std::const_pointer_cast<BlockHandleInterface>(const_handle);  // TODO: UB
+
+              parser_publisher->storeBlockApplied(const_handle->id());
+
+              td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, const_handle,
+                td::PromiseCreator::lambda(
+                  [this, SelfId, &parser_publisher, handle](td::Result<td::Ref<BlockData>> R) {
+                    if (R.is_error()) {
+                      LOG(ERROR) << R.move_as_error().to_string();
+                    } else {
+                      const auto block_data = R.move_as_ok();
+
+                      parser_publisher->storeBlockData(handle, block_data);
+
+                      td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_from_db, handle,
+                        td::PromiseCreator::lambda(
+                          [&parser_publisher, handle](td::Result<td::Ref<ShardState>> R) {
+                            if (R.is_error()) {
+                              LOG(ERROR) << R.move_as_error().to_string();
+                            } else {
+                              const auto state = R.move_as_ok();
+
+                              parser_publisher->storeBlockState(handle, state);
+                            }
+                          }
+                        )
+                      );
+                    }
+                  }
+                )
+              );
+            }
+          }
+        )
+      );
+    }
   }
 
   void parse_other() {
@@ -1659,7 +1729,6 @@ class Indexer : public td::actor::Actor {
   //    }
   //  }
 };  // namespace validator
-}  // namespace validator
 }  // namespace ton
 
 td::actor::ActorOwn<ton::validator::Indexer> indexer;
@@ -1737,10 +1806,13 @@ int main(int argc, char **argv) {
       return td::Status::Error(ton::ErrorCode::error, "bad value for --progress: not true or false");
     }
   });
-  p.add_checked_option('P', "publish", "publish blocks/states to message queue <endpoint>", [&](td::Slice arg) {
+  p.add_option('P', "publish", "publish blocks/states to message queue <endpoint>", [&](td::Slice arg) {
     const auto endpoint = arg.str();
     td::actor::send_closure(indexer, &ton::validator::Indexer::set_block_publisher, std::make_unique<ton::validator::BlockPublisherKafka>(endpoint));
-    return td::Status::OK();
+  });
+  p.add_option('d', "daemon", "(DIFFERENT BEHAVIOUR) receive block parse requests <endpoint>", [&](td::Slice arg) {
+    const auto endpoint = arg.str();
+    td::actor::send_closure(indexer, &ton::validator::Indexer::set_daemon_mode, std::make_unique<ton::validator::BlockRequestReceiverKafka>(endpoint));
   });
 
   td::actor::set_debug(true);
