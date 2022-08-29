@@ -6,8 +6,7 @@ namespace ton::validator {
 BlockRequestReceiverKafka::BlockRequestReceiverKafka(const std::string &endpoint) : consumer(
   cppkafka::Configuration{
     { "metadata.broker.list", endpoint },
-    { "message.max.bytes", "1000000000" },  // max
-    { "acks", "1" }
+    { "enable.auto.commit", false }
   }
 ) {
   consumer.subscribe({"block-request"});
