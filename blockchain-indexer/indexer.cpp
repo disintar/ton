@@ -475,6 +475,8 @@ class Indexer : public td::actor::Actor {
 
   void sync_complete(const BlockHandle &handle) {
     if (daemon_mode_) {
+      parser_ = std::make_unique<BlockParser>(std::move(publisher_));
+
       td::actor::send_closure(actor_id(this), &Indexer::daemon);
       return;
     }
@@ -500,8 +502,6 @@ class Indexer : public td::actor::Actor {
   }
 
   void daemon() {
-    parser_ = std::make_unique<BlockParser>(std::move(publisher_));
-
     while (true) {
       auto R = request_receiver_->getRequest();
       if (R.is_error()) {
@@ -525,7 +525,7 @@ class Indexer : public td::actor::Actor {
           }
         )
       );
-      break;
+//      break;
     }
   }
 
