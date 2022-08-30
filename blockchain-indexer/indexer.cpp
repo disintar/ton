@@ -526,7 +526,7 @@ class Indexer : public td::actor::Actor {
         [SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
           if (R.is_error()) {
             LOG(ERROR) << "Failed to get block handle: " << R.move_as_error();
-            td::actor::send_closure(actor_id(this), &Indexer::daemon);
+            td::actor::send_closure(SelfId, &Indexer::daemon);
           } else {
             const auto const_handle = R.move_as_ok();
             td::actor::send_closure(SelfId, &Indexer::daemon_got_block_handle, const_handle);
@@ -547,7 +547,7 @@ class Indexer : public td::actor::Actor {
       [SelfId = actor_id(this), const_handle](td::Result<td::Ref<BlockData>> R) {
           if (R.is_error()) {
             LOG(ERROR) << R.move_as_error().to_string();
-            td::actor::send_closure(actor_id(this), &Indexer::daemon);
+            td::actor::send_closure(SelfId, &Indexer::daemon);
           } else {
             const auto block_data = R.move_as_ok();
             td::actor::send_closure(SelfId, &Indexer::daemon_got_block_data, const_handle, block_data);
@@ -568,7 +568,7 @@ class Indexer : public td::actor::Actor {
       [SelfId = actor_id(this), const_handle](td::Result<td::Ref<ShardState>> R) {
           if (R.is_error()) {
             LOG(ERROR) << R.move_as_error().to_string();
-            td::actor::send_closure(actor_id(this), &Indexer::daemon);
+            td::actor::send_closure(SelfId, &Indexer::daemon);
           } else {
             const auto state = R.move_as_ok();
 
