@@ -484,7 +484,7 @@ class Indexer : public td::actor::Actor {
 
     // separate first parse seqno to prevent WC shard seqno leak
     auto P = td::PromiseCreator::lambda(
-        [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
+        [SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
           if (R.is_error()) {
             td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
             //            decrease_block_padding();
@@ -511,7 +511,7 @@ class Indexer : public td::actor::Actor {
       }
       const auto request = R.move_as_ok();
 
-      LOG(INFO) << "Processing request: " << request.workchain << ":" << request.shard << ":" << request.seqno;
+      LOG(INFO) << "Got request: " << request.workchain << ":" << request.shard << ":" << request.seqno;
 
       td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db,
                               ton::AccountIdPrefixFull {request.workchain, request.shard}, request.seqno,
