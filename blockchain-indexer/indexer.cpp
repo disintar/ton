@@ -258,7 +258,7 @@ class Indexer : public td::actor::Actor {
   bool daemon_mode_ = false;
   std::unique_ptr<IBlockRequestReceiver> request_receiver_ = nullptr;
   std::unique_ptr<IBlockParser> parser_ = nullptr;
-  std::thread daemon_thread_;
+//  std::thread daemon_thread_;
 
   std::map<BlockIdExt, json> pending_blocks_;
   std::map<BlockIdExt, td::uint64> pending_blocks_size_;
@@ -508,7 +508,8 @@ class Indexer : public td::actor::Actor {
       auto R = request_receiver_->getRequest();
       if (R.is_error()) {
         LOG(DEBUG) << "Failed to receive request" << R.move_as_error();
-//        continue; // TODO:
+        td::actor::send_closure(actor_id(this), &Indexer::daemon);
+        return;
       }
       const auto request = R.move_as_ok();
       LOG(DEBUG) << "fail here?";
@@ -525,6 +526,7 @@ class Indexer : public td::actor::Actor {
         [SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
           if (R.is_error()) {
             LOG(ERROR) << "Failed to get block handle: " << R.move_as_error();
+            td::actor::send_closure(actor_id(this), &Indexer::daemon);
           } else {
             const auto const_handle = R.move_as_ok();
             td::actor::send_closure(SelfId, &Indexer::daemon_got_block_handle, const_handle);
@@ -545,6 +547,7 @@ class Indexer : public td::actor::Actor {
       [SelfId = actor_id(this), const_handle](td::Result<td::Ref<BlockData>> R) {
           if (R.is_error()) {
             LOG(ERROR) << R.move_as_error().to_string();
+            td::actor::send_closure(actor_id(this), &Indexer::daemon);
           } else {
             const auto block_data = R.move_as_ok();
             td::actor::send_closure(SelfId, &Indexer::daemon_got_block_data, const_handle, block_data);
@@ -565,6 +568,7 @@ class Indexer : public td::actor::Actor {
       [SelfId = actor_id(this), const_handle](td::Result<td::Ref<ShardState>> R) {
           if (R.is_error()) {
             LOG(ERROR) << R.move_as_error().to_string();
+            td::actor::send_closure(actor_id(this), &Indexer::daemon);
           } else {
             const auto state = R.move_as_ok();
 
@@ -580,6 +584,8 @@ class Indexer : public td::actor::Actor {
     const auto handle = std::const_pointer_cast<BlockHandleInterface>(const_handle);  // TODO: UB
 
     parser_->storeBlockState(handle, state);
+
+    td::actor::send_closure(actor_id(this), &Indexer::daemon);
   }
 
   void parse_other() {
