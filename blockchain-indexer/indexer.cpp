@@ -525,6 +525,7 @@ class Indexer : public td::actor::Actor {
           }
         )
       );
+      break;
     }
   }
 
