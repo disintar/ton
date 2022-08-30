@@ -519,6 +519,7 @@ class Indexer : public td::actor::Actor {
               LOG(ERROR) << "Failed to receive request" << R.move_as_error();
             } else {
               const auto const_handle = R.move_as_ok();
+              LOG(INFO) << "Got block handle: " << const_handle->id().id.workchain << ":" << const_handle->id().id.shard << ":" << const_handle->id().id.seqno;
               const auto handle = std::const_pointer_cast<BlockHandleInterface>(const_handle);  // TODO: UB
 
               parser_publisher->storeBlockApplied(const_handle->id());
@@ -530,6 +531,7 @@ class Indexer : public td::actor::Actor {
                       LOG(ERROR) << R.move_as_error().to_string();
                     } else {
                       const auto block_data = R.move_as_ok();
+                      LOG(INFO) << "Got block data: " << handle->id().id.workchain << ":" << handle->id().id.shard << ":" << handle->id().id.seqno;
 
                       parser_publisher->storeBlockData(handle, block_data);
 
@@ -540,6 +542,7 @@ class Indexer : public td::actor::Actor {
                               LOG(ERROR) << R.move_as_error().to_string();
                             } else {
                               const auto state = R.move_as_ok();
+                              LOG(INFO) << "Got state: " << handle->id().id.workchain << ":" << handle->id().id.shard << ":" << handle->id().id.seqno;
 
                               parser_publisher->storeBlockState(handle, state);
                             }
