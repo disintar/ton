@@ -479,8 +479,6 @@ class Indexer : public td::actor::Actor {
       parser_ = std::make_unique<BlockParser>(std::move(publisher_));
 
       daemon_thread_ = std::thread(&Indexer::daemon, this); // TODO: join it somewhere (or not)
-
-      td::actor::send_closure(actor_id(this), &Indexer::daemon);
       return;
     }
 
