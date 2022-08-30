@@ -258,6 +258,7 @@ class Indexer : public td::actor::Actor {
   bool daemon_mode_ = false;
   std::unique_ptr<IBlockRequestReceiver> request_receiver_ = nullptr;
   std::unique_ptr<IBlockParser> parser_ = nullptr;
+  std::thread daemon_thread_;
 
   std::map<BlockIdExt, json> pending_blocks_;
   std::map<BlockIdExt, td::uint64> pending_blocks_size_;
@@ -477,6 +478,8 @@ class Indexer : public td::actor::Actor {
     if (daemon_mode_) {
       parser_ = std::make_unique<BlockParser>(std::move(publisher_));
 
+      daemon_thread_ = std::thread(&Indexer::daemon, this); // TODO: join it somewhere (or not)
+
       td::actor::send_closure(actor_id(this), &Indexer::daemon);
       return;
     }
@@ -525,7 +528,6 @@ class Indexer : public td::actor::Actor {
           }
         )
       );
-//      break;
     }
   }
 
