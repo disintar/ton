@@ -510,23 +510,26 @@ class Indexer : public td::actor::Actor {
         continue; // TODO:
       }
       const auto request = R.move_as_ok();
-
-      LOG(INFO) << "Got request: " << request.workchain << ":" << request.shard << ":" << request.seqno;
-
-      td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db,
-                              ton::AccountIdPrefixFull {request.workchain, request.shard}, request.seqno,
-                              td::PromiseCreator::lambda(
-      [SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
-            if (R.is_error()) {
-              LOG(ERROR) << "Failed to get block handle: " << R.move_as_error();
-            } else {
-              const auto const_handle = R.move_as_ok();
-              td::actor::send_closure(SelfId, &Indexer::daemon_got_block_handle, const_handle);
-            }
-          }
-        )
-      );
+      td::actor::send_closure(actor_id(this), &Indexer::daemon_got_request, request);
     }
+  }
+
+  void daemon_got_request(BlockId request) {
+    LOG(INFO) << "Got request: " << request.workchain << ":" << request.shard << ":" << request.seqno;
+
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db,
+                            ton::AccountIdPrefixFull {request.workchain, request.shard}, request.seqno,
+      td::PromiseCreator::lambda(
+        [SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
+          if (R.is_error()) {
+            LOG(ERROR) << "Failed to get block handle: " << R.move_as_error();
+          } else {
+            const auto const_handle = R.move_as_ok();
+            td::actor::send_closure(SelfId, &Indexer::daemon_got_block_handle, const_handle);
+          }
+        }
+      )
+    );
   }
 
   void daemon_got_block_handle(ConstBlockHandle const_handle) {
