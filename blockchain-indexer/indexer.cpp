@@ -151,15 +151,15 @@ class Dumper {
         std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
             .count();
 
-    std::ostringstream oss;
-    oss << prefix << tag << ".json";
-    std::ofstream file(oss.str());
-    file << to_dump.dump(4);
-
-    std::ostringstream oss_ids;
-    oss_ids << prefix << tag << "_ids.json";
-    std::ofstream file_ids(oss_ids.str());
-    file_ids << to_dump_ids.dump(4);
+//    std::ostringstream oss;
+//    oss << prefix << tag << ".json";
+//    std::ofstream file(oss.str());
+//    file << to_dump.dump(4);
+//
+//    std::ostringstream oss_ids;
+//    oss_ids << prefix << tag << "_ids.json";
+//    std::ofstream file_ids(oss_ids.str());
+//    file_ids << to_dump_ids.dump(4);
 
     LOG(INFO) << "Dumped " << dumped_amount << " block/state pairs";
   }
@@ -178,10 +178,10 @@ class Dumper {
       }
       error.clear();
 
-      std::ostringstream oss_ids;
-      oss_ids << prefix << tag << "_error.json";
-      std::ofstream file_ids(oss_ids.str());
-      file_ids << error_to_dump.dump(4);
+//      std::ostringstream oss_ids;
+//      oss_ids << prefix << tag << "_error.json";
+//      std::ofstream file_ids(oss_ids.str());
+//      file_ids << error_to_dump.dump(4);
 
       LOG(INFO) << "Dumped error data";
     }
@@ -218,15 +218,15 @@ class Dumper {
           std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
               .count();
 
-      std::ostringstream oss;
-      oss << prefix << "loners_" << tag << ".json";
-      std::ofstream file(oss.str());
-      file << to_dump.dump(4);
-
-      std::ostringstream oss_ids;
-      oss_ids << prefix << "loners_" << tag << "_ids.json";
-      std::ofstream file_ids(oss_ids.str());
-      file_ids << to_dump_ids.dump(4);
+//      std::ostringstream oss;
+//      oss << prefix << "loners_" << tag << ".json";
+//      std::ofstream file(oss.str());
+//      file << to_dump.dump(4);
+//
+//      std::ostringstream oss_ids;
+//      oss_ids << prefix << "loners_" << tag << "_ids.json";
+//      std::ofstream file_ids(oss_ids.str());
+//      file_ids << to_dump_ids.dump(4);
 
       LOG(WARNING) << "Dumped " << lone_blocks_amount << " blocks without pair";
       LOG(WARNING) << "Dumped " << lone_states_amount << " states without pair";
