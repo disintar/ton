@@ -478,7 +478,8 @@ class Indexer : public td::actor::Actor {
     if (daemon_mode_) {
       parser_ = std::make_unique<BlockParser>(std::move(publisher_));
 
-      daemon_thread_ = std::thread(&Indexer::daemon, this); // TODO: join it somewhere (or not)
+//      daemon_thread_ = std::thread(&Indexer::daemon, this); // TODO: join it somewhere (or not)
+      td::actor::send_closure(actor_id(this), &Indexer::daemon);
       return;
     }
 
@@ -503,16 +504,16 @@ class Indexer : public td::actor::Actor {
   }
 
   void daemon() {
-    while (true) {
+//    while (true) {
       auto R = request_receiver_->getRequest();
       if (R.is_error()) {
         LOG(DEBUG) << "Failed to receive request" << R.move_as_error();
-        continue; // TODO:
+//        continue; // TODO:
       }
       const auto request = R.move_as_ok();
       LOG(DEBUG) << "fail here?";
       td::actor::send_closure(actor_id(this), &Indexer::daemon_got_request, request);
-    }
+//    }
   }
 
   void daemon_got_request(BlockId request) {
