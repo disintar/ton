@@ -509,6 +509,8 @@ class Indexer : public td::actor::Actor {
       }
       const auto request = R.move_as_ok();
 
+      LOG(INFO) << "Processing request: " << request.workchain << ":" << request.shard << ":" << request.seqno;
+
       td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db,
                               ton::AccountIdPrefixFull {request.workchain, request.shard}, request.seqno,
                               td::PromiseCreator::lambda(
