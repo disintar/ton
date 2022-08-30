@@ -505,7 +505,7 @@ class Indexer : public td::actor::Actor {
       auto R = request_receiver_->getRequest();
       if (R.is_error()) {
         LOG(ERROR) << "Failed to receive request" << R.move_as_error();
-        std::abort(); // TODO:
+        continue; // TODO:
       }
       const auto request = R.move_as_ok();
 
