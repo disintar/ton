@@ -257,6 +257,7 @@ class Indexer : public td::actor::Actor {
   std::unique_ptr<Dumper> dumper_ = std::make_unique<Dumper>("dump_", 1);
   bool daemon_mode_ = false;
   std::unique_ptr<IBlockRequestReceiver> request_receiver_ = nullptr;
+  std::unique_ptr<IBlockParser> parser_ = nullptr;
 
   std::map<BlockIdExt, json> pending_blocks_;
   std::map<BlockIdExt, td::uint64> pending_blocks_size_;
@@ -499,7 +500,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void daemon() {
-    auto parser_publisher = std::make_unique<BlockParser>(std::move(publisher_));
+    parser_ = std::make_unique<BlockParser>(std::move(publisher_));
 
     while (true) {
       auto R = request_receiver_->getRequest();
@@ -514,50 +515,65 @@ class Indexer : public td::actor::Actor {
       td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db,
                               ton::AccountIdPrefixFull {request.workchain, request.shard}, request.seqno,
                               td::PromiseCreator::lambda(
-      [this, SelfId = actor_id(this), &parser_publisher](td::Result<ConstBlockHandle> R) {
+      [SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
             if (R.is_error()) {
-              LOG(ERROR) << "Failed to receive request" << R.move_as_error();
+              LOG(ERROR) << "Failed to get block handle: " << R.move_as_error();
             } else {
               const auto const_handle = R.move_as_ok();
-              LOG(INFO) << "Got block handle: " << const_handle->id().id.workchain << ":" << const_handle->id().id.shard << ":" << const_handle->id().id.seqno;
-              const auto handle = std::const_pointer_cast<BlockHandleInterface>(const_handle);  // TODO: UB
-
-              parser_publisher->storeBlockApplied(const_handle->id());
-
-              td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, const_handle,
-                td::PromiseCreator::lambda(
-                  [this, SelfId, &parser_publisher, handle](td::Result<td::Ref<BlockData>> R) {
-                    if (R.is_error()) {
-                      LOG(ERROR) << R.move_as_error().to_string();
-                    } else {
-                      const auto block_data = R.move_as_ok();
-                      LOG(INFO) << "Got block data: " << handle->id().id.workchain << ":" << handle->id().id.shard << ":" << handle->id().id.seqno;
-
-                      parser_publisher->storeBlockData(handle, block_data);
-
-                      td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_from_db, handle,
-                        td::PromiseCreator::lambda(
-                          [&parser_publisher, handle](td::Result<td::Ref<ShardState>> R) {
-                            if (R.is_error()) {
-                              LOG(ERROR) << R.move_as_error().to_string();
-                            } else {
-                              const auto state = R.move_as_ok();
-                              LOG(INFO) << "Got state: " << handle->id().id.workchain << ":" << handle->id().id.shard << ":" << handle->id().id.seqno;
-
-                              parser_publisher->storeBlockState(handle, state);
-                            }
-                          }
-                        )
-                      );
-                    }
-                  }
-                )
-              );
+              td::actor::send_closure(SelfId, &Indexer::daemon_got_block_handle, const_handle);
             }
           }
         )
       );
     }
+  }
+
+  void daemon_got_block_handle(ConstBlockHandle const_handle) {
+    LOG(INFO) << "Got block handle: " << const_handle->id().id.workchain << ":" << const_handle->id().id.shard << ":" << const_handle->id().id.seqno;
+    const auto handle = std::const_pointer_cast<BlockHandleInterface>(const_handle);  // TODO: UB
+
+    parser_->storeBlockApplied(const_handle->id());
+
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, const_handle,
+      td::PromiseCreator::lambda(
+      [SelfId = actor_id(this), const_handle](td::Result<td::Ref<BlockData>> R) {
+          if (R.is_error()) {
+            LOG(ERROR) << R.move_as_error().to_string();
+          } else {
+            const auto block_data = R.move_as_ok();
+            td::actor::send_closure(SelfId, &Indexer::daemon_got_block_data, const_handle, block_data);
+          }
+        }
+      )
+    );
+  }
+
+  void daemon_got_block_data(ConstBlockHandle const_handle, td::Ref<BlockData> block_data) {
+    LOG(INFO) << "Got block data: " << const_handle->id().id.workchain << ":" << const_handle->id().id.shard << ":" << const_handle->id().id.seqno;
+    const auto handle = std::const_pointer_cast<BlockHandleInterface>(const_handle);  // TODO: UB
+
+    parser_->storeBlockData(handle, block_data);
+
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_from_db, const_handle,
+      td::PromiseCreator::lambda(
+      [SelfId = actor_id(this), const_handle](td::Result<td::Ref<ShardState>> R) {
+          if (R.is_error()) {
+            LOG(ERROR) << R.move_as_error().to_string();
+          } else {
+            const auto state = R.move_as_ok();
+
+            td::actor::send_closure(SelfId, &Indexer::daemon_got_state, const_handle, state);
+          }
+        }
+      )
+    );
+  }
+
+  void daemon_got_state(ConstBlockHandle const_handle, td::Ref<ShardState> state) {
+    LOG(INFO) << "Got state: " << const_handle->id().id.workchain << ":" << const_handle->id().id.shard << ":" << const_handle->id().id.seqno;
+    const auto handle = std::const_pointer_cast<BlockHandleInterface>(const_handle);  // TODO: UB
+
+    parser_->storeBlockState(handle, state);
   }
 
   void parse_other() {
