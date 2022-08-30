@@ -7,6 +7,7 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <functional>
 #include "validator/interfaces/block-handle.h"
 #include "validator/interfaces/block.h"
 #include "validator/interfaces/shard.h"
@@ -42,6 +43,8 @@ public:
   void storeBlockData(BlockHandle handle, td::Ref<BlockData> block) final;
   void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) final;
 
+  void setPostProcessor(std::function<std::string(std::string)>);
+
  private:
   void gotState(BlockHandle handle, td::Ref<ShardState> state, std::vector<td::Bits256> accounts_keys);
 
@@ -55,6 +58,7 @@ public:
 
  private:
   std::unique_ptr<IBLockPublisher> publisher_;
+  std::function<std::string(std::string)> post_processor_;
 
   std::mutex maps_mtx_;
   std::map<std::string, std::pair<BlockHandle, td::Ref<ShardState>>> stored_states_;

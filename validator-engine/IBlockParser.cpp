@@ -31,7 +31,12 @@ void BlockParser::storeBlockApplied(BlockIdExt id) {
     }
   };
 
-  enqueuePublishBlockApplied(to_dump.dump());
+  std::string dump = to_dump.dump();
+  if (post_processor_) {
+    dump = post_processor_(dump);
+  }
+
+  enqueuePublishBlockApplied(dump);
 }
 
 void BlockParser::storeBlockData(BlockHandle handle, td::Ref<BlockData> block) {
@@ -571,7 +576,13 @@ void BlockParser::storeBlockData(BlockHandle handle, td::Ref<BlockData> block) {
       {"data", answer}
   };
 
-  enqueuePublishBlockData(to_dump.dump());
+  std::string dump = to_dump.dump();
+
+  if (post_processor_) {
+    dump = post_processor_(dump);
+  }
+
+  enqueuePublishBlockData(dump);
 }
 
 void BlockParser::storeBlockState(BlockHandle handle, td::Ref<ShardState> state) {
@@ -586,6 +597,10 @@ void BlockParser::storeBlockState(BlockHandle handle, td::Ref<ShardState> state)
     gotState(handle, state, accounts->second);
     stored_accounts_keys_.erase(accounts);
   }
+}
+
+void BlockParser::setPostProcessor(std::function<std::string(std::string)> post_processor) {
+  post_processor_ = std::move(post_processor);
 }
 
 void BlockParser::gotState(BlockHandle handle, td::Ref<ShardState> state, std::vector<td::Bits256> accounts_keys) {
@@ -772,8 +787,14 @@ void BlockParser::gotState(BlockHandle handle, td::Ref<ShardState> state, std::v
     {"id", std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" + std::to_string(block_id.id.seqno)},
     {"data", answer}
   };
-  
-  enqueuePublishBlockState(to_dump.dump());
+
+  std::string dump = to_dump.dump();
+
+  if (post_processor_) {
+    dump = post_processor_(dump);
+  }
+
+  enqueuePublishBlockState(dump);
 }
 
 void BlockParser::enqueuePublishBlockApplied(std::string json) {
