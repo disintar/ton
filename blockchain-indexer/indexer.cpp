@@ -510,6 +510,7 @@ class Indexer : public td::actor::Actor {
         continue; // TODO:
       }
       const auto request = R.move_as_ok();
+      LOG(DEBUG) << "fail here?";
       td::actor::send_closure(actor_id(this), &Indexer::daemon_got_request, request);
     }
   }
