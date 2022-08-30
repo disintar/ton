@@ -7,7 +7,7 @@ BlockRequestReceiverKafka::BlockRequestReceiverKafka(const std::string &endpoint
   cppkafka::Configuration{
     { "metadata.broker.list", endpoint },
     { "enable.auto.commit", false },
-    { "auto.create.topics.enable", true },
+    { "allow.auto.create.topics", true },
     { "group.id", "BlockRequestReceiver" }  // ?
   }
 ) {
