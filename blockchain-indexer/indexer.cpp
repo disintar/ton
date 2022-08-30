@@ -131,13 +131,15 @@ class Dumper {
 
       auto data = json {
           {"id", e["id"]},
-          {"data", e["block"]}
+          {"data", e["block"]},
+          {"requested", true}
       };
       publisher_->publishBlockData(data.dump());
 
       auto state = json {
           {"id", e["id"]},
-          {"data", e["state"]}
+          {"data", e["state"]},
+          {"requested", true}
       };
       publisher_->publishBlockState(state.dump());
 
@@ -695,7 +697,7 @@ class Indexer : public td::actor::Actor {
 
           auto workchain = blkid.id.workchain;
 
-          const auto json_block_id_ext = json {
+          auto json_block_id_ext = json {
             {"file_hash", blkid.file_hash.to_hex()},
               {"root_hash", blkid.root_hash.to_hex()},
               {"id",
@@ -707,6 +709,7 @@ class Indexer : public td::actor::Actor {
               }
           };
           answer["BlockIdExt"] = json_block_id_ext;
+          json_block_id_ext["requested"] = true;
           publisher_->publishBlockApplied(json_block_id_ext.dump());
 
           block::gen::Block::Record blk;
