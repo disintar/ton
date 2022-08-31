@@ -46,9 +46,9 @@ int verbosity = 0;
 
 namespace ton::validator {
 
-std::unique_ptr<IBLockPublisher> publisher_ = std::make_unique<BlockPublisherFS>(); // TODO:
+std::unique_ptr<IBLockPublisher> publisher_ = std::make_unique<BlockPublisherFS>(1000); // TODO:
 
-
+// TODO: get rid of Dumper, leave all parsing to IBlockParser
 class Dumper {
  public:
   explicit Dumper(std::string prefix, const std::size_t buffer_size)
@@ -1296,7 +1296,7 @@ class Indexer : public td::actor::Actor {
 
     if (block_padding_ == 0 && state_padding_ == 0) {  // TODO: add some mutexes
       LOG(WARNING) << "Block&State paddings reached 0; Dump json files;";
-      dumper_->forceDump();
+//      dumper_->forceDump(); // what for...
 
       // clear boc (lib & data & account) cache
       clear_cache();
@@ -1373,6 +1373,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void shutdown() {
+    publisher_ = nullptr;
     LOG(INFO) << "Ready to die";
     ///TODO: danger danger
     LOG(WARNING) << "Calling std::exit(0)";
