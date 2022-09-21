@@ -19,6 +19,8 @@ BlockParser::~BlockParser() {
 }
 
 void BlockParser::storeBlockApplied(BlockIdExt id) {
+  LOG(WARNING) << "Store applied: " << id.to_str();
+
   json to_dump = {
     {"file_hash", id.file_hash.to_hex()},
     {"root_hash", id.root_hash.to_hex()},
@@ -586,7 +588,7 @@ void BlockParser::storeBlockData(BlockHandle handle, td::Ref<BlockData> block) {
 }
 
 void BlockParser::storeBlockState(BlockHandle handle, td::Ref<ShardState> state) {
-  LOG(WARNING) << "Store block: " << state->get_block_id().to_str();
+  LOG(WARNING) << "Store state: " << state->get_block_id().to_str();
   std::lock_guard<std::mutex> lock(maps_mtx_);
   const auto block_id = state->get_block_id();
   const std::string key = std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
