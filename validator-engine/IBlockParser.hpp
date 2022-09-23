@@ -46,7 +46,7 @@ public:
   void setPostProcessor(std::function<std::string(std::string)>);
 
  private:
-  void gotState(BlockHandle handle, td::Ref<ShardState> state, std::vector<std::vector<td::Bits256>> accounts_keys_array);
+  void gotState(BlockHandle handle, td::Ref<ShardState> state, std::vector<td::Bits256> accounts_keys);
 
   void enqueuePublishBlockApplied(std::string json);
   void enqueuePublishBlockData(std::string json);
@@ -62,7 +62,7 @@ public:
 
   std::mutex maps_mtx_;
   std::map<std::string, std::pair<BlockHandle, td::Ref<ShardState>>> stored_states_;
-  std::map<std::string, std::vector<std::vector<td::Bits256>>> stored_accounts_keys_;
+  std::map<std::string, std::vector<td::Bits256>> stored_accounts_keys_;
 
   // mb rewrite with https://github.com/andreiavrammsd/cpp-channel
 
