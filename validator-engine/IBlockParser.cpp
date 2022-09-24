@@ -105,6 +105,10 @@ void BlockParser::handleBlockProgress(BlockIdExt id) {
   enqueuePublishBlockData(block_parsed.first);
   const auto state_parsed = parseBlockState(id, state_found_iter->first, state_found_iter->second, block_parsed.second);
   enqueuePublishBlockState(state_parsed);
+
+  stored_applied_.erase(stored_applied_.find(key));
+  stored_blocks_.erase(stored_blocks_.find(key));
+  stored_states_.erase(stored_states_.find(key));
 }
 
 std::string BlockParser::parseBlockApplied(BlockIdExt id) {
