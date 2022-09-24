@@ -34,9 +34,9 @@ class IBlockParser {
 
 
 class BlockParser : public IBlockParser {
-public:
-    explicit BlockParser(std::unique_ptr<IBLockPublisher> publisher);
-    ~BlockParser() override;
+ public:
+  explicit BlockParser(std::unique_ptr<IBLockPublisher> publisher);
+  ~BlockParser() override;
 
  public:
   void storeBlockApplied(BlockIdExt id) final;
@@ -47,6 +47,12 @@ public:
 
  private:
   void gotState(BlockHandle handle, td::Ref<ShardState> state, std::vector<td::Bits256> accounts_keys);
+
+  void handleBlockProgress(BlockIdExt id);
+
+  std::string parseBlockApplied(BlockIdExt id);
+  std::pair<std::string, std::vector<td::Bits256>> parseBlockData(BlockIdExt id, BlockHandle handle, td::Ref<BlockData> data);
+  std::string parseBlockState(BlockIdExt id, BlockHandle handle, td::Ref<ShardState> state, std::vector<td::Bits256> accounts_keys);
 
   void enqueuePublishBlockApplied(std::string json);
   void enqueuePublishBlockData(std::string json);
@@ -61,8 +67,9 @@ public:
   std::function<std::string(std::string)> post_processor_;
 
   std::mutex maps_mtx_;
-  std::map<std::string, std::pair<BlockHandle, td::Ref<ShardState>>> stored_states_;
-  std::map<std::string, std::vector<td::Bits256>> stored_accounts_keys_;
+  std::map<std::string, BlockIdExt> stored_applied_;
+  std::map<std::string, std::vector<std::pair<BlockHandle, td::Ref<BlockData>>>> stored_blocks_;  // multimap?
+  std::map<std::string, std::vector<std::pair<BlockHandle, td::Ref<ShardState>>>> stored_states_; // multimap?
 
   // mb rewrite with https://github.com/andreiavrammsd/cpp-channel
 
