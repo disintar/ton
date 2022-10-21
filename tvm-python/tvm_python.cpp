@@ -12,6 +12,8 @@
 #include "block/block.h"
 #include "block/block-parse.h"
 #include "td/utils/crypto.h"
+#include "crypto/fift/Fift.h"
+#include "crypto/fift/words.h"
 
 namespace py = pybind11;
 using namespace pybind11::literals;  // to bring in the `_a` literal
