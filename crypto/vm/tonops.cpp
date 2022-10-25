@@ -180,7 +180,8 @@ int exec_set_global_common(VmState* st, unsigned idx) {
 
 int exec_set_global(VmState* st, unsigned args) {
   args &= 31;
-  VM_LOG(st) << "execute SETGLOB " << args;
+  VM_LOG(st) << "execute "
+                "SETGLOB " << args;
   st->check_underflow(1);
   return exec_set_global_common(st, args);
 }
