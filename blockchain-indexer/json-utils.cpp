@@ -309,6 +309,8 @@ json parse_message(Ref<vm::Cell> message_any) {
   if ((int)body.prefetch_ulong(1) == 1) {  // Either
     answer["body"] = dump_as_boc(body.prefetch_ref());
   } else {
+    body.skip_first(1);
+
     vm::CellBuilder cb;
     cb.append_cellslice(body);
     auto body_cell = cb.finalize();
