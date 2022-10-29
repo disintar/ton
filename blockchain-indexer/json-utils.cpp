@@ -753,7 +753,6 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
   CHECK(tlb::unpack(trans.total_fees.write(), trans_total_fees_cc));
 
   std::vector<std::tuple<int, std::string>> dummy;
-  transaction["transaction_cell"] = dump_as_boc(trans_root);
   transaction["total_fees"] = {
       {"grams", block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string()},
       {"extra", trans_total_fees_cc.other->have_refs() ? parse_extra_currency(trans_total_fees_cc.other->prefetch_ref())
@@ -775,6 +774,7 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
     CHECK(trans.r1.in_msg->have_refs());
 
     auto message = trans.r1.in_msg->prefetch_ref();
+    transaction["in_msg_cell"] = dump_as_boc(message);
     transaction["in_msg"] = parse_message(message);
   }
 
