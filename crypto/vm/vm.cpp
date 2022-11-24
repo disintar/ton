@@ -464,7 +464,6 @@ if (stack_trace) {
 
 if (vm_dumper.enable) {
   vm_dumper.dump_stack(stack);
-  vm_dumper.dump_gas_consumed(gas.gas_consumed());
 }
 
 ++steps;
