@@ -204,6 +204,7 @@ class ValidatorEngine : public td::actor::Actor {
   bool started_keyring_ = false;
   bool started_ = false;
   ton::BlockSeqno truncate_seqno_{0};
+  std::string session_logs_file_;
 
   std::set<ton::CatchainSeqno> unsafe_catchains_;
   std::map<ton::BlockSeqno, std::pair<ton::CatchainSeqno, td::uint32>> unsafe_catchain_rotations_;
@@ -246,6 +247,9 @@ class ValidatorEngine : public td::actor::Actor {
   void set_truncate_seqno(ton::BlockSeqno seqno) {
     truncate_seqno_ = seqno;
   }
+  void set_session_logs_file(std::string f) {
+    session_logs_file_ = std::move(f);
+  }
   void add_ip(td::IPAddress addr) {
     addrs_.push_back(addr);
   }
@@ -257,7 +261,6 @@ class ValidatorEngine : public td::actor::Actor {
   }
 
   void start_up() override;
-  void got_result();
   ValidatorEngine() {
   }
 
@@ -410,6 +413,8 @@ class ValidatorEngine : public td::actor::Actor {
   void run_control_query(ton::ton_api::engine_validator_importShardOverlayCertificate &query, td::BufferSlice data,
                          ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
   void run_control_query(ton::ton_api::engine_validator_getOverlaysStats &query, td::BufferSlice data,
+                         ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
+  void run_control_query(ton::ton_api::engine_validator_getPerfTimerStats &query, td::BufferSlice data,
                          ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
   template <class T>
   void run_control_query(T &query, td::BufferSlice data, ton::PublicKeyHash src, td::uint32 perm,

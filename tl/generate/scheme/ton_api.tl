@@ -68,6 +68,7 @@ adnl.address.udp6 ip:int128 port:int = adnl.Address;
 //adnl.address.tcp6 ip:int128 port:int = adnl.Address;
 
 adnl.address.tunnel to:int256 pubkey:PublicKey = adnl.Address; 
+adnl.address.reverse = adnl.Address;
 
 adnl.addressList addrs:(vector adnl.Address) version:int reinit_date:int priority:int expire_at:int = adnl.AddressList;
 
@@ -183,8 +184,12 @@ dht.pong random_id:long = dht.Pong;
 dht.valueNotFound nodes:dht.nodes = dht.ValueResult;
 dht.valueFound value:dht.Value = dht.ValueResult;
 
+dht.clientNotFound nodes:dht.nodes = dht.ReversePingResult;
+dht.reversePingOk = dht.ReversePingResult;
+
 dht.stored = dht.Stored;
 dht.message node:dht.node = dht.Message;
+dht.requestReversePingCont target:adnl.Node signature:bytes client:int256 = dht.RequestReversePingCont;
 
 dht.db.bucket nodes:dht.nodes = dht.db.Bucket;
 dht.db.key.bucket id:int = dht.db.Key;
@@ -196,6 +201,8 @@ dht.store value:dht.value = dht.Stored;
 dht.findNode key:int256 k:int = dht.Nodes; 
 dht.findValue key:int256 k:int = dht.ValueResult; 
 dht.getSignedAddressList = dht.Node;
+dht.registerReverseConnection node:PublicKey ttl:int signature:bytes = dht.Stored;
+dht.requestReversePing target:adnl.Node signature:bytes client:int256 k:int = dht.ReversePingResult;
 
 dht.query node:dht.node = True;
 
@@ -630,6 +637,10 @@ engine.validator.overlayStatsNode adnl_id:int256 ip_addr:string bdcst_errors:int
 engine.validator.overlayStats overlay_id:int256 overlay_id_full:PublicKey adnl_id:int256 scope:string nodes:(vector engine.validator.overlayStatsNode) stats:(vector engine.validator.oneStat) = engine.validator.OverlayStats;
 engine.validator.overlaysStats overlays:(vector engine.validator.overlayStats) = engine.validator.OverlaysStats;
 
+engine.validator.onePerfTimerStat time:int min:double avg:double max:double = engine.validator.OnePerfTimerStat;
+engine.validator.perfTimerStatsByName name:string stats:(vector engine.validator.OnePerfTimerStat) = engine.validator.PerfTimerStatsByName;
+engine.validator.perfTimerStats stats:(vector engine.validator.PerfTimerStatsByName) = engine.validator.PerfTimerStats;
+
 
 ---functions---
 
@@ -680,6 +691,8 @@ engine.validator.importCertificate overlay_id:int256 local_id:adnl.id.short sign
 engine.validator.signShardOverlayCertificate workchain:int shard:long signed_key:engine.validator.KeyHash expire_at:int max_size:int = overlay.Certificate;
 engine.validator.importShardOverlayCertificate workchain:int shard:long signed_key:engine.validator.KeyHash cert:overlay.Certificate = engine.validator.Success;
 
+engine.validator.getPerfTimerStats name:string = engine.validator.PerfTimerStats;
+
 ---types---
 
 storage.pong = storage.Pong;
@@ -705,7 +718,7 @@ storage.queryPrefix id:int256 = Object;
 
 http.header name:string value:string = http.Header;
 http.payloadPart data:bytes trailer:(vector http.header) last:Bool = http.PayloadPart;
-http.response http_version:string status_code:int reason:string headers:(vector http.header) = http.Response;
+http.response http_version:string status_code:int reason:string headers:(vector http.header) no_payload:Bool = http.Response;
 
 ---functions---
 
@@ -721,3 +734,13 @@ http.server.host domains:(vector string) ip:int port:int adnl_id:adnl.id.short =
 http.server.config dhs:(vector http.server.dnsEntry) local_hosts:(vector http.server.host) = http.server.Config;
 
 ---functions---
+
+---types---
+
+validatorSession.statsProducer id:int256 block_status:int block_timestamp:long = validatorSession.StatsProducer;
+
+validatorSession.statsRound timestamp:long producers:(vector validatorSession.statsProducer) = validatorSession.StatsRound;
+
+validatorSession.stats id:tonNode.blockId timestamp:long self:int256 creator:int256 total_validators:int total_weight:long
+    signatures:int signatures_weight:long approve_signatures:int approve_signatures_weight:long
+    first_round:int rounds:(vector validatorSession.statsRound) = validatorSession.Stats;
