@@ -545,7 +545,7 @@ class Indexer : public td::actor::Actor {
   }
   void set_chunk_size(td::uint32 size) {
     chunk_size_ = size;
-    dumper_ = std::make_unique<Dumper>("dump_", size);
+    dumper_ = std::make_unique<Dumper>("dump_", size * 3);
   }
   void set_display_speed(bool display_speed) {
     display_speed_ = display_speed;
@@ -1525,12 +1525,6 @@ class Indexer : public td::actor::Actor {
             td::Promise<td::int32> Pfinal = td::PromiseCreator::lambda([SelfId = SelfId](td::int32 a) {
               td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
             });
-
-            //            void parse_state(const std::string &block_id_string, vm::Ref<vm::Cell> root_cell,
-            //                             const std::vector<td::Bits256>& accounts_keys, BlockIdExt block_id,
-            //                             std::unique_ptr<Dumper> dumper_, td::Promise<int> dec_promise) {
-            //
-            //            }
 
             td::actor::create_actor<StateIndexer>("StateIndexer", block_id_string, root_cell,
                                                   accounts_keys, block_id, dumper_, std::move(Pfinal)).release();
