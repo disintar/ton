@@ -309,8 +309,6 @@ json parse_message(Ref<vm::Cell> message_any) {
   if ((int)body.prefetch_ulong(1) == 1) {  // Either
     answer["body"] = dump_as_boc(body.prefetch_ref());
   } else {
-    body.skip_first(1);
-
     vm::CellBuilder cb;
     cb.append_cellslice(body);
     auto body_cell = cb.finalize();
@@ -322,12 +320,12 @@ json parse_message(Ref<vm::Cell> message_any) {
 }
 
 json parse_intermediate_address(vm::CellSlice intermediate_address) {
-//  interm_addr_regular$0 use_dest_bits:(#<= 96)
-//  = IntermediateAddress;
-//  interm_addr_simple$10 workchain_id:int8 addr_pfx:uint64
-//                                                       = IntermediateAddress;
-//  interm_addr_ext$11 workchain_id:int32 addr_pfx:uint64
-//                                                     = IntermediateAddress;
+  //  interm_addr_regular$0 use_dest_bits:(#<= 96)
+  //  = IntermediateAddress;
+  //  interm_addr_simple$10 workchain_id:int8 addr_pfx:uint64
+  //                                                       = IntermediateAddress;
+  //  interm_addr_ext$11 workchain_id:int32 addr_pfx:uint64
+  //                                                     = IntermediateAddress;
 
   json answer;
 
@@ -367,7 +365,7 @@ json parse_intermediate_address(vm::CellSlice intermediate_address) {
 }
 
 json parse_msg_envelope(Ref<vm::Cell> message_envelope) {
-/*
+  /*
   msg_envelope#4 cur_addr:IntermediateAddress
   next_addr:IntermediateAddress fwd_fee_remaining:Grams
   msg:^(Message Any) = MsgEnvelope;
@@ -853,7 +851,7 @@ json parse_in_msg(vm::CellSlice in_msg, int workchain) {
     answer["msg"] = parse_message(msg_import_ihr.msg);
 
     // TODO:
-//    msg_import_ihr.proof_created - proof_created:^Cell
+    //    msg_import_ihr.proof_created - proof_created:^Cell
   }
 
   else if (tag == block::gen::t_InMsg.msg_import_imm) {
@@ -911,7 +909,7 @@ json parse_in_msg(vm::CellSlice in_msg, int workchain) {
     answer["in_msg"] = parse_msg_envelope(msg_discard_tr.in_msg);
 
     // TODO:
-//    msg_discard_tr.proof_delivered - proof_delivered:^Cell
+    //    msg_discard_tr.proof_delivered - proof_delivered:^Cell
   }
 
   else {
@@ -942,23 +940,23 @@ json parse_out_msg(vm::CellSlice out_msg, int workchain) {
 
   const auto insert_parsed_transaction
       = [](const Ref<vm::Cell>& transaction, const auto workchain) -> json {
-          vm::CellBuilder cb;
-          cb.store_ref(transaction);
-          const auto body_cell = cb.finalize();
-          const auto csr = load_cell_slice_ref(body_cell);
+    vm::CellBuilder cb;
+    cb.store_ref(transaction);
+    const auto body_cell = cb.finalize();
+    const auto csr = load_cell_slice_ref(body_cell);
 
-          return parse_transaction(csr, workchain);
-      };
+    return parse_transaction(csr, workchain);
+  };
 
   const auto insert_parsed_in_msg
       = [](const Ref<vm::Cell>& in_msg, const auto workchain) -> json {
-          vm::CellBuilder cb;
-          cb.store_ref(in_msg);
-          const auto body_cell = cb.finalize();
-          const auto cs = load_cell_slice(body_cell);
+    vm::CellBuilder cb;
+    cb.store_ref(in_msg);
+    const auto body_cell = cb.finalize();
+    const auto cs = load_cell_slice(body_cell);
 
-          return parse_in_msg(cs, workchain);
-      };
+    return parse_in_msg(cs, workchain);
+  };
 
   json answer;
 

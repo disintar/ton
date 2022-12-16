@@ -36,19 +36,13 @@
 #include <queue>
 #include <chrono>
 #include <thread>
-#include "validator-engine/IBlockParser.hpp"
-#include "validator-engine/BlockPublisherKafka.hpp"
-#include "validator-engine/BlockPublisherFS.hpp"
-#include "validator-engine/IBlockRequestReceiver.hpp"
-#include "validator-engine/BlockRequestReceiverKafka.hpp"
 
 int verbosity = 0;
 
-namespace ton::validator {
+namespace ton {
 
-std::unique_ptr<IBLockPublisher> publisher_ = std::make_unique<BlockPublisherFS>(1000); // TODO:
+namespace validator {
 
-// TODO: get rid of Dumper, leave all parsing to IBlockParser
 class Dumper {
  public:
   explicit Dumper(std::string prefix, const std::size_t buffer_size)
@@ -98,8 +92,8 @@ class Dumper {
     }
   }
 
-  void addError(std::string id, std::string type, std::string e) {
-    LOG(ERROR) << "We have error in " << id << " in " << type << ": " << e;
+  void addError(std::string id, std::string type) {
+    LOG(ERROR) << "We have error in " << id << " in " << type;
     json data;
     data = {
         {"id", id},
@@ -128,21 +122,6 @@ class Dumper {
 
     for (auto &e : joined) {
       to_dump_ids.emplace_back(e["id"]);
-
-      auto data = json {
-          {"id", e["id"]},
-          {"data", e["block"]},
-          {"requested", true}
-      };
-      publisher_->publishBlockData(data.dump());
-
-      auto state = json {
-          {"id", e["id"]},
-          {"data", e["state"]},
-          {"requested", true}
-      };
-      publisher_->publishBlockState(state.dump());
-
       to_dump.emplace_back(std::move(e));
     }
     joined.clear();
@@ -151,15 +130,15 @@ class Dumper {
         std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
             .count();
 
-//    std::ostringstream oss;
-//    oss << prefix << tag << ".json";
-//    std::ofstream file(oss.str());
-//    file << to_dump.dump(4);
-//
-//    std::ostringstream oss_ids;
-//    oss_ids << prefix << tag << "_ids.json";
-//    std::ofstream file_ids(oss_ids.str());
-//    file_ids << to_dump_ids.dump(4);
+    std::ostringstream oss;
+    oss << prefix << tag << ".json";
+    std::ofstream file(oss.str());
+    file << to_dump.dump(4);
+
+    std::ostringstream oss_ids;
+    oss_ids << prefix << tag << "_ids.json";
+    std::ofstream file_ids(oss_ids.str());
+    file_ids << to_dump_ids.dump(4);
 
     LOG(INFO) << "Dumped " << dumped_amount << " block/state pairs";
   }
@@ -178,10 +157,10 @@ class Dumper {
       }
       error.clear();
 
-//      std::ostringstream oss_ids;
-//      oss_ids << prefix << tag << "_error.json";
-//      std::ofstream file_ids(oss_ids.str());
-//      file_ids << error_to_dump.dump(4);
+      std::ostringstream oss_ids;
+      oss_ids << prefix << tag << "_error.json";
+      std::ofstream file_ids(oss_ids.str());
+      file_ids << error_to_dump.dump(4);
 
       LOG(INFO) << "Dumped error data";
     }
@@ -218,15 +197,15 @@ class Dumper {
           std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
               .count();
 
-//      std::ostringstream oss;
-//      oss << prefix << "loners_" << tag << ".json";
-//      std::ofstream file(oss.str());
-//      file << to_dump.dump(4);
-//
-//      std::ostringstream oss_ids;
-//      oss_ids << prefix << "loners_" << tag << "_ids.json";
-//      std::ofstream file_ids(oss_ids.str());
-//      file_ids << to_dump_ids.dump(4);
+      std::ostringstream oss;
+      oss << prefix << "loners_" << tag << ".json";
+      std::ofstream file(oss.str());
+      file << to_dump.dump(4);
+
+      std::ostringstream oss_ids;
+      oss_ids << prefix << "loners_" << tag << "_ids.json";
+      std::ofstream file_ids(oss_ids.str());
+      file_ids << to_dump_ids.dump(4);
 
       LOG(WARNING) << "Dumped " << lone_blocks_amount << " blocks without pair";
       LOG(WARNING) << "Dumped " << lone_states_amount << " states without pair";
@@ -256,11 +235,7 @@ class Indexer : public td::actor::Actor {
   td::uint32 chunk_count_ = 0;
   td::uint32 chunk_current_ = 0;
   std::mutex display_mtx_;
-  std::unique_ptr<Dumper> dumper_ = std::make_unique<Dumper>("dump_", 20000);
-  bool daemon_mode_ = false;
-  std::unique_ptr<IBlockRequestReceiver> request_receiver_ = nullptr;
-  std::unique_ptr<IBlockParser> parser_ = nullptr;
-//  std::thread daemon_thread_;
+  std::unique_ptr<Dumper> dumper_;
 
   std::map<BlockIdExt, json> pending_blocks_;
   std::map<BlockIdExt, td::uint64> pending_blocks_size_;
@@ -273,6 +248,59 @@ class Indexer : public td::actor::Actor {
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
   td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
   bool display_speed_ = false;
+  td::Status create_validator_options() {
+    TRY_RESULT_PREFIX(conf_data, td::read_file(global_config_), "failed to read: ");
+    TRY_RESULT_PREFIX(conf_json, td::json_decode(conf_data.as_slice()), "failed to parse json: ");
+
+    ton::ton_api::config_global conf;
+    TRY_STATUS_PREFIX(ton::ton_api::from_json(conf, conf_json.get_object()), "json does not fit TL scheme: ");
+
+    auto zero_state = ton::create_block_id(conf.validator_->zero_state_);
+    ton::BlockIdExt init_block;
+    if (!conf.validator_->init_block_) {
+      LOG(INFO) << "no init block readOnlyin config. using zero state";
+      init_block = zero_state;
+    } else {
+      init_block = ton::create_block_id(conf.validator_->init_block_);
+    }
+
+    std::function<bool(ton::ShardIdFull, ton::CatchainSeqno, ton::validator::ValidatorManagerOptions::ShardCheckMode)>
+        check_shard = [](ton::ShardIdFull, ton::CatchainSeqno,
+                         ton::validator::ValidatorManagerOptions::ShardCheckMode) { return true; };
+    bool allow_blockchain_init = false;
+    double sync_blocks_before = 86400;
+    double block_ttl = 86400 * 7;
+    double state_ttl = 3600;
+    double archive_ttl = 86400 * 365;
+    double key_proof_ttl = 86400 * 3650;
+    double max_mempool_num = 999999;
+    bool initial_sync_disabled = true;
+
+    opts_ = ton::validator::ValidatorManagerOptions::create(zero_state, init_block, check_shard, allow_blockchain_init,
+                                                            sync_blocks_before, block_ttl, state_ttl, archive_ttl,
+                                                            key_proof_ttl, max_mempool_num, initial_sync_disabled);
+
+    std::vector<ton::BlockIdExt> h;
+    h.reserve(conf.validator_->hardforks_.size());
+    for (auto &x : conf.validator_->hardforks_) {
+      auto b = ton::create_block_id(x);
+      if (!b.is_masterchain()) {
+        return td::Status::Error(ton::ErrorCode::error,
+                                 "[validator/hardforks] section contains not masterchain block id");
+      }
+      if (!b.is_valid_full()) {
+        return td::Status::Error(ton::ErrorCode::error, "[validator/hardforks] section contains invalid block_id");
+      }
+      for (auto &y : h) {
+        if (y.is_valid() && y.seqno() >= b.seqno()) {
+          y.invalidate();
+        }
+      }
+      h.emplace_back(std::move(b));
+    }
+    opts_.write().set_hardforks(std::move(h));
+    return td::Status::OK();
+  }
   std::unordered_set<std::string> already_traversed_;
   std::mutex parsed_shards_mtx_;
 
@@ -281,61 +309,6 @@ class Indexer : public td::actor::Actor {
  public:
   std::size_t stored_blocks_counter_ = 0;
   std::size_t stored_states_counter_ = 0;
-
- private:
-  td::Status create_validator_options() {
-      TRY_RESULT_PREFIX(conf_data, td::read_file(global_config_), "failed to read: ");
-      TRY_RESULT_PREFIX(conf_json, td::json_decode(conf_data.as_slice()), "failed to parse json: ");
-
-      ton::ton_api::config_global conf;
-      TRY_STATUS_PREFIX(ton::ton_api::from_json(conf, conf_json.get_object()), "json does not fit TL scheme: ");
-
-      auto zero_state = ton::create_block_id(conf.validator_->zero_state_);
-      ton::BlockIdExt init_block;
-      if (!conf.validator_->init_block_) {
-        LOG(INFO) << "no init block readOnly in config. using zero state";
-        init_block = zero_state;
-      } else {
-        init_block = ton::create_block_id(conf.validator_->init_block_);
-      }
-
-      std::function<bool(ton::ShardIdFull, ton::CatchainSeqno, ton::validator::ValidatorManagerOptions::ShardCheckMode)>
-          check_shard = [](ton::ShardIdFull, ton::CatchainSeqno,
-                           ton::validator::ValidatorManagerOptions::ShardCheckMode) { return true; };
-      bool allow_blockchain_init = false;
-      double sync_blocks_before = 86400;
-      double block_ttl = 86400 * 7;
-      double state_ttl = 3600;
-      double archive_ttl = 86400 * 365;
-      double key_proof_ttl = 86400 * 3650;
-      double max_mempool_num = 999999;
-      bool initial_sync_disabled = true;
-
-      opts_ = ton::validator::ValidatorManagerOptions::create(zero_state, init_block, check_shard, allow_blockchain_init,
-                                                              sync_blocks_before, block_ttl, state_ttl, archive_ttl,
-                                                              key_proof_ttl, max_mempool_num, initial_sync_disabled);
-
-      std::vector<ton::BlockIdExt> h;
-      h.reserve(conf.validator_->hardforks_.size());
-      for (auto &x : conf.validator_->hardforks_) {
-        auto b = ton::create_block_id(x);
-        if (!b.is_masterchain()) {
-          return td::Status::Error(ton::ErrorCode::error,
-                                   "[validator/hardforks] section contains not masterchain block id");
-        }
-        if (!b.is_valid_full()) {
-          return td::Status::Error(ton::ErrorCode::error, "[validator/hardforks] section contains invalid block_id");
-        }
-        for (auto &y : h) {
-          if (y.is_valid() && y.seqno() >= b.seqno()) {
-            y.invalidate();
-          }
-        }
-        h.emplace_back(b);
-      }
-      opts_.write().set_hardforks(std::move(h));
-      return td::Status::OK();
-    }
 
  public:
   void set_db_root(std::string db_root) {
@@ -350,17 +323,10 @@ class Indexer : public td::actor::Actor {
   }
   void set_chunk_size(td::uint32 size) {
     chunk_size_ = size;
-    dumper_ = std::make_unique<Dumper>("dump_", size); // TODO: unrelated
+    dumper_ = std::make_unique<Dumper>("dump_", size);
   }
   void set_display_speed(bool display_speed) {
     display_speed_ = display_speed;
-  }
-  void set_block_publisher(std::unique_ptr<IBLockPublisher> publisher) {
-    publisher_ = std::move(publisher);
-  }
-  void set_daemon_mode(std::unique_ptr<IBlockRequestReceiver> request_receiver) {
-    daemon_mode_ = true;
-    request_receiver_ = std::move(request_receiver);
   }
 
   void run() {
@@ -477,23 +443,9 @@ class Indexer : public td::actor::Actor {
   }
 
   void sync_complete(const BlockHandle &handle) {
-    if (daemon_mode_) {
-      auto parser = std::make_unique<BlockParser>(std::move(publisher_));
-      parser->setPostProcessor([](std::string json_string) -> std::string {
-        auto j = json::parse(json_string);
-        j["requested"] = true;
-        return j.dump();
-      });
-      parser_ = std::move(parser);
-
-//      daemon_thread_ = std::thread(&Indexer::daemon, this); // TODO: join it somewhere (or not)
-      td::actor::send_closure(actor_id(this), &Indexer::daemon);
-      return;
-    }
-
     // separate first parse seqno to prevent WC shard seqno leak
     auto P = td::PromiseCreator::lambda(
-        [SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
+        [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
           if (R.is_error()) {
             td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
             //            decrease_block_padding();
@@ -509,90 +461,6 @@ class Indexer : public td::actor::Actor {
     ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                             seqno_first_, std::move(P));
-  }
-
-  void daemon() {
-//    while (true) {
-      auto R = request_receiver_->getRequest();
-      if (R.is_error()) {
-        LOG(DEBUG) << "Failed to receive request" << R.move_as_error();
-        td::actor::send_closure(actor_id(this), &Indexer::daemon);
-        return;
-      }
-      const auto request = R.move_as_ok();
-      td::actor::send_closure(actor_id(this), &Indexer::daemon_got_request, request);
-//    }
-  }
-
-  void daemon_got_request(BlockId request) {
-    LOG(INFO) << "Got request: " << request.workchain << ":" << request.shard << ":" << request.seqno;
-
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db,
-                            ton::AccountIdPrefixFull {request.workchain, request.shard}, request.seqno,
-      td::PromiseCreator::lambda(
-        [SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
-          if (R.is_error()) {
-            LOG(ERROR) << "Failed to get block handle: " << R.move_as_error();
-            td::actor::send_closure(SelfId, &Indexer::daemon);
-          } else {
-            const auto const_handle = R.move_as_ok();
-            td::actor::send_closure(SelfId, &Indexer::daemon_got_block_handle, const_handle);
-          }
-        }
-      )
-    );
-  }
-
-  void daemon_got_block_handle(ConstBlockHandle const_handle) {
-    LOG(INFO) << "Got block handle: " << const_handle->id().id.workchain << ":" << const_handle->id().id.shard << ":" << const_handle->id().id.seqno;
-    const auto handle = std::const_pointer_cast<BlockHandleInterface>(const_handle);  // TODO: UB
-
-    parser_->storeBlockApplied(const_handle->id());
-
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, const_handle,
-      td::PromiseCreator::lambda(
-      [SelfId = actor_id(this), const_handle](td::Result<td::Ref<BlockData>> R) {
-          if (R.is_error()) {
-            LOG(ERROR) << R.move_as_error().to_string();
-            td::actor::send_closure(SelfId, &Indexer::daemon);
-          } else {
-            const auto block_data = R.move_as_ok();
-            td::actor::send_closure(SelfId, &Indexer::daemon_got_block_data, const_handle, block_data);
-          }
-        }
-      )
-    );
-  }
-
-  void daemon_got_block_data(ConstBlockHandle const_handle, td::Ref<BlockData> block_data) {
-    LOG(INFO) << "Got block data: " << const_handle->id().id.workchain << ":" << const_handle->id().id.shard << ":" << const_handle->id().id.seqno;
-    const auto handle = std::const_pointer_cast<BlockHandleInterface>(const_handle);  // TODO: UB
-
-    parser_->storeBlockData(handle, block_data);
-
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_from_db, const_handle,
-      td::PromiseCreator::lambda(
-      [SelfId = actor_id(this), const_handle](td::Result<td::Ref<ShardState>> R) {
-          if (R.is_error()) {
-            LOG(ERROR) << R.move_as_error().to_string();
-            td::actor::send_closure(SelfId, &Indexer::daemon);
-          } else {
-            const auto state = R.move_as_ok();
-
-            td::actor::send_closure(SelfId, &Indexer::daemon_got_state, const_handle, state);
-          }
-        }
-      )
-    );
-  }
-
-  void daemon_got_state(ConstBlockHandle const_handle, td::Ref<ShardState> state) {
-    LOG(INFO) << "Got state: " << const_handle->id().id.workchain << ":" << const_handle->id().id.shard << ":" << const_handle->id().id.seqno;
-    const auto handle = std::const_pointer_cast<BlockHandleInterface>(const_handle);  // TODO: UB
-
-    parser_->storeBlockState(handle, state);
-
-    td::actor::send_closure(actor_id(this), &Indexer::daemon);
   }
 
   void parse_other() {
@@ -673,7 +541,7 @@ class Indexer : public td::actor::Actor {
     auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this), is_first = first, block_handle = handle,
                                          block_id_string = id](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
-        dumper_->addError(block_id_string, "block", R.move_as_error().to_string());
+        dumper_->addError(block_id_string, "block");
       } else {
         try {
           auto block = R.move_as_ok();
@@ -697,20 +565,14 @@ class Indexer : public td::actor::Actor {
 
           auto workchain = blkid.id.workchain;
 
-          auto json_block_id_ext = json {
-            {"file_hash", blkid.file_hash.to_hex()},
-              {"root_hash", blkid.root_hash.to_hex()},
-              {"id",
-                {
-                  {"workchain", workchain},
-                  {"seqno", blkid.id.seqno},
-                  {"shard", blkid.id.shard},
-                }
-              }
-          };
-          answer["BlockIdExt"] = json_block_id_ext;
-          json_block_id_ext["requested"] = true;
-          publisher_->publishBlockApplied(json_block_id_ext.dump());
+          answer["BlockIdExt"] = {{"file_hash", blkid.file_hash.to_hex()},
+                                  {"root_hash", blkid.root_hash.to_hex()},
+                                  {"id",
+                                   {
+                                       {"workchain", workchain},
+                                       {"seqno", blkid.id.seqno},
+                                       {"shard", blkid.id.shard},
+                                   }}};
 
           block::gen::Block::Record blk;
           block::gen::BlockInfo::Record info;
@@ -914,6 +776,7 @@ class Indexer : public td::actor::Actor {
                                             {"extra", parse_extra_currency(value_flow.created.extra)}};
           answer["ValueFlow"]["minted"] = {{"grams", value_flow.minted.grams->to_dec_string()},
                                            {"extra", parse_extra_currency(value_flow.minted.extra)}};
+
           /* tlb
        block_extra in_msg_descr:^InMsgDescr
         out_msg_descr:^OutMsgDescr
@@ -1209,6 +1072,7 @@ class Indexer : public td::actor::Actor {
           auto state_hash = upd_cs.prefetch_ref(1)->get_hash(0).to_hex();
 
           answer["ShardState"] = {{"state_old_hash", state_old_hash}, {"state_hash", state_hash}};
+
           {
             std::lock_guard<std::mutex> lock(stored_counter_mtx_);
             ++stored_blocks_counter_;
@@ -1223,8 +1087,8 @@ class Indexer : public td::actor::Actor {
           if (is_first && !info.not_master) {
             td::actor::send_closure(SelfId, &Indexer::parse_other);
           }
-        } catch (std::exception& e) {
-          dumper_->addError(block_id_string, "block", std::string("exception: ") + e.what());
+        } catch (...) {
+          dumper_->addError(block_id_string, "block");
         }
       }
     });
@@ -1296,7 +1160,7 @@ class Indexer : public td::actor::Actor {
 
     if (block_padding_ == 0 && state_padding_ == 0) {  // TODO: add some mutexes
       LOG(WARNING) << "Block&State paddings reached 0; Dump json files;";
-//      dumper_->forceDump(); // what for...
+      dumper_->forceDump();
 
       // clear boc (lib & data & account) cache
       clear_cache();
@@ -1373,7 +1237,6 @@ class Indexer : public td::actor::Actor {
   }
 
   void shutdown() {
-    publisher_ = nullptr;
     LOG(INFO) << "Ready to die";
     ///TODO: danger danger
     LOG(WARNING) << "Calling std::exit(0)";
@@ -1389,7 +1252,7 @@ class Indexer : public td::actor::Actor {
                                          accounts_keys =
                                              std::move(accounts_keys)](td::Result<td::Ref<vm::DataCell>> R) {
       if (R.is_error()) {
-        dumper_->addError(block_id_string, "state", R.move_as_error().to_string());
+        dumper_->addError(block_id_string, "state");
       } else {
         try {
           auto root_cell = R.move_as_ok();
@@ -1597,8 +1460,8 @@ class Indexer : public td::actor::Actor {
             td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
             //              decrease_state_padding();
           }
-        } catch (std::exception& e) {
-          dumper_->addError(block_id_string, "state", std::string("exception: ") + e.what());
+        } catch (...) {
+          dumper_->addError(block_id_string, "state");
         }
       }
     });
@@ -1608,7 +1471,170 @@ class Indexer : public td::actor::Actor {
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle,
                             std::move(P));
   }
+
+  //  void add_done_block(const json &block, BlockIdExt block_id, td::uint64 accounts_count) {
+  //    std::lock_guard<std::mutex> lock(pending_blocks_mtx_);
+  //
+  //    auto data = std::make_pair(block_id, block);
+  //    auto size_data = std::make_pair(block_id, accounts_count);
+  //
+  //    pending_blocks_.emplace(data);
+  //    pending_blocks_size_.insert(size_data);
+  //  }
+  //
+  //  void skip_account(BlockIdExt block_id) {
+  //    auto it_cnt = pending_blocks_size_.find(block_id);
+  //    if (it_cnt != pending_blocks_size_.end()) {
+  //      if ((*it_cnt).second == 1) {
+  //        // dump
+  //        auto it_data = pending_blocks_.find(block_id);
+  //        if (it_data != pending_blocks_.end()) {
+  //          //          auto answer = std::move((*it_data).second);
+  //          //
+  //          //          // save parsed accounts
+  //          //          answer["accounts"] = std::move((*it).second);
+  //          //
+  //          //          {
+  //          //            std::lock_guard<std::mutex> lock(stored_counter_mtx_);
+  //          //            ++stored_states_counter_;
+  //          //          }
+  //          //                    dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+  //          //                                            std::to_string(block_id.id.seqno),
+  //          //                                        std::move(answer));
+  //
+  //          LOG(WARNING) << "received & parsed state from db " << block_id.to_str();
+  //          decrease_state_padding();
+  //        }
+  //      } else {
+  //        (*it_cnt).second = (*it_cnt).second - 1;
+  //        LOG(WARNING) << "Skip account in block: " << block_id.to_str() << " Accounts: " << (*it_cnt).second;
+  //      }
+  //    }
+  //  }
+  //
+  //  void parse_account(BlockIdExt block_id, vm::CellSlice value, std::string account_address) {
+  //    LOG(DEBUG) << "Parse account: (" << block_id.to_str() << ":" << account_address << ")";
+  //    block::gen::ShardAccount::Record sa;
+  //    block::gen::CurrencyCollection::Record dbi_cc;
+  //    std::vector<std::tuple<int, std::string>> dummy;
+  //    CHECK(tlb::unpack(value, sa));
+  //    json data;
+  //
+  //    data["account_address"] = {{"workchain", block_id.id.workchain}, {"address", account_address}};
+  //    data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}};
+  //
+  //    auto account_cell = load_cell_slice(sa.account);
+  //    auto acc_tag = block::gen::t_Account.get_tag(account_cell);
+  //
+  //    if (acc_tag == block::gen::t_Account.account) {
+  //      block::gen::Account::Record_account acc;
+  //      block::gen::StorageInfo::Record si;
+  //      block::gen::AccountStorage::Record as;
+  //      block::gen::StorageUsed::Record su;
+  //      block::gen::CurrencyCollection::Record balance;
+  //
+  //      CHECK(tlb::unpack(account_cell, acc));
+  //
+  //      CHECK(tlb::unpack(acc.storage.write(), as));
+  //      CHECK(tlb::unpack(acc.storage_stat.write(), si));
+  //      CHECK(tlb::unpack(si.used.write(), su));
+  //      CHECK(tlb::unpack(as.balance.write(), balance));
+  //      data["account"]["addr"] = parse_address(acc.addr.write());
+  //      std::string due_payment;
+  //
+  //      if (si.due_payment->prefetch_ulong(1) > 0) {
+  //        auto due = si.due_payment.write();
+  //        due.fetch_bits(1);  // maybe
+  //        due_payment = block::tlb::t_Grams.as_integer(due)->to_dec_string();
+  //      }
+  //
+  //      data["account"]["storage_stat"] = {{"last_paid", si.last_paid}, {"due_payment", due_payment}};
+  //
+  //      data["account"]["storage_stat"]["used"] = {
+  //          {"cells", block::tlb::t_VarUInteger_7.as_uint(su.cells.write())},
+  //          {"bits", block::tlb::t_VarUInteger_7.as_uint(su.bits.write())},
+  //          {"public_cells", block::tlb::t_VarUInteger_7.as_uint(su.public_cells.write())},
+  //      };
+  //
+  //      data["account"]["storage"] = {{"last_trans_lt", as.last_trans_lt}};
+  //
+  //      data["account"]["storage"]["balance"] = {
+  //          {"grams", block::tlb::t_Grams.as_integer(balance.grams)->to_dec_string()},
+  //          {"extra", balance.other->have_refs() ? parse_extra_currency(balance.other->prefetch_ref()) : dummy}};
+  //
+  //      auto tag = block::gen::t_AccountState.get_tag(as.state.write());
+  //
+  //      if (tag == block::gen::t_AccountState.account_uninit) {
+  //        data["account"]["state"] = {{"type", "uninit"}};
+  //      }
+  //
+  //      else if (tag == block::gen::t_AccountState.account_active) {
+  //        block::gen::AccountState::Record_account_active active_account;
+  //        CHECK(tlb::unpack(as.state.write(), active_account));
+  //
+  //        data["account"]["state"] = {{"type", "active"}, {"state_init", parse_state_init(active_account.x.write())}};
+  //
+  //      }
+  //
+  //      else if (tag == block::gen::t_AccountState.account_frozen) {
+  //        block::gen::AccountState::Record_account_frozen f{};
+  //        CHECK(tlb::unpack(as.state.write(), f))
+  //        data["account"]["state"] = {{"type", "frozen"}, {"state_hash", f.state_hash.to_hex()}};
+  //      }
+  //    }
+  //
+  //    {
+  //      std::lock_guard<std::mutex> lock(pending_blocks_mtx_);
+  //
+  //      auto it = pending_blocks_accounts_.find(block_id);
+  //      if (it != pending_blocks_accounts_.end()) {
+  //        //        it->second.emplace_back(std::move(data));
+  //      } else {  // first parsed account
+  //        std::vector<json> data_for_waiting;
+  //        //        data_for_waiting.emplace_back(std::move(data));
+  //
+  //        auto p = std::make_pair(block_id, data_for_waiting);
+  //        pending_blocks_accounts_.emplace(p);
+  //      }
+  //      it = pending_blocks_accounts_.find(block_id);
+  //
+  //      auto it_cnt = pending_blocks_size_.find(block_id);
+  //      if (it_cnt == pending_blocks_size_.end()) {
+  //        return;
+  //      }
+  //      if (it_cnt->second != 1) {
+  //        it_cnt->second -= 1;
+  //        return;
+  //      }
+  //
+  //      // dump
+  //      auto it_data = pending_blocks_.find(block_id);
+  //      if (it_data == pending_blocks_.end()) {
+  //        return;
+  //      }
+  //      // save parsed accounts
+  //      //      it_data->second["accounts"] = it->second;
+  //
+  //      {
+  //        std::lock_guard<std::mutex> lock_internal(stored_counter_mtx_);
+  //        ++stored_states_counter_;
+  //      }
+  //      dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+  //                              std::to_string(block_id.id.seqno),
+  //                          it_data->second);
+  //
+  //      // clean up
+  //      pending_blocks_accounts_.erase(it);
+  //      pending_blocks_size_.erase(it_cnt);
+  //      pending_blocks_.erase(it_data);
+  //
+  //      LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
+  //      //      td::actor::send_closure(actor_id(this), &Indexer::decrease_state_padding);
+  //      decrease_state_padding();
+  //    }
+  //  }
 };  // namespace validator
+}  // namespace validator
 }  // namespace ton
 
 td::actor::ActorOwn<ton::validator::Indexer> indexer;
@@ -1686,17 +1712,9 @@ int main(int argc, char **argv) {
       return td::Status::Error(ton::ErrorCode::error, "bad value for --progress: not true or false");
     }
   });
-  p.add_option('P', "publish", "publish blocks/states to message queue <endpoint>", [&](td::Slice arg) {
-    const auto endpoint = arg.str();
-    td::actor::send_closure(indexer, &ton::validator::Indexer::set_block_publisher, std::make_unique<ton::validator::BlockPublisherKafka>(endpoint));
-  });
-  p.add_option('d', "daemon", "(DIFFERENT BEHAVIOUR) receive block parse requests <endpoint>", [&](td::Slice arg) {
-    const auto endpoint = arg.str();
-    td::actor::send_closure(indexer, &ton::validator::Indexer::set_daemon_mode, std::make_unique<ton::validator::BlockRequestReceiverKafka>(endpoint));
-  });
 
   td::actor::set_debug(true);
-  td::actor::Scheduler scheduler({threads});  // contains a bug: threads not initialized by OptionsParser [maybe]
+  td::actor::Scheduler scheduler({threads});  // contans a bug: threads not initialized by OptionsParser
   scheduler.run_in_context([&] { indexer = td::actor::create_actor<ton::validator::Indexer>("cool"); });
   scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
   scheduler.run_in_context([&] { td::actor::send_closure(indexer, &ton::validator::Indexer::run); });
