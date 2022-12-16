@@ -1098,8 +1098,40 @@ class Indexer : public td::actor::Actor {
               LOG(DEBUG) << "FOR: " << blkid.to_str() << " first: " << is_first;
               LOG(DEBUG) << "GO: " << shard_workchain << ":" << shard_shard << ":" << shard_seqno;
 
-              td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, shard_seqno, shard_shard,
-                                            shard_workchain, is_first);
+              LOG(DEBUG) << "Receive start_parse_shards";
+
+              auto P = td::PromiseCreator::lambda([this, workchain_shard = shard_workchain, seqno_shard = shard_seqno, shard_shard = shard_shard,
+                                                   SelfId = SelfId, first = is_first](td::Result<ConstBlockHandle> R) {
+                if (R.is_error()) {
+                  LOG(ERROR) << "ERROR IN BLOCK: "
+                             << "Seqno: " << seqno_shard << " Shard: " << shard_shard << " Worckchain: " << workchain_shard;
+
+                  LOG(ERROR) << R.move_as_error().to_string();
+                  td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
+                  //        decrease_state_padding();
+                  return;
+                } else {
+                  auto handle = R.move_as_ok();
+                  LOG(DEBUG) << "got block from db " << workchain_shard << ":" << shard_shard << ":" << seqno_shard
+                             << " is_first: " << first;
+                  td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, first);
+                }
+              });
+
+              const auto id = std::to_string(shard_workchain) + ":" + std::to_string(shard_shard) + ":" + std::to_string(shard_seqno);
+              LOG(DEBUG) << "Receive start_parse_shards for " << id;
+
+              if (is_first | already_traversed_.find(id) != already_traversed_.end()) {
+                increase_block_padding();
+                ton::AccountIdPrefixFull pfx{shard_workchain, shard_shard};
+                td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, shard_shard,
+                                        std::move(P));
+              } else {
+                LOG(DEBUG) << id << " <- already traversed!";
+              }
+
+//              td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, shard_seqno, shard_shard,
+//                                            shard_workchain, is_first);
 
               return 1;
             };
