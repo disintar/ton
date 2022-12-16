@@ -263,8 +263,9 @@ bool dict_check_for_each_key(vm::Ref<vm::Cell> dict, td::BitPtr key_buffer, int 
 
 class StateIndexer : public td::actor::Actor {
  public:
-  StateIndexer(const std::string &block_id_string, vm::Ref<vm::Cell> root_cell, const std::vector<td::Bits256>& accounts_keys,
-               BlockIdExt block_id, std::unique_ptr<Dumper> &dumper_, td::Promise<td::int32> dec_promise) {
+  StateIndexer(const std::string &block_id_string, vm::Ref<vm::Cell> root_cell,
+               const std::vector<td::Bits256> &accounts_keys, BlockIdExt block_id, std::unique_ptr<Dumper> &dumper_,
+               td::Promise<td::int32> dec_promise) {
     //    try {
     td::Timer timer;
 
@@ -386,7 +387,9 @@ class StateIndexer : public td::actor::Actor {
       //                                bool invert_first = false)
       unsigned long total_accounts = accounts_keys.size();
 
-      vm::DictionaryFixed::foreach_func_t fAcc = [&](auto value, auto x, auto y) {
+      vm::DictionaryFixed::foreach_func_t fAcc = [timer = &timer, block_id_string, block_id,
+                                                  json_accounts = &json_accounts,
+                                                  &total_accounts](auto value, auto x, auto y) {
         auto account = ton::Bits256{x};
         LOG(DEBUG) << "Parse accounts states got account data " << account.to_hex() << " " << block_id_string << " "
                    << timer;
@@ -441,6 +444,7 @@ class StateIndexer : public td::actor::Actor {
 
             data["account"]["storage"] = {{"last_trans_lt", as.last_trans_lt}};
 
+            std::vector<std::tuple<int, std::string>> dummy;
             data["account"]["storage"]["balance"] = {
                 {"grams", block::tlb::t_Grams.as_integer(balance.grams)->to_dec_string()},
                 {"extra", balance.other->have_refs() ? parse_extra_currency(balance.other->prefetch_ref()) : dummy}};
@@ -469,7 +473,7 @@ class StateIndexer : public td::actor::Actor {
               data["account"]["state"] = {{"type", "frozen"}, {"state_hash", f.state_hash.to_hex()}};
             }
 
-            json_accounts.emplace_back(data);
+            json_accounts->emplace_back(data);
           }
         }
 
@@ -483,7 +487,8 @@ class StateIndexer : public td::actor::Actor {
         return true;
       };
 
-      std::unique_ptr<std::vector<td::Bits256>> account_keys_ptr = std::make_unique<std::vector<td::Bits256>>(accounts_keys);
+      std::unique_ptr<std::vector<td::Bits256>> account_keys_ptr =
+          std::make_unique<std::vector<td::Bits256>>(accounts_keys);
       dict_check_for_each_key(cell, td::BitPtr{key_buffer}, 256, 256, fAcc, account_keys_ptr);
 
       answer["accounts"] = json_accounts;
