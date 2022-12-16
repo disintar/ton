@@ -430,6 +430,13 @@ class StateIndexer : public td::actor::Actor {
       vm::DictionaryFixed::foreach_func_t fAcc = [timer = &timer, block_id_string, block_id,
                                                   json_accounts = &json_accounts,
                                                   &total_accounts](auto value, auto x, auto y) {
+        total_accounts -= 1;
+
+        if (total_accounts == 0){
+          return false;
+        } else {
+          return true;
+        }
 //        auto account = ton::Bits256{x};
 //        LOG(DEBUG) << "Parse accounts states got account data " << account.to_hex() << " " << block_id_string << " "
 //                   << timer;
