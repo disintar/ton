@@ -390,99 +390,99 @@ class StateIndexer : public td::actor::Actor {
       vm::DictionaryFixed::foreach_func_t fAcc = [timer = &timer, block_id_string, block_id,
                                                   json_accounts = &json_accounts,
                                                   &total_accounts](auto value, auto x, auto y) {
-        auto account = ton::Bits256{x};
-        LOG(DEBUG) << "Parse accounts states got account data " << account.to_hex() << " " << block_id_string << " "
-                   << timer;
-
-        if (value.not_null()) {
-          block::gen::ShardAccount::Record sa;
-          block::gen::CurrencyCollection::Record dbi_cc;
-          CHECK(tlb::unpack(value.write(), sa));
-          LOG(DEBUG) << "Parse accounts states account data parsed " << account.to_hex() << " " << block_id_string
-                     << " " << timer;
-
-          json data;
-
-          data["account_address"] = {{"workchain", block_id.id.workchain}, {"address", account.to_hex()}};
-          data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}};
-
-          auto account_cell = load_cell_slice(sa.account);
-          auto acc_tag = block::gen::t_Account.get_tag(account_cell);
-
-          if (acc_tag == block::gen::t_Account.account) {
-            block::gen::Account::Record_account acc;
-            block::gen::StorageInfo::Record si;
-            block::gen::AccountStorage::Record as;
-            block::gen::StorageUsed::Record su;
-            block::gen::CurrencyCollection::Record balance;
-
-            CHECK(tlb::unpack(account_cell, acc));
-
-            CHECK(tlb::unpack(acc.storage.write(), as));
-            CHECK(tlb::unpack(acc.storage_stat.write(), si));
-            CHECK(tlb::unpack(si.used.write(), su));
-            CHECK(tlb::unpack(as.balance.write(), balance));
-            LOG(DEBUG) << "Parse accounts states account main info parsed " << account.to_hex() << " "
-                       << block_id_string << " " << timer;
-
-            data["account"]["addr"] = parse_address(acc.addr.write());
-            std::string due_payment;
-
-            if (si.due_payment->prefetch_ulong(1) > 0) {
-              auto due = si.due_payment.write();
-              due.fetch_bits(1);  // maybe
-              due_payment = block::tlb::t_Grams.as_integer(due)->to_dec_string();
-            }
-
-            data["account"]["storage_stat"] = {{"last_paid", si.last_paid}, {"due_payment", due_payment}};
-
-            data["account"]["storage_stat"]["used"] = {
-                {"cells", block::tlb::t_VarUInteger_7.as_uint(su.cells.write())},
-                {"bits", block::tlb::t_VarUInteger_7.as_uint(su.bits.write())},
-                {"public_cells", block::tlb::t_VarUInteger_7.as_uint(su.public_cells.write())},
-            };
-
-            data["account"]["storage"] = {{"last_trans_lt", as.last_trans_lt}};
-
-            std::vector<std::tuple<int, std::string>> dummy;
-            data["account"]["storage"]["balance"] = {
-                {"grams", block::tlb::t_Grams.as_integer(balance.grams)->to_dec_string()},
-                {"extra", balance.other->have_refs() ? parse_extra_currency(balance.other->prefetch_ref()) : dummy}};
-
-            LOG(DEBUG) << "Parse accounts states account storage parsed" << account.to_hex() << " " << block_id_string
-                       << " " << timer;
-
-            auto tag = block::gen::t_AccountState.get_tag(as.state.write());
-
-            if (tag == block::gen::t_AccountState.account_uninit) {
-              data["account"]["state"] = {{"type", "uninit"}};
-            }
-
-            else if (tag == block::gen::t_AccountState.account_active) {
-              block::gen::AccountState::Record_account_active active_account;
-              CHECK(tlb::unpack(as.state.write(), active_account));
-
-              data["account"]["state"] = {{"type", "active"},
-                                          {"state_init", parse_state_init(active_account.x.write())}};
-
-            }
-
-            else if (tag == block::gen::t_AccountState.account_frozen) {
-              block::gen::AccountState::Record_account_frozen f{};
-              CHECK(tlb::unpack(as.state.write(), f))
-              data["account"]["state"] = {{"type", "frozen"}, {"state_hash", f.state_hash.to_hex()}};
-            }
-
-            json_accounts->emplace_back(data);
-          }
-        }
-
-        LOG(DEBUG) << "Parse accounts states account finally parsed " << account.to_hex() << " " << block_id_string
-                   << " " << timer;
-        total_accounts -= 1;
-        if (total_accounts == 0) {
-          return false;  // stop iterating
-        }
+//        auto account = ton::Bits256{x};
+//        LOG(DEBUG) << "Parse accounts states got account data " << account.to_hex() << " " << block_id_string << " "
+//                   << timer;
+//
+//        if (value.not_null()) {
+//          block::gen::ShardAccount::Record sa;
+//          block::gen::CurrencyCollection::Record dbi_cc;
+//          CHECK(tlb::unpack(value.write(), sa));
+//          LOG(DEBUG) << "Parse accounts states account data parsed " << account.to_hex() << " " << block_id_string
+//                     << " " << timer;
+//
+//          json data;
+//
+//          data["account_address"] = {{"workchain", block_id.id.workchain}, {"address", account.to_hex()}};
+//          data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}};
+//
+//          auto account_cell = load_cell_slice(sa.account);
+//          auto acc_tag = block::gen::t_Account.get_tag(account_cell);
+//
+//          if (acc_tag == block::gen::t_Account.account) {
+//            block::gen::Account::Record_account acc;
+//            block::gen::StorageInfo::Record si;
+//            block::gen::AccountStorage::Record as;
+//            block::gen::StorageUsed::Record su;
+//            block::gen::CurrencyCollection::Record balance;
+//
+//            CHECK(tlb::unpack(account_cell, acc));
+//
+//            CHECK(tlb::unpack(acc.storage.write(), as));
+//            CHECK(tlb::unpack(acc.storage_stat.write(), si));
+//            CHECK(tlb::unpack(si.used.write(), su));
+//            CHECK(tlb::unpack(as.balance.write(), balance));
+//            LOG(DEBUG) << "Parse accounts states account main info parsed " << account.to_hex() << " "
+//                       << block_id_string << " " << timer;
+//
+//            data["account"]["addr"] = parse_address(acc.addr.write());
+//            std::string due_payment;
+//
+//            if (si.due_payment->prefetch_ulong(1) > 0) {
+//              auto due = si.due_payment.write();
+//              due.fetch_bits(1);  // maybe
+//              due_payment = block::tlb::t_Grams.as_integer(due)->to_dec_string();
+//            }
+//
+//            data["account"]["storage_stat"] = {{"last_paid", si.last_paid}, {"due_payment", due_payment}};
+//
+//            data["account"]["storage_stat"]["used"] = {
+//                {"cells", block::tlb::t_VarUInteger_7.as_uint(su.cells.write())},
+//                {"bits", block::tlb::t_VarUInteger_7.as_uint(su.bits.write())},
+//                {"public_cells", block::tlb::t_VarUInteger_7.as_uint(su.public_cells.write())},
+//            };
+//
+//            data["account"]["storage"] = {{"last_trans_lt", as.last_trans_lt}};
+//
+//            std::vector<std::tuple<int, std::string>> dummy;
+//            data["account"]["storage"]["balance"] = {
+//                {"grams", block::tlb::t_Grams.as_integer(balance.grams)->to_dec_string()},
+//                {"extra", balance.other->have_refs() ? parse_extra_currency(balance.other->prefetch_ref()) : dummy}};
+//
+//            LOG(DEBUG) << "Parse accounts states account storage parsed" << account.to_hex() << " " << block_id_string
+//                       << " " << timer;
+//
+//            auto tag = block::gen::t_AccountState.get_tag(as.state.write());
+//
+//            if (tag == block::gen::t_AccountState.account_uninit) {
+//              data["account"]["state"] = {{"type", "uninit"}};
+//            }
+//
+//            else if (tag == block::gen::t_AccountState.account_active) {
+//              block::gen::AccountState::Record_account_active active_account;
+//              CHECK(tlb::unpack(as.state.write(), active_account));
+//
+//              data["account"]["state"] = {{"type", "active"},
+//                                          {"state_init", parse_state_init(active_account.x.write())}};
+//
+//            }
+//
+//            else if (tag == block::gen::t_AccountState.account_frozen) {
+//              block::gen::AccountState::Record_account_frozen f{};
+//              CHECK(tlb::unpack(as.state.write(), f))
+//              data["account"]["state"] = {{"type", "frozen"}, {"state_hash", f.state_hash.to_hex()}};
+//            }
+//
+//            json_accounts->emplace_back(data);
+//          }
+//        }
+//
+//        LOG(DEBUG) << "Parse accounts states account finally parsed " << account.to_hex() << " " << block_id_string
+//                   << " " << timer;
+//        total_accounts -= 1;
+//        if (total_accounts == 0) {
+//          return false;  // stop iterating
+//        }
 
         return true;
       };
