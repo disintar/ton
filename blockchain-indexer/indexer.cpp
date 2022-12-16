@@ -224,7 +224,6 @@ class Dumper {
 };
 
 bool dict_check_for_each_key(vm::Ref<vm::Cell> dict, td::BitPtr key_buffer, int n, int total_key_len,
-                             const vm::DictionaryFixed::foreach_func_t &foreach_func,
                              std::unique_ptr<std::vector<td::Bits256>> &accounts_keys, bool invert_first = false) {
   if (dict.is_null()) {
     return true;
@@ -236,7 +235,8 @@ bool dict_check_for_each_key(vm::Ref<vm::Cell> dict, td::BitPtr key_buffer, int 
     auto key = ton::Bits256{key_buffer + n - total_key_len};
 
     if (std::find(accounts_keys->begin(), accounts_keys->end(), key) != accounts_keys->end()) {
-      return foreach_func(std::move(label.remainder), key_buffer + n - total_key_len, total_key_len);
+      return false;
+//      return foreach_func(std::move(label.remainder), key_buffer + n - total_key_len, total_key_len);
     } else {
       return true;
     };
@@ -489,7 +489,7 @@ class StateIndexer : public td::actor::Actor {
 
       std::unique_ptr<std::vector<td::Bits256>> account_keys_ptr =
           std::make_unique<std::vector<td::Bits256>>(accounts_keys);
-      dict_check_for_each_key(cell, td::BitPtr{key_buffer}, 256, 256, fAcc, account_keys_ptr);
+      dict_check_for_each_key(cell, td::BitPtr{key_buffer}, 256, 256, account_keys_ptr);
 
       answer["accounts"] = json_accounts;
       LOG(DEBUG) << "Parse accounts states all accounts parsed " << block_id_string << " " << timer;
