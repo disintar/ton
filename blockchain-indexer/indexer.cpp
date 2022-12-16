@@ -271,8 +271,15 @@ bool dict_check_for_each_key(Ref<vm::Cell> dict, td::BitPtr key_buffer, int n, i
   int l = label.l_bits;
   label.extract_label_to(key_buffer);
   if (l == n) {
-    // leaf node, value left in label.remainder
-    return foreach_func(std::move(label.remainder), key_buffer + n - total_key_len, total_key_len);
+    auto key = ton::Bits256{key_buffer + n - total_key_len};
+    auto keyPos = std::find(accounts_keys->get()->begin(), accounts_keys->get()->end(), key);
+
+    if (keyPos != accounts_keys->get()->end()){
+      // leaf node, value left in label.remainder
+      return foreach_func(std::move(label.remainder), key_buffer + n - total_key_len, total_key_len);
+    } else {
+      return true;
+    }
   }
   assert(l >= 0 && l < n);
   // a fork with two children, c1 and c2
