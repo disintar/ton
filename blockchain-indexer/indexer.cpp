@@ -558,17 +558,19 @@ class Indexer : public td::actor::Actor {
         dumper_->addError(block_id_string, "block");
       } else {
         try {
+          td::Timer timer;
           auto block = R.move_as_ok();
           CHECK(block.not_null());
 
           auto blkid = block->block_id();
-
-          LOG(INFO) << "Parse block: " << blkid.to_str() << " is_first: " << is_first;
+          LOG(INFO) << "Parse block: " << blkid.to_str() << " is_first: " << is_first << " time:" << timer;
 
           auto block_root = block->root_cell();
           if (block_root.is_null()) {
             LOG(ERROR) << "block has no valid root cell";
             return;
+          } else {
+            LOG(DEBUG) << "Parse block got root cell: " << blkid.to_str() << " " << timer.elapsed();
           }
 
           //
@@ -587,15 +589,17 @@ class Indexer : public td::actor::Actor {
                                        {"seqno", blkid.id.seqno},
                                        {"shard", blkid.id.shard},
                                    }}};
-
+          LOG(DEBUG) << "Parse block got root BlockIdExt: " << blkid.to_str() << " " << timer.elapsed();
           block::gen::Block::Record blk;
           block::gen::BlockInfo::Record info;
           block::gen::BlockExtra::Record extra;
 
           if (!(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra) &&
                 tlb::unpack_cell(blk.info, info))) {
-            LOG(FATAL) << "Error in block: " << blkid.to_str();
+            LOG(FATAL) << "Error unpack tlb in block: " << blkid.to_str();
             return;
+          } else {
+            LOG(DEBUG) << "Parse block unpacked block tlb: " << blkid.to_str() << " " << timer.elapsed();
           }
 
           /* tlb
@@ -652,6 +656,7 @@ class Indexer : public td::actor::Actor {
               {"min_ref_mc_seqno", info.min_ref_mc_seqno},
               {"prev_key_block_seqno", info.prev_key_block_seqno},
           };
+          LOG(DEBUG) << "Parse block got BlockInfo: " << blkid.to_str() << " " << timer.elapsed();
 
           if (info.vert_seqno_incr) {
             block::gen::ExtBlkRef::Record prev_vert_blk{};
@@ -663,6 +668,8 @@ class Indexer : public td::actor::Actor {
                 {"root_hash", prev_vert_blk.root_hash.to_hex()},
                 {"file_hash", prev_vert_blk.file_hash.to_hex()},
             };
+
+            LOG(DEBUG) << "Parse block got BlockInfo prev_vert_ref: " << blkid.to_str() << " " << timer.elapsed();
           }
 
           if (info.after_merge) {
@@ -693,6 +700,7 @@ class Indexer : public td::actor::Actor {
                      {"file_hash", prev_blk_2.file_hash.to_hex()},
                  }},
             };
+            LOG(DEBUG) << "Parse block got BlockInfo prev_ref: " << blkid.to_str() << " " << timer.elapsed();
 
             if (info.not_master && !is_first) {
               LOG(DEBUG) << "FOR: " << blkid.to_str() << " first: " << is_first;
@@ -719,6 +727,8 @@ class Indexer : public td::actor::Actor {
                                                     {"file_hash", prev_blk.file_hash.to_hex()},
                                                 }}};
 
+            LOG(DEBUG) << "Parse block got BlockInfo prev_ref: " << blkid.to_str() << " " << timer.elapsed();
+
             if (info.not_master && !is_first) {
               LOG(DEBUG) << "FOR: " << blkid.to_str();
               LOG(DEBUG) << "GO: " << blkid.id.workchain << ":" << blkid.id.shard << ":" << prev_blk.seq_no;
@@ -739,6 +749,8 @@ class Indexer : public td::actor::Actor {
                 {"root_hash", master.root_hash.to_hex()},
                 {"file_hash", master.file_hash.to_hex()},
             };
+
+            LOG(DEBUG) << "Parse block got BlockInfo master_ref: " << blkid.to_str() << " " << timer.elapsed();
           }
 
           if (info.gen_software.not_null()) {
@@ -746,6 +758,7 @@ class Indexer : public td::actor::Actor {
                 {"version", info.gen_software->prefetch_ulong(32)},
                 {"capabilities", info.gen_software->prefetch_ulong(64)},
             };
+            LOG(DEBUG) << "Parse block got BlockInfo gen_software: " << blkid.to_str() << " " << timer.elapsed();
           }
 
           auto value_flow_root = blk.value_flow;
@@ -790,6 +803,7 @@ class Indexer : public td::actor::Actor {
                                             {"extra", parse_extra_currency(value_flow.created.extra)}};
           answer["ValueFlow"]["minted"] = {{"grams", value_flow.minted.grams->to_dec_string()},
                                            {"extra", parse_extra_currency(value_flow.minted.extra)}};
+          LOG(DEBUG) << "Parse block got ValueFlow: " << blkid.to_str() << " " << timer.elapsed();
 
           /* tlb
        block_extra in_msg_descr:^InMsgDescr
@@ -803,33 +817,36 @@ class Indexer : public td::actor::Actor {
           auto in_msg_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.in_msg_descr), 256,
                                                                        block::tlb::aug_InMsgDescr);
 
-          std::vector<json> in_msgs_json;
-          while (!in_msg_dict->is_empty()) {
-            td::Bits256 last_key;
-
-            in_msg_dict->get_minmax_key(last_key);
-            Ref<vm::CellSlice> data = in_msg_dict->lookup_delete(last_key);
-
-            json parsed = {{"hash", last_key.to_hex()}, {"message", parse_in_msg(data.write(), workchain)}};
-            in_msgs_json.emplace_back(std::move(parsed));
-          }
-
-          auto out_msg_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.out_msg_descr),
-                                                                        256, block::tlb::aug_OutMsgDescr);
-
-          std::vector<json> out_msgs_json;
-          while (!out_msg_dict->is_empty()) {
-            td::Bits256 last_key;
-
-            out_msg_dict->get_minmax_key(last_key);
-            Ref<vm::CellSlice> data = out_msg_dict->lookup_delete(last_key);
-
-            json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg(data.write(), workchain)}};
-            out_msgs_json.emplace_back(std::move(parsed));
-          }
+          //          std::vector<json> in_msgs_json;
+          //          while (!in_msg_dict->is_empty()) {
+          //            td::Bits256 last_key;
+          //
+          //            in_msg_dict->get_minmax_key(last_key);
+          //            Ref<vm::CellSlice> data = in_msg_dict->lookup_delete(last_key);
+          //
+          //            json parsed = {{"hash", last_key.to_hex()}, {"message", parse_in_msg(data.write(), workchain)}};
+          //            in_msgs_json.emplace_back(std::move(parsed));
+          //            LOG(DEBUG) << "Parsed in_message: " << last_key.to_hex() << " " << blkid.to_str() << " " << timer.elapsed();
+          //          }
+          //
+          //          auto out_msg_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.out_msg_descr),
+          //                                                                        256, block::tlb::aug_OutMsgDescr);
+          //
+          //          std::vector<json> out_msgs_json;
+          //          while (!out_msg_dict->is_empty()) {
+          //            td::Bits256 last_key;
+          //
+          //            out_msg_dict->get_minmax_key(last_key);
+          //            Ref<vm::CellSlice> data = out_msg_dict->lookup_delete(last_key);
+          //
+          //            json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg(data.write(), workchain)}};
+          //            out_msgs_json.emplace_back(std::move(parsed));
+          //            LOG(DEBUG) << "Parsed out_message: " << last_key.to_hex() << " " << blkid.to_str() << " " << timer.elapsed();
+          //          }
 
           auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
               vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
+          LOG(DEBUG) << "Parse block got account_blocks_dict: " << blkid.to_str() << " " << timer.elapsed();
 
           /* tlb
          acc_trans#5 account_addr:bits256
@@ -855,22 +872,22 @@ class Indexer : public td::actor::Actor {
                 hex_addr != "0000000000000000000000000000000000000000000000000000000000000000" &&
                 hex_addr != "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEF") {
               accounts_keys.emplace_back(last_key);
-            }
+              LOG(DEBUG) << "Parse block start parse account: " << last_key << blkid.to_str() << " " << timer.elapsed();
 
-            data = account_blocks_dict->lookup_delete(last_key);
+              data = account_blocks_dict->lookup_delete(last_key);
 
-            json account_block_parsed;
-            account_block_parsed["account_addr"] = {{"address", hex_addr}, {"workchain", workchain}};
+              json account_block_parsed;
+              account_block_parsed["account_addr"] = {{"address", hex_addr}, {"workchain", workchain}};
 
-            block::gen::AccountBlock::Record acc_blk;
-            CHECK(tlb::csr_unpack(data, acc_blk));
-            int count = 0;
-            std::vector<json> transactions;
+              block::gen::AccountBlock::Record acc_blk;
+              CHECK(tlb::csr_unpack(data, acc_blk));
+              int count = 0;
+              std::vector<json> transactions;
 
-            vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
-                                               block::tlb::aug_AccountTransactions};
+              vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
+                                                 block::tlb::aug_AccountTransactions};
 
-            /* tlb
+              /* tlb
           transaction$0111 account_addr:bits256 lt:uint64
           prev_trans_hash:bits256 prev_trans_lt:uint64 now:uint32
           outmsg_cnt:uint15
@@ -880,29 +897,32 @@ class Indexer : public td::actor::Actor {
           description:^TransactionDescr = Transaction;
          */
 
-            while (!trans_dict.is_empty()) {
-              td::BitArray<64> last_lt{};
-              trans_dict.get_minmax_key(last_lt);
+              while (!trans_dict.is_empty()) {
+                td::BitArray<64> last_lt{};
+                trans_dict.get_minmax_key(last_lt);
 
-              Ref<vm::CellSlice> tvalue;
-              tvalue = trans_dict.lookup_delete(last_lt);
+                Ref<vm::CellSlice> tvalue;
+                tvalue = trans_dict.lookup_delete(last_lt);
 
-              json transaction = parse_transaction(tvalue, workchain);
-              transactions.emplace_back(std::move(transaction));
+                json transaction = parse_transaction(tvalue, workchain);
+                transactions.emplace_back(std::move(transaction));
 
-              ++count;
-            };
+                ++count;
+              };
 
-            account_block_parsed["transactions"] = transactions;
-            account_block_parsed["transactions_count"] = count;
-            accounts.emplace_back(account_block_parsed);
+              LOG(DEBUG) << "Parse block end parse account: " << last_key << blkid.to_str() << " " << timer.elapsed();
+
+              account_block_parsed["transactions"] = transactions;
+              account_block_parsed["transactions_count"] = count;
+              accounts.emplace_back(account_block_parsed);
+            } else {
+              accounts_keys.emplace_back(last_key);
+            }
           }
 
           if (!accounts_keys.empty()) {
             //          increase_state_padding();
-            auto key = std::to_string(blkid.id.workchain) + ":" + std::to_string(blkid.id.shard) + ":" +
-                       std::to_string(blkid.id.seqno);
-            LOG(DEBUG) << "Send state to parse: " << key;
+            LOG(DEBUG) << "Send state to parse: " << blkid.to_str() << " " << timer.elapsed();
             td::actor::send_closure(SelfId, &Indexer::increase_state_padding);
             td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
           } else {
@@ -915,13 +935,17 @@ class Indexer : public td::actor::Actor {
             dumper_->storeState(key, std::move(skip));
           }
 
-          answer["BlockExtra"] = {
-              {"accounts", std::move(accounts)},         {"rand_seed", extra.rand_seed.to_hex()},
-              {"created_by", extra.created_by.to_hex()}, {"out_msg_descr", std::move(out_msgs_json)},
-              {"in_msg_descr", std::move(in_msgs_json)},
-          };
+          answer["BlockExtra"] = {{"accounts", std::move(accounts)},
+                                  {"rand_seed", extra.rand_seed.to_hex()},
+                                  {"created_by", extra.created_by.to_hex()}};
+          LOG(DEBUG) << "Parse block got BlockExtra: " << blkid.to_str() << " " << timer.elapsed();
+
+          //          , {"out_msg_descr", std::move(out_msgs_json)},
+          //              {"in_msg_descr", std::move(in_msgs_json)},
 
           if ((int)extra.custom->prefetch_ulong(1) == 1) {
+            LOG(DEBUG) << "Parse block get BlockExtra custom: " << blkid.to_str() << " " << timer.elapsed();
+
             auto mc_extra = extra.custom->prefetch_ref();
 
             block::gen::McBlockExtra::Record extra_mc;
@@ -954,41 +978,41 @@ class Indexer : public td::actor::Actor {
               answer["BlockExtra"]["custom"]["configs"] = configs;
             };
 
-//            vm::Dictionary shard_fees_dict{extra_mc.shard_fees->prefetch_ref(), 96};
-//            std::map<std::string, json> shard_fees;
+            //            vm::Dictionary shard_fees_dict{extra_mc.shard_fees->prefetch_ref(), 96};
+            //            std::map<std::string, json> shard_fees;
 
-//            while (!shard_fees_dict.is_empty()) {
-//              td::BitArray<96> key{};
-//              shard_fees_dict.get_minmax_key(key);
-//
-//              Ref<vm::CellSlice> tvalue;
-//              tvalue = shard_fees_dict.lookup_delete(key);
-//
-//              block::gen::ShardFeeCreated::Record sf;
-//              CHECK(tlb::unpack(tvalue.write(), sf));
-//
-//              block::gen::CurrencyCollection::Record fees;
-//              block::gen::CurrencyCollection::Record create;
-//
-//              CHECK(tlb::unpack(sf.fees.write(), fees));
-//              CHECK(tlb::unpack(sf.create.write(), create));
-//
-//              std::vector<std::tuple<int, std::string>> dummy;
-//
-//              json data = {
-//                  {"fees",
-//                   {{"grams", block::tlb::t_Grams.as_integer(fees.grams)->to_dec_string()},
-//                    {"extra", fees.other->have_refs() ? parse_extra_currency(fees.other->prefetch_ref()) : dummy}}},
-//
-//                  {"create",
-//                   {{"grams", block::tlb::t_Grams.as_integer(create.grams)->to_dec_string()},
-//                    {"extra",
-//                     create.other->have_refs() ? parse_extra_currency(create.other->prefetch_ref()) : dummy}}}};
-//
-//              shard_fees[key.to_hex()] = data;
-//            };
+            //            while (!shard_fees_dict.is_empty()) {
+            //              td::BitArray<96> key{};
+            //              shard_fees_dict.get_minmax_key(key);
+            //
+            //              Ref<vm::CellSlice> tvalue;
+            //              tvalue = shard_fees_dict.lookup_delete(key);
+            //
+            //              block::gen::ShardFeeCreated::Record sf;
+            //              CHECK(tlb::unpack(tvalue.write(), sf));
+            //
+            //              block::gen::CurrencyCollection::Record fees;
+            //              block::gen::CurrencyCollection::Record create;
+            //
+            //              CHECK(tlb::unpack(sf.fees.write(), fees));
+            //              CHECK(tlb::unpack(sf.create.write(), create));
+            //
+            //              std::vector<std::tuple<int, std::string>> dummy;
+            //
+            //              json data = {
+            //                  {"fees",
+            //                   {{"grams", block::tlb::t_Grams.as_integer(fees.grams)->to_dec_string()},
+            //                    {"extra", fees.other->have_refs() ? parse_extra_currency(fees.other->prefetch_ref()) : dummy}}},
+            //
+            //                  {"create",
+            //                   {{"grams", block::tlb::t_Grams.as_integer(create.grams)->to_dec_string()},
+            //                    {"extra",
+            //                     create.other->have_refs() ? parse_extra_currency(create.other->prefetch_ref()) : dummy}}}};
+            //
+            //              shard_fees[key.to_hex()] = data;
+            //            };
 
-//            answer["BlockExtra"]["custom"]["shard_fees"] = shard_fees;
+            //            answer["BlockExtra"]["custom"]["shard_fees"] = shard_fees;
 
             if (extra_mc.r1.mint_msg->have_refs()) {
               answer["BlockExtra"]["custom"]["mint_msg"] =
@@ -1076,36 +1100,39 @@ class Indexer : public td::actor::Actor {
 
             shards.process_shard_hashes(f);
             answer["BlockExtra"]["custom"]["shards"] = shards_json;
+            LOG(DEBUG) << "Parse block got BlockExtra custom: " << blkid.to_str() << " " << timer.elapsed();
+
           }
 
-          vm::CellSlice upd_cs{vm::NoVmSpec(), blk.state_update};
-          if (!(upd_cs.is_special() && upd_cs.prefetch_long(8) == 4  // merkle update
-                && upd_cs.size_ext() == 0x20228)) {
-            LOG(ERROR) << "invalid Merkle update in block";
-            return;
-          }
-
-          CHECK(upd_cs.have_refs(2));
-          auto state_old_hash = upd_cs.prefetch_ref(0)->get_hash(0).to_hex();
-          auto state_hash = upd_cs.prefetch_ref(1)->get_hash(0).to_hex();
-
-          answer["ShardState"] = {{"state_old_hash", state_old_hash}, {"state_hash", state_hash}};
+//          vm::CellSlice upd_cs{vm::NoVmSpec(), blk.state_update};
+//          if (!(upd_cs.is_special() && upd_cs.prefetch_long(8) == 4  // merkle update
+//                && upd_cs.size_ext() == 0x20228)) {
+//            LOG(ERROR) << "invalid Merkle update in block";
+//            return;
+//          }
+//
+//          CHECK(upd_cs.have_refs(2));
+//          auto state_old_hash = upd_cs.prefetch_ref(0)->get_hash(0).to_hex();
+//          auto state_hash = upd_cs.prefetch_ref(1)->get_hash(0).to_hex();
+//
+//          answer["ShardState"] = {{"state_old_hash", state_old_hash}, {"state_hash", state_hash}};
 
           {
             std::lock_guard<std::mutex> lock(stored_counter_mtx_);
             ++stored_blocks_counter_;
           }
+
+          LOG(DEBUG) << "Dumper store block: " << blkid.to_str() << " " << timer.elapsed();
           dumper_->storeBlock(
               std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" + std::to_string(blkid.seqno()),
               std::move(answer));
-
           td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
-          //        decrease_block_padding();
 
           if (is_first && !info.not_master) {
+            LOG(DEBUG) << "First block, start parse other: " << blkid.to_str() << " " << timer.elapsed();
             td::actor::send_closure(SelfId, &Indexer::parse_other);
           }
-        } catch (std::exception& e) {
+        } catch (std::exception &e) {
           LOG(ERROR) << e.what() << " block error: " << block_id_string;
           dumper_->addError(block_id_string, "block");
         } catch (...) {
@@ -1481,7 +1508,7 @@ class Indexer : public td::actor::Actor {
             td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
             //              decrease_state_padding();
           }
-        } catch (std::exception& e) {
+        } catch (std::exception &e) {
           LOG(ERROR) << e.what() << " state error: " << block_id_string;
           dumper_->addError(block_id_string, "state");
         } catch (...) {
