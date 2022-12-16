@@ -459,7 +459,7 @@ class Indexer : public td::actor::Actor {
           }
         });
 
-    increase_block_padding();
+    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
     ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                             seqno_first_, std::move(P));
@@ -501,7 +501,7 @@ class Indexer : public td::actor::Actor {
               }
             });
 
-        increase_block_padding();
+        td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
         ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
         td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                                 std::move(P));
@@ -534,7 +534,7 @@ class Indexer : public td::actor::Actor {
     LOG(DEBUG) << "Receive start_parse_shards for " << id;
 
     if (is_first | already_traversed_.find(id) != already_traversed_.end()) {
-      increase_block_padding();
+      td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
       ton::AccountIdPrefixFull pfx{workchain, shard};
       td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                               std::move(P));
@@ -552,7 +552,7 @@ class Indexer : public td::actor::Actor {
       std::lock_guard<std::mutex> lock(parsed_shards_mtx_);
       if (already_traversed_.find(id) != already_traversed_.end()) {
         LOG(DEBUG) << id << " <- already traversed!";
-        decrease_block_padding();
+        td::actor::send_closure(actor_id(this), &Indexer::decrease_block_padding);
         return;
       }
 
@@ -761,7 +761,7 @@ class Indexer : public td::actor::Actor {
               LOG(DEBUG) << "Receive start_parse_shards for " << id;
 
               if (already_traversed_.find(id) != already_traversed_.end()) {
-                increase_block_padding();
+                td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
                 ton::AccountIdPrefixFull pfx{blkid.id.workchain, blkid.id.shard};
 
                 td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
@@ -772,12 +772,12 @@ class Indexer : public td::actor::Actor {
               } else {
                 LOG(DEBUG) << id << " <- already traversed!";
               }
-
-              td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, prev_blk_1.seq_no, blkid.id.shard,
-                                            blkid.id.workchain, false);
-
-              td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, prev_blk_2.seq_no, blkid.id.shard,
-                                            blkid.id.workchain, false);
+//
+//              td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, prev_blk_1.seq_no, blkid.id.shard,
+//                                            blkid.id.workchain, false);
+//
+//              td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, prev_blk_2.seq_no, blkid.id.shard,
+//                                            blkid.id.workchain, false);
             }
 
           } else {
@@ -1180,7 +1180,7 @@ class Indexer : public td::actor::Actor {
               LOG(DEBUG) << "Receive start_parse_shards for " << id;
 
               if (is_first | already_traversed_.find(id) != already_traversed_.end()) {
-                increase_block_padding();
+                td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
                 ton::AccountIdPrefixFull pfx{shard_workchain, shard_shard};
                 td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                                         shard_seqno, std::move(P));
@@ -1248,7 +1248,7 @@ class Indexer : public td::actor::Actor {
       ++block_padding_;
     }
 
-    //    progress_changed();
+//    progress_changed();
     td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
@@ -1266,7 +1266,7 @@ class Indexer : public td::actor::Actor {
       }
     }
 
-    //    progress_changed();
+//    progress_changed();
     td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
   }
 
@@ -1512,7 +1512,7 @@ class Indexer : public td::actor::Actor {
                                     std::move(answer));
 
                 LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
-                decrease_state_padding();
+                td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
 
                 LOG(DEBUG) << "Got empty accounts states addresses " << block_id_string << " " << timer;
 
