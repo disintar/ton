@@ -554,6 +554,7 @@ class Indexer : public td::actor::Actor {
     auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this), is_first = first, block_handle = handle,
                                          block_id_string = id](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
+        LOG(ERROR) << R.move_as_error().to_string() << " block error: " << block_id_string;
         dumper_->addError(block_id_string, "block");
       } else {
         try {
@@ -1101,7 +1102,11 @@ class Indexer : public td::actor::Actor {
           if (is_first && !info.not_master) {
             td::actor::send_closure(SelfId, &Indexer::parse_other);
           }
+        } catch (std::exception& e) {
+          LOG(ERROR) << e.what() << " block error: " << block_id_string;
+          dumper_->addError(block_id_string, "block");
         } catch (...) {
+          LOG(ERROR) << "WTF block error: " << block_id_string;
           dumper_->addError(block_id_string, "block");
         }
       }
@@ -1264,6 +1269,7 @@ class Indexer : public td::actor::Actor {
                                          accounts_keys =
                                              std::move(accounts_keys)](td::Result<td::Ref<vm::DataCell>> R) {
       if (R.is_error()) {
+        LOG(ERROR) << R.move_as_error().to_string() << " state error: " << block_id_string;
         dumper_->addError(block_id_string, "state");
       } else {
         try {
@@ -1472,6 +1478,9 @@ class Indexer : public td::actor::Actor {
             td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
             //              decrease_state_padding();
           }
+        } catch (std::exception& e) {
+          LOG(ERROR) << e.what() << " state error: " << block_id_string;
+          dumper_->addError(block_id_string, "state");
         } catch (...) {
           dumper_->addError(block_id_string, "state");
         }
