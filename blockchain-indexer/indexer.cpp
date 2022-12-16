@@ -229,7 +229,7 @@ class Indexer : public td::actor::Actor {
   std::string global_config_;
   BlockSeqno seqno_first_ = 0;
   BlockSeqno seqno_last_ = 0;
-  int block_padding_ = 1;
+  int block_padding_ = 0;
   int state_padding_ = 0;
   td::uint32 chunk_size_ = 20000;
   td::uint32 chunk_count_ = 0;
@@ -1146,6 +1146,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void increase_block_padding() {
+    LOG(DEBUG) << "increase_block_padding";
     {
       std::lock_guard<std::mutex> lock(display_mtx_);
 
@@ -1157,6 +1158,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void decrease_block_padding() {
+    LOG(DEBUG) << "decrease_block_padding";
     {
       std::lock_guard<std::mutex> lock(display_mtx_);
 
@@ -1174,6 +1176,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void increase_state_padding() {
+    LOG(DEBUG) << "increase_state_padding";
     {
       std::lock_guard<std::mutex> lock(display_mtx_);
 
@@ -1185,6 +1188,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void decrease_state_padding() {
+    LOG(DEBUG) << "decrease_state_padding";
     {
       std::lock_guard<std::mutex> lock(display_mtx_);
 
