@@ -862,8 +862,9 @@ class Indexer : public td::actor::Actor {
           while (!account_blocks_dict->is_empty()) {
             td::Bits256 last_key;
             Ref<vm::CellSlice> data;
-
+            LOG(DEBUG) << "Parse block start get minimum account: " << blkid.to_str() << " " << timer.elapsed();
             account_blocks_dict->get_minmax_key(last_key);
+            LOG(DEBUG) << "Parse block start parse account: " << last_key.to_hex() << blkid.to_str() << " " << timer.elapsed();
             auto hex_addr = last_key.to_hex();
             // todo: fix
             if (hex_addr != "3333333333333333333333333333333333333333333333333333333333333333" &&
@@ -872,13 +873,15 @@ class Indexer : public td::actor::Actor {
                 hex_addr != "0000000000000000000000000000000000000000000000000000000000000000" &&
                 hex_addr != "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEF") {
               accounts_keys.emplace_back(last_key);
-              LOG(DEBUG) << "Parse block start parse account: " << last_key << blkid.to_str() << " " << timer.elapsed();
 
+              LOG(DEBUG) << "Parse block start get account data: " << last_key.to_hex() << blkid.to_str() << " " << timer.elapsed();
               data = account_blocks_dict->lookup_delete(last_key);
+              LOG(DEBUG) << "Parse block end get account data: " << last_key.to_hex() << blkid.to_str() << " " << timer.elapsed();
 
               json account_block_parsed;
               account_block_parsed["account_addr"] = {{"address", hex_addr}, {"workchain", workchain}};
 
+              LOG(DEBUG) << "Parse block start parse account transactions: " << last_key.to_hex() << blkid.to_str() << " " << timer.elapsed();
               block::gen::AccountBlock::Record acc_blk;
               CHECK(tlb::csr_unpack(data, acc_blk));
               int count = 0;
@@ -896,7 +899,6 @@ class Indexer : public td::actor::Actor {
           total_fees:CurrencyCollection state_update:^(HASH_UPDATE Account)
           description:^TransactionDescr = Transaction;
          */
-
               while (!trans_dict.is_empty()) {
                 td::BitArray<64> last_lt{};
                 trans_dict.get_minmax_key(last_lt);
@@ -909,8 +911,7 @@ class Indexer : public td::actor::Actor {
 
                 ++count;
               };
-
-              LOG(DEBUG) << "Parse block end parse account: " << last_key << blkid.to_str() << " " << timer.elapsed();
+              LOG(DEBUG) << "Parse block end parse account transactions: " << last_key.to_hex() << blkid.to_str() << " " << timer.elapsed();
 
               account_block_parsed["transactions"] = transactions;
               account_block_parsed["transactions_count"] = count;
@@ -918,6 +919,8 @@ class Indexer : public td::actor::Actor {
             } else {
               accounts_keys.emplace_back(last_key);
             }
+
+            LOG(DEBUG) << "Parse block end parse account: " << last_key.to_hex() << blkid.to_str() << " " << timer.elapsed();
           }
 
           if (!accounts_keys.empty()) {
