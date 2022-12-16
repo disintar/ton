@@ -860,11 +860,13 @@ class Indexer : public td::actor::Actor {
 
           std::vector<json> accounts;
           std::vector<td::Bits256> accounts_keys;
-          while (!account_blocks_dict->is_empty()) {
-            td::Bits256 last_key;
-            Ref<vm::CellSlice> data;
+
+          auto f = [this, &blkid, &timer, &accounts, &accounts_keys, workchain](
+                       Ref<vm::CellSlice> data, Ref<vm::CellSlice> extra, td::ConstBitPtr key, int key_len) {
+            td::Bits256 last_key = ton::Bits256{key};
+
             LOG(DEBUG) << "Parse block start get minimum account: " << blkid.to_str() << " " << timer;
-            account_blocks_dict->get_minmax_key(last_key);
+
             LOG(DEBUG) << "Parse block start parse account: " << last_key.to_hex() << blkid.to_str() << " " << timer;
             auto hex_addr = last_key.to_hex();
             // todo: fix
@@ -874,11 +876,6 @@ class Indexer : public td::actor::Actor {
                 hex_addr != "0000000000000000000000000000000000000000000000000000000000000000" &&
                 hex_addr != "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEF") {
               accounts_keys.emplace_back(last_key);
-
-              LOG(DEBUG) << "Parse block start get account data: " << last_key.to_hex() << blkid.to_str() << " "
-                         << timer;
-              data = account_blocks_dict->lookup_delete(last_key);
-              LOG(DEBUG) << "Parse block end get account data: " << last_key.to_hex() << blkid.to_str() << " " << timer;
 
               json account_block_parsed;
               account_block_parsed["account_addr"] = {{"address", hex_addr}, {"workchain", workchain}};
@@ -921,13 +918,16 @@ class Indexer : public td::actor::Actor {
               account_block_parsed["transactions_count"] = count;
               accounts.emplace_back(account_block_parsed);
             } else {
-              account_blocks_dict->lookup_delete(last_key);
               accounts_keys.emplace_back(last_key);
             }
 
             LOG(DEBUG) << "Parse block end parse account: " << last_key.to_hex() << " " << blkid.to_str() << " "
                        << timer;
-          }
+
+            return 1;
+          };
+
+          account_blocks_dict->check_for_each_extra(f);
 
           if (!accounts_keys.empty()) {
             //          increase_state_padding();
