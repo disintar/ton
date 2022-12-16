@@ -230,7 +230,7 @@ class Indexer : public td::actor::Actor {
   BlockSeqno seqno_first_ = 0;
   BlockSeqno seqno_last_ = 0;
   int block_padding_ = 1;
-  int state_padding_ = 1;
+  int state_padding_ = 0;
   td::uint32 chunk_size_ = 20000;
   td::uint32 chunk_count_ = 0;
   td::uint32 chunk_current_ = 0;
@@ -240,7 +240,7 @@ class Indexer : public td::actor::Actor {
   std::map<BlockIdExt, json> pending_blocks_;
   std::map<BlockIdExt, td::uint64> pending_blocks_size_;
   std::map<BlockIdExt, std::vector<json>> pending_blocks_accounts_;
-  std::mutex pending_blocks_mtx_; // TODO: not used
+  std::mutex pending_blocks_mtx_;  // TODO: not used
 
   // store timestamps of parsed blocks for speed measuring
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_blocks_timepoints_;
@@ -450,6 +450,8 @@ class Indexer : public td::actor::Actor {
             td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
             //            decrease_block_padding();
             LOG(ERROR) << R.move_as_error().to_string();
+            LOG(WARNING) << "Calling std::exit(0)";
+            std::exit(0);
           } else {
             auto handle = R.move_as_ok();
             LOG(DEBUG) << "got data for block " << handle->id().to_str();
@@ -517,10 +519,15 @@ class Indexer : public td::actor::Actor {
       }
     });
 
-    increase_block_padding();
-    ton::AccountIdPrefixFull pfx{workchain, shard};
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
-                            std::move(P));
+    const auto id = std::to_string(workchain) + ":" + std::to_string(shard) + ":" + std::to_string(seqno);
+    if (already_traversed_.find(id) != already_traversed_.end()) {
+      increase_block_padding();
+      ton::AccountIdPrefixFull pfx{workchain, shard};
+      td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
+                              std::move(P));
+    } else {
+      LOG(DEBUG) << id << " <- already traversed!";
+    }
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle, bool first = false) {
@@ -535,6 +542,8 @@ class Indexer : public td::actor::Actor {
         decrease_block_padding();
         return;
       }
+
+      LOG(DEBUG) << "Save " << id << " to traversed!";
       already_traversed_.emplace(id);
     }
 
@@ -846,7 +855,7 @@ class Indexer : public td::actor::Actor {
             data = account_blocks_dict->lookup_delete(last_key);
 
             json account_block_parsed;
-            account_block_parsed["account_addr"] = {{"address", last_key.to_hex()}, {"workchain", workchain}};
+            account_block_parsed["account_addr"] = {{"address", hex_addr}, {"workchain", workchain}};
 
             block::gen::AccountBlock::Record acc_blk;
             CHECK(tlb::csr_unpack(data, acc_blk));
@@ -937,40 +946,41 @@ class Indexer : public td::actor::Actor {
               answer["BlockExtra"]["custom"]["configs"] = configs;
             };
 
-            //          vm::Dictionary shard_fees_dict{extra_mc.shard_fees->prefetch_ref(), 96};
-            //          std::map<std::string, json> shard_fees;
-            //
-            //          while (!shard_fees_dict.is_empty()) {
-            //            td::BitArray<96> key{};
-            //            shard_fees_dict.get_minmax_key(key);
-            //
-            //            Ref<vm::CellSlice> tvalue;
-            //            tvalue = shard_fees_dict.lookup_delete(key);
-            //
-            //            block::gen::ShardFeeCreated::Record sf;
-            //            CHECK(tlb::unpack(tvalue.write(), sf));
-            //
-            //            block::gen::CurrencyCollection::Record fees;
-            //            block::gen::CurrencyCollection::Record create;
-            //
-            //            CHECK(tlb::unpack(sf.fees.write(), fees));
-            //            CHECK(tlb::unpack(sf.create.write(), create));
-            //
-            //            std::vector<std::tuple<int, std::string>> dummy;
-            //
-            //            json data = {
-            //                {"fees",
-            //                 {{"grams", block::tlb::t_Grams.as_integer(fees.grams)->to_dec_string()},
-            //                  {"extra", fees.other->have_refs() ? parse_extra_currency(fees.other->prefetch_ref()) : dummy}}},
-            //
-            //                {"create",
-            //                 {{"grams", block::tlb::t_Grams.as_integer(create.grams)->to_dec_string()},
-            //                  {"extra", create.other->have_refs() ? parse_extra_currency(create.other->prefetch_ref()) : dummy}}}};
-            //
-            //            shard_fees[key.to_hex()] = data;
-            //          };
-            //
-            //          answer["BlockExtra"]["custom"]["shard_fees"] = shard_fees;
+            vm::Dictionary shard_fees_dict{extra_mc.shard_fees->prefetch_ref(), 96};
+            std::map<std::string, json> shard_fees;
+
+            while (!shard_fees_dict.is_empty()) {
+              td::BitArray<96> key{};
+              shard_fees_dict.get_minmax_key(key);
+
+              Ref<vm::CellSlice> tvalue;
+              tvalue = shard_fees_dict.lookup_delete(key);
+
+              block::gen::ShardFeeCreated::Record sf;
+              CHECK(tlb::unpack(tvalue.write(), sf));
+
+              block::gen::CurrencyCollection::Record fees;
+              block::gen::CurrencyCollection::Record create;
+
+              CHECK(tlb::unpack(sf.fees.write(), fees));
+              CHECK(tlb::unpack(sf.create.write(), create));
+
+              std::vector<std::tuple<int, std::string>> dummy;
+
+              json data = {
+                  {"fees",
+                   {{"grams", block::tlb::t_Grams.as_integer(fees.grams)->to_dec_string()},
+                    {"extra", fees.other->have_refs() ? parse_extra_currency(fees.other->prefetch_ref()) : dummy}}},
+
+                  {"create",
+                   {{"grams", block::tlb::t_Grams.as_integer(create.grams)->to_dec_string()},
+                    {"extra",
+                     create.other->have_refs() ? parse_extra_currency(create.other->prefetch_ref()) : dummy}}}};
+
+              shard_fees[key.to_hex()] = data;
+            };
+
+            answer["BlockExtra"]["custom"]["shard_fees"] = shard_fees;
 
             if (extra_mc.r1.mint_msg->have_refs()) {
               answer["BlockExtra"]["custom"]["mint_msg"] =
