@@ -223,10 +223,48 @@ class Dumper {
   const std::size_t buffer_size;
 };
 
+bool dict_check_for_each_key(vm::Ref<vm::Cell> dict, td::BitPtr key_buffer, int n, int total_key_len,
+                             const vm::DictionaryFixed::foreach_func_t &foreach_func,
+                             std::vector<td::Bits256> &accounts_keys, bool invert_first = false) {
+  if (dict.is_null()) {
+    return true;
+  }
+  vm::dict::LabelParser label{std::move(dict), n, vm::dict::LabelParser::chk_all};
+  int l = label.l_bits;
+  label.extract_label_to(key_buffer);
+  if (l == n) {
+    auto key = ton::Bits256{key_buffer + n - total_key_len};
+
+    if (std::find(accounts_keys.begin(), accounts_keys.end(), key) != accounts_keys.end()) {
+      return foreach_func(std::move(label.remainder), key_buffer + n - total_key_len, total_key_len);
+    } else {
+      return true;
+    };
+  }
+  assert(l >= 0 && l < n);
+  // a fork with two children, c1 and c2
+  auto c1 = label.remainder->prefetch_ref(0);
+  auto c2 = label.remainder->prefetch_ref(1);
+  label.remainder.clear();
+  key_buffer += l + 1;
+  if (l) {
+    invert_first = false;
+  } else if (invert_first) {
+    std::swap(c1, c2);
+  }
+  key_buffer[-1] = invert_first;
+  // recursive check_foreach applied to both children
+  if (!dict_check_for_each_key(std::move(c1), key_buffer, n - l - 1, total_key_len, foreach_func, accounts_keys)) {
+    return false;
+  }
+  key_buffer[-1] = !invert_first;
+  return dict_check_for_each_key(std::move(c2), key_buffer, n - l - 1, total_key_len, foreach_func, accounts_keys);
+}
+
 class StateIndexer : public td::actor::Actor {
  public:
-  StateIndexer(const std::string& block_id_string, vm::Ref<vm::Cell> root_cell,
-               const std::vector<td::Bits256>& accounts_keys, BlockIdExt block_id, std::unique_ptr<Dumper> &dumper_,
+  StateIndexer(const std::string &block_id_string, vm::Ref<vm::Cell> root_cell,
+               std::vector<td::Bits256> accounts_keys, BlockIdExt block_id, std::unique_ptr<Dumper> &dumper_,
                td::Promise<td::int32> dec_promise) {
     try {
       td::Timer timer;
@@ -318,16 +356,13 @@ class StateIndexer : public td::actor::Actor {
 
       LOG(DEBUG) << "Parse accounts states libs " << block_id_string << " " << timer;
 
-      auto accounts = td::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice(shard_state.accounts).prefetch_ref(),
-                                                               256, block::tlb::aug_ShardAccounts);
-
       if (accounts_keys.empty()) {
         // save parsed accounts
         std::vector<json> accounts_parsed;
         answer["accounts"] = accounts_parsed;
         dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
-                               std::to_string(block_id.id.seqno),
-                           std::move(answer));
+                                std::to_string(block_id.id.seqno),
+                            std::move(answer));
 
         LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
         dec_promise(1);
@@ -336,12 +371,24 @@ class StateIndexer : public td::actor::Actor {
         LOG(DEBUG) << "Got empty accounts states addresses " << block_id_string << " " << timer;
 
       } else {
+        //        auto accounts = td::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice(shard_state.accounts).prefetch_ref(),
+        //                                                                 256, block::tlb::aug_ShardAccounts);
+
         std::vector<json> json_accounts;
 
         LOG(DEBUG) << "Parse accounts states one by one " << block_id_string << " " << timer;
 
-        for (const auto &account : accounts_keys) {
-          auto value = accounts->lookup(account);
+        vm::Ref<vm::Cell> cell = vm::load_cell_slice(shard_state.accounts).prefetch_ref();
+
+        unsigned char key_buffer[256];
+
+        //        dict_check_for_each_key(vm::Ref<vm::Cell> dict, td::BitPtr key_buffer, int n, int total_key_len,
+        //                                const vm::DictionaryFixed::foreach_func_t &foreach_func, std::vector<td::Bits256> &accounts_keys,
+        //                                bool invert_first = false)
+        unsigned long total_accounts = accounts_keys.size();
+
+        vm::DictionaryFixed::foreach_func_t fAcc = [&](auto value, auto x, auto y) {
+          auto account = ton::Bits256{x};
           LOG(DEBUG) << "Parse accounts states got account data " << account.to_hex() << " " << block_id_string << " "
                      << timer;
 
@@ -429,14 +476,21 @@ class StateIndexer : public td::actor::Actor {
 
           LOG(DEBUG) << "Parse accounts states account finally parsed " << account.to_hex() << " " << block_id_string
                      << " " << timer;
-        }
+          total_accounts -= 1;
+          if (total_accounts == 0){
+            return false; // stop iterating
+          }
+
+          return true;
+        };
+        dict_check_for_each_key(cell, td::BitPtr{key_buffer}, 256, 256, fAcc, accounts_keys);
 
         answer["accounts"] = json_accounts;
         LOG(DEBUG) << "Parse accounts states all accounts parsed " << block_id_string << " " << timer;
 
         dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
-                               std::to_string(block_id.id.seqno),
-                           std::move(answer));
+                                std::to_string(block_id.id.seqno),
+                            std::move(answer));
 
         LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
         dec_promise(1);
@@ -1524,12 +1578,12 @@ class Indexer : public td::actor::Actor {
           } else {
             auto root_cell = R.move_as_ok();
             auto block_id = handle->id();
-            td::Promise<td::int32> Pfinal = td::PromiseCreator::lambda([SelfId = SelfId](td::int32 a) {
-              td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
-            });
+            td::Promise<td::int32> Pfinal = td::PromiseCreator::lambda(
+                [SelfId = SelfId](td::int32 a) { td::actor::send_closure(SelfId, &Indexer::decrease_state_padding); });
 
-            td::actor::create_actor<StateIndexer>("StateIndexer", block_id_string, root_cell,
-                                                  accounts_keys, block_id, dumper_, std::move(Pfinal)).release();
+            td::actor::create_actor<StateIndexer>("StateIndexer", block_id_string, root_cell, std::move(accounts_keys), block_id,
+                                                  dumper_, std::move(Pfinal))
+                .release();
           }
         });
 
