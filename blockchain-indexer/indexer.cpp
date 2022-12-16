@@ -1233,6 +1233,7 @@ class Indexer : public td::actor::Actor {
 
       if (state_padding_-- == 0) {
         LOG(ERROR) << "decreasing state padding but it's zero";
+        state_padding_++;
       }
     }
 
