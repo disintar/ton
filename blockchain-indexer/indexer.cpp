@@ -266,7 +266,7 @@ class StateIndexer : public td::actor::Actor {
   StateIndexer(const std::string &block_id_string, vm::Ref<vm::Cell> root_cell,
                std::vector<td::Bits256> accounts_keys, BlockIdExt block_id, std::unique_ptr<Dumper> &dumper_,
                td::Promise<td::int32> dec_promise) {
-    try {
+//    try {
       td::Timer timer;
 
       LOG(DEBUG) << "Parse accounts states " << block_id_string << " " << timer;
@@ -496,9 +496,7 @@ class StateIndexer : public td::actor::Actor {
         dec_promise(1);
         //              decrease_state_padding();
       }
-    }
-
-//    catch (std::exception &e) {
+//    } catch (std::exception &e) {
 //      LOG(ERROR) << e.what() << " state error: " << block_id_string;
 //      dumper_->addError(block_id_string, "state");
 //    } catch (...) {
