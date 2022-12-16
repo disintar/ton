@@ -225,7 +225,7 @@ class Dumper {
 
 bool dict_check_for_each_key(vm::Ref<vm::Cell> dict, td::BitPtr key_buffer, int n, int total_key_len,
                              const vm::DictionaryFixed::foreach_func_t &foreach_func,
-                             std::vector<td::Bits256> &accounts_keys, bool invert_first = false) {
+                             std::vector<td::Bits256> *accounts_keys, bool invert_first = false) {
   if (dict.is_null()) {
     return true;
   }
@@ -235,7 +235,7 @@ bool dict_check_for_each_key(vm::Ref<vm::Cell> dict, td::BitPtr key_buffer, int 
   if (l == n) {
     auto key = ton::Bits256{key_buffer + n - total_key_len};
 
-    if (std::find(accounts_keys.begin(), accounts_keys.end(), key) != accounts_keys.end()) {
+    if (std::find(accounts_keys->begin(), accounts_keys->end(), key) != accounts_keys->end()) {
       return foreach_func(std::move(label.remainder), key_buffer + n - total_key_len, total_key_len);
     } else {
       return true;
@@ -483,7 +483,7 @@ class StateIndexer : public td::actor::Actor {
 
           return true;
         };
-        dict_check_for_each_key(cell, td::BitPtr{key_buffer}, 256, 256, fAcc, accounts_keys);
+        dict_check_for_each_key(cell, td::BitPtr{key_buffer}, 256, 256, fAcc, &accounts_keys);
 
         answer["accounts"] = json_accounts;
         LOG(DEBUG) << "Parse accounts states all accounts parsed " << block_id_string << " " << timer;
