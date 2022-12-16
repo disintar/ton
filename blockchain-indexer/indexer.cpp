@@ -222,23 +222,57 @@ class Dumper {
   std::vector<json> error;
   const std::size_t buffer_size;
 };
+//
+//bool dict_check_for_each_key(vm::Ref<vm::Cell> dict, td::BitPtr key_buffer, int n, int total_key_len,
+//                             const vm::DictionaryFixed::foreach_func_t &foreach_func, bool invert_first = false) {
+//  if (dict.is_null()) {
+//    return true;
+//  }
+//  vm::dict::LabelParser label{std::move(dict), n, vm::dict::LabelParser::chk_all};
+//  int l = label.l_bits;
+//  label.extract_label_to(key_buffer);
+//  if (l == n) {
+//    auto key = ton::Bits256{key_buffer + n - total_key_len};
+//
+////    if (std::find(accounts_keys->begin(), accounts_keys->end(), key) != accounts_keys->end()) {
+////      return foreach_func(std::move(label.remainder), key_buffer + n - total_key_len, total_key_len);
+////    } else {
+//      return true;
+////    };
+//  }
+//  assert(l >= 0 && l < n);
+//  // a fork with two children, c1 and c2
+//  auto c1 = label.remainder->prefetch_ref(0);
+//  auto c2 = label.remainder->prefetch_ref(1);
+//  label.remainder.clear();
+//  key_buffer += l + 1;
+//  if (l) {
+//    invert_first = false;
+//  } else if (invert_first) {
+//    std::swap(c1, c2);
+//  }
+//  key_buffer[-1] = invert_first;
+//  // recursive check_foreach applied to both children
+//  if (!dict_check_for_each_key(std::move(c1), key_buffer, n - l - 1, total_key_len, foreach_func)) {
+//    return false;
+//  }
+//  key_buffer[-1] = !invert_first;
+//  return dict_check_for_each_key(std::move(c2), key_buffer, n - l - 1, total_key_len, foreach_func);
+//}
 
-bool dict_check_for_each_key(vm::Ref<vm::Cell> dict, td::BitPtr key_buffer, int n, int total_key_len,
-                             const vm::DictionaryFixed::foreach_func_t &foreach_func, bool invert_first = false) {
+
+bool dict_check_for_each(Ref<vm::Cell> dict, td::BitPtr key_buffer, int n, int total_key_len,
+                                          const vm::DictionaryFixed::foreach_func_t& foreach_func,
+                                          bool invert_first=false) {
   if (dict.is_null()) {
     return true;
   }
-  vm::dict::LabelParser label{std::move(dict), n, vm::dict::LabelParser::chk_all};
+  vm::dict::LabelParser label{std::move(dict), n, 0};
   int l = label.l_bits;
   label.extract_label_to(key_buffer);
   if (l == n) {
-    auto key = ton::Bits256{key_buffer + n - total_key_len};
-
-//    if (std::find(accounts_keys->begin(), accounts_keys->end(), key) != accounts_keys->end()) {
-//      return foreach_func(std::move(label.remainder), key_buffer + n - total_key_len, total_key_len);
-//    } else {
-      return true;
-//    };
+    // leaf node, value left in label.remainder
+    return foreach_func(std::move(label.remainder), key_buffer + n - total_key_len, total_key_len);
   }
   assert(l >= 0 && l < n);
   // a fork with two children, c1 and c2
@@ -253,11 +287,11 @@ bool dict_check_for_each_key(vm::Ref<vm::Cell> dict, td::BitPtr key_buffer, int 
   }
   key_buffer[-1] = invert_first;
   // recursive check_foreach applied to both children
-  if (!dict_check_for_each_key(std::move(c1), key_buffer, n - l - 1, total_key_len, foreach_func)) {
+  if (!dict_check_for_each(std::move(c1), key_buffer, n - l - 1, total_key_len, foreach_func, invert_first)) {
     return false;
   }
   key_buffer[-1] = !invert_first;
-  return dict_check_for_each_key(std::move(c2), key_buffer, n - l - 1, total_key_len, foreach_func);
+  return dict_check_for_each(std::move(c2), key_buffer, n - l - 1, total_key_len, foreach_func, invert_first);
 }
 
 class StateIndexer : public td::actor::Actor {
@@ -488,7 +522,8 @@ class StateIndexer : public td::actor::Actor {
 
       std::unique_ptr<std::vector<td::Bits256>> account_keys_ptr =
           std::make_unique<std::vector<td::Bits256>>(accounts_keys);
-      dict_check_for_each_key(cell, td::BitPtr{key_buffer}, 256, 256, fAcc);
+//      dict_check_for_each_key(cell, td::BitPtr{key_buffer}, 256, 256, fAcc);
+      dict_check_for_each(cell, td::BitPtr{key_buffer}, 256, 256, fAcc, false);
 
       answer["accounts"] = json_accounts;
       LOG(DEBUG) << "Parse accounts states all accounts parsed " << block_id_string << " " << timer;
