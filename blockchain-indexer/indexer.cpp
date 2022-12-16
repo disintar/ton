@@ -914,8 +914,6 @@ class Indexer : public td::actor::Actor {
               account_block_parsed["transactions"] = transactions;
               account_block_parsed["transactions_count"] = count;
               accounts.emplace_back(account_block_parsed);
-            } else {
-              accounts_keys.emplace_back(last_key);
             }
 
             LOG(DEBUG) << "Parse block end parse account: " << last_key.to_hex() << " " << blkid.to_str() << " "
