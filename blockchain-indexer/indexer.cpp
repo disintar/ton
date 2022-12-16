@@ -261,9 +261,9 @@ class Dumper {
 //}
 
 
-bool dict_check_for_each(Ref<vm::Cell> dict, td::BitPtr key_buffer, int n, int total_key_len,
+bool dict_check_for_each_key(Ref<vm::Cell> dict, td::BitPtr key_buffer, int n, int total_key_len,
                                           const vm::DictionaryFixed::foreach_func_t& foreach_func,
-                                          bool invert_first=false) {
+                                          bool invert_first, std::unique_ptr<std::vector<td::Bits256>> *accounts_keys) {
   if (dict.is_null()) {
     return true;
   }
@@ -287,11 +287,11 @@ bool dict_check_for_each(Ref<vm::Cell> dict, td::BitPtr key_buffer, int n, int t
   }
   key_buffer[-1] = invert_first;
   // recursive check_foreach applied to both children
-  if (!dict_check_for_each(std::move(c1), key_buffer, n - l - 1, total_key_len, foreach_func, invert_first)) {
+  if (!dict_check_for_each_key(std::move(c1), key_buffer, n - l - 1, total_key_len, foreach_func, invert_first, accounts_keys)) {
     return false;
   }
   key_buffer[-1] = !invert_first;
-  return dict_check_for_each(std::move(c2), key_buffer, n - l - 1, total_key_len, foreach_func, invert_first);
+  return dict_check_for_each_key(std::move(c2), key_buffer, n - l - 1, total_key_len, foreach_func, invert_first, accounts_keys);
 }
 
 class StateIndexer : public td::actor::Actor {
@@ -523,7 +523,8 @@ class StateIndexer : public td::actor::Actor {
       std::unique_ptr<std::vector<td::Bits256>> account_keys_ptr =
           std::make_unique<std::vector<td::Bits256>>(accounts_keys);
 //      dict_check_for_each_key(cell, td::BitPtr{key_buffer}, 256, 256, fAcc);
-      dict_check_for_each(cell, td::BitPtr{key_buffer}, 256, 256, fAcc, false);
+      dict_check_for_each_key(cell, td::BitPtr{key_buffer}, 256, 256,
+                              fAcc, false, &account_keys_ptr);
 
       answer["accounts"] = json_accounts;
       LOG(DEBUG) << "Parse accounts states all accounts parsed " << block_id_string << " " << timer;
