@@ -234,17 +234,23 @@ class StateIndexer : public td::actor::Actor {
   unsigned long total_accounts;
   json answer;
   td::Promise<td::int32> dec_promise;
+  vm::Ref<vm::Cell> root_cell;
+  std::vector<td::Bits256> accounts_keys;
 
  public:
-  StateIndexer(std::string block_id_string_, vm::Ref<vm::Cell> root_cell, const std::vector<td::Bits256> &accounts_keys,
+  StateIndexer(std::string block_id_string_, vm::Ref<vm::Cell> root_cell_, std::vector<td::Bits256> accounts_keys_,
                BlockIdExt block_id_, std::unique_ptr<Dumper> &dumper, td::Promise<td::int32> dec_promise_) {
-    try {
-      dumper_ = dumper.get();
-      block_id = block_id_;
-      block_id_string = std::move(block_id_string_);
-      total_accounts = accounts_keys.size();
-      dec_promise = std::move(dec_promise_);
+    dumper_ = dumper.get();
+    block_id = block_id_;
+    block_id_string = std::move(block_id_string_);
+    total_accounts = accounts_keys.size();
+    dec_promise = std::move(dec_promise_);
+    root_cell = std::move(root_cell_);
+    accounts_keys = std::move(accounts_keys_);
+  }
 
+  void start_up() override {
+    try {
       LOG(DEBUG) << "Parse accounts states " << block_id_string << " " << timer;
 
       block::gen::ShardStateUnsplit::Record shard_state;
@@ -447,7 +453,7 @@ class StateIndexer : public td::actor::Actor {
                << timer;
 
     total_accounts -= 1;
-    if (total_accounts == 0){
+    if (total_accounts == 0) {
       td::actor::send_closure(actor_id(this), &StateIndexer::finalize);
     }
   }
@@ -1544,8 +1550,7 @@ class Indexer : public td::actor::Actor {
                 [SelfId = SelfId](td::int32 a) { td::actor::send_closure(SelfId, &Indexer::decrease_state_padding); });
 
             td::actor::create_actor<StateIndexer>("StateIndexer", block_id_string, root_cell, accounts_keys, block_id,
-                                                  dumper_, std::move(Pfinal))
-                .release();
+                                                  dumper_, std::move(Pfinal)).release();
           }
         });
 
