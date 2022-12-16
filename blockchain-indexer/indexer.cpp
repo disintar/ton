@@ -244,7 +244,7 @@ class StateIndexer : public td::actor::Actor {
     dumper_ = dumper.get();
     block_id = block_id_;
     block_id_string = std::move(block_id_string_);
-    total_accounts = accounts_keys.size();
+    total_accounts = accounts_keys_.size();
     dec_promise = std::move(dec_promise_);
     root_cell = std::move(root_cell_);
     accounts_keys = std::move(accounts_keys_);
