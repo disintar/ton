@@ -496,12 +496,14 @@ class StateIndexer : public td::actor::Actor {
         dec_promise(1);
         //              decrease_state_padding();
       }
-    } catch (std::exception &e) {
-      LOG(ERROR) << e.what() << " state error: " << block_id_string;
-      dumper_->addError(block_id_string, "state");
-    } catch (...) {
-      dumper_->addError(block_id_string, "state");
     }
+
+//    catch (std::exception &e) {
+//      LOG(ERROR) << e.what() << " state error: " << block_id_string;
+//      dumper_->addError(block_id_string, "state");
+//    } catch (...) {
+//      dumper_->addError(block_id_string, "state");
+//    }
   }
 };
 
