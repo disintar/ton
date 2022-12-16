@@ -256,7 +256,7 @@ class Indexer : public td::actor::Actor {
   td::uint32 chunk_count_ = 0;
   td::uint32 chunk_current_ = 0;
   std::mutex display_mtx_;
-  std::unique_ptr<Dumper> dumper_ = std::make_unique<Dumper>("dump_", 1);
+  std::unique_ptr<Dumper> dumper_ = std::make_unique<Dumper>("dump_", 20000);
   bool daemon_mode_ = false;
   std::unique_ptr<IBlockRequestReceiver> request_receiver_ = nullptr;
   std::unique_ptr<IBlockParser> parser_ = nullptr;
@@ -293,7 +293,7 @@ class Indexer : public td::actor::Actor {
       auto zero_state = ton::create_block_id(conf.validator_->zero_state_);
       ton::BlockIdExt init_block;
       if (!conf.validator_->init_block_) {
-        LOG(INFO) << "no init block readOnlyin config. using zero state";
+        LOG(INFO) << "no init block readOnly in config. using zero state";
         init_block = zero_state;
       } else {
         init_block = ton::create_block_id(conf.validator_->init_block_);
@@ -331,7 +331,7 @@ class Indexer : public td::actor::Actor {
             y.invalidate();
           }
         }
-        h.emplace_back(std::move(b));
+        h.emplace_back(b);
       }
       opts_.write().set_hardforks(std::move(h));
       return td::Status::OK();
