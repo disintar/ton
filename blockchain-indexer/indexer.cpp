@@ -1092,10 +1092,9 @@ class Indexer : public td::actor::Actor {
 
               LOG(DEBUG) << "FOR: " << blkid.to_str() << " first: " << is_first;
               LOG(DEBUG) << "GO: " << shard_workchain << ":" << shard_shard << ":" << shard_seqno;
-              start_parse_shards(shard_seqno, shard_shard, shard_workchain, is_first);
 
-//              td::actor::send_closure(SelfId, &Indexer::start_parse_shards, shard_seqno, shard_shard, shard_workchain,
-//                                      is_first);
+              td::actor::send_closure(SelfId, &Indexer::start_parse_shards, shard_seqno, shard_shard, shard_workchain,
+                                      is_first);
 
               return 1;
             };
