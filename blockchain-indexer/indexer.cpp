@@ -530,17 +530,10 @@ class Indexer : public td::actor::Actor {
       }
     });
 
-    const auto id = std::to_string(workchain) + ":" + std::to_string(shard) + ":" + std::to_string(seqno);
-    LOG(DEBUG) << "Receive start_parse_shards for " << id;
-
-    if (is_first | already_traversed_.find(id) != already_traversed_.end()) {
-      td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
-      ton::AccountIdPrefixFull pfx{workchain, shard};
-      td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
-                              std::move(P));
-    } else {
-      LOG(DEBUG) << id << " <- already traversed!";
-    }
+    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
+    ton::AccountIdPrefixFull pfx{workchain, shard};
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
+                            std::move(P));
   }
 
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle, bool first = false) {
