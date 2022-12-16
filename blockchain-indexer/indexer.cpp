@@ -761,7 +761,7 @@ class Indexer : public td::actor::Actor {
               LOG(DEBUG) << "Receive start_parse_shards for " << id;
 
               if (already_traversed_.find(id) != already_traversed_.end()) {
-                td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
+                td::actor::send_closure(SelfId, &ton::validator::Indexer::increase_block_padding);
                 ton::AccountIdPrefixFull pfx{blkid.id.workchain, blkid.id.shard};
 
                 td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
@@ -1180,7 +1180,7 @@ class Indexer : public td::actor::Actor {
               LOG(DEBUG) << "Receive start_parse_shards for " << id;
 
               if (is_first | already_traversed_.find(id) != already_traversed_.end()) {
-                td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
+                td::actor::send_closure(SelfId, &ton::validator::Indexer::increase_block_padding);
                 ton::AccountIdPrefixFull pfx{shard_workchain, shard_shard};
                 td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                                         shard_seqno, std::move(P));
