@@ -1177,7 +1177,7 @@ class Indexer : public td::actor::Actor {
       // another clear cache
       td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::clear_celldb_boc_cache);
 
-      if (chunk_current_ != chunk_count_) {
+      if (chunk_count_ != 0 && chunk_current_ != chunk_count_) {
         LOG(WARNING) << "Call parse next chunk";
 
         auto P = td::PromiseCreator::lambda(
