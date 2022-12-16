@@ -1062,7 +1062,7 @@ class Indexer : public td::actor::Actor {
 
             std::vector<json> shards_json;
 
-            auto parseShards = [&shards_json, SelfId, &blkid, is_first](McShardHash &ms) {
+            auto parseShards = [this, &shards_json, SelfId, &blkid, is_first](McShardHash &ms) {
               json data = {{"BlockIdExt",
                             {{"file_hash", ms.top_block_id().file_hash.to_hex()},
                              {"root_hash", ms.top_block_id().root_hash.to_hex()},
@@ -1092,9 +1092,10 @@ class Indexer : public td::actor::Actor {
 
               LOG(DEBUG) << "FOR: " << blkid.to_str() << " first: " << is_first;
               LOG(DEBUG) << "GO: " << shard_workchain << ":" << shard_shard << ":" << shard_seqno;
+              start_parse_shards(shard_seqno, shard_shard, shard_workchain, is_first);
 
-              td::actor::send_closure(SelfId, &Indexer::start_parse_shards, shard_seqno, shard_shard, shard_workchain,
-                                      is_first);
+//              td::actor::send_closure(SelfId, &Indexer::start_parse_shards, shard_seqno, shard_shard, shard_workchain,
+//                                      is_first);
 
               return 1;
             };
