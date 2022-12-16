@@ -231,6 +231,7 @@ class StateIndexer : public td::actor::Actor {
   td::Timer timer;
   BlockIdExt block_id;
   std::mutex accounts_mtx_;
+  std::mutex accounts_count_mtx_;
   unsigned long total_accounts;
   json answer;
   td::Promise<td::int32> dec_promise;
@@ -452,8 +453,16 @@ class StateIndexer : public td::actor::Actor {
     LOG(DEBUG) << "Parse accounts states account finally parsed " << account.to_hex() << " " << block_id_string << " "
                << timer;
 
-    total_accounts -= 1;
-    if (total_accounts == 0) {
+    bool is_end;
+
+    {
+      std::lock_guard<std::mutex> lock(accounts_count_mtx_);
+      total_accounts -= 1;
+      LOG(DEBUG) << "Parse accounts for " << block_id_string << " left " << total_accounts;
+      is_end = total_accounts == 0;
+    }
+
+    if (is_end) {
       td::actor::send_closure(actor_id(this), &StateIndexer::finalize);
     }
   }
@@ -1550,7 +1559,8 @@ class Indexer : public td::actor::Actor {
                 [SelfId = SelfId](td::int32 a) { td::actor::send_closure(SelfId, &Indexer::decrease_state_padding); });
 
             td::actor::create_actor<StateIndexer>("StateIndexer", block_id_string, root_cell, accounts_keys, block_id,
-                                                  dumper_, std::move(Pfinal)).release();
+                                                  dumper_, std::move(Pfinal))
+                .release();
           }
         });
 
