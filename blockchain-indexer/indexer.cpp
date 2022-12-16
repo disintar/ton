@@ -470,6 +470,10 @@ class Indexer : public td::actor::Actor {
       if (chunk_count_ == 0) {
         auto blocks_size = seqno_last_ - seqno_first_;
         chunk_count_ = (unsigned int)ceil(blocks_size / chunk_size_);
+        if (chunk_count_ == 0) {
+          chunk_count_ = 1;
+        }
+
         LOG(WARNING) << "Total chunks count: " << chunk_count_;
       }
 
@@ -1177,7 +1181,7 @@ class Indexer : public td::actor::Actor {
       // another clear cache
       td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::clear_celldb_boc_cache);
 
-      if (chunk_count_ != 0 && chunk_current_ != chunk_count_) {
+      if (chunk_current_ >= chunk_count_ - 1) {
         LOG(WARNING) << "Call parse next chunk";
 
         auto P = td::PromiseCreator::lambda(
@@ -1195,8 +1199,6 @@ class Indexer : public td::actor::Actor {
 
         ///TODO: clean this super dirty stuff
         td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
-        //        ++block_padding_;
-
         ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
 
         // parse first mc seqno in chunk to prevent mc seqno leak
