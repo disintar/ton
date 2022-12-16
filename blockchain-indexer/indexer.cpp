@@ -504,6 +504,8 @@ class Indexer : public td::actor::Actor {
   }
 
   void start_parse_shards(BlockSeqno seqno, ShardId shard, WorkchainId workchain, bool is_first = false) {
+    LOG(DEBUG) << "Receive start_parse_shards";
+
     auto P = td::PromiseCreator::lambda([this, workchain_shard = workchain, seqno_shard = seqno, shard_shard = shard,
                                          SelfId = actor_id(this), first = is_first](td::Result<ConstBlockHandle> R) {
       if (R.is_error()) {
@@ -883,34 +885,24 @@ class Indexer : public td::actor::Actor {
               LOG(DEBUG) << "Parse block start parse account transactions: " << last_key.to_hex() << blkid.to_str()
                          << " " << timer;
               block::gen::AccountBlock::Record acc_blk;
-              CHECK(tlb::csr_unpack(data, acc_blk));
+              CHECK(tlb::csr_unpack(std::move(data), acc_blk));
               int count = 0;
               std::vector<json> transactions;
 
               vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
                                                  block::tlb::aug_AccountTransactions};
 
-              /* tlb
-          transaction$0111 account_addr:bits256 lt:uint64
-          prev_trans_hash:bits256 prev_trans_lt:uint64 now:uint32
-          outmsg_cnt:uint15
-          orig_status:AccountStatus end_status:AccountStatus
-          ^[ in_msg:(Maybe ^(Message Any)) out_msgs:(HashmapE 15 ^(Message Any)) ]
-          total_fees:CurrencyCollection state_update:^(HASH_UPDATE Account)
-          description:^TransactionDescr = Transaction;
-         */
-              while (!trans_dict.is_empty()) {
-                td::BitArray<64> last_lt{};
-                trans_dict.get_minmax_key(last_lt);
-
-                Ref<vm::CellSlice> tvalue;
-                tvalue = trans_dict.lookup_delete(last_lt);
+              auto fTransactions = [&transactions, &count, workchain](const Ref<vm::CellSlice>& tvalue,
+                                                  const Ref<vm::CellSlice>& extra,
+                                                  td::ConstBitPtr key, int key_len) {
 
                 json transaction = parse_transaction(tvalue, workchain);
                 transactions.emplace_back(std::move(transaction));
-
                 ++count;
+                return 1;
               };
+
+              trans_dict.check_for_each_extra(fTransactions);
               LOG(DEBUG) << "Parse block end parse account transactions: " << last_key.to_hex() << " " << blkid.to_str()
                          << " " << timer;
 
