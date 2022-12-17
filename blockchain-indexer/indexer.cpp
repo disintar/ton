@@ -339,7 +339,7 @@ class StateIndexer : public td::actor::Actor {
 
       LOG(DEBUG) << "Parse accounts states libs " << block_id_string << " " << timer;
 
-      accounts = td::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice(shard_state.accounts).prefetch_ref(), 256,
+      accounts = td::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(shard_state.accounts), 256,
                                                           block::tlb::aug_ShardAccounts);
 
       if (accounts_keys.empty()) {
@@ -1135,7 +1135,10 @@ class Indexer : public td::actor::Actor {
                 hex_addr != "5555555555555555555555555555555555555555555555555555555555555555" &&
                 hex_addr != "0000000000000000000000000000000000000000000000000000000000000000" &&
                 hex_addr != "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEF") {
-              accounts_keys.emplace_back(last_key);
+
+              if (std::find(accounts_keys.begin(), accounts_keys.end(), last_key) == accounts_keys.end()){
+                accounts_keys.emplace_back(last_key);
+              }
 
               json account_block_parsed;
               account_block_parsed["account_addr"] = {{"address", hex_addr}, {"workchain", workchain}};
@@ -1228,7 +1231,7 @@ class Indexer : public td::actor::Actor {
                 Ref<vm::Cell> tvalue;
                 tvalue = config_dict.lookup_delete(key)->prefetch_ref();
 
-                configs[key.to_long()] = dump_as_boc(tvalue);
+                configs[key.to_long()] = dump_as_boc(std::move(tvalue));
               };
 
               answer["BlockExtra"]["custom"]["configs"] = configs;

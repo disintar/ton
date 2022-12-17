@@ -1,4 +1,5 @@
 #include "json-utils.hpp"
+#include "td/utils/Timer.h"
 
 std::vector<std::tuple<int, std::string>> parse_extra_currency(const Ref<vm::Cell> &extra) {
   std::vector<std::tuple<int, std::string>> c_list;
@@ -155,7 +156,7 @@ json parse_libraries(Ref<vm::Cell> lib_cell) {
     json lib_json = {
         {"hash", key.to_hex()},
         {"public", (bool)lib->prefetch_ulong(1)},
-        {"root", dump_as_boc(code)},
+        {"root", dump_as_boc(std::move(code))},
     };
 
     libs.emplace_back(std::move(lib_json));
@@ -166,16 +167,23 @@ json parse_libraries(Ref<vm::Cell> lib_cell) {
 }
 
 json parse_state_init(vm::CellSlice state_init) {
+  td::Timer t;
+  LOG(DEBUG) << "Start parse state init" << t;
+
   json answer;
 
   block::gen::StateInit::Record state_init_parsed;
+
   auto is_good = tlb::unpack(state_init, state_init_parsed);
+  LOG(DEBUG) << "TLB unpacked" << t;
 
   if (is_good) {
     if ((int)state_init_parsed.split_depth->prefetch_ulong(1) == 1) {
       auto sd = state_init_parsed.split_depth.write();
       sd.skip_first(1);
       answer["split_depth"] = (int)sd.prefetch_ulong(5);
+
+      LOG(DEBUG) << "Split_depth written" << t;
     }
 
     if ((int)state_init_parsed.special->prefetch_ulong(1) == 1) {
@@ -189,23 +197,29 @@ json parse_state_init(vm::CellSlice state_init) {
           {"tick", tiktok.tick},
           {"tock", tiktok.tock},
       };
+
+      LOG(DEBUG) << "Special written" << t;
     }
 
     if ((int)state_init_parsed.code->prefetch_ulong(1) == 1) {
       auto code = state_init_parsed.code->prefetch_ref();
 
       answer["code_hash"] = code->get_hash().to_hex();
-      answer["code"] = dump_as_boc(code);
+      answer["code"] = dump_as_boc(std::move(code));
+
+      LOG(DEBUG) << "Code written" << t;
     }
 
     if ((int)state_init_parsed.data->prefetch_ulong(1) == 1) {
       auto data = state_init_parsed.data->prefetch_ref();
 
-      answer["data"] = dump_as_boc(data);
+      answer["data"] = dump_as_boc(std::move(data));
+      LOG(DEBUG) << "Data written" << t;
     }
 
     if ((int)state_init_parsed.library->prefetch_ulong(1) == 1) {  // if not empty
       answer["libs"] = parse_libraries(state_init_parsed.library->prefetch_ref());
+      LOG(DEBUG) << "Libs written" << t;
     }
 
     answer["type"] = "success";
