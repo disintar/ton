@@ -45,7 +45,7 @@ std::string dump_as_boc(Ref<vm::Cell> root_cell) {
     }
   }
 
-  auto s = td::base64_encode(std_boc_serialize(std::move(root_cell), 31).move_as_ok());
+  auto s = td::base64_encode(std_boc_serialize(std::move(root_cell), 2).move_as_ok());
 
   {
     std::lock_guard<std::mutex> lock(cache_mtx);
@@ -207,19 +207,19 @@ json parse_state_init(vm::CellSlice state_init) {
       answer["code_hash"] = code->get_hash().to_hex();
       answer["code"] = dump_as_boc(std::move(code));
 
-      LOG(DEBUG) << "Code written" << t;
+      LOG(DEBUG) << "Code written " << t;
     }
 
     if ((int)state_init_parsed.data->prefetch_ulong(1) == 1) {
       auto data = state_init_parsed.data->prefetch_ref();
 
       answer["data"] = dump_as_boc(std::move(data));
-      LOG(DEBUG) << "Data written" << t;
+      LOG(DEBUG) << "Data written " << t;
     }
 
     if ((int)state_init_parsed.library->prefetch_ulong(1) == 1) {  // if not empty
       answer["libs"] = parse_libraries(state_init_parsed.library->prefetch_ref());
-      LOG(DEBUG) << "Libs written" << t;
+      LOG(DEBUG) << "Libs written " << t;
     }
 
     answer["type"] = "success";
