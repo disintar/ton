@@ -45,7 +45,7 @@ std::string dump_as_boc(Ref<vm::Cell> root_cell) {
     }
   }
 
-  auto s = td::base64_encode(std_boc_serialize(std::move(root_cell), 2).move_as_ok());
+  auto s = td::base64_encode(std_boc_serialize(std::move(root_cell), 31).move_as_ok());
 
   {
     std::lock_guard<std::mutex> lock(cache_mtx);
