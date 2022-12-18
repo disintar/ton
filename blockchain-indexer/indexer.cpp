@@ -778,7 +778,7 @@ class Indexer : public td::actor::Actor {
                    << "Seqno: " << seqno_shard << " Shard: " << shard_shard << " Worckchain: " << workchain_shard;
 
         LOG(ERROR) << R.move_as_error().to_string();
-        td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
+        td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
         //        decrease_state_padding();
         return;
       } else {
