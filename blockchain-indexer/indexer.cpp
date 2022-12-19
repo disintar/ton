@@ -1390,11 +1390,12 @@ class Indexer : public td::actor::Actor {
           LOG(ERROR) << e.what() << " block error: " << block_id_string;
           dumper_->addError(block_id_string, "block");
           shutdown(); // td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
-        } catch (...) {
-          LOG(ERROR) << "WTF block error: " << block_id_string;
-          dumper_->addError(block_id_string, "block");
-          shutdown(); // td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
         }
+//        catch (...) {
+//          LOG(ERROR) << "WTF block error: " << block_id_string;
+//          dumper_->addError(block_id_string, "block");
+//          shutdown(); // td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+//        }
       }
     });
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
