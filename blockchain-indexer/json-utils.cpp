@@ -212,6 +212,7 @@ json parse_state_init(vm::CellSlice state_init) {
     }
 
     LOG(DEBUG) << "Start write data " << t;
+    LOG(DEBUG) << "Start write data " << state_init_parsed.data->size();
     if ((int)state_init_parsed.data->prefetch_ulong(1) == 1) {
       LOG(DEBUG) << "Start write data2 " << t;
       auto data = state_init_parsed.data->prefetch_ref();
