@@ -142,6 +142,7 @@ json parse_address(vm::CellSlice address) {
 }
 
 json parse_libraries(Ref<vm::Cell> lib_cell) {
+  LOG(DEBUG) << "Create libs dict";
   auto libraries = vm::Dictionary{std::move(lib_cell), 256};
 
   std::vector<json> libs;
@@ -149,6 +150,7 @@ json parse_libraries(Ref<vm::Cell> lib_cell) {
   while (!libraries.is_empty()) {
     td::BitArray<256> key{};
     libraries.get_minmax_key(key);
+    LOG(DEBUG) << "Parse lib " << key.to_hex();
 
     auto lib = libraries.lookup_delete(key);
     auto code = lib->prefetch_ref();
@@ -201,7 +203,6 @@ json parse_state_init(vm::CellSlice state_init) {
       LOG(DEBUG) << "Special written " << t;
     }
 
-    LOG(DEBUG) << "Start write code " << t;
     if ((int)state_init_parsed.code->prefetch_ulong(1) == 1) {
       auto code = state_init_parsed.code->prefetch_ref();
 
@@ -211,25 +212,14 @@ json parse_state_init(vm::CellSlice state_init) {
       LOG(DEBUG) << "Code written " << t;
     }
 
-    LOG(DEBUG) << "Start write data " << t;
-    LOG(DEBUG) << "Start write data " << state_init_parsed.data->size();
-    LOG(DEBUG) << "Start write data " << state_init_parsed.data->prefetch_ulong(1);
     if ((int)state_init_parsed.data->prefetch_ulong(1) == 1) {
-      LOG(DEBUG) << "Start write data2 " << t;
       auto data = state_init_parsed.data->prefetch_ref();
-      LOG(DEBUG) << "Start write data3 " << t;
 
-      try {
-        LOG(DEBUG) << "Start write data4 " << t;
-        answer["data"] = dump_as_boc(std::move(data));
-        LOG(DEBUG) << "Data written " << t;
-      } catch (...) {
-        LOG(ERROR) << "Cant dump data";
-        throw std::runtime_error("error");
-      }
-
+      answer["data"] = dump_as_boc(std::move(data));
     }
 
+    LOG(DEBUG) << "Write libs!";
+    LOG(DEBUG) << "Write libs!" << state_init_parsed.library->prefetch_ulong(1);
     if ((int)state_init_parsed.library->prefetch_ulong(1) == 1) {  // if not empty
       answer["libs"] = parse_libraries(state_init_parsed.library->prefetch_ref());
       LOG(DEBUG) << "Libs written " << t;
