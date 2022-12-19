@@ -183,7 +183,7 @@ json parse_state_init(vm::CellSlice state_init) {
       sd.skip_first(1);
       answer["split_depth"] = (int)sd.prefetch_ulong(5);
 
-      LOG(DEBUG) << "Split_depth written" << t;
+      LOG(DEBUG) << "Split_depth written " << t;
     }
 
     if ((int)state_init_parsed.special->prefetch_ulong(1) == 1) {
@@ -198,7 +198,7 @@ json parse_state_init(vm::CellSlice state_init) {
           {"tock", tiktok.tock},
       };
 
-      LOG(DEBUG) << "Special written" << t;
+      LOG(DEBUG) << "Special written " << t;
     }
 
     if ((int)state_init_parsed.code->prefetch_ulong(1) == 1) {
@@ -213,8 +213,15 @@ json parse_state_init(vm::CellSlice state_init) {
     if ((int)state_init_parsed.data->prefetch_ulong(1) == 1) {
       auto data = state_init_parsed.data->prefetch_ref();
 
-      answer["data"] = dump_as_boc(std::move(data));
-      LOG(DEBUG) << "Data written " << t;
+
+      try {
+        answer["data"] = dump_as_boc(std::move(data));
+        LOG(DEBUG) << "Data written " << t;
+      } catch (...) {
+        LOG(ERROR) << "Cant dump data";
+        throw std::runtime_error("error");
+      }
+
     }
 
     if ((int)state_init_parsed.library->prefetch_ulong(1) == 1) {  // if not empty
