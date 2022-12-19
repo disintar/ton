@@ -774,6 +774,7 @@ class Indexer : public td::actor::Actor {
     auto P = td::PromiseCreator::lambda([this, workchain_shard = workchain, seqno_shard = seqno, shard_shard = shard,
                                          SelfId = actor_id(this), first = is_first](td::Result<ConstBlockHandle> R) {
       if (R.is_error()) {
+        // sometimes when blocks merge it can be that we want to find not valid block
         LOG(ERROR) << "ERROR IN BLOCK: "
                    << "Seqno: " << seqno_shard << " Shard: " << shard_shard << " Worckchain: " << workchain_shard;
 
@@ -1388,9 +1389,11 @@ class Indexer : public td::actor::Actor {
         } catch (std::exception &e) {
           LOG(ERROR) << e.what() << " block error: " << block_id_string;
           dumper_->addError(block_id_string, "block");
+          shutdown(); // td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
         } catch (...) {
           LOG(ERROR) << "WTF block error: " << block_id_string;
           dumper_->addError(block_id_string, "block");
+          shutdown(); // td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
         }
       }
     });
