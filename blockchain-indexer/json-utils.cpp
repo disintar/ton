@@ -168,7 +168,7 @@ json parse_libraries(Ref<vm::Cell> lib_cell) {
 
 json parse_state_init(vm::CellSlice state_init) {
   td::Timer t;
-  LOG(DEBUG) << "Start parse state init" << t;
+  LOG(DEBUG) << "Start parse state init " << t;
 
   json answer;
 
@@ -213,9 +213,12 @@ json parse_state_init(vm::CellSlice state_init) {
 
     LOG(DEBUG) << "Start write data " << t;
     if ((int)state_init_parsed.data->prefetch_ulong(1) == 1) {
+      LOG(DEBUG) << "Start write data2 " << t;
       auto data = state_init_parsed.data->prefetch_ref();
+      LOG(DEBUG) << "Start write data3 " << t;
 
       try {
+        LOG(DEBUG) << "Start write data4 " << t;
         answer["data"] = dump_as_boc(std::move(data));
         LOG(DEBUG) << "Data written " << t;
       } catch (...) {
