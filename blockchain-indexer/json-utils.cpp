@@ -142,31 +142,36 @@ json parse_address(vm::CellSlice address) {
 }
 
 json parse_libraries(Ref<vm::Cell> lib_cell) {
-  LOG(DEBUG) << "Create libs dict: " << dump_as_boc(lib_cell);
-
-  auto libraries = vm::Dictionary{std::move(lib_cell), 256};
-
   std::vector<json> libs;
 
-  while (!libraries.is_empty()) {
-    td::BitArray<256> key{};
-    libraries.get_minmax_key(key);
-    LOG(DEBUG) << "Parse lib " << key.to_hex();
+  try {
+    auto libraries = vm::Dictionary{std::move(lib_cell), 256};
 
-    auto lib = libraries.lookup_delete(key);
-    auto code = lib->prefetch_ref();
+    while (!libraries.is_empty()) {
+      td::BitArray<256> key{};
+      libraries.get_minmax_key(key);
+      LOG(DEBUG) << "Parse lib " << key.to_hex();
 
-    json lib_json = {
-        {"hash", key.to_hex()},
-        {"public", (bool)lib->prefetch_ulong(1)},
-        {"root", dump_as_boc(std::move(code))},
-    };
+      auto lib = libraries.lookup_delete(key);
+      auto code = lib->prefetch_ref();
 
-    libs.emplace_back(std::move(lib_json));
-    //      out_msgs_list.emplace_back(parse_message(o_msg));
+      json lib_json = {
+          {"hash", key.to_hex()},
+          {"public", (bool)lib->prefetch_ulong(1)},
+          {"root", dump_as_boc(std::move(code))},
+      };
+
+      libs.emplace_back(std::move(lib_json));
+      //      out_msgs_list.emplace_back(parse_message(o_msg));
+      return libs;
+    }
+  } catch (...) {
+    LOG(ERROR) << "ERROR IN LOADING LIBRARY";
+    return libs;
   }
 
-  return libs;
+
+
 }
 
 json parse_state_init(vm::CellSlice state_init) {
