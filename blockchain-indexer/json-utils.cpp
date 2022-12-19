@@ -142,7 +142,7 @@ json parse_address(vm::CellSlice address) {
 }
 
 json parse_libraries(Ref<vm::Cell> lib_cell) {
-  LOG(DEBUG) << "Create libs dict" << load_cell_slice(lib_cell).size();
+  LOG(DEBUG) << "Create libs dict: " << dump_as_boc(lib_cell);
 
   auto libraries = vm::Dictionary{std::move(lib_cell), 256};
 
