@@ -175,7 +175,7 @@ json parse_state_init(vm::CellSlice state_init) {
   block::gen::StateInit::Record state_init_parsed;
 
   auto is_good = tlb::unpack(state_init, state_init_parsed);
-  LOG(DEBUG) << "TLB unpacked" << t;
+  LOG(DEBUG) << "TLB unpacked " << t;
 
   if (is_good) {
     if ((int)state_init_parsed.split_depth->prefetch_ulong(1) == 1) {
@@ -201,6 +201,7 @@ json parse_state_init(vm::CellSlice state_init) {
       LOG(DEBUG) << "Special written " << t;
     }
 
+    LOG(DEBUG) << "Start write code " << t;
     if ((int)state_init_parsed.code->prefetch_ulong(1) == 1) {
       auto code = state_init_parsed.code->prefetch_ref();
 
@@ -210,9 +211,9 @@ json parse_state_init(vm::CellSlice state_init) {
       LOG(DEBUG) << "Code written " << t;
     }
 
+    LOG(DEBUG) << "Start write data " << t;
     if ((int)state_init_parsed.data->prefetch_ulong(1) == 1) {
       auto data = state_init_parsed.data->prefetch_ref();
-
 
       try {
         answer["data"] = dump_as_boc(std::move(data));
