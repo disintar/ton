@@ -1128,7 +1128,7 @@ class Indexer : public td::actor::Actor {
 
             LOG(DEBUG) << "Parse block start get minimum account: " << blkid.to_str() << " " << timer;
 
-            LOG(DEBUG) << "Parse block start parse account: " << last_key.to_hex() << blkid.to_str() << " " << timer;
+            LOG(DEBUG) << "Parse block start parse account: " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
             auto hex_addr = last_key.to_hex();
             // todo: fix
             if (hex_addr != "3333333333333333333333333333333333333333333333333333333333333333" &&
@@ -1136,8 +1136,7 @@ class Indexer : public td::actor::Actor {
                 hex_addr != "5555555555555555555555555555555555555555555555555555555555555555" &&
                 hex_addr != "0000000000000000000000000000000000000000000000000000000000000000" &&
                 hex_addr != "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEF") {
-
-              if (std::find(accounts_keys.begin(), accounts_keys.end(), last_key) == accounts_keys.end()){
+              if (std::find(accounts_keys.begin(), accounts_keys.end(), last_key) == accounts_keys.end()) {
                 accounts_keys.emplace_back(last_key);
               }
 
@@ -1148,15 +1147,18 @@ class Indexer : public td::actor::Actor {
                          << " " << timer;
               block::gen::AccountBlock::Record acc_blk;
               CHECK(tlb::csr_unpack(std::move(data), acc_blk));
+              LOG(DEBUG) << "Tlb unpacked " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
               int count = 0;
               std::vector<json> transactions;
 
               vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
                                                  block::tlb::aug_AccountTransactions};
+              LOG(DEBUG) << "Dict unpacked " << last_key.to_hex()<< " " << blkid.to_str() << " " << timer;
 
-              auto fTransactions = [&transactions, &count, workchain](const Ref<vm::CellSlice> &tvalue,
-                                                                      const Ref<vm::CellSlice> &extra,
-                                                                      td::ConstBitPtr key, int key_len) {
+              auto fTransactions = [&last_key, &blkid, &timer, &transactions, &count, workchain](
+                                       const Ref<vm::CellSlice> &tvalue, const Ref<vm::CellSlice> &extra,
+                                       td::ConstBitPtr key, int key_len) {
+                LOG(DEBUG) << "Parse transaction " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
                 json transaction = parse_transaction(tvalue, workchain);
                 transactions.emplace_back(std::move(transaction));
                 ++count;
@@ -1389,13 +1391,12 @@ class Indexer : public td::actor::Actor {
         } catch (std::exception &e) {
           LOG(ERROR) << e.what() << " block error: " << block_id_string;
           dumper_->addError(block_id_string, "block");
-          shutdown(); // td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+          shutdown();  // td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+        } catch (...) {
+          LOG(ERROR) << "WTF block error: " << block_id_string;
+          dumper_->addError(block_id_string, "block");
+          shutdown();  // td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
         }
-//        catch (...) {
-//          LOG(ERROR) << "WTF block error: " << block_id_string;
-//          dumper_->addError(block_id_string, "block");
-//          shutdown(); // td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
-//        }
       }
     });
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,

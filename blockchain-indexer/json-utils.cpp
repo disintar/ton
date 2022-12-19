@@ -762,8 +762,11 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
 
   CHECK(tvalue->have_refs());
   auto trans_root = tvalue->prefetch_ref();
+  LOG(DEBUG) << "Transaction unpack root";
   CHECK(tlb::unpack_cell(trans_root, trans));
+  LOG(DEBUG) << "Transaction typecheck root";
   CHECK(tlb::type_unpack_cell(std::move(trans.state_update), block::gen::t_HASH_UPDATE_Account, hash_upd));
+  LOG(DEBUG) << "Transaction total fees";
   CHECK(tlb::unpack(trans.total_fees.write(), trans_total_fees_cc));
 
   std::vector<std::tuple<int, std::string>> dummy;
@@ -771,6 +774,7 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
       {"grams", block::tlb::t_Grams.as_integer(trans_total_fees_cc.grams)->to_dec_string()},
       {"extra", trans_total_fees_cc.other->have_refs() ? parse_extra_currency(trans_total_fees_cc.other->prefetch_ref())
                                                        : dummy}};
+  LOG(DEBUG) << "Transaction total fees written";
 
   transaction["account_addr"] = {{"workchain", workchain}, {"address", trans.account_addr.to_hex()}};
   transaction["lt"] = trans.lt;
@@ -782,16 +786,21 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
   transaction["now"] = trans.now;
   transaction["outmsg_cnt"] = trans.outmsg_cnt;
   transaction["state_update"] = {{"old_hash", hash_upd.old_hash.to_hex()}, {"new_hash", hash_upd.old_hash.to_hex()}};
+  LOG(DEBUG) << "Transaction stuff written";
 
   // Parse in msg
   if (trans.r1.in_msg->prefetch_ulong(1) == 1) {
+    LOG(DEBUG) << "Parse in message";
     CHECK(trans.r1.in_msg->have_refs());
 
     auto message = trans.r1.in_msg->prefetch_ref();
     transaction["in_msg_cell"] = dump_as_boc(message);
+    LOG(DEBUG) << "Parse in message boc dumped";
     transaction["in_msg"] = parse_message(message);
+    LOG(DEBUG) << "Parse in message - parsed";
   }
 
+  LOG(DEBUG) << "Parse out messages";
   auto out_msgs = vm::Dictionary{trans.r1.out_msgs, 15};
 
   std::vector<json> out_msgs_list;
@@ -799,15 +808,20 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
   while (!out_msgs.is_empty()) {
     td::BitArray<15> key{};
     out_msgs.get_minmax_key(key);
+    LOG(DEBUG) << "Parse out message: " << key.to_hex();
 
     auto o_msg = out_msgs.lookup_delete_ref(key);
     out_msgs_list.emplace_back(parse_message(o_msg));
+    LOG(DEBUG) << "Parse out message: " << key.to_hex() << " parsed";
   }
 
   transaction["out_msgs"] = out_msgs_list;
   transaction["orig_status"] = parse_type(trans.orig_status);
   transaction["end_status"] = parse_type(trans.end_status);
+  LOG(DEBUG) << "Parsed transaction statuses";
+
   transaction["description"] = parse_transaction_descr(trans.description);
+  LOG(DEBUG) << "Parsed transaction description";
 
   return transaction;
 }
