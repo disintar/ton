@@ -1499,7 +1499,7 @@ class Indexer : public td::actor::Actor {
 
         ///TODO: clean this super dirty stuff
         td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
-        ton::AccountIdPrefixFull pfx{0, 0x8000000000000000};
+        ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
 
         // parse first mc seqno in chunk to prevent mc seqno leak
         auto seqno = td::min(seqno_last_, seqno_first_ + (chunk_size_ * chunk_current_));

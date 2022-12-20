@@ -317,33 +317,24 @@ json parse_message(Ref<vm::Cell> message_any) {
   // Parse init
   auto init = in_message.init.write();
 
-  if ((int)init.prefetch_ulong(1) == 1) {
-    init.skip_first(1);
+  try{
+    if ((int)init.prefetch_ulong(1) == 1) {
+      init.skip_first(1);
 
-    if (init.have_refs()) {
-      LOG(DEBUG) << "Load ref init " << block::gen::t_StateInit.validate_ref(init.prefetch_ref());
-      auto init_root = init.prefetch_ref();
-      LOG(DEBUG) << "Ref init loaded: " << init_root.not_null();
+      if (init.have_refs()) {
+        auto init_root = init.prefetch_ref();
 
-      try {
-        std::ostringstream s;
-        LOG(ERROR) << dump_as_boc(init_root);
-
-        bool is_special;
-        vm::load_cell_slice_special(init_root, is_special);
-      } catch (vm::VmError &e) {
-        LOG(ERROR) << e.get_msg();
-      } catch (...) {
-        LOG(ERROR) << "Load cell slice error";
+        answer["init"] = parse_state_init(load_cell_slice(init_root));
+      } else {
+        LOG(DEBUG) << "Load cell slice";
+        answer["init"] = parse_state_init(init);
       }
-
-      answer["init"] = parse_state_init(load_cell_slice(init_root));
-    } else {
-      LOG(DEBUG) << "Load cell slice";
-      answer["init"] = parse_state_init(init);
     }
+    LOG(DEBUG) << "State init in message info parsed";
+  } catch (...){
+    LOG(ERROR) << "State init IN message failed";
   }
-  LOG(DEBUG) << "State init in message info parsed";
+
 
   auto body = in_message.body.write();
   if ((int)body.prefetch_ulong(1) == 1) {  // Either
