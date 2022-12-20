@@ -332,6 +332,7 @@ json parse_message(Ref<vm::Cell> message_any) {
     if (init.have_refs()) {
       LOG(DEBUG) << "Load ref";
       auto init_root = init.prefetch_ref();
+      LOG(DEBUG) << "Loaded ref: " << init_root.is_null();
       std::stringstream s2;
       load_cell_slice(init_root).dump(s2);
 
