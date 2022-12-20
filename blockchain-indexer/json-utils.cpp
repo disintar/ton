@@ -326,9 +326,14 @@ json parse_message(Ref<vm::Cell> message_any) {
       LOG(DEBUG) << "Ref init loaded: " << init_root.not_null();
 
       try {
+        LOG(DEBUG) << init_root->get_level();
+        LOG(DEBUG) << init_root->get_depth();
+
         std::ostringstream s;
         bool is_special = true;
         vm::load_cell_slice(init_root).dump(s);
+      } catch (vm::VmError &e) {
+        LOG(ERROR) << e.get_msg();
       } catch (...) {
         LOG(ERROR) << "Load cell slice error";
       }
