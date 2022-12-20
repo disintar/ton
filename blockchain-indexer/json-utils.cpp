@@ -320,17 +320,29 @@ json parse_message(Ref<vm::Cell> message_any) {
   // Parse init
   auto init = in_message.init.write();
 
+  std::stringstream s;
+  init.dump(s);
+
+  LOG(DEBUG) << "GOT init: " << init.size() << " " << s.str();
+  LOG(DEBUG) << "Parse: " << (int)init.prefetch_ulong(1);
+
   if ((int)init.prefetch_ulong(1) == 1) {
     init.skip_first(1);
 
     if (init.have_refs()) {
+      LOG(DEBUG) << "Load ref";
       auto init_root = init.prefetch_ref();
+      std::stringstream s2;
+      load_cell_slice(init_root).dump(s2);
+
+      LOG(DEBUG) << "GOT init root: " << init.size() << " " << s.str();
       answer["init"] = parse_state_init(load_cell_slice(init_root));
     } else {
+      LOG(DEBUG) << "Load cell slice";
       answer["init"] = parse_state_init(init);
     }
   }
-  LOG(DEBUG) << "Main in message info parsed";
+  LOG(DEBUG) << "State init in message info parsed";
 
   auto body = in_message.body.write();
   if ((int)body.prefetch_ulong(1) == 1) {  // Either
