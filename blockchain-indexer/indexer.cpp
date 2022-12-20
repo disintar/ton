@@ -819,7 +819,7 @@ class Indexer : public td::actor::Actor {
         LOG(ERROR) << R.move_as_error().to_string() << " block error: " << block_id_string;
         dumper_->addError(block_id_string, "block");
       } else {
-//        try {
+        try {
           td::Timer timer;
           auto block = R.move_as_ok();
           CHECK(block.not_null());
@@ -1388,15 +1388,15 @@ class Indexer : public td::actor::Actor {
             LOG(DEBUG) << "First block, start parse other: " << blkid.to_str() << " " << timer;
             td::actor::send_closure(SelfId, &Indexer::parse_other);
           }
-//        } catch (std::exception &e) {
-//          LOG(ERROR) << e.what() << " block error: " << block_id_string;
-//          dumper_->addError(block_id_string, "block");
-//          shutdown();  // td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
-//        } catch (...) {
-//          LOG(ERROR) << "WTF block error: " << block_id_string;
-//          dumper_->addError(block_id_string, "block");
-//          shutdown();  // td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
-//        }
+        } catch (std::exception &e) {
+          LOG(ERROR) << e.what() << " block error: " << block_id_string;
+          dumper_->addError(block_id_string, "block");
+          shutdown();  // td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+        } catch (...) {
+          LOG(ERROR) << "WTF block error: " << block_id_string;
+          dumper_->addError(block_id_string, "block");
+          shutdown();  // td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+        }
       }
     });
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
