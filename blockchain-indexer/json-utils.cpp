@@ -170,9 +170,6 @@ json parse_libraries(Ref<vm::Cell> lib_cell) {
     LOG(ERROR) << "ERROR IN LOADING LIBRARY";
     return libs;
   }
-
-
-
 }
 
 json parse_state_init(vm::CellSlice state_init) {
@@ -226,7 +223,7 @@ json parse_state_init(vm::CellSlice state_init) {
     }
 
     LOG(DEBUG) << "Write libs!";
-    LOG(DEBUG) << "Write libs!" << state_init_parsed.library->prefetch_ulong(1);
+    LOG(DEBUG) << "Write libs! " << state_init_parsed.library->prefetch_ulong(1);
     if ((int)state_init_parsed.library->prefetch_ulong(1) == 1) {  // if not empty
       answer["libs"] = parse_libraries(state_init_parsed.library->prefetch_ref());
       LOG(DEBUG) << "Libs written " << t;
@@ -330,14 +327,20 @@ json parse_message(Ref<vm::Cell> message_any) {
     init.skip_first(1);
 
     if (init.have_refs()) {
-      LOG(DEBUG) << "Load ref";
-      auto init_root = init.prefetch_ref();
-      LOG(DEBUG) << "Loaded ref: " << init_root.is_null();
-      std::stringstream s2;
-      load_cell_slice(init_root).dump(s2);
+      try {
+        LOG(DEBUG) << "Load ref";
+        auto init_root = init.prefetch_ref();
+        LOG(DEBUG) << "Loaded ref: " << init_root.is_null();
+        std::stringstream s2;
+        load_cell_slice(init_root).dump(s2);
 
-      LOG(DEBUG) << "GOT init root: " << init.size() << " " << s.str();
-      answer["init"] = parse_state_init(load_cell_slice(init_root));
+        LOG(DEBUG) << "GOT init root: " << init.size() << " " << s2.str();
+
+        answer["init"] = parse_state_init(load_cell_slice(init_root));
+      } catch (...) {
+        throw std::runtime_error("WTF");
+      }
+
     } else {
       LOG(DEBUG) << "Load cell slice";
       answer["init"] = parse_state_init(init);
