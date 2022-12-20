@@ -326,7 +326,9 @@ json parse_message(Ref<vm::Cell> message_any) {
       LOG(DEBUG) << "Ref init loaded: " << init_root.is_null();
 
       std::ostringstream s;
-      load_cell_slice(init_root).dump(s);
+
+      bool is_special = true;
+      vm::load_cell_slice_special(init_root, is_special).dump(s);
 
       answer["init"] = parse_state_init(load_cell_slice(init_root));
     } else {
