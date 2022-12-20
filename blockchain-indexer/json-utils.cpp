@@ -565,8 +565,6 @@ json parse_bounce_phase(vm::CellSlice bp) {
 json parse_compute_ph(vm::CellSlice item) {
   json answer;
   if (item.prefetch_ulong(1) == 0) {  // tr_phase_compute_skipped
-    item.skip_first(1);
-
     block::gen::TrComputePhase::Record_tr_phase_compute_skipped t{};
     CHECK(tlb::unpack(item, t));
 
