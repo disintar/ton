@@ -327,8 +327,10 @@ json parse_message(Ref<vm::Cell> message_any) {
 
       try {
         std::ostringstream s;
+        LOG(ERROR) << dump_as_boc(init_root);
+
         bool is_special;
-        vm::load_cell_slice_special(init_root, is_special).dump(s);
+        vm::load_cell_slice_special(init_root, is_special);
       } catch (vm::VmError &e) {
         LOG(ERROR) << e.get_msg();
       } catch (...) {
