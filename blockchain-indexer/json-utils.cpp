@@ -88,6 +88,7 @@ json parse_address(vm::CellSlice address) {
 
     auto anycast = dest_addr.anycast.write();
     if ((int)anycast.prefetch_ulong(1) == 1) {  // Maybe Anycast
+      anycast.skip_first(1);
       anycast_prased = parse_anycast(anycast);
     } else {
       anycast_prased = {
@@ -286,7 +287,8 @@ json parse_message(Ref<vm::Cell> message_any) {
     answer["fwd_fee"] = block::tlb::t_Grams.as_integer(msg.fwd_fee.write())->to_dec_string();
     answer["created_lt"] = msg.created_lt;
     answer["created_at"] = msg.created_at;
-  } else if (tag == block::gen::CommonMsgInfo::ext_in_msg_info) {
+  }
+  else if (tag == block::gen::CommonMsgInfo::ext_in_msg_info) {
     answer["type"] = "ext_in_msg_info";
     block::gen::CommonMsgInfo::Record_ext_in_msg_info msg;
     CHECK(tlb::unpack(in_msg_info, msg));
@@ -313,6 +315,7 @@ json parse_message(Ref<vm::Cell> message_any) {
     LOG(ERROR) << "Not covered";
     answer = {{"type", "Unknown"}};
   }
+  LOG(DEBUG) << "Main in message info parsed";
 
   // Parse init
   auto init = in_message.init.write();
@@ -327,6 +330,7 @@ json parse_message(Ref<vm::Cell> message_any) {
       answer["init"] = parse_state_init(init);
     }
   }
+  LOG(DEBUG) << "Main in message info parsed";
 
   auto body = in_message.body.write();
   if ((int)body.prefetch_ulong(1) == 1) {  // Either
@@ -561,6 +565,8 @@ json parse_bounce_phase(vm::CellSlice bp) {
 json parse_compute_ph(vm::CellSlice item) {
   json answer;
   if (item.prefetch_ulong(1) == 0) {  // tr_phase_compute_skipped
+    item.skip_first(1);
+
     block::gen::TrComputePhase::Record_tr_phase_compute_skipped t{};
     CHECK(tlb::unpack(item, t));
 
@@ -571,7 +577,6 @@ json parse_compute_ph(vm::CellSlice item) {
     } else if (t.reason == block::gen::t_ComputeSkipReason.cskip_no_gas) {
       answer = {{"type", "skipped"}, {"reason", "cskip_no_gas"}};
     }
-
   } else {
     block::gen::TrComputePhase::Record_tr_phase_compute_vm t;
     CHECK(tlb::unpack(item, t));
