@@ -321,7 +321,7 @@ json parse_message(Ref<vm::Cell> message_any) {
     init.skip_first(1);
 
     if (init.have_refs()) {
-      LOG(DEBUG) << "Load ref init";
+      LOG(DEBUG) << "Load ref init " << block::gen::t_StateInit.validate_ref(init.prefetch_ref());
       auto init_root = init.prefetch_ref();
       LOG(DEBUG) << "Ref init loaded: " << init_root.is_null();
 
