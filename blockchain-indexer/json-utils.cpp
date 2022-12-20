@@ -323,12 +323,16 @@ json parse_message(Ref<vm::Cell> message_any) {
     if (init.have_refs()) {
       LOG(DEBUG) << "Load ref init " << block::gen::t_StateInit.validate_ref(init.prefetch_ref());
       auto init_root = init.prefetch_ref();
-      LOG(DEBUG) << "Ref init loaded: " << init_root.is_null();
+      LOG(DEBUG) << "Ref init loaded: " << init_root.not_null();
 
-      std::ostringstream s;
+      try {
+        std::ostringstream s;
+        bool is_special = true;
+        vm::load_cell_slice(init_root).dump(s);
+      } catch (...) {
+        LOG(ERROR) << "Load cell slice error";
+      }
 
-      bool is_special = true;
-      vm::load_cell_slice_special(init_root, is_special).dump(s);
 
       answer["init"] = parse_state_init(load_cell_slice(init_root));
     } else {
