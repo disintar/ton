@@ -95,10 +95,22 @@ void BlockParser::handleBlockProgress(BlockIdExt id) {
 
   const auto applied_parsed = parseBlockApplied(id);
   enqueuePublishBlockApplied(applied_parsed);
-  const auto block_parsed = parseBlockData(id, block_found_iter->first, block_found_iter->second);
-  enqueuePublishBlockData(block_parsed.first);
-  const auto state_parsed = parseBlockState(id, state_found_iter->first, state_found_iter->second, block_parsed.second);
-  enqueuePublishBlockState(state_parsed);
+
+  try {
+    const auto block_parsed = parseBlockData(id, block_found_iter->first, block_found_iter->second);
+    enqueuePublishBlockData(block_parsed.first);
+
+    try {
+      const auto state_parsed =
+          parseBlockState(id, state_found_iter->first, state_found_iter->second, block_parsed.second);
+      enqueuePublishBlockState(state_parsed);
+    } catch (vm::VmError& e) {
+      LOG(ERROR) << "VM ERROR: state " << e.get_msg();
+    }
+
+  } catch (vm::VmError& e) {
+    LOG(ERROR) << "VM ERROR: block " << e.get_msg();
+  }
 
   stored_applied_.erase(stored_applied_.find(key));
   stored_blocks_.erase(stored_blocks_.find(key));
@@ -1028,13 +1040,12 @@ void BlockParser::gotState(BlockHandle handle, td::Ref<ShardState> state, std::v
           block::gen::AccountState::Record_account_active active_account;
           CHECK(tlb::unpack(as.state.write(), active_account));
 
-          try{
+          try {
             data["account"]["state"] = {{"type", "active"}, {"state_init", parse_state_init(active_account.x.write())}};
-          } catch (...){
+          } catch (...) {
             LOG(ERROR) << "State init parse fail";
             data["account"]["state"] = {{"type", "uninit"}};
           }
-
 
         }
 
