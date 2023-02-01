@@ -437,16 +437,22 @@ struct PyTVM {
     lib_set.clear();  // remove old libs
 
     auto iter = py::iter(std::move(cells));
+    vm::Dictionary libraries{256};
+
     while (iter != py::iterator::sentinel()) {
       auto value = *iter;
       auto stack_entry = cast_python_item_to_stack_entry(value);
+
       if (stack_entry.is_cell()) {
-        lib_set.push_back(stack_entry.as_cell());
+        libraries.set_ref(stack_entry.as_cell()->get_hash().bits(), 256, stack_entry.as_cell(),
+                          vm::Dictionary::SetMode::Add);
       } else {
         throw std::invalid_argument("All libs must be cells");
       }
       ++iter;
     }
+
+    lib_set.push_back(libraries.get_root_cell());
   }
 
   void clear_stack() {
@@ -459,8 +465,6 @@ struct PyTVM {
     }
 
     auto stack_ = td::make_ref<vm::Stack>();
-
-    std::vector<td::Ref<vm::Cell>> lib_set;
 
     vm::VmLog vm_log;
     vm::VmDumper vm_dumper{true, &stacks, &vm_ops};
