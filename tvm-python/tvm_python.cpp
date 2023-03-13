@@ -738,6 +738,18 @@ std::string parse_chunked_data(vm::CellSlice& cs) {
   return td::base64_encode(slice);
 }
 
+
+long long parse_op_code(std::string& boc){
+  auto cell = parseStringToCell(boc);
+  auto cs = load_cell_slice(cell);
+  if (cs.size() < 32){
+    return -1;
+  } else {
+    return cs.prefetch_ulong(32);
+  }
+}
+
+
 py::dict parse_token_data(const std::string& boc) {
   auto cell = parseStringToCell(boc);
   auto cs = load_cell_slice(cell);
@@ -819,6 +831,7 @@ PYBIND11_MODULE(tvm_python, m) {
 
   m.def("method_name_to_id", &method_name_to_id);
   m.def("code_disasseble", &code_disasseble);
+  m.def("parse_op_code", &parse_op_code);
   m.def("pack_address", &pack_address);
   m.def("load_address", &load_address);
   m.def("parse_token_data", &parse_token_data);

@@ -284,8 +284,7 @@ json parse_message(Ref<vm::Cell> message_any) {
     answer["fwd_fee"] = block::tlb::t_Grams.as_integer(msg.fwd_fee.write())->to_dec_string();
     answer["created_lt"] = msg.created_lt;
     answer["created_at"] = msg.created_at;
-  }
-  else if (tag == block::gen::CommonMsgInfo::ext_in_msg_info) {
+  } else if (tag == block::gen::CommonMsgInfo::ext_in_msg_info) {
     answer["type"] = "ext_in_msg_info";
     block::gen::CommonMsgInfo::Record_ext_in_msg_info msg;
     CHECK(tlb::unpack(in_msg_info, msg));
@@ -317,7 +316,7 @@ json parse_message(Ref<vm::Cell> message_any) {
   // Parse init
   auto init = in_message.init.write();
 
-  try{
+  try {
     if ((int)init.prefetch_ulong(1) == 1) {
       init.skip_first(1);
 
@@ -331,18 +330,22 @@ json parse_message(Ref<vm::Cell> message_any) {
       }
     }
     LOG(DEBUG) << "State init in message info parsed";
-  } catch (...){
+  } catch (...) {
     LOG(ERROR) << "State init IN message failed";
   }
 
-
   auto body = in_message.body.write();
   if ((int)body.prefetch_ulong(1) == 1) {  // Either
-    answer["body"] = dump_as_boc(body.prefetch_ref());
+    auto root_cell = body.prefetch_ref();
+    answer["body"] = dump_as_boc(root_cell);
+    answer["op_code"] = load_cell_slice(root_cell).prefetch_ulong(32);
+
   } else {
     body.skip_first(1);
 
     vm::CellBuilder cb;
+    answer["op_code"] = body.prefetch_ulong(32);
+
     cb.append_cellslice(body);
     auto body_cell = cb.finalize();
 
@@ -369,7 +372,7 @@ json parse_intermediate_address(vm::CellSlice intermediate_address) {
 
     block::gen::IntermediateAddress::Record_interm_addr_regular interm_addr_regular;
     CHECK(tlb::unpack(intermediate_address, interm_addr_regular));
-    answer["use_dest_bits"] = interm_addr_regular.use_dest_bits; // WARNING: isn't int too small?
+    answer["use_dest_bits"] = interm_addr_regular.use_dest_bits;  // WARNING: isn't int too small?
   }
 
   else if (tag == block::gen::IntermediateAddress::interm_addr_simple) {
@@ -416,7 +419,6 @@ json parse_msg_envelope(Ref<vm::Cell> message_envelope) {
 
   return answer;
 }
-
 
 std::string parse_type(char type) {
   if (type == block::gen::t_AccountStatus.acc_state_active) {
@@ -842,8 +844,6 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
   return transaction;
 }
 
-
-
 json parse_in_msg(vm::CellSlice in_msg, int workchain) {
   //  //
   //  msg_import_ext$000 msg:^(Message Any) transaction:^Transaction
@@ -864,8 +864,7 @@ json parse_in_msg(vm::CellSlice in_msg, int workchain) {
 
   json answer;
 
-  const auto insert_parsed_transaction
-      = [](const Ref<vm::Cell>& transaction, const auto workchain) -> json {
+  const auto insert_parsed_transaction = [](const Ref<vm::Cell> &transaction, const auto workchain) -> json {
     vm::CellBuilder cb;
     cb.store_ref(transaction);
     const auto body_cell = cb.finalize();
@@ -966,7 +965,6 @@ json parse_in_msg(vm::CellSlice in_msg, int workchain) {
 }
 
 json parse_out_msg(vm::CellSlice out_msg, int workchain) {
-
   //
   //  msg_import_ext$000 msg:^(Message Any) transaction:^Transaction
   //                                                       = InMsg;
@@ -984,8 +982,7 @@ json parse_out_msg(vm::CellSlice out_msg, int workchain) {
   //                                                                fwd_fee:Grams proof_delivered:^Cell = InMsg;
   //
 
-  const auto insert_parsed_transaction
-      = [](const Ref<vm::Cell>& transaction, const auto workchain) -> json {
+  const auto insert_parsed_transaction = [](const Ref<vm::Cell> &transaction, const auto workchain) -> json {
     vm::CellBuilder cb;
     cb.store_ref(transaction);
     const auto body_cell = cb.finalize();
@@ -994,8 +991,7 @@ json parse_out_msg(vm::CellSlice out_msg, int workchain) {
     return parse_transaction(csr, workchain);
   };
 
-  const auto insert_parsed_in_msg
-      = [](const Ref<vm::Cell>& in_msg, const auto workchain) -> json {
+  const auto insert_parsed_in_msg = [](const Ref<vm::Cell> &in_msg, const auto workchain) -> json {
     vm::CellBuilder cb;
     cb.store_ref(in_msg);
     const auto body_cell = cb.finalize();
