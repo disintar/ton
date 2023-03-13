@@ -801,7 +801,7 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
   transaction["prev_trans_lt"] = trans.prev_trans_lt;
   transaction["now"] = trans.now;
   transaction["outmsg_cnt"] = trans.outmsg_cnt;
-  transaction["state_update"] = {{"old_hash", hash_upd.old_hash.to_hex()}, {"new_hash", hash_upd.old_hash.to_hex()}};
+  transaction["state_update"] = {{"old_hash", hash_upd.old_hash.to_hex()}, {"new_hash", hash_upd.new_hash.to_hex()}};
   LOG(DEBUG) << "Transaction stuff written";
 
   // Parse in msg
