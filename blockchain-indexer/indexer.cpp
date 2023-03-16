@@ -56,15 +56,17 @@ class Dumper {
 
   void storeBlock(std::string id, json block) {
     LOG(DEBUG) << "Storing block " << id;
-//    std::lock_guard lock(store_mtx);
+    {
+      std::lock_guard<std::mutex> lock(store_mtx);
 
-    auto state = states.find(id);
-    if (state == states.end()) {
-      blocks.insert({std::move(id), std::move(block)});
-    } else {
-      json together = {{"id", id}, {"block", std::move(block)}, {"state", std::move(state->second)}};
-      joined.emplace_back(std::move(together));
-      states.erase(state);
+      auto state = states.find(id);
+      if (state == states.end()) {
+        blocks.insert({std::move(id), std::move(block)});
+      } else {
+        json together = {{"id", id}, {"block", std::move(block)}, {"state", std::move(state->second)}};
+        joined.emplace_back(std::move(together));
+        states.erase(state);
+      }
     }
 
     if (joined.size() >= buffer_size) {
@@ -74,14 +76,17 @@ class Dumper {
 
   void storeState(std::string id, json state) {
     LOG(DEBUG) << "Storing state " << id;
-//    std::lock_guard lock(store_mtx);
-    auto block = blocks.find(id);
-    if (block == blocks.end()) {
-      states.insert({std::move(id), std::move(state)});
-    } else {
-      json together = {{"id", id}, {"block", std::move(block->second)}, {"state", std::move(state)}};
-      joined.emplace_back(std::move(together));
-      blocks.erase(block);
+    {
+      std::lock_guard lock(store_mtx);
+
+      auto block = blocks.find(id);
+      if (block == blocks.end()) {
+        states.insert({std::move(id), std::move(state)});
+      } else {
+        json together = {{"id", id}, {"block", std::move(block->second)}, {"state", std::move(state)}};
+        joined.emplace_back(std::move(together));
+        blocks.erase(block);
+      }
     }
 
     if (joined.size() >= buffer_size) {
@@ -110,18 +115,21 @@ class Dumper {
 
  public:
   void dump() {
-    std::lock_guard lock(dump_mtx);
-
-    const auto dumped_amount = joined.size();
-
     auto to_dump = json::array();
     auto to_dump_ids = json::array();
+    long long dumped_amount = 0;
 
-    for (auto &e : joined) {
-      to_dump_ids.emplace_back(e["id"]);
-      to_dump.emplace_back(std::move(e));
+    {
+      std::lock_guard lock(dump_mtx);
+
+      dumped_amount = joined.size();
+
+      for (auto &e : joined) {
+        to_dump_ids.emplace_back(e["id"]);
+        to_dump.emplace_back(std::move(e));
+      }
+      joined.clear();
     }
-    joined.clear();
 
     auto tag =
         std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
