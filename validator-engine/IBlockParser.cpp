@@ -540,46 +540,47 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
       answer["BlockExtra"]["custom"]["configs"] = configs;
     };
 
-//    LOG(DEBUG) << "Parse: " << blkid.to_str() << " BlockExtra success, start shard_fees_dict parse";
-//
-//    vm::Dictionary shard_fees_dict{extra_mc.shard_fees->prefetch_ref(), 96};
-//    LOG(DEBUG) << "Parse: " << blkid.to_str() << " shard_fees_dict got";
-//    std::map<std::string, json> shard_fees;
-//
-//    while (!shard_fees_dict.is_empty()) {
-//      td::BitArray<96> key{};
-//      shard_fees_dict.get_minmax_key(key);
-//      LOG(DEBUG) << "Parse: " << blkid.to_str() << " shard_fees_dict at " << key.to_hex();
-//
-//      Ref<vm::CellSlice> tvalue;
-//      tvalue = shard_fees_dict.lookup_delete(key);
-//
-//      block::gen::ShardFeeCreated::Record sf;
-//      CHECK(tlb::unpack(tvalue.write(), sf));
-//
-//      block::gen::CurrencyCollection::Record fees;
-//      block::gen::CurrencyCollection::Record create;
-//
-//      CHECK(tlb::unpack(sf.fees.write(), fees));
-//      CHECK(tlb::unpack(sf.create.write(), create));
-//
-//      std::vector<std::tuple<int, std::string>> dummy;
-//
-//      json data = {
-//          {"fees",
-//           {{"grams", block::tlb::t_Grams.as_integer(fees.grams)->to_dec_string()},
-//            {"extra", fees.other->have_refs() ? parse_extra_currency(fees.other->prefetch_ref()) : dummy}}},
-//
-//          {"create",
-//           {{"grams", block::tlb::t_Grams.as_integer(create.grams)->to_dec_string()},
-//            {"extra", create.other->have_refs() ? parse_extra_currency(create.other->prefetch_ref()) : dummy}}}};
-//
-//      shard_fees[key.to_hex()] = data;
-//      LOG(DEBUG) << "Parse: " << blkid.to_str() << " shard_fees_dict at " << key.to_hex() << " success";
-//    };
-//
-//    answer["BlockExtra"]["custom"]["shard_fees"] = shard_fees;
-//    LOG(DEBUG) << "Parse: " << blkid.to_str() << " BlockExtra shard_fees success";
+    LOG(DEBUG) << "Parse: " << blkid.to_str() << " BlockExtra success";
+
+    auto shard_fees_dict =
+        std::make_unique<vm::AugmentedDictionary>(extra_mc.shard_fees, 96, block::tlb::aug_ShardFees);
+
+    std::map<std::string, json> shard_fees;
+
+    while (!shard_fees_dict.is_empty()) {
+      td::BitArray<96> key{};
+      shard_fees_dict.get_minmax_key(key);
+      LOG(DEBUG) << "Parse: " << blkid.to_str() << " shard_fees_dict at " << key.to_hex();
+
+      Ref<vm::CellSlice> tvalue;
+      tvalue = shard_fees_dict.lookup_delete(key);
+
+      block::gen::ShardFeeCreated::Record sf;
+      CHECK(tlb::unpack(tvalue.write(), sf));
+
+      block::gen::CurrencyCollection::Record fees;
+      block::gen::CurrencyCollection::Record create;
+
+      CHECK(tlb::unpack(sf.fees.write(), fees));
+      CHECK(tlb::unpack(sf.create.write(), create));
+
+      std::vector<std::tuple<int, std::string>> dummy;
+
+      json data_fees = {
+          {"fees",
+           {{"grams", block::tlb::t_Grams.as_integer(fees.grams)->to_dec_string()},
+            {"extra", fees.other->have_refs() ? parse_extra_currency(fees.other->prefetch_ref()) : dummy}}},
+
+          {"create",
+           {{"grams", block::tlb::t_Grams.as_integer(create.grams)->to_dec_string()},
+            {"extra", create.other->have_refs() ? parse_extra_currency(create.other->prefetch_ref()) : dummy}}}};
+
+      shard_fees[key.to_hex()] = data_fees;
+      LOG(DEBUG) << "Parse: " << blkid.to_str() << " shard_fees_dict at " << key.to_hex() << " success";
+    };
+
+    answer["BlockExtra"]["custom"]["shard_fees"] = shard_fees;
+    LOG(DEBUG) << "Parse: " << blkid.to_str() << " BlockExtra shard_fees success";
 
     if (extra_mc.r1.mint_msg->have_refs()) {
       answer["BlockExtra"]["custom"]["mint_msg"] =

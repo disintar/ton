@@ -1243,7 +1243,7 @@ class Indexer : public td::actor::Actor {
 
             auto shard_fees_dict =
                 std::make_unique<vm::AugmentedDictionary>(extra_mc.shard_fees, 96, block::tlb::aug_ShardFees);
-            //            vm::Dictionary shard_fees_dict{extra_mc.shard_fees->prefetch_ref(), 96};
+
             std::map<std::string, json> shard_fees;
 
             while (!shard_fees_dict->is_empty()) {
@@ -1264,7 +1264,7 @@ class Indexer : public td::actor::Actor {
 
               std::vector<std::tuple<int, std::string>> dummy;
 
-              json data = {
+              json data_fees = {
                   {"fees",
                    {{"grams", block::tlb::t_Grams.as_integer(fees.grams)->to_dec_string()},
                     {"extra", fees.other->have_refs() ? parse_extra_currency(fees.other->prefetch_ref()) : dummy}}},
@@ -1274,7 +1274,7 @@ class Indexer : public td::actor::Actor {
                     {"extra",
                      create.other->have_refs() ? parse_extra_currency(create.other->prefetch_ref()) : dummy}}}};
 
-              shard_fees[key.to_hex()] = data;
+              shard_fees[key.to_hex()] = data_fees;
             };
 
             answer["BlockExtra"]["custom"]["shard_fees"] = shard_fees;
