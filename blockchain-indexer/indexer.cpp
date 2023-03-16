@@ -1241,15 +1241,17 @@ class Indexer : public td::actor::Actor {
               answer["BlockExtra"]["custom"]["configs"] = configs;
             };
 
-            vm::Dictionary shard_fees_dict{extra_mc.shard_fees->prefetch_ref(), 96};
+            auto shard_fees_dict =
+                std::make_unique<vm::AugmentedDictionary>(extra_mc.shard_fees, 96, block::tlb::aug_ShardFees);
+            //            vm::Dictionary shard_fees_dict{extra_mc.shard_fees->prefetch_ref(), 96};
             std::map<std::string, json> shard_fees;
 
-            while (!shard_fees_dict.is_empty()) {
+            while (!shard_fees_dict->is_empty()) {
               td::BitArray<96> key{};
-              shard_fees_dict.get_minmax_key(key);
+              shard_fees_dict->get_minmax_key(key);
 
               Ref<vm::CellSlice> tvalue;
-              tvalue = shard_fees_dict.lookup_delete(key);
+              tvalue = shard_fees_dict->lookup_delete(key);
 
               block::gen::ShardFeeCreated::Record sf;
               CHECK(tlb::unpack(tvalue.write(), sf));
