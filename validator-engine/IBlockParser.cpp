@@ -540,14 +540,16 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
       answer["BlockExtra"]["custom"]["configs"] = configs;
     };
 
-    LOG(DEBUG) << "Parse: " << blkid.to_str() << " BlockExtra success";
+    LOG(DEBUG) << "Parse: " << blkid.to_str() << " BlockExtra success, start shard_fees_dict parse";
 
     vm::Dictionary shard_fees_dict{extra_mc.shard_fees->prefetch_ref(), 96};
+    LOG(DEBUG) << "Parse: " << blkid.to_str() << " shard_fees_dict got";
     std::map<std::string, json> shard_fees;
 
     while (!shard_fees_dict.is_empty()) {
       td::BitArray<96> key{};
       shard_fees_dict.get_minmax_key(key);
+      LOG(DEBUG) << "Parse: " << blkid.to_str() << " shard_fees_dict at " << key.to_hex();
 
       Ref<vm::CellSlice> tvalue;
       tvalue = shard_fees_dict.lookup_delete(key);
@@ -573,6 +575,7 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
             {"extra", create.other->have_refs() ? parse_extra_currency(create.other->prefetch_ref()) : dummy}}}};
 
       shard_fees[key.to_hex()] = data;
+      LOG(DEBUG) << "Parse: " << blkid.to_str() << " shard_fees_dict at " << key.to_hex() << " success";
     };
 
     answer["BlockExtra"]["custom"]["shard_fees"] = shard_fees;
