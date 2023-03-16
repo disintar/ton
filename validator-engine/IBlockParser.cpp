@@ -144,7 +144,7 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
   //  CHECK(block.not_null());
 
   auto blkid = data->block_id();
-  //  LOG(DEBUG) << "Parse: " << blkid.to_str() << " is_first: " << is_first;
+  LOG(DEBUG) << "Parse: " << blkid.to_str();
 
   auto block_root = data->root_cell();
   if (block_root.is_null()) {
@@ -170,7 +170,7 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
                                {"seqno", blkid.id.seqno},
                                {"shard", blkid.id.shard},
                            }}};
-
+  LOG(DEBUG) << "Parse: " << blkid.to_str() << " BlockIdExt success";
   block::gen::Block::Record blk;
   block::gen::BlockInfo::Record info;
   block::gen::BlockExtra::Record extra;
@@ -235,6 +235,8 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
       {"min_ref_mc_seqno", info.min_ref_mc_seqno},
       {"prev_key_block_seqno", info.prev_key_block_seqno},
   };
+
+  LOG(DEBUG) << "Parse: " << blkid.to_str() << " BlockInfo success";
 
   if (info.vert_seqno_incr) {
     block::gen::ExtBlkRef::Record prev_vert_blk{};
@@ -311,6 +313,8 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
     //    }
   }
 
+  LOG(DEBUG) << "Parse: " << blkid.to_str() << " BlockInfo prev_ref success";
+
   if (info.master_ref.not_null()) {
     block::gen::ExtBlkRef::Record master{};
     auto csr = load_cell_slice(info.master_ref);
@@ -322,6 +326,7 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
         {"root_hash", master.root_hash.to_hex()},
         {"file_hash", master.file_hash.to_hex()},
     };
+    LOG(DEBUG) << "Parse: " << blkid.to_str() << " BlockInfo master_ref success";
   }
 
   if (info.gen_software.not_null()) {
@@ -329,6 +334,7 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
         {"version", info.gen_software->prefetch_ulong(32)},
         {"capabilities", info.gen_software->prefetch_ulong(64)},
     };
+    LOG(DEBUG) << "Parse: " << blkid.to_str() << " BlockInfo gen_software success";
   }
 
   auto value_flow_root = blk.value_flow;
@@ -375,6 +381,7 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
   answer["ValueFlow"]["minted"] = {{"grams", value_flow.minted.grams->to_dec_string()},
                                    {"extra", parse_extra_currency(value_flow.minted.extra)}};
 
+  LOG(DEBUG) << "Parse: " << blkid.to_str() << " ValueFlow success";
   /* tlb
          block_extra in_msg_descr:^InMsgDescr
           out_msg_descr:^OutMsgDescr
@@ -398,6 +405,8 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
     in_msgs_json.push_back(parsed);
   }
 
+  LOG(DEBUG) << "Parse: " << blkid.to_str() << " in_msg_dict success";
+
   auto out_msg_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.out_msg_descr), 256,
                                                                 block::tlb::aug_OutMsgDescr);
 
@@ -411,6 +420,8 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
     json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg(data.write(), workchain)}};
     out_msgs_json.push_back(parsed);
   }
+
+  LOG(DEBUG) << "Parse: " << blkid.to_str() << " out_msg_dict success";
 
   auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.account_blocks),
                                                                        256, block::tlb::aug_ShardAccountBlocks);
@@ -433,6 +444,8 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
 
     account_blocks_dict->get_minmax_key(last_key);
     auto hex_addr = last_key.to_hex();
+    LOG(DEBUG) << "Parse: " << blkid.to_str() << " at " << hex_addr;
+
     // todo: fix
     if (hex_addr != "3333333333333333333333333333333333333333333333333333333333333333" &&
         hex_addr != "34517C7BDF5187C55AF4F8B61FDC321588C7AB768DEE24B006DF29106458D7CF" &&
@@ -477,11 +490,14 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
 
       ++count;
     };
+    LOG(DEBUG) << "Parse: " << blkid.to_str() << " at " << hex_addr << " transactions success";
 
     account_block_parsed["transactions"] = transactions;
     account_block_parsed["transactions_count"] = count;
     accounts.push_back(account_block_parsed);
   }
+
+  LOG(DEBUG) << "Parse: " << blkid.to_str() << " account_blocks_dict success";
 
   answer["BlockExtra"] = {
       {"accounts", accounts},
@@ -524,6 +540,8 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
       answer["BlockExtra"]["custom"]["configs"] = configs;
     };
 
+    LOG(DEBUG) << "Parse: " << blkid.to_str() << " BlockExtra success";
+
     vm::Dictionary shard_fees_dict{extra_mc.shard_fees->prefetch_ref(), 96};
     std::map<std::string, json> shard_fees;
 
@@ -558,16 +576,19 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
     };
 
     answer["BlockExtra"]["custom"]["shard_fees"] = shard_fees;
+    LOG(DEBUG) << "Parse: " << blkid.to_str() << " BlockExtra shard_fees success";
 
     if (extra_mc.r1.mint_msg->have_refs()) {
       answer["BlockExtra"]["custom"]["mint_msg"] =
           parse_in_msg(load_cell_slice(extra_mc.r1.mint_msg->prefetch_ref()), workchain);
     }
+    LOG(DEBUG) << "Parse: " << blkid.to_str() << " BlockExtra mint_msg success";
 
     if (extra_mc.r1.recover_create_msg->have_refs()) {
       answer["BlockExtra"]["custom"]["recover_create_msg"] =
           parse_in_msg(load_cell_slice(extra_mc.r1.recover_create_msg->prefetch_ref()), workchain);
     }
+    LOG(DEBUG) << "Parse: " << blkid.to_str() << " BlockExtra recover_create_msg success";
 
     if (extra_mc.r1.prev_blk_signatures->have_refs()) {
       vm::Dictionary prev_blk_signatures{extra_mc.r1.prev_blk_signatures->prefetch_ref(), 16};
@@ -600,6 +621,7 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
 
       answer["BlockExtra"]["custom"]["prev_blk_signatures"] = prev_blk_signatures_json;
     };
+    LOG(DEBUG) << "Parse: " << blkid.to_str() << " BlockExtra prev_blk_signatures success";
 
     block::ShardConfig shards;
     shards.unpack(extra_mc.shard_hashes);
@@ -644,6 +666,7 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
     };
 
     shards.process_shard_hashes(f);
+    LOG(DEBUG) << "Parse: " << blkid.to_str() << " BlockExtra shards success";
     answer["BlockExtra"]["custom"]["shards"] = shards_json;
   }
 
@@ -660,12 +683,14 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
   auto state_hash = upd_cs.prefetch_ref(1)->get_hash(0).to_hex();
 
   answer["ShardState"] = {{"state_old_hash", state_old_hash}, {"state_hash", state_hash}};
+  LOG(DEBUG) << "Parse: " << blkid.to_str() << " ShardState success";
 
   json to_dump = {
       {"id", std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" + std::to_string(blkid.seqno())},
       {"data", answer}};
 
   std::string dump = to_dump.dump();
+  LOG(DEBUG) << "Parse: " << blkid.to_str() << " success";
 
   if (post_processor_) {
     dump = post_processor_(dump);
