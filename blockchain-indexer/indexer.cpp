@@ -55,9 +55,9 @@ class Dumper {
   }
 
   void storeBlock(std::string id, json block) {
-    std::lock_guard lock(store_mtx);
-
     LOG(DEBUG) << "Storing block " << id;
+
+    std::lock_guard lock(store_mtx);
 
     auto state = states.find(id);
     if (state == states.end()) {
@@ -74,10 +74,9 @@ class Dumper {
   }
 
   void storeState(std::string id, json state) {
-    std::lock_guard lock(store_mtx);
-
     LOG(DEBUG) << "Storing state " << id;
 
+    std::lock_guard lock(store_mtx);
     auto block = blocks.find(id);
     if (block == blocks.end()) {
       states.insert({std::move(id), std::move(state)});
