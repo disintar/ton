@@ -547,13 +547,13 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
 
     std::map<std::string, json> shard_fees;
 
-    while (!shard_fees_dict.is_empty()) {
+    while (!shard_fees_dict->is_empty()) {
       td::BitArray<96> key{};
-      shard_fees_dict.get_minmax_key(key);
+      shard_fees_dict->get_minmax_key(key);
       LOG(DEBUG) << "Parse: " << blkid.to_str() << " shard_fees_dict at " << key.to_hex();
 
       Ref<vm::CellSlice> tvalue;
-      tvalue = shard_fees_dict.lookup_delete(key);
+      tvalue = shard_fees_dict->lookup_delete(key);
 
       block::gen::ShardFeeCreated::Record sf;
       CHECK(tlb::unpack(tvalue.write(), sf));
