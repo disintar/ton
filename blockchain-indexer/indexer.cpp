@@ -56,8 +56,7 @@ class Dumper {
 
   void storeBlock(std::string id, json block) {
     LOG(DEBUG) << "Storing block " << id;
-
-//    std::lock_guard lock(store_mtx);
+    std::lock_guard lock(store_mtx);
 
     auto state = states.find(id);
     if (state == states.end()) {
@@ -75,8 +74,7 @@ class Dumper {
 
   void storeState(std::string id, json state) {
     LOG(DEBUG) << "Storing state " << id;
-
-//    std::lock_guard lock(store_mtx);
+    std::lock_guard lock(store_mtx);
     auto block = blocks.find(id);
     if (block == blocks.end()) {
       states.insert({std::move(id), std::move(state)});
@@ -1127,7 +1125,8 @@ class Indexer : public td::actor::Actor {
 
             LOG(DEBUG) << "Parse block start get minimum account: " << blkid.to_str() << " " << timer;
 
-            LOG(DEBUG) << "Parse block start parse account: " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
+            LOG(DEBUG) << "Parse block start parse account: " << last_key.to_hex() << " " << blkid.to_str() << " "
+                       << timer;
             auto hex_addr = last_key.to_hex();
             // todo: fix
             if (hex_addr != "3333333333333333333333333333333333333333333333333333333333333333" &&
@@ -1152,7 +1151,7 @@ class Indexer : public td::actor::Actor {
 
               vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
                                                  block::tlb::aug_AccountTransactions};
-              LOG(DEBUG) << "Dict unpacked " << last_key.to_hex()<< " " << blkid.to_str() << " " << timer;
+              LOG(DEBUG) << "Dict unpacked " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
 
               auto fTransactions = [&last_key, &blkid, &timer, &transactions, &count, workchain](
                                        const Ref<vm::CellSlice> &tvalue, const Ref<vm::CellSlice> &extra,
@@ -1180,6 +1179,7 @@ class Indexer : public td::actor::Actor {
           };
 
           account_blocks_dict->check_for_each_extra(f);
+          bool skip_state = false;
 
           if (!accounts_keys.empty()) {
             //          increase_state_padding();
@@ -1187,13 +1187,7 @@ class Indexer : public td::actor::Actor {
             td::actor::send_closure(SelfId, &Indexer::increase_state_padding);
             td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
           } else {
-            auto key = std::to_string(blkid.id.workchain) + ":" + std::to_string(blkid.id.shard) + ":" +
-                       std::to_string(blkid.id.seqno);
-            LOG(DEBUG) << "Skip state: " << key;
-
-            json skip;
-            skip["skip"] = true;
-            dumper_->storeState(key, std::move(skip));
+            skip_state = true;
           }
 
           answer["BlockExtra"] = {{"accounts", std::move(accounts)},
@@ -1382,6 +1376,16 @@ class Indexer : public td::actor::Actor {
               std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" + std::to_string(blkid.seqno()),
               std::move(answer));
           td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+
+          if (skip_state) {
+            auto key = std::to_string(blkid.id.workchain) + ":" + std::to_string(blkid.id.shard) + ":" +
+                       std::to_string(blkid.id.seqno);
+            LOG(DEBUG) << "Skip state: " << key;
+
+            json skip;
+            skip["skip"] = true;
+            dumper_->storeState(key, std::move(skip));
+          }
 
           if (is_first && !info.not_master) {
             LOG(DEBUG) << "First block, start parse other: " << blkid.to_str() << " " << timer;
