@@ -339,13 +339,19 @@ json parse_message(Ref<vm::Cell> message_any) {
   if ((int)body.prefetch_ulong(1) == 1) {  // Either
     auto root_cell = body.prefetch_ref();
     answer["body"] = dump_as_boc(root_cell);
-    answer["op_code"] = load_cell_slice(root_cell).prefetch_ulong(32);
+
+    auto cs = load_cell_slice(root_cell);
+    if (cs.size() >= 32) {
+      answer["op_code"] = cs.prefetch_ulong(32);
+    }
 
   } else {
     body.skip_first(1);
 
     vm::CellBuilder cb;
-    answer["op_code"] = body.prefetch_ulong(32);
+    if (body.size() >= 32) {
+      answer["op_code"] = body.prefetch_ulong(32);
+    }
 
     cb.append_cellslice(body);
     auto body_cell = cb.finalize();
