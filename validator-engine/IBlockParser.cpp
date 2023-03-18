@@ -521,6 +521,7 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
       block::gen::ConfigParams::Record cp;
       CHECK(tlb::unpack(extra_mc.config.write(), cp));
 
+      answer["BlockExtra"]["custom"]["config_cell"] = dump_as_boc(cp.config);
       answer["BlockExtra"]["custom"]["config_addr"] = cp.config_addr.to_hex();
 
       std::map<long long, std::string> configs;

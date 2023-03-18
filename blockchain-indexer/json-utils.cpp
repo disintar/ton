@@ -219,6 +219,7 @@ json parse_state_init(vm::CellSlice state_init) {
     if ((int)state_init_parsed.data->prefetch_ulong(1) == 1) {
       auto data = state_init_parsed.data->prefetch_ref();
 
+      answer["data_hash"] = data->get_hash().to_hex();
       answer["data"] = dump_as_boc(std::move(data));
     }
 
