@@ -290,6 +290,11 @@ std::string code_disasseble(const std::string& code) {
   }
 }
 
+std::string cell_hash(const std::string& code) {
+  auto codeCell = parseStringToCell(code);
+  return codeCell->get_hash().to_hex();
+}
+
 struct PyTVM {
   td::Ref<vm::Cell> code;
   td::Ref<vm::Cell> data;
@@ -738,17 +743,15 @@ std::string parse_chunked_data(vm::CellSlice& cs) {
   return td::base64_encode(slice);
 }
 
-
-long long parse_op_code(std::string& boc){
+long long parse_op_code(std::string& boc) {
   auto cell = parseStringToCell(boc);
   auto cs = load_cell_slice(cell);
-  if (cs.size() < 32){
+  if (cs.size() < 32) {
     return -1;
   } else {
     return cs.prefetch_ulong(32);
   }
 }
-
 
 py::dict parse_token_data(const std::string& boc) {
   auto cell = parseStringToCell(boc);
@@ -835,6 +838,7 @@ PYBIND11_MODULE(tvm_python, m) {
   m.def("pack_address", &pack_address);
   m.def("load_address", &load_address);
   m.def("parse_token_data", &parse_token_data);
+  m.def("cell_hash", &cell_hash);
 
   py::class_<PyTVM>(m, "PyTVM")
       .def(py::init<int, std::string, std::string, bool, bool, bool>(), py::arg("log_level") = 0, py::arg("code") = "",
