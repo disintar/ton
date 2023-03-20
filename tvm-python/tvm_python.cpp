@@ -422,6 +422,12 @@ struct PyTVM {
     }
   }
 
+  void set_state_init(const std::string& state_init_) {
+    auto state_init = load_cell_slice(parseStringToCell(state_init_));
+    code = state_init.fetch_ref();
+    data = state_init.fetch_ref();
+  }
+
   std::string get_code() const {
     return dump_as_boc(code);
   }
@@ -817,7 +823,7 @@ py::dict parse_token_data(const std::string& boc) {
   }
 }
 
-unsigned long long get_public_key_from_state_init_wallet(const std::string& boc) {
+std::string get_public_key_from_state_init_wallet(const std::string& boc) {
   auto cell = load_cell_slice(parseStringToCell(boc));
 
   auto code = cell.fetch_ref();
@@ -832,20 +838,20 @@ unsigned long long get_public_key_from_state_init_wallet(const std::string& boc)
 
   auto v2data = {"B61041A58A7980B946E8FB9E198E3C904D24799FFA36574EA4251C41A566F581",
                  "84DAFA449F98A6987789BA232358072BC0F76DC4524002A5D0918B9A75D2D599",
+                 "45A898C1C0B25261A62773A494B96B75C3FC4AD0D851988B3338AA05561F6C83",
                  "FEB5FF6820E2FF0D9483E7E0D62C817D846789FB4AE580C878866D959DABD5C0"};
 
   for (auto h : v1data) {
     if (code_hash == h) {
-      data.fetch_bits(32);
-      return data.fetch_ulong(256);
+      data.skip_first(32);  // seqno
+      return data.fetch_bits(256).to_hex();
     }
   }
 
   for (auto h : v2data) {
     if (code_hash == h) {
-      data.fetch_bits(32);
-      data.fetch_bits(32);
-      return data.fetch_ulong(256);
+      data.skip_first(64);  // seqno + sub wallet id
+      return data.fetch_bits(256).to_hex();
     }
   }
 
@@ -884,6 +890,7 @@ PYBIND11_MODULE(tvm_python, m) {
       .def("set_stack", &PyTVM::set_stack)
       .def("set_libs", &PyTVM::set_libs)
       .def("get_ops", &PyTVM::get_ops)
+      .def("set_state_init", &PyTVM::set_state_init)
       .def("get_stacks", &PyTVM::get_stacks)
       .def("clear_stack", &PyTVM::clear_stack)
       .def("set_gasLimit", &PyTVM::set_gasLimit, py::arg("gas_limit") = 0, py::arg("gas_max") = -1)
