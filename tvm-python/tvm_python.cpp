@@ -817,6 +817,41 @@ py::dict parse_token_data(const std::string& boc) {
   }
 }
 
+unsigned long long get_public_key_from_state_init_wallet(const std::string& boc) {
+  auto cell = load_cell_slice(parseStringToCell(boc));
+
+  auto code = cell.fetch_ref();
+  auto code_hash = code->get_hash().to_hex();
+  auto data = load_cell_slice(cell.fetch_ref());
+
+  auto v1data = {"A0CFC2C48AEE16A271F2CFC0B7382D81756CECB1017D077FAAAB3BB602F6868C",
+                 "D4902FCC9FAD74698FA8E353220A68DA0DCF72E32BCB2EB9EE04217C17D3062C",
+                 "587CC789EFF1C84F46EC3797E45FC809A14FF5AE24F1E0C7A6A99CC9DC9061FF",
+                 "5C9A5E68C108E18721A07C42F9956BFB39AD77EC6D624B60C576EC88EEE65329",
+                 "FE9530D3243853083EF2EF0B4C2908C0ABF6FA1C31EA243AACAA5BF8C7D753F1"};
+
+  auto v2data = {"B61041A58A7980B946E8FB9E198E3C904D24799FFA36574EA4251C41A566F581",
+                 "84DAFA449F98A6987789BA232358072BC0F76DC4524002A5D0918B9A75D2D599",
+                 "FEB5FF6820E2FF0D9483E7E0D62C817D846789FB4AE580C878866D959DABD5C0"};
+
+  for (auto h : v1data) {
+    if (code_hash == h) {
+      data.fetch_bits(32);
+      return data.fetch_ulong(256);
+    }
+  }
+
+  for (auto h : v2data) {
+    if (code_hash == h) {
+      data.fetch_bits(32);
+      data.fetch_bits(32);
+      return data.fetch_ulong(256);
+    }
+  }
+
+  return 0;
+}
+
 PYBIND11_MODULE(tvm_python, m) {
   static py::exception<vm::VmError> exc(m, "VmError");
   py::register_exception_translator([](std::exception_ptr p) {
@@ -839,6 +874,7 @@ PYBIND11_MODULE(tvm_python, m) {
   m.def("load_address", &load_address);
   m.def("parse_token_data", &parse_token_data);
   m.def("cell_hash", &cell_hash);
+  m.def("get_public_key_from_state_init_wallet", &get_public_key_from_state_init_wallet);
 
   py::class_<PyTVM>(m, "PyTVM")
       .def(py::init<int, std::string, std::string, bool, bool, bool>(), py::arg("log_level") = 0, py::arg("code") = "",
