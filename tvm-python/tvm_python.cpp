@@ -855,7 +855,7 @@ std::string get_public_key_from_state_init_wallet(const std::string& boc) {
     }
   }
 
-  return 0;
+  throw std::invalid_argument("Not supported hash: " + code_hash);
 }
 
 PYBIND11_MODULE(tvm_python, m) {
