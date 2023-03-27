@@ -1170,6 +1170,7 @@ class Indexer : public td::actor::Actor {
                 ++count;
                 return 1;
               };
+              // TODO: for system accounts find if this is tiktok and skip
 
               trans_dict.check_for_each_extra(fTransactions);
               LOG(DEBUG) << "Parse block end parse account transactions: " << last_key.to_hex() << " " << blkid.to_str()
