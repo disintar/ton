@@ -115,21 +115,18 @@ class Dumper {
 
  public:
   void dump() {
+    std::lock_guard lock(dump_mtx);
+
+    const auto dumped_amount = joined.size();
+
     auto to_dump = json::array();
     auto to_dump_ids = json::array();
-    long long dumped_amount = 0;
 
-    {
-      std::lock_guard lock(dump_mtx);
-
-      dumped_amount = joined.size();
-
-      for (auto &e : joined) {
-        to_dump_ids.emplace_back(e["id"]);
-        to_dump.emplace_back(std::move(e));
-      }
-      joined.clear();
+    for (auto &e : joined) {
+      to_dump_ids.emplace_back(e["id"]);
+      to_dump.emplace_back(std::move(e));
     }
+    joined.clear();
 
     auto tag =
         std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
@@ -138,12 +135,12 @@ class Dumper {
     std::ostringstream oss;
     oss << prefix << tag << ".json";
     std::ofstream file(oss.str());
-    file << to_dump.dump(4);
+    file << to_dump.dump(-1);
 
     std::ostringstream oss_ids;
     oss_ids << prefix << tag << "_ids.json";
     std::ofstream file_ids(oss_ids.str());
-    file_ids << to_dump_ids.dump(4);
+    file_ids << to_dump_ids.dump(-1);
 
     LOG(INFO) << "Dumped " << dumped_amount << " block/state pairs";
   }
