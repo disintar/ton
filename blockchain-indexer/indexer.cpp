@@ -123,7 +123,6 @@ class Dumper {
     auto to_dump_ids = json::array();
 
     for (auto &e : joined) {
-      LOG(WARNING) << "DUMP: " << e["id"].dump();
       to_dump_ids.emplace_back(e["id"]);
       to_dump.emplace_back(std::move(e));
     }
@@ -1140,45 +1139,45 @@ class Indexer : public td::actor::Actor {
 //                hex_addr != "5555555555555555555555555555555555555555555555555555555555555555" &&
 //                hex_addr != "0000000000000000000000000000000000000000000000000000000000000000" &&
 //                hex_addr != "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEF"
-            if (true) {
-              if (std::find(accounts_keys.begin(), accounts_keys.end(), last_key) == accounts_keys.end()) {
-                accounts_keys.emplace_back(last_key);
-              }
 
-              json account_block_parsed;
-              account_block_parsed["account_addr"] = {{"address", hex_addr}, {"workchain", workchain}};
-
-              LOG(DEBUG) << "Parse block start parse account transactions: " << last_key.to_hex() << blkid.to_str()
-                         << " " << timer;
-              block::gen::AccountBlock::Record acc_blk;
-              CHECK(tlb::csr_unpack(std::move(data), acc_blk));
-              LOG(DEBUG) << "Tlb unpacked " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
-              int count = 0;
-              std::vector<json> transactions;
-
-              vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
-                                                 block::tlb::aug_AccountTransactions};
-              LOG(DEBUG) << "Dict unpacked " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
-
-              auto fTransactions = [&last_key, &blkid, &timer, &transactions, &count, workchain](
-                                       const Ref<vm::CellSlice> &tvalue, const Ref<vm::CellSlice> &extra,
-                                       td::ConstBitPtr key, int key_len) {
-                LOG(DEBUG) << "Parse transaction " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
-                json transaction = parse_transaction(tvalue, workchain);
-                transactions.emplace_back(std::move(transaction));
-                ++count;
-                return 1;
-              };
-              // TODO: for system accounts find if this is tiktok and skip
-
-              trans_dict.check_for_each_extra(fTransactions);
-              LOG(DEBUG) << "Parse block end parse account transactions: " << last_key.to_hex() << " " << blkid.to_str()
-                         << " " << timer;
-
-              account_block_parsed["transactions"] = transactions;
-              account_block_parsed["transactions_count"] = count;
-              accounts.emplace_back(account_block_parsed);
+            if (std::find(accounts_keys.begin(), accounts_keys.end(), last_key) == accounts_keys.end()) {
+              accounts_keys.emplace_back(last_key);
             }
+
+            json account_block_parsed;
+            account_block_parsed["account_addr"] = {{"address", hex_addr}, {"workchain", workchain}};
+
+            LOG(DEBUG) << "Parse block start parse account transactions: " << last_key.to_hex() << blkid.to_str()
+                       << " " << timer;
+            block::gen::AccountBlock::Record acc_blk;
+            CHECK(tlb::csr_unpack(std::move(data), acc_blk));
+            LOG(DEBUG) << "Tlb unpacked " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
+            int count = 0;
+            std::vector<json> transactions;
+
+            vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
+                                               block::tlb::aug_AccountTransactions};
+            LOG(DEBUG) << "Dict unpacked " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
+
+            auto fTransactions = [&last_key, &blkid, &timer, &transactions, &count, workchain](
+                                     const Ref<vm::CellSlice> &tvalue, const Ref<vm::CellSlice> &extra,
+                                     td::ConstBitPtr key, int key_len) {
+              LOG(DEBUG) << "Parse transaction " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
+              json transaction = parse_transaction(tvalue, workchain);
+              transactions.emplace_back(std::move(transaction));
+              ++count;
+              return 1;
+            };
+            // TODO: for system accounts find if this is tiktok and skip
+
+            trans_dict.check_for_each_extra(fTransactions);
+            LOG(DEBUG) << "Parse block end parse account transactions: " << last_key.to_hex() << " " << blkid.to_str()
+                       << " " << timer;
+
+            account_block_parsed["transactions"] = transactions;
+            account_block_parsed["transactions_count"] = count;
+            accounts.emplace_back(account_block_parsed);
+
 
             LOG(DEBUG) << "Parse block end parse account: " << last_key.to_hex() << " " << blkid.to_str() << " "
                        << timer;
