@@ -1137,11 +1137,12 @@ class Indexer : public td::actor::Actor {
                        << timer;
             auto hex_addr = last_key.to_hex();
             // todo: fix
-            if (hex_addr != "3333333333333333333333333333333333333333333333333333333333333333" &&
-                hex_addr != "34517C7BDF5187C55AF4F8B61FDC321588C7AB768DEE24B006DF29106458D7CF" &&
-                hex_addr != "5555555555555555555555555555555555555555555555555555555555555555" &&
-                hex_addr != "0000000000000000000000000000000000000000000000000000000000000000" &&
-                hex_addr != "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEF") {
+//            hex_addr != "3333333333333333333333333333333333333333333333333333333333333333" &&
+//                hex_addr != "34517C7BDF5187C55AF4F8B61FDC321588C7AB768DEE24B006DF29106458D7CF" &&
+//                hex_addr != "5555555555555555555555555555555555555555555555555555555555555555" &&
+//                hex_addr != "0000000000000000000000000000000000000000000000000000000000000000" &&
+//                hex_addr != "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEF"
+            if (true) {
               if (std::find(accounts_keys.begin(), accounts_keys.end(), last_key) == accounts_keys.end()) {
                 accounts_keys.emplace_back(last_key);
               }
