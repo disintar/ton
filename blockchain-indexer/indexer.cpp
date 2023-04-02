@@ -362,7 +362,7 @@ class StateIndexer : public td::actor::Actor {
   }
 
   void processAccount(td::Bits256 account) {
-//    try {
+    try {
       std::vector<std::tuple<int, std::string>> dummy;
 
       auto value = accounts->lookup(account);
@@ -455,11 +455,11 @@ class StateIndexer : public td::actor::Actor {
 
       LOG(DEBUG) << "Parse accounts states account finally parsed " << account.to_hex() << " " << block_id_string << " "
                  << timer;
-//    } catch (std::exception &e) {
-//      LOG(ERROR) << e.what() << "account error " << account.to_hex();
-//    } catch (...) {
-//      LOG(ERROR) << "account error " << account.to_hex();
-//    }
+    } catch (std::exception &e) {
+      LOG(ERROR) << e.what() << "account error " << account.to_hex();
+    } catch (...) {
+      LOG(ERROR) << "account error " << account.to_hex();
+    }
 
     bool is_end;
 
