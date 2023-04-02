@@ -54,7 +54,7 @@ class Dumper {
     forceDump();
   }
 
-  void storeBlock(std::string id, json block) {
+  void storeBlock(std::string id, std::string block) {
     LOG(DEBUG) << "Storing block " << id;
     {
       std::lock_guard<std::mutex> lock(store_mtx);
@@ -63,7 +63,11 @@ class Dumper {
       if (state == states.end()) {
         blocks.insert({std::move(id), std::move(block)});
       } else {
-        json together = {{"id", std::move(id)}, {"block", std::move(block)}, {"state", std::move(state->second)}};
+        joined_ids.emplace_back(id);
+
+        std::string together = R"({"id": ")";
+        together += id + R"(", "block": )" + block + R"(, "state": )" + state->second + "}";
+
         joined.emplace_back(std::move(together));
         states.erase(state);
       }
@@ -74,7 +78,7 @@ class Dumper {
     }
   }
 
-  void storeState(std::string id, json state) {
+  void storeState(std::string id, std::string state) {
     LOG(DEBUG) << "Storing state " << id;
     {
       std::lock_guard lock(store_mtx);
@@ -83,7 +87,12 @@ class Dumper {
       if (block == blocks.end()) {
         states.insert({std::move(id), std::move(state)});
       } else {
-        json together = {{"id", std::move(id)}, {"block", std::move(block->second)}, {"state", std::move(state)}};
+        joined_ids.emplace_back(id);
+
+        std::string together = R"({"id": ")";
+        together += id + R"(", "block": )" + block->second + R"(, "state": )" + state + "}";
+
+        //        json together = {{"id", std::move(id)}, {"block", std::move(block->second)}, {"state", std::move(state)}};
         joined.emplace_back(std::move(together));
         blocks.erase(block);
       }
@@ -119,14 +128,20 @@ class Dumper {
 
     const auto dumped_amount = joined.size();
 
-    auto to_dump = json::array();
-    auto to_dump_ids = json::array();
+    std::string to_dump = "[";
+    std::string to_dump_ids = "[";
 
     for (auto &e : joined) {
-      to_dump_ids.emplace_back(e["id"]);
-      to_dump.emplace_back(std::move(e));
+      to_dump += e + ",";
     }
+    to_dump += "]";
     joined.clear();
+
+    for (auto &e : joined_ids) {
+      to_dump_ids += "\"" + e + "\",";
+    }
+    to_dump_ids += "]";
+    joined_ids.clear();
 
     auto tag =
         std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
@@ -135,12 +150,12 @@ class Dumper {
     std::ostringstream oss;
     oss << prefix << tag << ".json";
     std::ofstream file(oss.str());
-    file << to_dump.dump(-1);
+    file << to_dump;
 
     std::ostringstream oss_ids;
     oss_ids << prefix << tag << "_ids.json";
     std::ofstream file_ids(oss_ids.str());
-    file_ids << to_dump_ids.dump(-1);
+    file_ids << to_dump_ids;
 
     LOG(INFO) << "Dumped " << dumped_amount << " block/state pairs";
   }
@@ -202,12 +217,12 @@ class Dumper {
       std::ostringstream oss;
       oss << prefix << "loners_" << tag << ".json";
       std::ofstream file(oss.str());
-      file << to_dump.dump(4);
+      file << to_dump.dump(-1);
 
       std::ostringstream oss_ids;
       oss_ids << prefix << "loners_" << tag << "_ids.json";
       std::ofstream file_ids(oss_ids.str());
-      file_ids << to_dump_ids.dump(4);
+      file_ids << to_dump_ids.dump(-1);
 
       LOG(WARNING) << "Dumped " << lone_blocks_amount << " blocks without pair";
       LOG(WARNING) << "Dumped " << lone_states_amount << " states without pair";
@@ -218,9 +233,10 @@ class Dumper {
   const std::string prefix;
   std::mutex store_mtx;
   std::mutex dump_mtx;
-  std::unordered_map<std::string, json> blocks;
-  std::unordered_map<std::string, json> states;
-  std::vector<json> joined;
+  std::unordered_map<std::string, std::string> blocks;
+  std::unordered_map<std::string, std::string> states;
+  std::vector<std::string> joined;
+  std::vector<std::string> joined_ids;
   std::vector<json> error;
   const std::size_t buffer_size;
 };
@@ -481,7 +497,7 @@ class StateIndexer : public td::actor::Actor {
 
     dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
                             std::to_string(block_id.id.seqno),
-                        std::move(answer));
+                        answer.dump(-1));
 
     LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
     dec_promise(1);
@@ -1386,7 +1402,7 @@ class Indexer : public td::actor::Actor {
         LOG(DEBUG) << "Dumper store block: " << blkid.to_str() << " " << timer;
         dumper_->storeBlock(
             std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" + std::to_string(blkid.seqno()),
-            std::move(answer));
+            answer.dump(-1));
         td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
 
         if (skip_state) {
@@ -1394,9 +1410,7 @@ class Indexer : public td::actor::Actor {
                      std::to_string(blkid.id.seqno);
           LOG(DEBUG) << "Skip state: " << key;
 
-          json skip;
-          skip["skip"] = true;
-          dumper_->storeState(key, std::move(skip));
+          dumper_->storeState(key, R"({"skip": true})");
         }
 
         if (is_first && !info.not_master) {
