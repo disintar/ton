@@ -1546,9 +1546,6 @@ class Indexer : public td::actor::Actor {
     }
 
     if (block_padding_ == 0 && state_padding_ == 0) {  // TODO: add some mutexes
-      LOG(WARNING) << "Block&State paddings reached 0; Dump json files;";
-      dumper_->forceDump();
-
       // clear boc (lib & data & account) cache
       clear_cache();
       // another clear cache
@@ -1583,6 +1580,9 @@ class Indexer : public td::actor::Actor {
         td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                                 std::move(P));
       } else {
+        LOG(WARNING) << "Block&State paddings reached 0; Dump json files;";
+        dumper_->forceDump();
+
         shutdown();
       }
     }
