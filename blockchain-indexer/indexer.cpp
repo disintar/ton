@@ -746,7 +746,7 @@ class Indexer : public td::actor::Actor {
       auto start = seqno_first_ + (chunk_size_ * (chunk_current_ - 1));
       auto end = td::min(seqno_last_, seqno_first_ + (chunk_size_ * chunk_current_));
 
-      if (start - end == 0 | start > end) {
+      if ((start - end == 0) | (start > end)) {
         LOG(WARNING) << "Total chunks parsed: " << chunk_current_ << " total: MC " << end;
         shutdown();
       }
