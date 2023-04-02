@@ -1241,35 +1241,7 @@ class Indexer : public td::actor::Actor {
           //          increase_state_padding();
           LOG(DEBUG) << "Send state to parse: " << blkid.to_str() << " " << timer;
           td::actor::send_closure(SelfId, &Indexer::increase_state_padding);
-          //          td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
-
-          const auto block_id = block_handle->id().id;
-          const auto id = std::to_string(block_id.workchain) + ":" + std::to_string(block_id.shard) + ":" +
-                          std::to_string(block_id.seqno);
-
-          auto P = td::PromiseCreator::lambda(
-              [this, SelfId = actor_id(this), block_id_string = id, block_handle,
-               accounts_keys = std::move(accounts_keys)](td::Result<td::Ref<vm::DataCell>> R) {
-                if (R.is_error()) {
-                  LOG(ERROR) << R.move_as_error().to_string() << " state error: " << block_id_string;
-                  dumper_->addError(block_id_string, "state");
-                } else {
-                  auto root_cell = R.move_as_ok();
-                  auto block_id = block_handle->id();
-                  td::Promise<td::int32> Pfinal = td::PromiseCreator::lambda([SelfId = SelfId](td::int32 a) {
-                    td::actor::send_closure(SelfId, &Indexer::decrease_state_padding);
-                  });
-
-                  td::actor::create_actor<StateIndexer>("StateIndexer", block_id_string, root_cell, accounts_keys,
-                                                        block_id, dumper_, std::move(Pfinal))
-                      .release();
-                }
-              });
-
-          LOG(DEBUG) << "getting state from db " << block_handle->id().to_str() << " "
-                     << td::base64_encode(block_handle->id().root_hash.as_slice());
-          td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_root_cell_from_db,
-                                  block_handle, std::move(P));
+          td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
         } else {
           skip_state = true;
         }
@@ -1653,6 +1625,35 @@ class Indexer : public td::actor::Actor {
     ///TODO: danger danger
     LOG(WARNING) << "Calling std::exit(0)";
     std::exit(0);
+  }
+
+  void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::vector<td::Bits256> accounts_keys) {
+    const auto block_id = handle->id().id;
+    const auto id = std::to_string(block_id.workchain) + ":" + std::to_string(block_id.shard) + ":" +
+                    std::to_string(block_id.seqno);
+
+    auto P =
+        td::PromiseCreator::lambda([this, SelfId = actor_id(this), block_id_string = id, handle,
+                                    accounts_keys = std::move(accounts_keys)](td::Result<td::Ref<vm::DataCell>> R) {
+          if (R.is_error()) {
+            LOG(ERROR) << R.move_as_error().to_string() << " state error: " << block_id_string;
+            dumper_->addError(block_id_string, "state");
+          } else {
+            auto root_cell = R.move_as_ok();
+            auto block_id = handle->id();
+            td::Promise<td::int32> Pfinal = td::PromiseCreator::lambda(
+                [SelfId = SelfId](td::int32 a) { td::actor::send_closure(SelfId, &Indexer::decrease_state_padding); });
+
+            td::actor::create_actor<StateIndexer>("StateIndexer", block_id_string, root_cell, accounts_keys, block_id,
+                                                  dumper_, std::move(Pfinal))
+                .release();
+          }
+        });
+
+    LOG(DEBUG) << "getting state from db " << handle->id().to_str() << " "
+               << td::base64_encode(handle->id().root_hash.as_slice());
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle,
+                            std::move(P));
   }
 };  // namespace validator
 }  // namespace validator
