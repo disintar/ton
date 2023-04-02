@@ -63,7 +63,7 @@ class Dumper {
       if (state == states.end()) {
         blocks.insert({std::move(id), std::move(block)});
       } else {
-        json together = {{"id", id}, {"block", std::move(block)}, {"state", std::move(state->second)}};
+        json together = {{"id", std::move(id)}, {"block", std::move(block)}, {"state", std::move(state->second)}};
         joined.emplace_back(std::move(together));
         states.erase(state);
       }
@@ -83,7 +83,7 @@ class Dumper {
       if (block == blocks.end()) {
         states.insert({std::move(id), std::move(state)});
       } else {
-        json together = {{"id", id}, {"block", std::move(block->second)}, {"state", std::move(state)}};
+        json together = {{"id", std::move(id)}, {"block", std::move(block->second)}, {"state", std::move(state)}};
         joined.emplace_back(std::move(together));
         blocks.erase(block);
       }
@@ -600,7 +600,7 @@ class Indexer : public td::actor::Actor {
       LOG(DEBUG) << "Global config loaded successfully from " << global_config_;
     }
 
-    dumper_ = std::make_unique<Dumper>("dump_", chunk_size_ * 3);
+    dumper_ = std::make_unique<Dumper>("dump_", chunk_size_ * 5);
 
     auto shard = ton::ShardIdFull(ton::masterchainId, ton::shardIdAll);
     auto shard_top =
