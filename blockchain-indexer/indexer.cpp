@@ -503,9 +503,17 @@ class StateIndexer : public td::actor::Actor {
     answer["accounts"] = json_accounts;
     LOG(DEBUG) << "Parse accounts states all accounts parsed " << block_id_string << " " << timer;
 
-    dumper_->storeState(std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
-                            std::to_string(block_id.id.seqno),
-                        answer.dump(-1));
+    std::string final_json;
+    std::string final_id = std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+                           std::to_string(block_id.id.seqno);
+
+    try {
+      final_json = answer.dump(-1);
+    } catch (...) {
+      LOG(ERROR) << "Cant dump state: " << final_id;
+      shutdown();
+    }
+    dumper_->storeState(std::move(final_id), std::move(final_json));
 
     LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
     dec_promise(1);
@@ -1405,9 +1413,19 @@ class Indexer : public td::actor::Actor {
         //          answer["ShardState"] = {{"state_old_hash", state_old_hash}, {"state_hash", state_hash}};
 
         LOG(DEBUG) << "Dumper store block: " << blkid.to_str() << " " << timer;
-        dumper_->storeBlock(
-            std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" + std::to_string(blkid.seqno()),
-            answer.dump(-1));
+
+        std::string final_id =
+            std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" + std::to_string(blkid.seqno());
+        std::string final_json;
+
+        try {
+          final_json = answer.dump(-1);
+        } catch (...) {
+          LOG(ERROR) << "Can't dump block: " << final_id;
+          shutdown();
+        }
+
+        dumper_->storeBlock(std::move(final_id), std::move(final_json));
         td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
 
         if (skip_state) {
@@ -1415,7 +1433,7 @@ class Indexer : public td::actor::Actor {
                      std::to_string(blkid.id.seqno);
           LOG(DEBUG) << "Skip state: " << key;
 
-          dumper_->storeState(key, R"({"skip": true})");
+          dumper_->storeState(std::move(key), R"({"skip": true})");
         }
 
         if (is_first && !info.not_master) {
