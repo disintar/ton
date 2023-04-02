@@ -1049,11 +1049,8 @@ class Indexer : public td::actor::Actor {
 
         auto value_flow_root = blk.value_flow;
         block::ValueFlow value_flow;
-        vm::CellSlice cs{vm::NoVmOrd(), value_flow_root};
-        if (!(cs.is_valid() && value_flow.fetch(cs) && cs.empty_ext())) {
-          LOG(ERROR) << "cannot unpack ValueFlow of the new block ";
-          return;
-        }
+        vm::CellSlice cs{vm::NoVmOrd(), std::move(value_flow_root)};
+        value_flow.fetch(cs);
 
         /* tlb
         value_flow ^[ from_prev_blk:CurrencyCollection
