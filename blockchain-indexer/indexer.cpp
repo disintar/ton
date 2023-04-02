@@ -132,13 +132,15 @@ class Dumper {
     std::string to_dump_ids = "[";
 
     for (const auto& e : joined) {
-      to_dump += e + ",";
+      std::string tmp = e;
+      to_dump += tmp + ",";
     }
     to_dump += "]";
     joined.clear();
 
     for (const auto& e : joined_ids) {
-      to_dump_ids += "\"" + e + "\",";
+      std::string tmp = e;
+      to_dump_ids += "\"" + tmp + "\",";
     }
     to_dump_ids += "]";
     joined_ids.clear();
