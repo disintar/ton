@@ -66,7 +66,9 @@ class Dumper {
         joined_ids.emplace_back(id);
 
         std::string together = R"({"id": ")";
-        together += id + R"(", "block": )" + block + R"(, "state": )" + state->second + "}";
+        std::string state_str = state->second;
+
+        together += id + R"(", "block": )" + block + R"(, "state": )" + state_str + "}";
 
         joined.emplace_back(std::move(together));
         states.erase(state);
@@ -90,7 +92,9 @@ class Dumper {
         joined_ids.emplace_back(id);
 
         std::string together = R"({"id": ")";
-        together += id + R"(", "block": )" + block->second + R"(, "state": )" + state + "}";
+        std::string block_str = block->second;
+
+        together += id + R"(", "block": )" + block_str + R"(, "state": )" + state + "}";
 
         //        json together = {{"id", std::move(id)}, {"block", std::move(block->second)}, {"state", std::move(state)}};
         joined.emplace_back(std::move(together));
@@ -131,7 +135,7 @@ class Dumper {
     std::string to_dump = "[";
     std::string to_dump_ids = "[";
 
-    for (const auto& e : joined) {
+    for (const auto &e : joined) {
       std::string tmp = e.c_str();
       to_dump += tmp + ",";
     }
@@ -139,7 +143,7 @@ class Dumper {
     to_dump += "]";
     joined.clear();
 
-    for (const auto& e : joined_ids) {
+    for (const auto &e : joined_ids) {
       std::string tmp = e.c_str();
       to_dump_ids += "\"" + tmp + "\",";
     }
