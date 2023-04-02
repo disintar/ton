@@ -79,10 +79,10 @@ class Dumper {
         joined.emplace_back(std::move(together));
         states.erase(state);
       }
-    }
 
-    if (joined.size() >= buffer_size) {
-      dump();
+      if (joined.size() >= buffer_size) {
+        dump();
+      }
     }
   }
 
@@ -112,10 +112,10 @@ class Dumper {
         joined.emplace_back(std::move(together));
         blocks.erase(block);
       }
-    }
 
-    if (joined.size() >= buffer_size) {
-      dump();
+      if (joined.size() >= buffer_size) {
+        dump();
+      }
     }
   }
 
