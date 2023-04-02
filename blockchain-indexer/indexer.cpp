@@ -137,21 +137,20 @@ class Dumper {
     std::string to_dump = "[";
     std::string to_dump_ids = "[";
 
-    for (const auto &e : joined) {
-      std::string tmp = e.c_str();
+    while (!joined.empty()) {
+      std::string tmp = joined.back();
       to_dump += tmp + ",";
     }
     to_dump.pop_back();
     to_dump += "]";
-    joined.clear();
 
-    for (const auto &e : joined_ids) {
-      std::string tmp = e.c_str();
+    while (!joined_ids.empty()) {
+      std::string tmp = joined_ids.back();
       to_dump_ids += "\"" + tmp + "\",";
+      joined_ids.pop_back();
     }
     to_dump_ids.pop_back();
     to_dump_ids += "]";
-    joined_ids.clear();
 
     auto tag =
         std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
