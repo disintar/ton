@@ -36,8 +36,7 @@ class WaitZeroState;
 class WaitShardState;
 class WaitBlockDataDisk;
 
-class
-    ValidatorManagerImpl : public ValidatorManager {
+class ValidatorManagerImpl : public ValidatorManager {
  private:
   std::vector<td::Ref<ExtMessage>> ext_messages_;
   std::vector<td::Ref<IhrMessage>> ihr_messages_;
@@ -146,7 +145,7 @@ class
   void store_persistent_state_file(BlockIdExt block_id, BlockIdExt masterchain_block_id, td::BufferSlice state,
                                    td::Promise<td::Unit> promise) override;
   void store_persistent_state_file_gen(BlockIdExt block_id, BlockIdExt masterchain_block_id,
-                                       std::function<td::Status(td::FileFd&)> write_data,
+                                       std::function<td::Status(td::FileFd &)> write_data,
                                        td::Promise<td::Unit> promise) override;
   void store_zero_state_file(BlockIdExt block_id, td::BufferSlice state, td::Promise<td::Unit> promise) override;
   void wait_block_state(BlockHandle handle, td::uint32 priority, td::Timestamp timeout,
@@ -381,16 +380,24 @@ class
   }
 
   void set_block_publisher(std::unique_ptr<IBlockParser> publisher) override {
-//    LOG(ERROR) << "set_block_publisher";
+    //    LOG(ERROR) << "set_block_publisher";
     publisher_ = std::move(publisher);
     td::actor::send_closure(db_, &Db::set_block_publisher, publisher_.get());
   }
-  IBlockParser* get_block_publisher() override {
+  IBlockParser *get_block_publisher() override {
     return publisher_.get();
   }
   void clear_celldb_boc_cache() override {
     //    LOG(ERROR) << "clear_celldb_boc_cache";
     td::actor::send_closure(db_, &Db::clear_boc_cache);
+  }
+
+  void set_async() override {
+    LOG(WARNING) << "SER ASYNC TO ARCHIVE DB!";
+
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) { R.ensure(); });
+
+    td::actor::send_closure(db_, &Db::set_async_mode, true, std::move(P));
   }
 
  private:

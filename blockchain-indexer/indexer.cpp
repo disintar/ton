@@ -698,6 +698,11 @@ class Indexer : public td::actor::Actor {
                             std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
     LOG(DEBUG) << "Callback installed";
 
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::install_callback,
+                            std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
+    LOG(DEBUG) << "Async true";
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::set_async);
+
     if (display_speed_) {
       std::unique_lock<std::mutex> lock(display_mtx_);
       display_speed();
