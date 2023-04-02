@@ -96,7 +96,12 @@ class Dumper {
         std::string together = R"({"id": ")";
         std::string block_str = block->second;
 
-        together += tmp_id + R"(", "block": )" + block_str + R"(, "state": )" + state + "}";
+        together += tmp_id;
+        together += R"(", "block": )";
+        together += block_str;
+        together += R"(, "state": )";
+        together += state;
+        together += "}";
 
         //        json together = {{"id", std::move(id)}, {"block", std::move(block->second)}, {"state", std::move(state)}};
         joined.emplace_back(std::move(together));
@@ -146,7 +151,9 @@ class Dumper {
 
     while (!joined_ids.empty()) {
       std::string tmp = joined_ids.back();
-      to_dump_ids += "\"" + tmp + "\",";
+      to_dump_ids += "\"";
+      to_dump_ids += tmp;
+      to_dump_ids += "\",";
       joined_ids.pop_back();
     }
     to_dump_ids.pop_back();
