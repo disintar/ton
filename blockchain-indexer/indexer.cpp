@@ -147,24 +147,27 @@ class Dumper {
     std::string to_dump = "[";
     std::string to_dump_ids = "[";
 
-    while (!joined.empty()) {
-      std::string tmp = joined.back();
-      joined.pop_back();
-      to_dump += tmp;
-      to_dump += ",";
+    if (!joined.empty()) {
+      while (!joined.empty()) {
+        std::string tmp = joined.back();
+        joined.pop_back();
+        to_dump += tmp;
+        to_dump += ",";
+      }
+      to_dump.pop_back();
+
+      while (!joined_ids.empty()) {
+        std::string tmp = joined_ids.back();
+        joined_ids.pop_back();
+
+        to_dump_ids += "\"";
+        to_dump_ids += tmp;
+        to_dump_ids += "\",";
+      }
+      to_dump_ids.pop_back();
     }
-    to_dump.pop_back();
+
     to_dump += "]";
-
-    while (!joined_ids.empty()) {
-      std::string tmp = joined_ids.back();
-      joined_ids.pop_back();
-
-      to_dump_ids += "\"";
-      to_dump_ids += tmp;
-      to_dump_ids += "\",";
-    }
-    to_dump_ids.pop_back();
     to_dump_ids += "]";
 
     auto tag =
