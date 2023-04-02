@@ -642,7 +642,7 @@ class Indexer : public td::actor::Actor {
       LOG(DEBUG) << "Global config loaded successfully from " << global_config_;
     }
 
-    dumper_ = std::make_unique<Dumper>("dump_", chunk_size_ * 5);
+    dumper_ = std::make_unique<Dumper>("dump_", 5000);
 
     auto shard = ton::ShardIdFull(ton::masterchainId, ton::shardIdAll);
     auto shard_top =
