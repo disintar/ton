@@ -63,12 +63,13 @@ class Dumper {
       if (state == states.end()) {
         blocks.insert({std::move(id), std::move(block)});
       } else {
-        joined_ids.emplace_back(id);
+        std::string tmp_id = id;
+        joined_ids.emplace_back(std::move(id));
 
         std::string together = R"({"id": ")";
         std::string state_str = state->second;
 
-        together += id + R"(", "block": )" + block + R"(, "state": )" + state_str + "}";
+        together += tmp_id + R"(", "block": )" + block + R"(, "state": )" + state_str + "}";
 
         joined.emplace_back(std::move(together));
         states.erase(state);
@@ -89,12 +90,13 @@ class Dumper {
       if (block == blocks.end()) {
         states.insert({std::move(id), std::move(state)});
       } else {
-        joined_ids.emplace_back(id);
+        std::string tmp_id = id;
+        joined_ids.emplace_back(std::move(id));
 
         std::string together = R"({"id": ")";
         std::string block_str = block->second;
 
-        together += id + R"(", "block": )" + block_str + R"(, "state": )" + state + "}";
+        together += tmp_id + R"(", "block": )" + block_str + R"(, "state": )" + state + "}";
 
         //        json together = {{"id", std::move(id)}, {"block", std::move(block->second)}, {"state", std::move(state)}};
         joined.emplace_back(std::move(together));
