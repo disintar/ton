@@ -135,6 +135,7 @@ class Dumper {
       std::string tmp = e.c_str();
       to_dump += tmp + ",";
     }
+    to_dump.pop_back();
     to_dump += "]";
     joined.clear();
 
@@ -142,6 +143,7 @@ class Dumper {
       std::string tmp = e.c_str();
       to_dump_ids += "\"" + tmp + "\",";
     }
+    to_dump_ids.pop_back();
     to_dump_ids += "]";
     joined_ids.clear();
 
