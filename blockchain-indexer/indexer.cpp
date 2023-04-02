@@ -511,7 +511,9 @@ class StateIndexer : public td::actor::Actor {
       final_json = answer.dump(-1);
     } catch (...) {
       LOG(ERROR) << "Cant dump state: " << final_id;
-      shutdown();
+
+      LOG(WARNING) << "Calling std::exit(0)";
+      std::exit(0);
     }
     dumper_->storeState(std::move(final_id), std::move(final_json));
 
@@ -1422,7 +1424,9 @@ class Indexer : public td::actor::Actor {
           final_json = answer.dump(-1);
         } catch (...) {
           LOG(ERROR) << "Can't dump block: " << final_id;
-          shutdown();
+
+          LOG(WARNING) << "Calling std::exit(0)";
+          std::exit(0);
         }
 
         dumper_->storeBlock(std::move(final_id), std::move(final_json));
