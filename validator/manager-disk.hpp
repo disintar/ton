@@ -393,7 +393,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   }
 
   void set_async() override {
-    LOG(WARNING) << "SER ASYNC TO ARCHIVE DB!";
+    LOG(WARNING) << "SET ASYNC TO ARCHIVE DB!";
 
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) { R.ensure(); });
 
