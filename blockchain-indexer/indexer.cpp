@@ -1241,7 +1241,8 @@ class Indexer : public td::actor::Actor {
           //          increase_state_padding();
           LOG(DEBUG) << "Send state to parse: " << blkid.to_str() << " " << timer;
           td::actor::send_closure(SelfId, &Indexer::increase_state_padding);
-          td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
+//          td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
+          got_state_accounts(block_handle, accounts_keys);
         } else {
           skip_state = true;
         }
