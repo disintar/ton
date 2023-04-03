@@ -801,6 +801,9 @@ class Indexer : public td::actor::Actor {
 
       if ((start - end == 0) | (start > end)) {
         LOG(WARNING) << "Total chunks parsed: " << chunk_current_ << " total: MC " << end;
+        LOG(WARNING) << "Block&State paddings reached 0; Dump json files;";
+        dumper_->forceDump();
+
         shutdown();
       }
 
