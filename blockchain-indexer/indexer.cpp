@@ -184,7 +184,7 @@ class Dumper {
     std::ofstream file_ids(oss_ids.str());
     file_ids << to_dump_ids;
 
-    LOG(INFO) << "Dumped " << dumped_amount << " block/state pairs";
+    LOG(WARNING) << "Dumped " << dumped_amount << " block/state pairs";
   }
 
   void dumpError() {
