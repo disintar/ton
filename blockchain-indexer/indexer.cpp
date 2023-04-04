@@ -636,9 +636,6 @@ class IndexerWorker : public td::actor::Actor {
         shutdown();
       }
 
-      if (chunk_current_ == chunk_count_) {
-        end = seqno_last_;
-      }
       LOG(WARNING) << "Process chunk (" << chunk_current_ << ") From: " << start << " To: " << end;
 
       for (auto seqno = start + 1; seqno <= end - 1; ++seqno) {
