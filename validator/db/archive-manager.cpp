@@ -732,7 +732,7 @@ ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_seqno(ShardIdF
           return nullptr;
         } else {
           LOG(WARNING) << it->second.max_seqno << " " << it->second.min_seqno << " " << seqno;
-          LOG(WARNING) << (it->second.max_seqno <= seqno) << " " << (it->second.min_seqno >= seqno);
+          LOG(WARNING) << (it->second.max_seqno >= seqno) << " " << (it->second.min_seqno <= seqno);
           return &it->second;
         }
 
