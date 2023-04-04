@@ -1285,6 +1285,7 @@ class IndexerWorker : public td::actor::Actor {
         if (is_first && !info.not_master) {
           LOG(DEBUG) << "First block, start parse other: " << blkid.to_str() << " " << timer;
           td::actor::send_closure(SelfId, &IndexerWorker::parse_other);
+          td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
           return;
         }
 
@@ -1314,7 +1315,7 @@ class IndexerWorker : public td::actor::Actor {
                             std::move(P));
   }
   void increase_block_padding() {
-    LOG(DEBUG) << "increase_block_padding";
+    LOG(DEBUG) << "increase_block_padding, have: " << block_padding_;
     {
       std::lock_guard<std::mutex> lock(display_mtx_);
 
@@ -1325,7 +1326,7 @@ class IndexerWorker : public td::actor::Actor {
     td::actor::send_closure(actor_id(this), &ton::validator::IndexerWorker::progress_changed);
   }
   void decrease_block_padding() {
-    LOG(DEBUG) << "decrease_block_padding";
+    LOG(DEBUG) << "decrease_block_padding, have: " << block_padding_;
     {
       std::lock_guard<std::mutex> lock(display_mtx_);
 
@@ -1342,7 +1343,7 @@ class IndexerWorker : public td::actor::Actor {
     td::actor::send_closure(actor_id(this), &ton::validator::IndexerWorker::progress_changed);
   }
   void increase_state_padding() {
-    LOG(DEBUG) << "increase_state_padding";
+    LOG(DEBUG) << "increase_state_padding, have: " << state_padding_;
     {
       std::lock_guard<std::mutex> lock(display_mtx_);
 
@@ -1353,7 +1354,8 @@ class IndexerWorker : public td::actor::Actor {
     td::actor::send_closure(actor_id(this), &ton::validator::IndexerWorker::progress_changed);
   }
   void decrease_state_padding() {
-    LOG(DEBUG) << "decrease_state_padding";
+    LOG(DEBUG) << "decrease_state_padding, have: " << state_padding_;
+
     {
       std::lock_guard<std::mutex> lock(display_mtx_);
 
