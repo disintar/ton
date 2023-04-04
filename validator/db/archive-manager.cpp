@@ -706,7 +706,7 @@ void ArchiveManager::update_desc(FileDescription &desc, ShardIdFull shard, Block
 
 ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_seqno(ShardIdFull shard, BlockSeqno seqno,
                                                                         bool key_block) {
-  LOG(WARNING) << "GET file desc by seqno: " << shard << " seqno: " << seqno;
+  LOG(WARNING) << "GET file desc by seqno: shard " << shard.to_str() << " seqno: " << seqno;
   auto &f = get_file_map(PackageId{0, key_block, false});
   for (auto it = f.rbegin(); it != f.rend(); it++) {
     auto i = it->second.first_blocks.find(shard);
