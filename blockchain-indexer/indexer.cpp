@@ -1532,7 +1532,6 @@ class Indexer : public td::actor::Actor {
       seqno_first += per_thread;
     }
 
-    yield();
     LOG(WARNING) << "Blockchain indexer setup success;";
   }
 
@@ -1825,9 +1824,9 @@ int main(int argc, char **argv) {
     ++pos;
     TRY_RESULT(seqno_last, td::to_integer_safe<ton::BlockSeqno>(seqno.substr(pos, seqno.size())));
 
-    td::actor::create_actor<ton::validator::Indexer>(td::actor::ActorOptions().with_name("CoolBlockIndexer"),
-                                                               threads, db_root, config_path, size, seqno_first,
-                                                               seqno_last, speed).release();
+    td::actor::create_actor<ton::validator::Indexer>("CoolBlockIndexer", threads, db_root, config_path, size,
+                                                     seqno_first, seqno_last, speed)
+        .release();
   });
 
   scheduler.run();
