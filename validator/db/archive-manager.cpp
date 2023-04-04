@@ -622,7 +622,7 @@ void ArchiveManager::load_package(PackageId id) {
     }
 
     for (std::pair<WorkchainId, FileDescription::MinMax> ii : desc.first_blocks_min_max_index) {
-      LOG(WARNING) << "WORKCHAIN: " << ii.first << "Set max_seqno: " << ii.second.max_seqno
+      LOG(WARNING) << "WORKCHAIN: " << ii.first << " Set max_seqno: " << ii.second.max_seqno
                    << " min_seqno: " << ii.second.min_seqno;
     }
   }
@@ -735,7 +735,7 @@ ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_seqno(ShardIdF
   for (auto it = f.rbegin(); it != f.rend(); it++) {
     auto index_it = it->second.first_blocks_min_max_index.find(shard.workchain);
     if (index_it != it->second.first_blocks_min_max_index.end()) {
-      if ((index_it->second.max_seqno >= seqno) && (index_it->second.min_seqno <= seqno)) {
+      if (index_it->second.min_seqno <= seqno) {
         auto i = it->second.first_blocks.find(shard);
         if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
           if (it->second.deleted) {
