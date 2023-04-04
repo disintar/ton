@@ -1072,9 +1072,13 @@ class IndexerWorker : public td::actor::Actor {
 
         if (!accounts_keys.empty()) {
           //          increase_state_padding();
-          LOG(DEBUG) << "Send state to parse: " << blkid.to_str() << " " << timer;
-          td::actor::send_closure(SelfId, &IndexerWorker::increase_state_padding);
-          td::actor::send_closure(SelfId, &IndexerWorker::got_state_accounts, block_handle, accounts_keys);
+          if (is_first && !info.not_master) {
+            LOG(DEBUG) << "Skip 1 mc block in chunk";
+          } else {
+            LOG(DEBUG) << "Send state to parse: " << blkid.to_str() << " " << timer;
+            td::actor::send_closure(SelfId, &IndexerWorker::increase_state_padding);
+            td::actor::send_closure(SelfId, &IndexerWorker::got_state_accounts, block_handle, accounts_keys);
+          }
         } else {
           skip_state = true;
         }
@@ -1278,6 +1282,12 @@ class IndexerWorker : public td::actor::Actor {
           std::exit(0);
         }
 
+        if (is_first && !info.not_master) {
+          LOG(DEBUG) << "First block, start parse other: " << blkid.to_str() << " " << timer;
+          td::actor::send_closure(SelfId, &IndexerWorker::parse_other);
+          return;
+        }
+
         dumper_->storeBlock(std::move(final_id), std::move(final_json));
         td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
 
@@ -1289,10 +1299,6 @@ class IndexerWorker : public td::actor::Actor {
           dumper_->storeState(std::move(key), R"({"skip": true})");
         }
 
-        if (is_first && !info.not_master) {
-          LOG(DEBUG) << "First block, start parse other: " << blkid.to_str() << " " << timer;
-          td::actor::send_closure(SelfId, &IndexerWorker::parse_other);
-        }
         //        } catch (std::exception &e) {
         //          LOG(ERROR) << e.what() << " block error: " << block_id_string;
         //          dumper_->addError(block_id_string, "block");
@@ -1408,7 +1414,6 @@ class IndexerWorker : public td::actor::Actor {
         td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                                 std::move(P));
       } else {
-        LOG(WARNING) << "Block&State paddings reached 0; Dump json files;";
         shutdown();
       }
     }
@@ -1593,18 +1598,14 @@ class Indexer : public td::actor::Actor {
     LOG(WARNING) << "Masterchain seqno per worker: " << per_thread;
 
     for (unsigned int i = 0; i < s; i++) {
-      auto start = seqno_first - 1;
-      if (i != 0){
-        start -= 1;
-      }
+      auto start = seqno_first;
       auto end = seqno_first + per_thread;
       if ((end > seqno_last) | (i == s - 1)) {
         end = seqno_last;
       }
 
-      LOG(WARNING) << "Set for IndexerWorker #" + std::to_string(i) << " seqno start " << start << " seqno end "
-                   << end;
-      td::actor::send_closure(workers.at(i), &IndexerWorker::set_seqno_range, start, end);
+      LOG(WARNING) << "Set for IndexerWorker #" + std::to_string(i) << " seqno start " << start - 1 << " seqno end " << end;
+      td::actor::send_closure(workers.at(i), &IndexerWorker::set_seqno_range, start - 1, end);
       seqno_first += per_thread;
     }
   }
