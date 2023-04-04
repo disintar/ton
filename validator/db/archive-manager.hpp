@@ -103,8 +103,8 @@ class ArchiveManager : public td::actor::Actor {
 
     std::map<ShardIdFull, Desc> first_blocks;
     td::actor::ActorOwn<ArchiveSlice> file;
-    BlockSeqno max_seqno = 0;
-    BlockSeqno min_seqno = 0;
+    BlockSeqno max_seqno = 999999999;
+    BlockSeqno min_seqno = -1;
   };
 
   std::map<PackageId, FileDescription> files_;
