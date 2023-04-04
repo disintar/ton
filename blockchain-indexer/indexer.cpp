@@ -638,7 +638,7 @@ class IndexerWorker : public td::actor::Actor {
 
       LOG(WARNING) << "Process chunk (" << chunk_current_ << ") From: " << start << " To: " << end;
 
-      for (auto seqno = start + 1; seqno <= end - 1; ++seqno) {
+      for (auto seqno = start + 1; seqno != end + 1; ++seqno) {
         auto P = td::PromiseCreator::lambda(
             [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
               if (R.is_error()) {
