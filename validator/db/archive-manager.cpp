@@ -798,12 +798,36 @@ ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_seqno(AccountI
     return get_file_desc_by_seqno(ShardIdFull{masterchainId}, seqno, key_block);
   }
   for (auto it = f.rbegin(); it != f.rend(); it++) {
+    if ((it->second.max_seqno >= seqno) && (it->second.min_seqno <= seqno)) {
+      bool found = false;
+      for (int i = 0; i < 60; i++) {
+        auto shard = shard_prefix(account, i);
+        auto it2 = it->second.first_blocks.find(shard);
+        if (it2 != it->second.first_blocks.end()) {
+          if (it2->second.seqno <= seqno) {
+            return &it->second;
+          }
+          found = true;
+        } else if (found) {
+          break;
+        }
+      }
+    }
+  }
+
+  LOG(ERROR) << "NOT FOUND: " << seqno;
+  for (auto it = f.rbegin(); it != f.rend(); it++) {
     bool found = false;
     for (int i = 0; i < 60; i++) {
       auto shard = shard_prefix(account, i);
       auto it2 = it->second.first_blocks.find(shard);
       if (it2 != it->second.first_blocks.end()) {
         if (it2->second.seqno <= seqno) {
+          auto block = it2->second.seqno;
+          LOG(WARNING) << "NOT FOUND!" << it->second.max_seqno << " " << it->second.min_seqno << " " << seqno
+                       << " CONTAINS: " << block << " " << (block <= seqno);
+          LOG(WARNING) << (it->second.max_seqno >= seqno) << " " << (it->second.min_seqno <= seqno);
+
           return &it->second;
         }
         found = true;
