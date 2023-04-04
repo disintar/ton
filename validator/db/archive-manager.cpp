@@ -498,21 +498,21 @@ void ArchiveManager::get_block_by_lt(AccountIdPrefixFull account_id, LogicalTime
     promise.set_error(td::Status::Error(ErrorCode::notready, "lt not in db"));
   }
 }
+//
+//void ArchiveManager::get_block_by_seqno(AccountIdPrefixFull account_id, BlockSeqno seqno,
+//                                        td::Promise<ConstBlockHandle> promise) {
+//  auto f = get_file_desc_by_seqno(account_id, seqno, false);
+//  if (f) {
+//    td::actor::send_closure(f->file_actor_id(), &ArchiveSlice::get_block_by_seqno, account_id, seqno,
+//                            std::move(promise));
+//  } else {
+//    promise.set_error(td::Status::Error(ErrorCode::notready, "seqno not in db"));
+//  }
+//}
 
 void ArchiveManager::get_block_by_seqno(AccountIdPrefixFull account_id, BlockSeqno seqno,
                                         td::Promise<ConstBlockHandle> promise) {
-  auto P = td::PromiseCreator::lambda(
-      [promise_ = std::move(promise), account_id, seqno](td::Result<FileDescription> R) mutable {
-        if (R.is_ok()) {
-          auto f = R.move_as_ok();
-          td::actor::send_closure(f.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account_id, seqno,
-                                  std::move(promise_));
-        } else {
-          promise_.set_error(td::Status::Error(ErrorCode::notready, "seqno not in db"));
-        }
-      });
-
-  get_file_desc_by_seqno_async(account_id, seqno, false, std::move(P));
+  get_file_desc_by_seqno_async(account_id, seqno, false, std::move(promise));
 }
 
 void ArchiveManager::delete_package(PackageId id, td::Promise<td::Unit> promise) {
@@ -633,6 +633,8 @@ void ArchiveManager::load_package(PackageId id) {
   }
 
   auto actor = td::actor::create_actor<ArchiveSlice>("slice", id.id, id.key, id.temp, false, db_root_, read_only_);
+  actor.release();
+
   desc.file = actor.get();
 
   get_file_map(id).emplace(id, std::move(desc));
@@ -667,6 +669,8 @@ validator::FileDescription *ArchiveManager::add_file_desc(ShardIdFull shard, Pac
   td::mkdir(db_root_ + id.path()).ensure();
   std::string prefix = PSTRING() << db_root_ << id.path() << id.name();
   auto act = td::actor::create_actor<ArchiveSlice>("slice", id.id, id.key, id.temp, false, db_root_, read_only_);
+  act.release();
+
   desc.file = act.get();
 
   if (!id.temp) {
@@ -857,10 +861,15 @@ validator::FileDescription *ArchiveManager::get_file_desc_by_seqno(AccountIdPref
 
 class AsyncRunner : public td::actor::Actor {
  public:
-  explicit AsyncRunner(std::function<void()> f) : f_(std::move(f)) {
+  td::Promise<ConstBlockHandle> promise;
+  std::function<void(td::Promise<ConstBlockHandle>)> f;
+
+  explicit AsyncRunner(std::function<void(td::Promise<ConstBlockHandle>)> f_, td::Promise<ConstBlockHandle> promise_) {
+    promise = std::move(promise_);
+    f = std::move(f_);
   }
   void start_up() override {
-    f_();
+    f(std::move(promise));
     stop();
   }
 
@@ -869,12 +878,10 @@ class AsyncRunner : public td::actor::Actor {
 };
 
 void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, BlockSeqno seqno, bool key_block,
-                                                  td::Promise<validator::FileDescription> promise) {
-  auto promise_ptr = std::make_shared<td::Promise<validator::FileDescription>>(std::move(promise));
+                                                  td::Promise<ConstBlockHandle> promise) {
   auto &f = get_file_map(PackageId{0, key_block, false});
 
-  auto ff = [seqno, account, promise = std::move(promise_ptr), &f]() mutable {
-
+  auto ff = [&seqno, &account, &f](td::Promise<ConstBlockHandle> promise) mutable {
     if (account.is_masterchain()) {
       auto shard = ShardIdFull{masterchainId};
       LOG(WARNING) << "GET file desc by seqno: shard " << shard.to_str() << " seqno: " << seqno;
@@ -886,14 +893,15 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
             auto i = it->second.first_blocks.find(shard);
             if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
               if (it->second.deleted) {
-                promise->set_error(td::Status::Error());
+                promise.set_error(td::Status::Error());
                 return;
               } else {
                 LOG(WARNING) << index_it->second.max_seqno << " " << index_it->second.min_seqno << " " << seqno;
                 LOG(WARNING) << (index_it->second.max_seqno >= seqno) << " " << (index_it->second.min_seqno <= seqno);
 
                 auto a = it->second;
-                promise->set_value(std::move(a));
+                td::actor::send_closure(a.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
+                                        std::move(promise));
 
                 return;
               }
@@ -906,7 +914,7 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
         auto i = it->second.first_blocks.find(shard);
         if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
           if (it->second.deleted) {
-            promise->set_error(td::Status::Error());
+            promise.set_error(td::Status::Error());
             return;
           } else {
             auto block = i->second.seqno;
@@ -919,13 +927,15 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
             }
 
             auto a = it->second;
-            promise->set_value(std::move(a));
+            td::actor::send_closure(a.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
+                                    std::move(promise));
 
             return;
           }
         }
       }
 
+      promise.set_error(td::Status::Error());
       return;
     }
 
@@ -939,7 +949,8 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
           if (it2 != it->second.first_blocks.end()) {
             if (it2->second.seqno <= seqno) {
               auto a = it->second;
-              promise->set_value(std::move(a));
+              td::actor::send_closure(a.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
+                                      std::move(promise));
               return;
             }
             found = true;
@@ -960,7 +971,8 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
           if (it2->second.seqno <= seqno) {
             auto block = it2->second.seqno;
             auto a = it->second;
-            promise->set_value(std::move(a));
+            td::actor::send_closure(a.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
+                                    std::move(promise));
             return;
           }
           found = true;
@@ -970,10 +982,10 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
       }
     }
 
-    promise->set_error(td::Status::Error());
+    promise.set_error(td::Status::Error());
   };
 
-  td::actor::create_actor<AsyncRunner>("executeasync_desc_by_seqno", std::move(ff)).release();
+  td::actor::create_actor<AsyncRunner>("executeasync_desc_by_seqno", std::move(ff), std::move(promise)).release();
 }
 
 validator::FileDescription *ArchiveManager::get_file_desc_by_unix_time(AccountIdPrefixFull account, UnixTime ts,
@@ -1370,7 +1382,7 @@ void ArchiveManager::truncate(BlockSeqno masterchain_seqno, ConstBlockHandle han
   for (auto &x : temp_files_) {
     if (!x.second.deleted) {
       td::actor::send_closure(x.second.file_actor_id(), &ArchiveSlice::destroy, ig.get_promise());
-//      x.second.file.release();
+      //      x.second.file.release();
     }
   }
   temp_files_.clear();
@@ -1386,7 +1398,7 @@ void ArchiveManager::truncate(BlockSeqno masterchain_seqno, ConstBlockHandle han
         auto it2 = it;
         it++;
         td::actor::send_closure(it2->second.file_actor_id(), &ArchiveSlice::destroy, ig.get_promise());
-//        it2->second.file.release();
+        //        it2->second.file.release();
         index_
             ->erase(create_serialize_tl_object<ton_api::db_files_package_key>(it2->second.id.id, it2->second.id.key,
                                                                               it2->second.id.temp)
@@ -1407,7 +1419,7 @@ void ArchiveManager::truncate(BlockSeqno masterchain_seqno, ConstBlockHandle han
         auto it2 = it;
         it++;
         td::actor::send_closure(it2->second.file_actor_id(), &ArchiveSlice::destroy, ig.get_promise());
-//        it2->second.file.release();
+        //        it2->second.file.release();
         index_
             ->erase(create_serialize_tl_object<ton_api::db_files_package_key>(it2->second.id.id, it2->second.id.key,
                                                                               it2->second.id.temp)

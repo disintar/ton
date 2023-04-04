@@ -135,7 +135,7 @@ class ArchiveManager : public td::actor::Actor {
   void get_handle_finish(BlockHandle handle, td::Promise<BlockHandle> promise);
   void get_file_short_cont(FileReference ref_id, PackageId idx, td::Promise<td::BufferSlice> promise);
   void get_file_desc_by_seqno_async(AccountIdPrefixFull shard, BlockSeqno seqno, bool key_block,
-                                    td::Promise<validator::FileDescription> promise);
+                                    td::Promise<ConstBlockHandle> promise);
 
   FileDescription *get_file_desc(ShardIdFull shard, PackageId id, BlockSeqno seqno, UnixTime ts, LogicalTime lt,
                                  bool force);
