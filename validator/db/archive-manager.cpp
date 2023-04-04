@@ -884,15 +884,17 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
       for (auto it = f.rbegin(); it != f.rend(); it++) {
         auto index_it = it->second.first_blocks_min_max_index.find(account.workchain);
         if (index_it != it->second.first_blocks_min_max_index.end()) {
-          auto i = it->second.first_blocks.find(shard);
-          if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
-            if (it->second.deleted) {
-              break;
-            } else {
-              auto block = i->second.seqno;
-              td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
-                                      std::move(promise));
-              return;
+          if (index_it->second.max_seqno >= seqno) {
+            auto i = it->second.first_blocks.find(shard);
+            if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
+              if (it->second.deleted) {
+                break;
+              } else {
+                auto block = i->second.seqno;
+                td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
+                                        std::move(promise));
+                return;
+              }
             }
           }
         }
@@ -905,19 +907,24 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
 
     for (auto it = f.rbegin(); it != f.rend(); it++) {
       bool found = false;
-      for (int i = 0; i < 60; i++) {
-        auto shard = shard_prefix(account, i);
-        auto it2 = it->second.first_blocks.find(shard);
-        if (it2 != it->second.first_blocks.end()) {
-          if (it2->second.seqno <= seqno) {
-            auto block = it2->second.seqno;
-            td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
-                                    std::move(promise));
-            return;
+      auto index_it = it->second.first_blocks_min_max_index.find(account.workchain);
+      if (index_it != it->second.first_blocks_min_max_index.end()) {
+        if (index_it->second.max_seqno >= seqno) {
+          for (int i = 0; i < 60; i++) {
+            auto shard = shard_prefix(account, i);
+            auto it2 = it->second.first_blocks.find(shard);
+            if (it2 != it->second.first_blocks.end()) {
+              if (it2->second.seqno <= seqno) {
+                auto block = it2->second.seqno;
+                td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
+                                        std::move(promise));
+                return;
+              }
+              found = true;
+            } else if (found) {
+              break;
+            }
           }
-          found = true;
-        } else if (found) {
-          break;
         }
       }
     }
