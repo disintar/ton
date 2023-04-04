@@ -1535,85 +1535,7 @@ class Indexer : public td::actor::Actor {
     LOG(WARNING) << "Blockchain indexer setup success;";
   }
 
- private:
-  std::string db_root_;
-  std::string global_config_;
-  std::mutex display_mtx_;
-  td::uint32 chunk_size_ = 20000;
-  std::unique_ptr<Dumper> dumper_;
-
-  td::Ref<ton::validator::ValidatorManagerOptions> opts_;
-  td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
-  std::vector<td::actor::ActorOwn<IndexerWorker>> workers;
-  unsigned int w_stopped = 0;
-  td::Status create_validator_options() {
-    TRY_RESULT_PREFIX(conf_data, td::read_file(global_config_), "failed to read: ");
-    TRY_RESULT_PREFIX(conf_json, td::json_decode(conf_data.as_slice()), "failed to parse json: ");
-
-    ton::ton_api::config_global conf;
-    TRY_STATUS_PREFIX(ton::ton_api::from_json(conf, conf_json.get_object()), "json does not fit TL scheme: ");
-
-    auto zero_state = ton::create_block_id(conf.validator_->zero_state_);
-    ton::BlockIdExt init_block;
-    if (!conf.validator_->init_block_) {
-      LOG(INFO) << "no init block readOnlyin config. using zero state";
-      init_block = zero_state;
-    } else {
-      init_block = ton::create_block_id(conf.validator_->init_block_);
-    }
-
-    std::function<bool(ton::ShardIdFull, ton::CatchainSeqno, ton::validator::ValidatorManagerOptions::ShardCheckMode)>
-        check_shard = [](ton::ShardIdFull, ton::CatchainSeqno,
-                         ton::validator::ValidatorManagerOptions::ShardCheckMode) { return true; };
-    bool allow_blockchain_init = false;
-    double sync_blocks_before = 86400;
-    double block_ttl = 86400 * 7;
-    double state_ttl = 3600;
-    double archive_ttl = 86400 * 365;
-    double key_proof_ttl = 86400 * 3650;
-    double max_mempool_num = 999999;
-    bool initial_sync_disabled = true;
-
-    opts_ = ton::validator::ValidatorManagerOptions::create(zero_state, init_block, check_shard, allow_blockchain_init,
-                                                            sync_blocks_before, block_ttl, state_ttl, archive_ttl,
-                                                            key_proof_ttl, max_mempool_num, initial_sync_disabled);
-
-    std::vector<ton::BlockIdExt> h;
-    h.reserve(conf.validator_->hardforks_.size());
-    for (auto &x : conf.validator_->hardforks_) {
-      auto b = ton::create_block_id(x);
-      if (!b.is_masterchain()) {
-        return td::Status::Error(ton::ErrorCode::error,
-                                 "[validator/hardforks] section contains not masterchain block id");
-      }
-      if (!b.is_valid_full()) {
-        return td::Status::Error(ton::ErrorCode::error, "[validator/hardforks] section contains invalid block_id");
-      }
-      for (auto &y : h) {
-        if (y.is_valid() && y.seqno() >= b.seqno()) {
-          y.invalidate();
-        }
-      }
-      h.emplace_back(std::move(b));
-    }
-    opts_.write().set_hardforks(std::move(h));
-    return td::Status::OK();
-  }
-
- public:
-  void shutdown_worker() {
-    w_stopped += 1;
-
-    if (w_stopped >= workers.size()) {
-      LOG(INFO) << "Ready to die";
-      ///TODO: danger danger
-      LOG(WARNING) << "Calling std::exit(0)";
-      dumper_->forceDump();
-      std::exit(0);
-    }
-  }
-
-  void run() {
+  void start_up() override {
     LOG(WARNING) << "Go Jhonny, go";
     LOG(DEBUG) << "Use db root: " << db_root_;
     dumper_ = std::make_unique<Dumper>("dump_", 5000);
@@ -1726,6 +1648,84 @@ class Indexer : public td::actor::Actor {
     //    LOG(DEBUG) << "Async true";
   }
 
+ private:
+  std::string db_root_;
+  std::string global_config_;
+  std::mutex display_mtx_;
+  td::uint32 chunk_size_ = 20000;
+  std::unique_ptr<Dumper> dumper_;
+
+  td::Ref<ton::validator::ValidatorManagerOptions> opts_;
+  td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
+  std::vector<td::actor::ActorOwn<IndexerWorker>> workers;
+  unsigned int w_stopped = 0;
+  td::Status create_validator_options() {
+    TRY_RESULT_PREFIX(conf_data, td::read_file(global_config_), "failed to read: ");
+    TRY_RESULT_PREFIX(conf_json, td::json_decode(conf_data.as_slice()), "failed to parse json: ");
+
+    ton::ton_api::config_global conf;
+    TRY_STATUS_PREFIX(ton::ton_api::from_json(conf, conf_json.get_object()), "json does not fit TL scheme: ");
+
+    auto zero_state = ton::create_block_id(conf.validator_->zero_state_);
+    ton::BlockIdExt init_block;
+    if (!conf.validator_->init_block_) {
+      LOG(INFO) << "no init block readOnlyin config. using zero state";
+      init_block = zero_state;
+    } else {
+      init_block = ton::create_block_id(conf.validator_->init_block_);
+    }
+
+    std::function<bool(ton::ShardIdFull, ton::CatchainSeqno, ton::validator::ValidatorManagerOptions::ShardCheckMode)>
+        check_shard = [](ton::ShardIdFull, ton::CatchainSeqno,
+                         ton::validator::ValidatorManagerOptions::ShardCheckMode) { return true; };
+    bool allow_blockchain_init = false;
+    double sync_blocks_before = 86400;
+    double block_ttl = 86400 * 7;
+    double state_ttl = 3600;
+    double archive_ttl = 86400 * 365;
+    double key_proof_ttl = 86400 * 3650;
+    double max_mempool_num = 999999;
+    bool initial_sync_disabled = true;
+
+    opts_ = ton::validator::ValidatorManagerOptions::create(zero_state, init_block, check_shard, allow_blockchain_init,
+                                                            sync_blocks_before, block_ttl, state_ttl, archive_ttl,
+                                                            key_proof_ttl, max_mempool_num, initial_sync_disabled);
+
+    std::vector<ton::BlockIdExt> h;
+    h.reserve(conf.validator_->hardforks_.size());
+    for (auto &x : conf.validator_->hardforks_) {
+      auto b = ton::create_block_id(x);
+      if (!b.is_masterchain()) {
+        return td::Status::Error(ton::ErrorCode::error,
+                                 "[validator/hardforks] section contains not masterchain block id");
+      }
+      if (!b.is_valid_full()) {
+        return td::Status::Error(ton::ErrorCode::error, "[validator/hardforks] section contains invalid block_id");
+      }
+      for (auto &y : h) {
+        if (y.is_valid() && y.seqno() >= b.seqno()) {
+          y.invalidate();
+        }
+      }
+      h.emplace_back(std::move(b));
+    }
+    opts_.write().set_hardforks(std::move(h));
+    return td::Status::OK();
+  }
+
+ public:
+  void shutdown_worker() {
+    w_stopped += 1;
+
+    if (w_stopped >= workers.size()) {
+      LOG(INFO) << "Ready to die";
+      ///TODO: danger danger
+      LOG(WARNING) << "Calling std::exit(0)";
+      dumper_->forceDump();
+      std::exit(0);
+    }
+  }
+
   void sync_complete(const BlockHandle &handle) {
     for (auto &w : workers) {
       auto P = td::PromiseCreator::lambda(
@@ -1817,27 +1817,21 @@ int main(int argc, char **argv) {
   }
 
   td::actor::set_debug(true);
-  td::actor::Scheduler scheduler({threads});
-  td::uint32 size;
-  ton::BlockSeqno seqno_first;
-  ton::BlockSeqno seqno_last;
-
+  td::actor::Scheduler scheduler({threads});  // contans a bug: threads not initialized by OptionsParser
   scheduler.run_in_context([&] {
-    TRY_RESULT(size, td::to_integer_safe<td::uint32>(chunk_size));
+    TRY_RESULT(size, td::to_integer_safe<ton::BlockSeqno>(chunk_size));
 
     auto pos = std::min(seqno.find(':'), seqno.size());
     TRY_RESULT(seqno_first, td::to_integer_safe<ton::BlockSeqno>(seqno.substr(0, pos)));
     ++pos;
     TRY_RESULT(seqno_last, td::to_integer_safe<ton::BlockSeqno>(seqno.substr(pos, seqno.size())));
-  });
 
-  scheduler.run_in_context([&] {
     indexer = td::actor::create_actor<ton::validator::Indexer>(td::actor::ActorOptions().with_name("CoolBlockIndexer"),
                                                                threads, db_root, config_path, size, seqno_first,
                                                                seqno_last, speed);
+    indexer.release();
   });
 
-  scheduler.run_in_context([&] { td::actor::send_closure(indexer, &ton::validator::Indexer::run); });
   scheduler.run();
   scheduler.stop();
   return 0;
