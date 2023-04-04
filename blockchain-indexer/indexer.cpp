@@ -543,10 +543,7 @@ class StateIndexer : public td::actor::Actor {
   }
 };
 
-class Indexer : public td::actor::Actor {
- private:
-  std::string db_root_;
-  std::string global_config_;
+class IndexerWorker : public td::actor::Actor {
   BlockSeqno seqno_first_ = 0;
   BlockSeqno seqno_last_ = 0;
   int block_padding_ = 0;
@@ -566,71 +563,13 @@ class Indexer : public td::actor::Actor {
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_blocks_timepoints_;
   std::queue<std::chrono::time_point<std::chrono::high_resolution_clock>> parsed_states_timepoints_;
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
-  td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
+  td::actor::ActorId<ton::validator::ValidatorManagerInterface> validator_manager_;
   bool display_speed_ = false;
-  td::Status create_validator_options() {
-    TRY_RESULT_PREFIX(conf_data, td::read_file(global_config_), "failed to read: ");
-    TRY_RESULT_PREFIX(conf_json, td::json_decode(conf_data.as_slice()), "failed to parse json: ");
-
-    ton::ton_api::config_global conf;
-    TRY_STATUS_PREFIX(ton::ton_api::from_json(conf, conf_json.get_object()), "json does not fit TL scheme: ");
-
-    auto zero_state = ton::create_block_id(conf.validator_->zero_state_);
-    ton::BlockIdExt init_block;
-    if (!conf.validator_->init_block_) {
-      LOG(INFO) << "no init block readOnlyin config. using zero state";
-      init_block = zero_state;
-    } else {
-      init_block = ton::create_block_id(conf.validator_->init_block_);
-    }
-
-    std::function<bool(ton::ShardIdFull, ton::CatchainSeqno, ton::validator::ValidatorManagerOptions::ShardCheckMode)>
-        check_shard = [](ton::ShardIdFull, ton::CatchainSeqno,
-                         ton::validator::ValidatorManagerOptions::ShardCheckMode) { return true; };
-    bool allow_blockchain_init = false;
-    double sync_blocks_before = 86400;
-    double block_ttl = 86400 * 7;
-    double state_ttl = 3600;
-    double archive_ttl = 86400 * 365;
-    double key_proof_ttl = 86400 * 3650;
-    double max_mempool_num = 999999;
-    bool initial_sync_disabled = true;
-
-    opts_ = ton::validator::ValidatorManagerOptions::create(zero_state, init_block, check_shard, allow_blockchain_init,
-                                                            sync_blocks_before, block_ttl, state_ttl, archive_ttl,
-                                                            key_proof_ttl, max_mempool_num, initial_sync_disabled);
-
-    std::vector<ton::BlockIdExt> h;
-    h.reserve(conf.validator_->hardforks_.size());
-    for (auto &x : conf.validator_->hardforks_) {
-      auto b = ton::create_block_id(x);
-      if (!b.is_masterchain()) {
-        return td::Status::Error(ton::ErrorCode::error,
-                                 "[validator/hardforks] section contains not masterchain block id");
-      }
-      if (!b.is_valid_full()) {
-        return td::Status::Error(ton::ErrorCode::error, "[validator/hardforks] section contains invalid block_id");
-      }
-      for (auto &y : h) {
-        if (y.is_valid() && y.seqno() >= b.seqno()) {
-          y.invalidate();
-        }
-      }
-      h.emplace_back(std::move(b));
-    }
-    opts_.write().set_hardforks(std::move(h));
-    return td::Status::OK();
-  }
   std::unordered_set<std::string> already_traversed_;
   std::mutex parsed_shards_mtx_;
+  td::Promise<unsigned int> shutdown_promise;
 
  public:
-  void set_db_root(std::string db_root) {
-    db_root_ = std::move(db_root);
-  }
-  void set_global_config_path(std::string path) {
-    global_config_ = std::move(path);
-  }
   void set_seqno_range(BlockSeqno seqno_first, BlockSeqno seqno_last) {
     seqno_first_ = seqno_first;
     seqno_last_ = seqno_last;
@@ -641,148 +580,32 @@ class Indexer : public td::actor::Actor {
   void set_display_speed(bool display_speed) {
     display_speed_ = display_speed;
   }
+  void set_validator_actor(td::actor::ActorId<ton::validator::ValidatorManagerInterface> v,
+                           td::Promise<unsigned int> promise) {
+    validator_manager_ = std::move(v);
+    shutdown_promise = std::move(promise);
 
-  void run() {
-    LOG(DEBUG) << "Use db root: " << db_root_;
-
-    auto Sr = create_validator_options();
-    if (Sr.is_error()) {
-      LOG(ERROR) << "failed to load global config'" << global_config_ << "': " << Sr;
-      std::_Exit(2);
-    } else {
-      LOG(DEBUG) << "Global config loaded successfully from " << global_config_;
-    }
-
-    dumper_ = std::make_unique<Dumper>("dump_", 5000);
-
-    auto shard = ton::ShardIdFull(ton::masterchainId, ton::shardIdAll);
-    auto shard_top =
-        ton::BlockIdExt{ton::masterchainId, ton::shardIdAll, 0, ton::RootHash::zero(), ton::FileHash::zero()};
-
-    auto id = PublicKeyHash::zero();
-
-    validator_manager_ =
-        ton::validator::ValidatorManagerDiskFactory::create(id, opts_, shard, shard_top, db_root_, true);
-
-    class Callback : public ValidatorManagerInterface::Callback {
-     public:
-      void initial_read_complete(BlockHandle handle) override {
-        LOG(DEBUG) << "Initial read complete";
-        td::actor::send_closure(id_, &Indexer::sync_complete, handle);
-      }
-      void add_shard(ShardIdFull shard) override {
-        LOG(DEBUG) << "add_shard";
-        //        td::actor::send_closure(id_, &FullNodeImpl::add_shard, shard);
-      }
-      void del_shard(ShardIdFull shard) override {
-        LOG(DEBUG) << "del_shard";
-        //        td::actor::send_closure(id_, &FullNodeImpl::del_shard, shard);
-      }
-      void send_ihr_message(AccountIdPrefixFull dst, td::BufferSlice data) override {
-        LOG(DEBUG) << "send_ihr_message";
-        //        td::actor::send_closure(id_, &FullNodeImpl::send_ihr_message, dst, std::move(data));
-      }
-      void send_ext_message(AccountIdPrefixFull dst, td::BufferSlice data) override {
-        LOG(DEBUG) << "send_ext_message";
-        //        td::actor::send_closure(id_, &FullNodeImpl::send_ext_message, dst, std::move(data));
-      }
-      void send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) override {
-        LOG(DEBUG) << "send_shard_block_info";
-        //        td::actor::send_closure(id_, &FullNodeImpl::send_shard_block_info, block_id, cc_seqno, std::move(data));
-      }
-      void send_broadcast(BlockBroadcast broadcast) override {
-        LOG(DEBUG) << "send_broadcast";
-        //        td::actor::send_closure(id_, &FullNodeImpl::send_broadcast, std::move(broadcast));
-      }
-      void download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
-                          td::Promise<ReceivedBlock> promise) override {
-        LOG(DEBUG) << "download_block";
-        //        td::actor::send_closure(id_, &FullNodeImpl::download_block, id, priority, timeout, std::move(promise));
-      }
-      void download_zero_state(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
-                               td::Promise<td::BufferSlice> promise) override {
-        LOG(DEBUG) << "download_zero_state";
-        //        td::actor::send_closure(id_, &FullNodeImpl::download_zero_state, id, priority, timeout, std::move(promise));
-      }
-      void download_persistent_state(BlockIdExt id, BlockIdExt masterchain_block_id, td::uint32 priority,
-                                     td::Timestamp timeout, td::Promise<td::BufferSlice> promise) override {
-        LOG(DEBUG) << "download_persistent_state";
-        //        td::actor::send_closure(id_, &FullNodeImpl::download_persistent_state, id, masterchain_block_id, priority,
-        //                                timeout, std::move(promise));
-      }
-      void download_block_proof(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
-                                td::Promise<td::BufferSlice> promise) override {
-        LOG(DEBUG) << "download_block_proof";
-        //        td::actor::send_closure(id_, &FullNodeImpl::download_block_proof, block_id, priority, timeout,
-        //                                std::move(promise));
-      }
-      void download_block_proof_link(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
-                                     td::Promise<td::BufferSlice> promise) override {
-        LOG(DEBUG) << "download_block_proof_link";
-        //        td::actor::send_closure(id_, &FullNodeImpl::download_block_proof_link, block_id, priority, timeout,
-        //                                std::move(promise));
-      }
-      void get_next_key_blocks(BlockIdExt block_id, td::Timestamp timeout,
-                               td::Promise<std::vector<BlockIdExt>> promise) override {
-        LOG(DEBUG) << "get_next_key_blocks";
-        //        td::actor::send_closure(id_, &FullNodeImpl::get_next_key_blocks, block_id, timeout, std::move(promise));
-      }
-      void download_archive(BlockSeqno masterchain_seqno, std::string tmp_dir, td::Timestamp timeout,
-                            td::Promise<std::string> promise) override {
-        LOG(DEBUG) << "download_archive";
-        //        td::actor::send_closure(id_, &FullNodeImpl::download_archive, masterchain_seqno, std::move(tmp_dir), timeout,
-        //                                std::move(promise));
-      }
-
-      void new_key_block(BlockHandle handle) override {
-        LOG(DEBUG) << "new_key_block";
-        //        td::actor::send_closure(id_, &FullNodeImpl::new_key_block, std::move(handle));
-      }
-
-      Callback(td::actor::ActorId<Indexer> id) : id_(id) {
-      }
-
-     private:
-      td::actor::ActorId<Indexer> id_;
-    };
-
-    auto P_cb = td::PromiseCreator::lambda([](td::Unit R) {});
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::install_callback,
-                            std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
-    LOG(DEBUG) << "Callback installed";
-
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::set_async);
-    LOG(DEBUG) << "Async true";
-
-    if (display_speed_) {
-      std::unique_lock<std::mutex> lock(display_mtx_);
-      display_speed();
-    }
-  }
-
-  void sync_complete(const BlockHandle &handle) {
     // separate first parse seqno to prevent WC shard seqno leak
-    auto P = td::PromiseCreator::lambda(
-        [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
-          if (R.is_error()) {
-            td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
-            //            decrease_block_padding();
-            LOG(ERROR) << R.move_as_error().to_string();
-            LOG(WARNING) << "Calling std::exit(0)";
-            std::exit(0);
-          } else {
-            auto handle = R.move_as_ok();
-            LOG(DEBUG) << "got data for block " << handle->id().to_str();
-            td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, handle->id().seqno() == seqno_first);
-          }
-        });
+    auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this),
+                                         seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
+      if (R.is_error()) {
+        td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
+        //            decrease_block_padding();
+        LOG(ERROR) << R.move_as_error().to_string();
+        LOG(WARNING) << "Calling std::exit(0)";
+        std::exit(0);
+      } else {
+        auto handle = R.move_as_ok();
+        LOG(DEBUG) << "got data for block " << handle->id().to_str();
+        td::actor::send_closure(SelfId, &IndexerWorker::got_block_handle, handle, handle->id().seqno() == seqno_first);
+      }
+    });
 
-    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
+    td::actor::send_closure(actor_id(this), &ton::validator::IndexerWorker::increase_block_padding);
     ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                             seqno_first_, std::move(P));
   }
-
   void parse_other() {
     if (seqno_last_ > seqno_first_) {
       if (chunk_count_ == 0) {
@@ -814,22 +637,21 @@ class Indexer : public td::actor::Actor {
             [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
               if (R.is_error()) {
                 LOG(ERROR) << R.move_as_error().to_string();
-                td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+                td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
               } else {
                 auto handle = R.move_as_ok();
                 LOG(DEBUG) << "got block from db " << handle->id().to_str();
-                td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle, false);
+                td::actor::send_closure_later(SelfId, &IndexerWorker::got_block_handle, handle, false);
               }
             });
 
-        td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
+        td::actor::send_closure(actor_id(this), &ton::validator::IndexerWorker::increase_block_padding);
         ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
         td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                                 std::move(P));
       }
     }
   }
-
   void start_parse_shards(BlockSeqno seqno, ShardId shard, WorkchainId workchain, bool is_first = false) {
     LOG(DEBUG) << "Receive start_parse_shards";
 
@@ -841,23 +663,22 @@ class Indexer : public td::actor::Actor {
                    << "Seqno: " << seqno_shard << " Shard: " << shard_shard << " Worckchain: " << workchain_shard;
 
         LOG(ERROR) << R.move_as_error().to_string();
-        td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+        td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
         //        decrease_state_padding();
         return;
       } else {
         auto handle = R.move_as_ok();
         LOG(DEBUG) << "got block from db " << workchain_shard << ":" << shard_shard << ":" << seqno_shard
                    << " is_first: " << first;
-        td::actor::send_closure(SelfId, &Indexer::got_block_handle, handle, first);
+        td::actor::send_closure(SelfId, &IndexerWorker::got_block_handle, handle, first);
       }
     });
 
-    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
+    td::actor::send_closure(actor_id(this), &ton::validator::IndexerWorker::increase_block_padding);
     ton::AccountIdPrefixFull pfx{workchain, shard};
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                             std::move(P));
   }
-
   void got_block_handle(std::shared_ptr<const BlockHandleInterface> handle, bool first = false) {
     const auto block_id = handle->id().id;
     const auto id = std::to_string(block_id.workchain) + ":" + std::to_string(block_id.shard) + ":" +
@@ -867,7 +688,7 @@ class Indexer : public td::actor::Actor {
       std::lock_guard<std::mutex> lock(parsed_shards_mtx_);
       if (already_traversed_.find(id) != already_traversed_.end()) {
         LOG(DEBUG) << id << " <- already traversed!";
-        td::actor::send_closure(actor_id(this), &Indexer::decrease_block_padding);
+        td::actor::send_closure(actor_id(this), &IndexerWorker::decrease_block_padding);
         return;
       }
 
@@ -1031,10 +852,10 @@ class Indexer : public td::actor::Actor {
             LOG(DEBUG) << "GO: " << blkid.id.workchain << ":" << blkid.id.shard << ":" << prev_blk_1.seq_no;
             LOG(DEBUG) << "GO: " << blkid.id.workchain << ":" << blkid.id.shard << ":" << prev_blk_2.seq_no;
 
-            td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, prev_blk_1.seq_no, blkid.id.shard,
+            td::actor::send_closure_later(SelfId, &IndexerWorker::start_parse_shards, prev_blk_1.seq_no, blkid.id.shard,
                                           blkid.id.workchain, false);
 
-            td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, prev_blk_2.seq_no, blkid.id.shard,
+            td::actor::send_closure_later(SelfId, &IndexerWorker::start_parse_shards, prev_blk_2.seq_no, blkid.id.shard,
                                           blkid.id.workchain, false);
           }
 
@@ -1057,7 +878,7 @@ class Indexer : public td::actor::Actor {
             LOG(DEBUG) << "FOR: " << blkid.to_str();
             LOG(DEBUG) << "GO: " << blkid.id.workchain << ":" << blkid.id.shard << ":" << prev_blk.seq_no;
 
-            td::actor::send_closure(SelfId, &Indexer::start_parse_shards, prev_blk.seq_no, blkid.id.shard,
+            td::actor::send_closure(SelfId, &IndexerWorker::start_parse_shards, prev_blk.seq_no, blkid.id.shard,
                                     blkid.id.workchain, false);
           }
         }
@@ -1246,8 +1067,8 @@ class Indexer : public td::actor::Actor {
         if (!accounts_keys.empty()) {
           //          increase_state_padding();
           LOG(DEBUG) << "Send state to parse: " << blkid.to_str() << " " << timer;
-          td::actor::send_closure(SelfId, &Indexer::increase_state_padding);
-          td::actor::send_closure(SelfId, &Indexer::got_state_accounts, block_handle, accounts_keys);
+          td::actor::send_closure(SelfId, &IndexerWorker::increase_state_padding);
+          td::actor::send_closure(SelfId, &IndexerWorker::got_state_accounts, block_handle, accounts_keys);
         } else {
           skip_state = true;
         }
@@ -1412,7 +1233,7 @@ class Indexer : public td::actor::Actor {
             LOG(DEBUG) << "FOR: " << blkid.to_str() << " first: " << is_first;
             LOG(DEBUG) << "GO: " << shard_workchain << ":" << shard_shard << ":" << shard_seqno;
 
-            td::actor::send_closure_later(SelfId, &Indexer::start_parse_shards, shard_seqno, shard_shard,
+            td::actor::send_closure_later(SelfId, &IndexerWorker::start_parse_shards, shard_seqno, shard_shard,
                                           shard_workchain, is_first);
 
             return 1;
@@ -1452,7 +1273,7 @@ class Indexer : public td::actor::Actor {
         }
 
         dumper_->storeBlock(std::move(final_id), std::move(final_json));
-        td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+        td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
 
         if (skip_state) {
           auto key = std::to_string(blkid.id.workchain) + ":" + std::to_string(blkid.id.shard) + ":" +
@@ -1464,7 +1285,7 @@ class Indexer : public td::actor::Actor {
 
         if (is_first && !info.not_master) {
           LOG(DEBUG) << "First block, start parse other: " << blkid.to_str() << " " << timer;
-          td::actor::send_closure(SelfId, &Indexer::parse_other);
+          td::actor::send_closure(SelfId, &IndexerWorker::parse_other);
         }
         //        } catch (std::exception &e) {
         //          LOG(ERROR) << e.what() << " block error: " << block_id_string;
@@ -1480,7 +1301,6 @@ class Indexer : public td::actor::Actor {
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, handle,
                             std::move(P));
   }
-
   void increase_block_padding() {
     LOG(DEBUG) << "increase_block_padding";
     {
@@ -1490,9 +1310,8 @@ class Indexer : public td::actor::Actor {
     }
 
     //    progress_changed();
-    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
+    td::actor::send_closure(actor_id(this), &ton::validator::IndexerWorker::progress_changed);
   }
-
   void decrease_block_padding() {
     LOG(DEBUG) << "decrease_block_padding";
     {
@@ -1508,9 +1327,8 @@ class Indexer : public td::actor::Actor {
     }
 
     //    progress_changed();
-    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
+    td::actor::send_closure(actor_id(this), &ton::validator::IndexerWorker::progress_changed);
   }
-
   void increase_state_padding() {
     LOG(DEBUG) << "increase_state_padding";
     {
@@ -1520,9 +1338,8 @@ class Indexer : public td::actor::Actor {
     }
 
     //    progress_changed();
-    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
+    td::actor::send_closure(actor_id(this), &ton::validator::IndexerWorker::progress_changed);
   }
-
   void decrease_state_padding() {
     LOG(DEBUG) << "decrease_state_padding";
     {
@@ -1539,9 +1356,8 @@ class Indexer : public td::actor::Actor {
     }
 
     //    progress_changed();
-    td::actor::send_closure(actor_id(this), &ton::validator::Indexer::progress_changed);
+    td::actor::send_closure(actor_id(this), &ton::validator::IndexerWorker::progress_changed);
   }
-
   void progress_changed() {
     if (display_speed_) {
       std::lock_guard<std::mutex> lock(display_mtx_);
@@ -1563,20 +1379,20 @@ class Indexer : public td::actor::Actor {
             [this, SelfId = actor_id(this), seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
               if (R.is_error()) {
                 LOG(ERROR) << R.move_as_error().to_string();
-                td::actor::send_closure(SelfId, &Indexer::decrease_block_padding);
+                td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
                 //                decrease_block_padding();
               } else {
                 auto handle = R.move_as_ok();
                 LOG(DEBUG) << "got block from db " << handle->id().to_str();
-                td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle, false);
+                td::actor::send_closure_later(SelfId, &IndexerWorker::got_block_handle, handle, false);
 
                 LOG(DEBUG) << "Start parse other";
-                td::actor::send_closure(SelfId, &Indexer::parse_other);
+                td::actor::send_closure(SelfId, &IndexerWorker::parse_other);
               }
             });
 
         ///TODO: clean this super dirty stuff
-        td::actor::send_closure(actor_id(this), &ton::validator::Indexer::increase_block_padding);
+        td::actor::send_closure(actor_id(this), &ton::validator::IndexerWorker::increase_block_padding);
         ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
 
         // parse first mc seqno in chunk to prevent mc seqno leak
@@ -1593,7 +1409,6 @@ class Indexer : public td::actor::Actor {
       }
     }
   }
-
   void display_speed() {
     while (!parsed_blocks_timepoints_.empty()) {
       const auto timepoint = parsed_blocks_timepoints_.front();
@@ -1628,14 +1443,10 @@ class Indexer : public td::actor::Actor {
       LOG(INFO) << oss.str();
     }
   }
-
   void shutdown() {
-    LOG(INFO) << "Ready to die";
-    ///TODO: danger danger
-    LOG(WARNING) << "Calling std::exit(0)";
-    std::exit(0);
+    LOG(WARNING) << "Ready to die";
+    shutdown_promise.set_value(0);
   }
-
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::vector<td::Bits256> accounts_keys) {
     const auto block_id = handle->id().id;
     const auto id = std::to_string(block_id.workchain) + ":" + std::to_string(block_id.shard) + ":" +
@@ -1650,8 +1461,9 @@ class Indexer : public td::actor::Actor {
           } else {
             auto root_cell = R.move_as_ok();
             auto block_id = handle->id();
-            td::Promise<td::int32> Pfinal = td::PromiseCreator::lambda(
-                [SelfId = SelfId](td::int32 a) { td::actor::send_closure(SelfId, &Indexer::decrease_state_padding); });
+            td::Promise<td::int32> Pfinal = td::PromiseCreator::lambda([SelfId = SelfId](td::int32 a) {
+              td::actor::send_closure(SelfId, &IndexerWorker::decrease_state_padding);
+            });
 
             td::actor::create_actor<StateIndexer>("StateIndexer", block_id_string, root_cell, accounts_keys, block_id,
                                                   dumper_, std::move(Pfinal))
@@ -1664,6 +1476,253 @@ class Indexer : public td::actor::Actor {
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle,
                             std::move(P));
   }
+};
+
+class Indexer : public td::actor::Actor {
+ private:
+  std::string db_root_;
+  std::string global_config_;
+  std::mutex display_mtx_;
+  td::uint32 chunk_size_ = 20000;
+
+  td::Ref<ton::validator::ValidatorManagerOptions> opts_;
+  td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
+  std::vector<td::actor::ActorOwn<IndexerWorker>> workers;
+  unsigned int w_stopped = 0;
+  td::Status create_validator_options() {
+    TRY_RESULT_PREFIX(conf_data, td::read_file(global_config_), "failed to read: ");
+    TRY_RESULT_PREFIX(conf_json, td::json_decode(conf_data.as_slice()), "failed to parse json: ");
+
+    ton::ton_api::config_global conf;
+    TRY_STATUS_PREFIX(ton::ton_api::from_json(conf, conf_json.get_object()), "json does not fit TL scheme: ");
+
+    auto zero_state = ton::create_block_id(conf.validator_->zero_state_);
+    ton::BlockIdExt init_block;
+    if (!conf.validator_->init_block_) {
+      LOG(INFO) << "no init block readOnlyin config. using zero state";
+      init_block = zero_state;
+    } else {
+      init_block = ton::create_block_id(conf.validator_->init_block_);
+    }
+
+    std::function<bool(ton::ShardIdFull, ton::CatchainSeqno, ton::validator::ValidatorManagerOptions::ShardCheckMode)>
+        check_shard = [](ton::ShardIdFull, ton::CatchainSeqno,
+                         ton::validator::ValidatorManagerOptions::ShardCheckMode) { return true; };
+    bool allow_blockchain_init = false;
+    double sync_blocks_before = 86400;
+    double block_ttl = 86400 * 7;
+    double state_ttl = 3600;
+    double archive_ttl = 86400 * 365;
+    double key_proof_ttl = 86400 * 3650;
+    double max_mempool_num = 999999;
+    bool initial_sync_disabled = true;
+
+    opts_ = ton::validator::ValidatorManagerOptions::create(zero_state, init_block, check_shard, allow_blockchain_init,
+                                                            sync_blocks_before, block_ttl, state_ttl, archive_ttl,
+                                                            key_proof_ttl, max_mempool_num, initial_sync_disabled);
+
+    std::vector<ton::BlockIdExt> h;
+    h.reserve(conf.validator_->hardforks_.size());
+    for (auto &x : conf.validator_->hardforks_) {
+      auto b = ton::create_block_id(x);
+      if (!b.is_masterchain()) {
+        return td::Status::Error(ton::ErrorCode::error,
+                                 "[validator/hardforks] section contains not masterchain block id");
+      }
+      if (!b.is_valid_full()) {
+        return td::Status::Error(ton::ErrorCode::error, "[validator/hardforks] section contains invalid block_id");
+      }
+      for (auto &y : h) {
+        if (y.is_valid() && y.seqno() >= b.seqno()) {
+          y.invalidate();
+        }
+      }
+      h.emplace_back(std::move(b));
+    }
+    opts_.write().set_hardforks(std::move(h));
+    return td::Status::OK();
+  }
+
+ public:
+  void set_threads(td::uint32 v) {
+    for (unsigned int i = 0; i < v; i++) {
+      workers.push_back(td::actor::create_actor<ton::validator::IndexerWorker>("IndexerWorker #" + std::to_string(i)));
+    }
+  }
+  void set_db_root(std::string db_root) {
+    db_root_ = std::move(db_root);
+  }
+  void set_global_config_path(std::string path) {
+    global_config_ = std::move(path);
+  }
+  void set_chunk_size(td::uint32 size) {
+    for (auto &w : workers) {
+      td::actor::send_closure(w, &IndexerWorker::set_chunk_size, size);
+    }
+  }
+  void shutdown_worker() {
+    w_stopped += 1;
+
+    if (w_stopped >= workers.size()) {
+      LOG(INFO) << "Ready to die";
+      ///TODO: danger danger
+      LOG(WARNING) << "Calling std::exit(0)";
+      std::exit(0);
+    }
+  }
+  void set_seqno_range(BlockSeqno seqno_first, BlockSeqno seqno_last) {
+    const auto s = workers.size();
+
+    LOG(WARNING) << "Current chunk size: " << chunk_size_ << " Workers: " << s;
+    LOG(WARNING) << "Total Masterchain seqno: " << seqno_last - seqno_first;
+
+    auto blocks_size = seqno_last - seqno_first;
+
+    if (blocks_size < s) {
+      LOG(ERROR) << "Please parse at least " << s << " or set less threads";
+      std::exit(0);
+    };
+
+    auto per_thread = (unsigned int)ceil(blocks_size / s);
+
+    for (unsigned int i; i < s; i++) {
+      auto end = seqno_first + per_thread;
+      if (end > seqno_last) {
+        end = seqno_last;
+      }
+
+      LOG(WARNING) << "Set for IndexerWorker #" + std::to_string(i) << " seqno start" << seqno_first << "seqno end"
+                   << end;
+      td::actor::send_closure(workers.at(i), &IndexerWorker::set_seqno_range, seqno_first, end);
+      seqno_first += per_thread;
+    }
+  }
+  void set_display_speed(bool display_speed) {
+    for (auto &w : workers) {
+      td::actor::send_closure(w, &IndexerWorker::set_display_speed, display_speed);
+    }
+  }
+
+  void run() {
+    LOG(DEBUG) << "Use db root: " << db_root_;
+
+    auto Sr = create_validator_options();
+    if (Sr.is_error()) {
+      LOG(ERROR) << "failed to load global config'" << global_config_ << "': " << Sr;
+      std::_Exit(2);
+    } else {
+      LOG(DEBUG) << "Global config loaded successfully from " << global_config_;
+    }
+
+    auto shard = ton::ShardIdFull(ton::masterchainId, ton::shardIdAll);
+    auto shard_top =
+        ton::BlockIdExt{ton::masterchainId, ton::shardIdAll, 0, ton::RootHash::zero(), ton::FileHash::zero()};
+
+    auto id = PublicKeyHash::zero();
+
+    validator_manager_ =
+        ton::validator::ValidatorManagerDiskFactory::create(id, opts_, shard, shard_top, db_root_, true);
+
+    class Callback : public ValidatorManagerInterface::Callback {
+     public:
+      void initial_read_complete(BlockHandle handle) override {
+        LOG(DEBUG) << "Initial read complete";
+        td::actor::send_closure(id_, &Indexer::sync_complete, handle);
+      }
+      void add_shard(ShardIdFull shard) override {
+        LOG(DEBUG) << "add_shard";
+        //        td::actor::send_closure(id_, &FullNodeImpl::add_shard, shard);
+      }
+      void del_shard(ShardIdFull shard) override {
+        LOG(DEBUG) << "del_shard";
+        //        td::actor::send_closure(id_, &FullNodeImpl::del_shard, shard);
+      }
+      void send_ihr_message(AccountIdPrefixFull dst, td::BufferSlice data) override {
+        LOG(DEBUG) << "send_ihr_message";
+        //        td::actor::send_closure(id_, &FullNodeImpl::send_ihr_message, dst, std::move(data));
+      }
+      void send_ext_message(AccountIdPrefixFull dst, td::BufferSlice data) override {
+        LOG(DEBUG) << "send_ext_message";
+        //        td::actor::send_closure(id_, &FullNodeImpl::send_ext_message, dst, std::move(data));
+      }
+      void send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) override {
+        LOG(DEBUG) << "send_shard_block_info";
+        //        td::actor::send_closure(id_, &FullNodeImpl::send_shard_block_info, block_id, cc_seqno, std::move(data));
+      }
+      void send_broadcast(BlockBroadcast broadcast) override {
+        LOG(DEBUG) << "send_broadcast";
+        //        td::actor::send_closure(id_, &FullNodeImpl::send_broadcast, std::move(broadcast));
+      }
+      void download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
+                          td::Promise<ReceivedBlock> promise) override {
+        LOG(DEBUG) << "download_block";
+        //        td::actor::send_closure(id_, &FullNodeImpl::download_block, id, priority, timeout, std::move(promise));
+      }
+      void download_zero_state(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
+                               td::Promise<td::BufferSlice> promise) override {
+        LOG(DEBUG) << "download_zero_state";
+        //        td::actor::send_closure(id_, &FullNodeImpl::download_zero_state, id, priority, timeout, std::move(promise));
+      }
+      void download_persistent_state(BlockIdExt id, BlockIdExt masterchain_block_id, td::uint32 priority,
+                                     td::Timestamp timeout, td::Promise<td::BufferSlice> promise) override {
+        LOG(DEBUG) << "download_persistent_state";
+        //        td::actor::send_closure(id_, &FullNodeImpl::download_persistent_state, id, masterchain_block_id, priority,
+        //                                timeout, std::move(promise));
+      }
+      void download_block_proof(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
+                                td::Promise<td::BufferSlice> promise) override {
+        LOG(DEBUG) << "download_block_proof";
+        //        td::actor::send_closure(id_, &FullNodeImpl::download_block_proof, block_id, priority, timeout,
+        //                                std::move(promise));
+      }
+      void download_block_proof_link(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
+                                     td::Promise<td::BufferSlice> promise) override {
+        LOG(DEBUG) << "download_block_proof_link";
+        //        td::actor::send_closure(id_, &FullNodeImpl::download_block_proof_link, block_id, priority, timeout,
+        //                                std::move(promise));
+      }
+      void get_next_key_blocks(BlockIdExt block_id, td::Timestamp timeout,
+                               td::Promise<std::vector<BlockIdExt>> promise) override {
+        LOG(DEBUG) << "get_next_key_blocks";
+        //        td::actor::send_closure(id_, &FullNodeImpl::get_next_key_blocks, block_id, timeout, std::move(promise));
+      }
+      void download_archive(BlockSeqno masterchain_seqno, std::string tmp_dir, td::Timestamp timeout,
+                            td::Promise<std::string> promise) override {
+        LOG(DEBUG) << "download_archive";
+        //        td::actor::send_closure(id_, &FullNodeImpl::download_archive, masterchain_seqno, std::move(tmp_dir), timeout,
+        //                                std::move(promise));
+      }
+
+      void new_key_block(BlockHandle handle) override {
+        LOG(DEBUG) << "new_key_block";
+        //        td::actor::send_closure(id_, &FullNodeImpl::new_key_block, std::move(handle));
+      }
+
+      Callback(td::actor::ActorId<Indexer> id) : id_(id) {
+      }
+
+     private:
+      td::actor::ActorId<Indexer> id_;
+    };
+
+    auto P_cb = td::PromiseCreator::lambda([](td::Unit R) {});
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::install_callback,
+                            std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
+    LOG(DEBUG) << "Callback installed";
+
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::set_async);
+    LOG(DEBUG) << "Async true";
+  }
+
+  void sync_complete(const BlockHandle &handle) {
+    for (auto &w : workers) {
+      auto P = td::PromiseCreator::lambda(
+          [SelfId = actor_id(this)](unsigned int s) { td::actor::send_closure(SelfId, &Indexer::shutdown_worker); });
+
+      td::actor::send_closure(w, &IndexerWorker::set_validator_actor, validator_manager_.get(), std::move(P));
+    }
+  }
+
 };  // namespace validator
 }  // namespace validator
 }  // namespace ton
@@ -1709,6 +1768,9 @@ int main(int argc, char **argv) {
           return td::Status::Error(ton::ErrorCode::error, "bad value for --threads: should be in range [1..256]");
         }
         threads = v;
+
+        td::actor::send_closure(indexer, &ton::validator::Indexer::set_threads, v);
+
         return td::Status::OK();
       });
 
