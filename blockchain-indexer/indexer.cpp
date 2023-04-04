@@ -1725,8 +1725,8 @@ class Indexer : public td::actor::Actor {
                             std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
     LOG(DEBUG) << "Callback installed";
 
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::set_async);
-    LOG(DEBUG) << "Async true";
+//    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::set_async);
+//    LOG(DEBUG) << "Async true";
   }
 
   void sync_complete(const BlockHandle &handle) {
