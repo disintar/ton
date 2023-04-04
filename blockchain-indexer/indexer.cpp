@@ -1584,6 +1584,7 @@ class Indexer : public td::actor::Actor {
     };
 
     auto per_thread = (unsigned int)ceil(blocks_size / s);
+    LOG(WARNING) << "Masterchain seqno per worker: " << per_thread;
 
     for (unsigned int i = 0; i < s; i++) {
       auto end = seqno_first + per_thread;
