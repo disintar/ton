@@ -1830,6 +1830,5 @@ int main(int argc, char **argv) {
   });
 
   scheduler.run();
-  scheduler.stop();
   return 0;
 }
