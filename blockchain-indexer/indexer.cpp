@@ -629,11 +629,10 @@ class IndexerWorker : public td::actor::Actor {
 
       chunk_current_ += 1;
       auto start = seqno_first_ + (chunk_size_ * (chunk_current_ - 1));
-      auto end = td::min(seqno_last_, seqno_first_ + (chunk_size_ * chunk_current_));
+      auto end = td::max(seqno_last_, seqno_first_ + (chunk_size_ * chunk_current_));
 
       if ((start - end == 0) | (start > end)) {
         LOG(WARNING) << "Total chunks parsed: " << chunk_current_ << " total: MC " << end;
-        LOG(WARNING) << "Block&State paddings reached 0; Dump json files;";
         shutdown();
       }
 
