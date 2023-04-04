@@ -1614,6 +1614,7 @@ class Indexer : public td::actor::Actor {
   }
 
   void run() {
+    LOG(WARNING) << "Go Jhonny, go";
     LOG(DEBUG) << "Use db root: " << db_root_;
     dumper_ = std::make_unique<Dumper>("dump_", 5000);
 
