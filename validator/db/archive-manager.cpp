@@ -632,10 +632,7 @@ void ArchiveManager::load_package(PackageId id) {
     }
   }
 
-  auto actor = td::actor::create_actor<ArchiveSlice>("slice", id.id, id.key, id.temp, false, db_root_, read_only_);
-  actor.release();
-
-  desc.file = actor.get();
+  desc.file = td::actor::create_actor<ArchiveSlice>("slice", id.id, id.key, id.temp, false, db_root_, read_only_);
 
   get_file_map(id).emplace(id, std::move(desc));
 }
@@ -668,10 +665,8 @@ validator::FileDescription *ArchiveManager::add_file_desc(ShardIdFull shard, Pac
   FileDescription desc{id, false};
   td::mkdir(db_root_ + id.path()).ensure();
   std::string prefix = PSTRING() << db_root_ << id.path() << id.name();
-  auto act = td::actor::create_actor<ArchiveSlice>("slice", id.id, id.key, id.temp, false, db_root_, read_only_);
-  act.release();
 
-  desc.file = act.get();
+  desc.file = td::actor::create_actor<ArchiveSlice>("slice", id.id, id.key, id.temp, false, db_root_, read_only_);
 
   if (!id.temp) {
     update_desc(desc, shard, seqno, ts, lt);
@@ -899,8 +894,7 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
                 LOG(WARNING) << index_it->second.max_seqno << " " << index_it->second.min_seqno << " " << seqno;
                 LOG(WARNING) << (index_it->second.max_seqno >= seqno) << " " << (index_it->second.min_seqno <= seqno);
 
-                auto a = it->second;
-                td::actor::send_closure(a.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
+                td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
                                         std::move(promise));
 
                 return;
@@ -926,8 +920,7 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
               LOG(WARNING) << (index_it->second.max_seqno >= seqno) << " " << (index_it->second.min_seqno <= seqno);
             }
 
-            auto a = it->second;
-            td::actor::send_closure(a.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
+            td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
                                     std::move(promise));
 
             return;
@@ -948,8 +941,7 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
           auto it2 = it->second.first_blocks.find(shard);
           if (it2 != it->second.first_blocks.end()) {
             if (it2->second.seqno <= seqno) {
-              auto a = it->second;
-              td::actor::send_closure(a.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
+              td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
                                       std::move(promise));
               return;
             }
@@ -970,8 +962,7 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
         if (it2 != it->second.first_blocks.end()) {
           if (it2->second.seqno <= seqno) {
             auto block = it2->second.seqno;
-            auto a = it->second;
-            td::actor::send_closure(a.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
+            td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
                                     std::move(promise));
             return;
           }
@@ -1382,7 +1373,7 @@ void ArchiveManager::truncate(BlockSeqno masterchain_seqno, ConstBlockHandle han
   for (auto &x : temp_files_) {
     if (!x.second.deleted) {
       td::actor::send_closure(x.second.file_actor_id(), &ArchiveSlice::destroy, ig.get_promise());
-      //      x.second.file.release();
+      x.second.file.release();
     }
   }
   temp_files_.clear();
@@ -1398,7 +1389,7 @@ void ArchiveManager::truncate(BlockSeqno masterchain_seqno, ConstBlockHandle han
         auto it2 = it;
         it++;
         td::actor::send_closure(it2->second.file_actor_id(), &ArchiveSlice::destroy, ig.get_promise());
-        //        it2->second.file.release();
+        it2->second.file.release();
         index_
             ->erase(create_serialize_tl_object<ton_api::db_files_package_key>(it2->second.id.id, it2->second.id.key,
                                                                               it2->second.id.temp)
@@ -1419,7 +1410,7 @@ void ArchiveManager::truncate(BlockSeqno masterchain_seqno, ConstBlockHandle han
         auto it2 = it;
         it++;
         td::actor::send_closure(it2->second.file_actor_id(), &ArchiveSlice::destroy, ig.get_promise());
-        //        it2->second.file.release();
+        it2->second.file.release();
         index_
             ->erase(create_serialize_tl_object<ton_api::db_files_package_key>(it2->second.id.id, it2->second.id.key,
                                                                               it2->second.id.temp)

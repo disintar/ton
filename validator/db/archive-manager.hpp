@@ -42,19 +42,19 @@ class FileDescription {
   FileDescription(PackageId id, bool deleted) : id(id), deleted(deleted) {
   }
   auto file_actor_id() const {
-    return file;
+    return file.get();
   }
   void clear_actor_id() {
-//    td::actor::send_closure(file, &ArchiveSlice::reset)
-//    file.reset();
+    file.reset();
   }
+
   bool has_account_prefix(AccountIdPrefixFull account_id) const;
   PackageId id;
   bool deleted;
 
   std::map<ShardIdFull, Desc> first_blocks;
   std::map<WorkchainId, MinMax> first_blocks_min_max_index;
-  td::actor::ActorId<ArchiveSlice> file;
+  td::actor::ActorOwn<ArchiveSlice> file;
 };
 
 class ArchiveManager : public td::actor::Actor {
