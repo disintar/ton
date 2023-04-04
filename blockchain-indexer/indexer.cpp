@@ -1594,14 +1594,18 @@ class Indexer : public td::actor::Actor {
     LOG(WARNING) << "Masterchain seqno per worker: " << per_thread;
 
     for (unsigned int i = 0; i < s; i++) {
+      auto start = seqno_first - 1;
+      if (i != 0){
+        start -= 1;
+      }
       auto end = seqno_first + per_thread;
       if ((end > seqno_last) | (i == s - 1)) {
         end = seqno_last;
       }
 
-      LOG(WARNING) << "Set for IndexerWorker #" + std::to_string(i) << " seqno start " << seqno_first - 1 << " seqno end "
+      LOG(WARNING) << "Set for IndexerWorker #" + std::to_string(i) << " seqno start " << start << " seqno end "
                    << end;
-      td::actor::send_closure(workers.at(i), &IndexerWorker::set_seqno_range, seqno_first - 1, end);
+      td::actor::send_closure(workers.at(i), &IndexerWorker::set_seqno_range, start, end);
       seqno_first += per_thread;
     }
   }
