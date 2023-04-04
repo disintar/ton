@@ -741,6 +741,19 @@ ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_seqno(ShardIdF
     }
   }
   LOG(WARNING) << "NOT FOUND: " << seqno;
+  for (auto it = f.rbegin(); it != f.rend(); it++) {
+    auto i = it->second.first_blocks.find(shard);
+    if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
+      if (it->second.deleted) {
+        return nullptr;
+      } else {
+        LOG(WARNING) << "NOT FOUND!" << it->second.max_seqno << " " << it->second.min_seqno << " " << seqno;
+        LOG(WARNING) << (it->second.max_seqno >= seqno) << " " << (it->second.min_seqno <= seqno);
+
+        return &it->second;
+      }
+    }
+  }
   return nullptr;
 }
 
