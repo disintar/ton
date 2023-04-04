@@ -596,11 +596,27 @@ void ArchiveManager::load_package(PackageId id) {
   }
 
   FileDescription desc{id, false};
+  BlockSeqno max_seqno = 0;
+  BlockSeqno min_seqno = 999999999;
+
   if (!id.temp) {
     for (auto &e : x->firstblocks_) {
-      desc.first_blocks[ShardIdFull{e->workchain_, static_cast<ShardId>(e->shard_)}] = FileDescription::Desc{
-          static_cast<BlockSeqno>(e->seqno_), static_cast<UnixTime>(e->unixtime_), static_cast<LogicalTime>(e->lt_)};
+      auto s = static_cast<BlockSeqno>(e->seqno_);
+
+      desc.first_blocks[ShardIdFull{e->workchain_, static_cast<ShardId>(e->shard_)}] =
+          FileDescription::Desc{s, static_cast<UnixTime>(e->unixtime_), static_cast<LogicalTime>(e->lt_)};
+
+      if (s > max_seqno) {
+        max_seqno = s;
+      }
+
+      if (s < min_seqno) {
+        min_seqno = s;
+      }
     }
+
+    desc.max_seqno = max_seqno;
+    desc.min_seqno = min_seqno;
   }
 
   desc.file = td::actor::create_actor<ArchiveSlice>("slice", id.id, id.key, id.temp, false, db_root_, read_only_);
@@ -709,12 +725,14 @@ ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_seqno(ShardIdF
   LOG(WARNING) << "GET file desc by seqno: shard " << shard.to_str() << " seqno: " << seqno;
   auto &f = get_file_map(PackageId{0, key_block, false});
   for (auto it = f.rbegin(); it != f.rend(); it++) {
-    auto i = it->second.first_blocks.find(shard);
-    if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
-      if (it->second.deleted) {
-        return nullptr;
-      } else {
-        return &it->second;
+    if (it->second.max_seqno < seqno || it->second.min_seqno > seqno) {
+      auto i = it->second.first_blocks.find(shard);
+      if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
+        if (it->second.deleted) {
+          return nullptr;
+        } else {
+          return &it->second;
+        }
       }
     }
   }
