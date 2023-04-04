@@ -1771,7 +1771,7 @@ int main(int argc, char **argv) {
   p.add_option('C', "config", "global config path", [&](td::Slice fname) {
     td::actor::send_closure(indexer, &ton::validator::Indexer::set_global_config_path, fname.str());
   });
-  td::uint32 threads = 24;
+  td::uint32 threads = 120;
   p.add_checked_option(
       't', "threads", PSTRING() << "number of threads (default=" << threads << ")", [&](td::Slice arg) {
         td::uint32 v;
