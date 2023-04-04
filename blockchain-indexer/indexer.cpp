@@ -1827,6 +1827,8 @@ int main(int argc, char **argv) {
     td::actor::create_actor<ton::validator::Indexer>("CoolBlockIndexer", threads, db_root, config_path, size,
                                                      seqno_first, seqno_last, speed)
         .release();
+
+    return td::Status::OK();
   });
 
   scheduler.run();
