@@ -617,6 +617,7 @@ void ArchiveManager::load_package(PackageId id) {
 
     desc.max_seqno = max_seqno;
     desc.min_seqno = min_seqno;
+    LOG(WARNING) << "Set max_seqno: " << max_seqno << " min_seqno: " << min_seqno;
   }
 
   desc.file = td::actor::create_actor<ArchiveSlice>("slice", id.id, id.key, id.temp, false, db_root_, read_only_);
