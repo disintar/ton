@@ -1585,7 +1585,7 @@ class Indexer : public td::actor::Actor {
 
     auto per_thread = (unsigned int)ceil(blocks_size / s);
 
-    for (unsigned int i; i < s; i++) {
+    for (unsigned int i = 0; i < s; i++) {
       auto end = seqno_first + per_thread;
       if (end > seqno_last) {
         end = seqno_last;
