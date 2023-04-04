@@ -737,7 +737,7 @@ void ArchiveManager::update_desc(FileDescription &desc, ShardIdFull shard, Block
 
 validator::FileDescription *ArchiveManager::get_file_desc_by_seqno(ShardIdFull shard, BlockSeqno seqno,
                                                                    bool key_block) {
-//  LOG(WARNING) << "GET file desc by seqno: shard " << shard.to_str() << " seqno: " << seqno;
+  //  LOG(WARNING) << "GET file desc by seqno: shard " << shard.to_str() << " seqno: " << seqno;
   auto &f = get_file_map(PackageId{0, key_block, false});
   for (auto it = f.rbegin(); it != f.rend(); it++) {
     auto index_it = it->second.first_blocks_min_max_index.find(shard.workchain);
@@ -879,23 +879,18 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
   auto ff = [seqno, account, &f](td::Promise<ConstBlockHandle> promise) mutable {
     if (account.is_masterchain()) {
       auto shard = ShardIdFull{masterchainId};
-//      LOG(WARNING) << "GET file desc by seqno: shard " << shard.to_str() << " seqno: " << seqno;
+      //      LOG(WARNING) << "GET file desc by seqno: shard " << shard.to_str() << " seqno: " << seqno;
 
       for (auto it = f.rbegin(); it != f.rend(); it++) {
-        auto index_it = it->second.first_blocks_min_max_index.find(account.workchain);
-        if (index_it != it->second.first_blocks_min_max_index.end()) {
-          if (index_it->second.max_seqno >= seqno) {
-            auto i = it->second.first_blocks.find(shard);
-            if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
-              if (it->second.deleted) {
-                break;
-              } else {
-                auto block = i->second.seqno;
-                td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
-                                        std::move(promise));
-                return;
-              }
-            }
+        auto i = it->second.first_blocks.find(shard);
+        if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
+          if (it->second.deleted) {
+            break;
+          } else {
+            auto block = i->second.seqno;
+            td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
+                                    std::move(promise));
+            return;
           }
         }
       }
@@ -907,24 +902,19 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
 
     for (auto it = f.rbegin(); it != f.rend(); it++) {
       bool found = false;
-      auto index_it = it->second.first_blocks_min_max_index.find(account.workchain);
-      if (index_it != it->second.first_blocks_min_max_index.end()) {
-        if (index_it->second.max_seqno >= seqno) {
-          for (int i = 0; i < 60; i++) {
-            auto shard = shard_prefix(account, i);
-            auto it2 = it->second.first_blocks.find(shard);
-            if (it2 != it->second.first_blocks.end()) {
-              if (it2->second.seqno <= seqno) {
-                auto block = it2->second.seqno;
-                td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
-                                        std::move(promise));
-                return;
-              }
-              found = true;
-            } else if (found) {
-              break;
-            }
+      for (int i = 0; i < 60; i++) {
+        auto shard = shard_prefix(account, i);
+        auto it2 = it->second.first_blocks.find(shard);
+        if (it2 != it->second.first_blocks.end()) {
+          if (it2->second.seqno <= seqno) {
+            auto block = it2->second.seqno;
+            td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
+                                    std::move(promise));
+            return;
           }
+          found = true;
+        } else if (found) {
+          break;
         }
       }
     }
