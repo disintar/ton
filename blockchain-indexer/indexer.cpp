@@ -1787,8 +1787,6 @@ int main(int argc, char **argv) {
         }
         threads = v;
 
-        td::actor::send_closure(indexer, &ton::validator::Indexer::set_threads, v);
-
         return td::Status::OK();
       });
 
@@ -1825,6 +1823,8 @@ int main(int argc, char **argv) {
   td::actor::Scheduler scheduler({threads});  // contans a bug: threads not initialized by OptionsParser
   scheduler.run_in_context([&] { indexer = td::actor::create_actor<ton::validator::Indexer>("cool"); });
   scheduler.run_in_context([&] {
+    td::actor::send_closure(indexer, &ton::validator::Indexer::set_threads, threads);
+
     td::actor::send_closure(indexer, &ton::validator::Indexer::set_db_root, db_root);
 
     td::actor::send_closure(indexer, &ton::validator::Indexer::set_global_config_path, config_path);
