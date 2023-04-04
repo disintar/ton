@@ -629,7 +629,7 @@ class IndexerWorker : public td::actor::Actor {
 
       chunk_current_ += 1;
       auto start = seqno_first_ + (chunk_size_ * (chunk_current_ - 1));
-      auto end = td::max(seqno_last_, seqno_first_ + (chunk_size_ * chunk_current_));
+      auto end = td::min(seqno_last_, seqno_first_ + (chunk_size_ * chunk_current_));
 
       if ((start - end == 0) | (start > end)) {
         LOG(WARNING) << "Total chunks parsed: " << chunk_current_ << " total: MC " << end;
@@ -637,6 +637,9 @@ class IndexerWorker : public td::actor::Actor {
       }
 
       LOG(WARNING) << "Process chunk (" << chunk_current_ << ") From: " << start << " To: " << end;
+      if (chunk_current_ == chunk_count_) {
+        end = seqno_last_;
+      }
 
       for (auto seqno = start + 1; seqno <= end - 1; ++seqno) {
         auto P = td::PromiseCreator::lambda(
