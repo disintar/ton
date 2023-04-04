@@ -882,15 +882,18 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
       LOG(WARNING) << "GET file desc by seqno: shard " << shard.to_str() << " seqno: " << seqno;
 
       for (auto it = f.rbegin(); it != f.rend(); it++) {
-        auto i = it->second.first_blocks.find(shard);
-        if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
-          if (it->second.deleted) {
-            break;
-          } else {
-            auto block = i->second.seqno;
-            td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
-                                    std::move(promise));
-            return;
+        auto index_it = it->second.first_blocks_min_max_index.find(account.workchain);
+        if (index_it != it->second.first_blocks_min_max_index.end()) {
+          auto i = it->second.first_blocks.find(shard);
+          if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
+            if (it->second.deleted) {
+              break;
+            } else {
+              auto block = i->second.seqno;
+              td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
+                                      std::move(promise));
+              return;
+            }
           }
         }
       }
