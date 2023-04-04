@@ -747,7 +747,8 @@ ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_seqno(ShardIdF
       if (it->second.deleted) {
         return nullptr;
       } else {
-        LOG(WARNING) << "NOT FOUND!" << it->second.max_seqno << " " << it->second.min_seqno << " " << seqno;
+        LOG(WARNING) << "NOT FOUND!" << it->second.max_seqno << " " << it->second.min_seqno << " " << seqno
+                     << " CONTAINS: " << i->second.seqno;
         LOG(WARNING) << (it->second.max_seqno >= seqno) << " " << (it->second.min_seqno <= seqno);
 
         return &it->second;
