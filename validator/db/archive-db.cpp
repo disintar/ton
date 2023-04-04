@@ -195,7 +195,7 @@ UnixTime ArchiveManager::convert_ts(UnixTime ts, bool key_block) {
   }
 }
 
-ArchiveManager::FileDescription *ArchiveManager::get_file(UnixTime ts, bool key_block, bool force) {
+validator::FileDescription *ArchiveManager::get_file(UnixTime ts, bool key_block, bool force) {
   ts = convert_ts(ts, key_block);
   auto &f = key_block ? key_files_ : files_;
   auto it = f.find(ts);
@@ -209,7 +209,7 @@ ArchiveManager::FileDescription *ArchiveManager::get_file(UnixTime ts, bool key_
   return add_file(ts, key_block);
 }
 
-ArchiveManager::FileDescription *ArchiveManager::add_file(UnixTime ts, bool key_block) {
+validator::FileDescription *ArchiveManager::add_file(UnixTime ts, bool key_block) {
   CHECK((key_block ? key_files_ : files_).count(ts) == 0);
   index_->begin_transaction().ensure();
   {
@@ -294,7 +294,7 @@ void ArchiveManager::update_desc(FileDescription &desc, ShardIdFull shard, Block
   index_->commit_transaction().ensure();
 }
 
-ArchiveManager::FileDescription *ArchiveManager::get_file_by_seqno(ShardIdFull shard, BlockSeqno seqno,
+validator::FileDescription *ArchiveManager::get_file_by_seqno(ShardIdFull shard, BlockSeqno seqno,
                                                                    bool key_block) {
   auto &f = (key_block ? key_files_ : files_);
 

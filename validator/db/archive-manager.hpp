@@ -26,9 +26,40 @@ namespace validator {
 
 class RootDb;
 
+class FileDescription {
+ public:
+  struct Desc {
+    BlockSeqno seqno;
+    UnixTime ts;
+    LogicalTime lt;
+  };
+
+  struct MinMax {
+    BlockSeqno max_seqno;
+    BlockSeqno min_seqno;
+  };
+
+  FileDescription(PackageId id, bool deleted) : id(id), deleted(deleted) {
+  }
+  auto file_actor_id() const {
+    return file;
+  }
+  void clear_actor_id() {
+//    td::actor::send_closure(file, &ArchiveSlice::reset)
+//    file.reset();
+  }
+  bool has_account_prefix(AccountIdPrefixFull account_id) const;
+  PackageId id;
+  bool deleted;
+
+  std::map<ShardIdFull, Desc> first_blocks;
+  std::map<WorkchainId, MinMax> first_blocks_min_max_index;
+  td::actor::ActorId<ArchiveSlice> file;
+};
+
 class ArchiveManager : public td::actor::Actor {
  public:
-  ArchiveManager(td::actor::ActorId<RootDb> root, std::string db_root, bool read_only=false);
+  ArchiveManager(td::actor::ActorId<RootDb> root, std::string db_root, bool read_only = false);
 
   void add_handle(BlockHandle handle, td::Promise<td::Unit> promise);
   void update_handle(BlockHandle handle, td::Promise<td::Unit> promise);
@@ -46,8 +77,7 @@ class ArchiveManager : public td::actor::Actor {
   void add_persistent_state(BlockIdExt block_id, BlockIdExt masterchain_block_id, td::BufferSlice data,
                             td::Promise<td::Unit> promise);
   void add_persistent_state_gen(BlockIdExt block_id, BlockIdExt masterchain_block_id,
-                                std::function<td::Status(td::FileFd&)> write_state,
-                                td::Promise<td::Unit> promise);
+                                std::function<td::Status(td::FileFd &)> write_state, td::Promise<td::Unit> promise);
   void get_zero_state(BlockIdExt block_id, td::Promise<td::BufferSlice> promise);
   void get_persistent_state(BlockIdExt block_id, BlockIdExt masterchain_block_id, td::Promise<td::BufferSlice> promise);
   void get_persistent_state_slice(BlockIdExt block_id, BlockIdExt masterchain_block_id, td::int64 offset,
@@ -83,36 +113,6 @@ class ArchiveManager : public td::actor::Actor {
   }
 
  private:
-  struct FileDescription {
-    struct Desc {
-      BlockSeqno seqno;
-      UnixTime ts;
-      LogicalTime lt;
-    };
-
-    struct MinMax{
-      BlockSeqno max_seqno;
-      BlockSeqno min_seqno;
-    };
-
-    FileDescription(PackageId id, bool deleted) : id(id), deleted(deleted) {
-    }
-    auto file_actor_id() const {
-      return file.get();
-    }
-    void clear_actor_id() {
-      file.reset();
-    }
-    bool has_account_prefix(AccountIdPrefixFull account_id) const;
-    PackageId id;
-    bool deleted;
-
-    std::map<ShardIdFull, Desc> first_blocks;
-    std::map<WorkchainId, MinMax> first_blocks_min_max_index;
-    td::actor::ActorOwn<ArchiveSlice> file;
-
-  };
-
   std::map<PackageId, FileDescription> files_;
   std::map<PackageId, FileDescription> key_files_;
   std::map<PackageId, FileDescription> temp_files_;
@@ -120,6 +120,7 @@ class ArchiveManager : public td::actor::Actor {
   bool async_mode_ = false;
   bool huge_transaction_started_ = false;
   td::uint32 huge_transaction_size_ = 0;
+
 
   auto &get_file_map(const PackageId &p) {
     return p.key ? key_files_ : p.temp ? temp_files_ : files_;
@@ -133,6 +134,8 @@ class ArchiveManager : public td::actor::Actor {
   void get_handle_cont(BlockIdExt block_id, PackageId id, td::Promise<BlockHandle> promise);
   void get_handle_finish(BlockHandle handle, td::Promise<BlockHandle> promise);
   void get_file_short_cont(FileReference ref_id, PackageId idx, td::Promise<td::BufferSlice> promise);
+  void get_file_desc_by_seqno_async(AccountIdPrefixFull shard, BlockSeqno seqno, bool key_block,
+                                    td::Promise<validator::FileDescription> promise);
 
   FileDescription *get_file_desc(ShardIdFull shard, PackageId id, BlockSeqno seqno, UnixTime ts, LogicalTime lt,
                                  bool force);
