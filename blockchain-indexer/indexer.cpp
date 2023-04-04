@@ -285,8 +285,8 @@ class StateIndexer : public td::actor::Actor {
 
  public:
   StateIndexer(std::string block_id_string_, vm::Ref<vm::Cell> root_cell_, std::vector<td::Bits256> accounts_keys_,
-               BlockIdExt block_id_, std::unique_ptr<Dumper> &dumper, td::Promise<td::int32> dec_promise_) {
-    dumper_ = dumper.get();
+               BlockIdExt block_id_, Dumper *dumper, td::Promise<td::int32> dec_promise_) {
+    dumper_ = dumper;
     block_id = block_id_;
     block_id_string = std::move(block_id_string_);
     total_accounts = accounts_keys_.size();
@@ -552,7 +552,8 @@ class IndexerWorker : public td::actor::Actor {
   td::uint32 chunk_count_ = 0;
   td::uint32 chunk_current_ = 0;
   std::mutex display_mtx_;
-  std::unique_ptr<Dumper> dumper_;
+  Dumper *dumper_;
+  ;
 
   std::map<BlockIdExt, json> pending_blocks_;
   std::map<BlockIdExt, td::uint64> pending_blocks_size_;
@@ -580,9 +581,10 @@ class IndexerWorker : public td::actor::Actor {
   void set_display_speed(bool display_speed) {
     display_speed_ = display_speed;
   }
-  void set_validator_actor(td::actor::ActorId<ton::validator::ValidatorManagerInterface> v,
-                           td::Promise<unsigned int> promise) {
+  void set_initial_data(td::actor::ActorId<ton::validator::ValidatorManagerInterface> v,
+                        td::Promise<unsigned int> promise, Dumper *dumper) {
     validator_manager_ = std::move(v);
+    dumper_ = dumper;
     shutdown_promise = std::move(promise);
 
     // separate first parse seqno to prevent WC shard seqno leak
@@ -1484,6 +1486,7 @@ class Indexer : public td::actor::Actor {
   std::string global_config_;
   std::mutex display_mtx_;
   td::uint32 chunk_size_ = 20000;
+  std::unique_ptr<Dumper> dumper_;
 
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
   td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
@@ -1606,6 +1609,7 @@ class Indexer : public td::actor::Actor {
 
   void run() {
     LOG(DEBUG) << "Use db root: " << db_root_;
+    dumper_ = std::make_unique<Dumper>("dump_", 5000);
 
     auto Sr = create_validator_options();
     if (Sr.is_error()) {
@@ -1720,7 +1724,7 @@ class Indexer : public td::actor::Actor {
       auto P = td::PromiseCreator::lambda(
           [SelfId = actor_id(this)](unsigned int s) { td::actor::send_closure(SelfId, &Indexer::shutdown_worker); });
 
-      td::actor::send_closure(w, &IndexerWorker::set_validator_actor, validator_manager_.get(), std::move(P));
+      td::actor::send_closure(w, &IndexerWorker::set_initial_data, validator_manager_.get(), std::move(P), dumper_.get());
     }
   }
 
