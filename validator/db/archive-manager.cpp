@@ -726,7 +726,7 @@ ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_seqno(ShardIdF
   LOG(WARNING) << "GET file desc by seqno: shard " << shard.to_str() << " seqno: " << seqno;
   auto &f = get_file_map(PackageId{0, key_block, false});
   for (auto it = f.rbegin(); it != f.rend(); it++) {
-    if ((it->second.max_seqno >= seqno) && (it->second.min_seqno <= seqno)) {
+    if ((it->second.min_seqno >= seqno)) {
       auto i = it->second.first_blocks.find(shard);
       if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
         if (it->second.deleted) {
@@ -798,7 +798,7 @@ ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_seqno(AccountI
     return get_file_desc_by_seqno(ShardIdFull{masterchainId}, seqno, key_block);
   }
   for (auto it = f.rbegin(); it != f.rend(); it++) {
-    if ((it->second.max_seqno >= seqno) && (it->second.min_seqno <= seqno)) {
+    if ((it->second.min_seqno >= seqno)) {
       bool found = false;
       for (int i = 0; i < 60; i++) {
         auto shard = shard_prefix(account, i);
