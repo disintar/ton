@@ -1568,7 +1568,10 @@ class Indexer : public td::actor::Actor {
               } else {
                 auto handle = R.move_as_ok();
                 LOG(DEBUG) << "got block from db " << handle->id().to_str();
-                td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle, true);
+                td::actor::send_closure_later(SelfId, &Indexer::got_block_handle, handle, false);
+
+                LOG(DEBUG) << "Start parse other";
+                td::actor::send_closure(SelfId, &Indexer::parse_other);
               }
             });
 
