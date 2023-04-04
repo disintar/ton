@@ -596,28 +596,35 @@ void ArchiveManager::load_package(PackageId id) {
   }
 
   FileDescription desc{id, false};
-  BlockSeqno max_seqno = 0;
-  BlockSeqno min_seqno = 0;
 
   if (!id.temp) {
     for (auto &e : x->firstblocks_) {
       auto s = static_cast<BlockSeqno>(e->seqno_);
+      auto wc = e->workchain_;
 
-      desc.first_blocks[ShardIdFull{e->workchain_, static_cast<ShardId>(e->shard_)}] =
+      desc.first_blocks[ShardIdFull{wc, static_cast<ShardId>(e->shard_)}] =
           FileDescription::Desc{s, static_cast<UnixTime>(e->unixtime_), static_cast<LogicalTime>(e->lt_)};
 
-      if (max_seqno == 0 || s > max_seqno) {
-        max_seqno = s;
-      }
+      auto it = desc.first_blocks_min_max_index.find(wc);
+      if (it != desc.first_blocks_min_max_index.end()) {
+        auto minmax = it->second;
 
-      if (min_seqno == 0 || s < min_seqno) {
-        min_seqno = s;
+        if (minmax.max_seqno == 0 || s > minmax.max_seqno) {
+          minmax.max_seqno = s;
+        }
+
+        if (minmax.min_seqno == 0 || s < minmax.min_seqno) {
+          minmax.min_seqno = s;
+        }
+      } else {
+        desc.first_blocks_min_max_index[wc] = FileDescription::MinMax{s, s};
       }
     }
 
-    desc.max_seqno = max_seqno;
-    desc.min_seqno = min_seqno;
-    LOG(WARNING) << "Set max_seqno: " << max_seqno << " min_seqno: " << min_seqno;
+    for (std::pair<WorkchainId, FileDescription::MinMax> ii : desc.first_blocks_min_max_index) {
+      LOG(WARNING) << "WORKCHAIN: " << ii.first << "Set max_seqno: " << ii.second.max_seqno
+                   << " min_seqno: " << ii.second.min_seqno;
+    }
   }
 
   desc.file = td::actor::create_actor<ArchiveSlice>("slice", id.id, id.key, id.temp, false, db_root_, read_only_);
@@ -726,16 +733,19 @@ ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_seqno(ShardIdF
   LOG(WARNING) << "GET file desc by seqno: shard " << shard.to_str() << " seqno: " << seqno;
   auto &f = get_file_map(PackageId{0, key_block, false});
   for (auto it = f.rbegin(); it != f.rend(); it++) {
-    if ((it->second.min_seqno >= seqno)) {
-      auto i = it->second.first_blocks.find(shard);
-      if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
-        if (it->second.deleted) {
-          return nullptr;
-        } else {
-          LOG(WARNING) << it->second.max_seqno << " " << it->second.min_seqno << " " << seqno;
-          LOG(WARNING) << (it->second.max_seqno >= seqno) << " " << (it->second.min_seqno <= seqno);
+    auto index_it = it->second.first_blocks_min_max_index.find(shard.workchain);
+    if (index_it != it->second.first_blocks_min_max_index.end()) {
+      if ((index_it->second.max_seqno >= seqno) && (index_it->second.min_seqno <= seqno)) {
+        auto i = it->second.first_blocks.find(shard);
+        if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
+          if (it->second.deleted) {
+            return nullptr;
+          } else {
+            LOG(WARNING) << index_it->second.max_seqno << " " << index_it->second.min_seqno << " " << seqno;
+            LOG(WARNING) << (index_it->second.max_seqno >= seqno) << " " << (index_it->second.min_seqno <= seqno);
 
-          return &it->second;
+            return &it->second;
+          }
         }
       }
     }
@@ -748,10 +758,13 @@ ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_seqno(ShardIdF
         return nullptr;
       } else {
         auto block = i->second.seqno;
-        LOG(WARNING) << "NOT FOUND!" << it->second.max_seqno << " " << it->second.min_seqno << " " << seqno
-                     << " CONTAINS: " << block << " " << (block <= seqno);
-        LOG(WARNING) << (it->second.max_seqno >= seqno) << " " << (it->second.min_seqno <= seqno);
 
+        auto index_it = it->second.first_blocks_min_max_index.find(shard.workchain);
+        if (index_it != it->second.first_blocks_min_max_index.end()) {
+          LOG(WARNING) << "NOT FOUND!" << index_it->second.max_seqno << " " << index_it->second.min_seqno << " " << seqno
+                       << " CONTAINS: " << block << " " << (block <= seqno);
+          LOG(WARNING) << (index_it->second.max_seqno >= seqno) << " " << (index_it->second.min_seqno <= seqno);
+        }
         return &it->second;
       }
     }
@@ -797,25 +810,25 @@ ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_seqno(AccountI
   if (account.is_masterchain()) {
     return get_file_desc_by_seqno(ShardIdFull{masterchainId}, seqno, key_block);
   }
-  for (auto it = f.rbegin(); it != f.rend(); it++) {
-    if ((it->second.min_seqno >= seqno)) {
-      bool found = false;
-      for (int i = 0; i < 60; i++) {
-        auto shard = shard_prefix(account, i);
-        auto it2 = it->second.first_blocks.find(shard);
-        if (it2 != it->second.first_blocks.end()) {
-          if (it2->second.seqno <= seqno) {
-            return &it->second;
-          }
-          found = true;
-        } else if (found) {
-          break;
-        }
-      }
-    }
-  }
-
-  LOG(ERROR) << "NOT FOUND: " << seqno;
+//  for (auto it = f.rbegin(); it != f.rend(); it++) {
+//    if ((it->second.min_seqno <= seqno)) {
+//      bool found = false;
+//      for (int i = 0; i < 60; i++) {
+//        auto shard = shard_prefix(account, i);
+//        auto it2 = it->second.first_blocks.find(shard);
+//        if (it2 != it->second.first_blocks.end()) {
+//          if (it2->second.seqno <= seqno) {
+//            return &it->second;
+//          }
+//          found = true;
+//        } else if (found) {
+//          break;
+//        }
+//      }
+//    }
+//  }
+//
+//  LOG(ERROR) << "NOT FOUND: " << seqno;
   for (auto it = f.rbegin(); it != f.rend(); it++) {
     bool found = false;
     for (int i = 0; i < 60; i++) {
@@ -824,10 +837,6 @@ ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_seqno(AccountI
       if (it2 != it->second.first_blocks.end()) {
         if (it2->second.seqno <= seqno) {
           auto block = it2->second.seqno;
-          LOG(WARNING) << "NOT FOUND!" << it->second.max_seqno << " " << it->second.min_seqno << " " << seqno
-                       << " CONTAINS: " << block << " " << (block <= seqno);
-          LOG(WARNING) << (it->second.max_seqno >= seqno) << " " << (it->second.min_seqno <= seqno);
-
           return &it->second;
         }
         found = true;

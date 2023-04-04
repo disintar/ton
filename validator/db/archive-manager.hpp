@@ -89,6 +89,12 @@ class ArchiveManager : public td::actor::Actor {
       UnixTime ts;
       LogicalTime lt;
     };
+
+    struct MinMax{
+      BlockSeqno max_seqno;
+      BlockSeqno min_seqno;
+    };
+
     FileDescription(PackageId id, bool deleted) : id(id), deleted(deleted) {
     }
     auto file_actor_id() const {
@@ -102,9 +108,9 @@ class ArchiveManager : public td::actor::Actor {
     bool deleted;
 
     std::map<ShardIdFull, Desc> first_blocks;
+    std::map<WorkchainId, MinMax> first_blocks_min_max_index;
     td::actor::ActorOwn<ArchiveSlice> file;
-    BlockSeqno max_seqno = 999999999;
-    BlockSeqno min_seqno = -1;
+
   };
 
   std::map<PackageId, FileDescription> files_;
