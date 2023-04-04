@@ -1531,6 +1531,8 @@ class Indexer : public td::actor::Actor {
       td::actor::send_closure(workers.at(i), &IndexerWorker::set_seqno_range, start, end);
       seqno_first += per_thread;
     }
+
+    LOG(WARNING) << "Blockchain indexer setup success;";
   }
 
  private:
