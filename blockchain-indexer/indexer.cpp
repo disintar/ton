@@ -140,6 +140,10 @@ class Dumper {
 
  public:
   void dump() {
+    if (joined.empty()) {
+      return;
+    }
+
     std::lock_guard lock(dump_mtx);
 
     const auto dumped_amount = joined.size();
@@ -215,6 +219,9 @@ class Dumper {
 
     const auto lone_blocks_amount = blocks.size();
     const auto lone_states_amount = states.size();
+    if (lone_blocks_amount == 0 & lone_states_amount == 0) {
+      return;
+    }
 
     auto to_dump_ids = json::array();
 
@@ -627,8 +634,6 @@ class IndexerWorker : public td::actor::Actor {
       if ((start - end == 0) | (start > end)) {
         LOG(WARNING) << "Total chunks parsed: " << chunk_current_ << " total: MC " << end;
         LOG(WARNING) << "Block&State paddings reached 0; Dump json files;";
-        dumper_->forceDump();
-
         shutdown();
       }
 
@@ -1405,8 +1410,6 @@ class IndexerWorker : public td::actor::Actor {
                                 std::move(P));
       } else {
         LOG(WARNING) << "Block&State paddings reached 0; Dump json files;";
-        dumper_->forceDump();
-
         shutdown();
       }
     }
@@ -1570,6 +1573,7 @@ class Indexer : public td::actor::Actor {
       LOG(INFO) << "Ready to die";
       ///TODO: danger danger
       LOG(WARNING) << "Calling std::exit(0)";
+      dumper_->forceDump();
       std::exit(0);
     }
   }
@@ -1724,7 +1728,8 @@ class Indexer : public td::actor::Actor {
       auto P = td::PromiseCreator::lambda(
           [SelfId = actor_id(this)](unsigned int s) { td::actor::send_closure(SelfId, &Indexer::shutdown_worker); });
 
-      td::actor::send_closure(w, &IndexerWorker::set_initial_data, validator_manager_.get(), std::move(P), dumper_.get());
+      td::actor::send_closure(w, &IndexerWorker::set_initial_data, validator_manager_.get(), std::move(P),
+                              dumper_.get());
     }
   }
 
