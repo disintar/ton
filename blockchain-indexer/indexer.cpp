@@ -1740,8 +1740,6 @@ class Indexer : public td::actor::Actor {
 }  // namespace validator
 }  // namespace ton
 
-td::actor::ActorOwn<ton::validator::Indexer> indexer;
-
 int main(int argc, char **argv) {
   SET_VERBOSITY_LEVEL(verbosity_DEBUG);
 
@@ -1826,10 +1824,9 @@ int main(int argc, char **argv) {
     ++pos;
     TRY_RESULT(seqno_last, td::to_integer_safe<ton::BlockSeqno>(seqno.substr(pos, seqno.size())));
 
-    indexer = td::actor::create_actor<ton::validator::Indexer>(td::actor::ActorOptions().with_name("CoolBlockIndexer"),
+    td::actor::create_actor<ton::validator::Indexer>(td::actor::ActorOptions().with_name("CoolBlockIndexer"),
                                                                threads, db_root, config_path, size, seqno_first,
-                                                               seqno_last, speed);
-    indexer.release();
+                                                               seqno_last, speed).release();
   });
 
   scheduler.run();
