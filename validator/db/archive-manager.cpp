@@ -737,7 +737,7 @@ void ArchiveManager::update_desc(FileDescription &desc, ShardIdFull shard, Block
 
 validator::FileDescription *ArchiveManager::get_file_desc_by_seqno(ShardIdFull shard, BlockSeqno seqno,
                                                                    bool key_block) {
-  LOG(WARNING) << "GET file desc by seqno: shard " << shard.to_str() << " seqno: " << seqno;
+//  LOG(WARNING) << "GET file desc by seqno: shard " << shard.to_str() << " seqno: " << seqno;
   auto &f = get_file_map(PackageId{0, key_block, false});
   for (auto it = f.rbegin(); it != f.rend(); it++) {
     auto index_it = it->second.first_blocks_min_max_index.find(shard.workchain);
@@ -879,7 +879,7 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
   auto ff = [seqno, account, &f](td::Promise<ConstBlockHandle> promise) mutable {
     if (account.is_masterchain()) {
       auto shard = ShardIdFull{masterchainId};
-      LOG(WARNING) << "GET file desc by seqno: shard " << shard.to_str() << " seqno: " << seqno;
+//      LOG(WARNING) << "GET file desc by seqno: shard " << shard.to_str() << " seqno: " << seqno;
 
       for (auto it = f.rbegin(); it != f.rend(); it++) {
         auto index_it = it->second.first_blocks_min_max_index.find(account.workchain);
