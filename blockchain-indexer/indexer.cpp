@@ -1725,8 +1725,8 @@ class Indexer : public td::actor::Actor {
                             std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
     LOG(DEBUG) << "Callback installed";
 
-//    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::set_async);
-//    LOG(DEBUG) << "Async true";
+    //    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::set_async);
+    //    LOG(DEBUG) << "Async true";
   }
 
   void sync_complete(const BlockHandle &handle) {
@@ -1751,6 +1751,12 @@ int main(int argc, char **argv) {
   CHECK(vm::init_op_cp0());
 
   td::OptionParser p;
+  std::string db_root;
+  std::string config_path;
+  std::string chunk_size;
+  std::string seqno;
+  bool speed;
+
   p.set_description("blockchain indexer");
   p.add_option('h', "help", "prints_help", [&]() {
     char b[10240];
@@ -1765,13 +1771,9 @@ int main(int argc, char **argv) {
     return (verbosity >= 0 && verbosity <= 9) ? td::Status::OK() : td::Status::Error("verbosity must be 0..9");
   });
   p.add_checked_option('u', "user", "change user", [&](td::Slice user) { return td::change_user(user.str()); });
-  p.add_option('D', "db", "root for dbs", [&](td::Slice fname) {
-    td::actor::send_closure(indexer, &ton::validator::Indexer::set_db_root, fname.str());
-  });
-  p.add_option('C', "config", "global config path", [&](td::Slice fname) {
-    td::actor::send_closure(indexer, &ton::validator::Indexer::set_global_config_path, fname.str());
-  });
-  td::uint32 threads = 120;
+  p.add_option('D', "db", "root for dbs", [&](td::Slice fname) { db_root = fname.str(); });
+  p.add_option('C', "config", "global config path", [&](td::Slice fname) { config_path = fname.str(); });
+  td::uint32 threads = 7;
   p.add_checked_option(
       't', "threads", PSTRING() << "number of threads (default=" << threads << ")", [&](td::Slice arg) {
         td::uint32 v;
@@ -1792,40 +1794,57 @@ int main(int argc, char **argv) {
 
   p.add_checked_option('c', "chunk-size", PSTRING() << "number of blocks per chunk (default=20000)",
                        [&](td::Slice arg) {
-                         TRY_RESULT(size, td::to_integer_safe<ton::BlockSeqno>(arg.str()));
-                         td::actor::send_closure(indexer, &ton::validator::Indexer::set_chunk_size, size);
+                         chunk_size = arg.str();
                          return td::Status::OK();
                        });
 
   p.add_checked_option('s', "seqno", "seqno_first[:seqno_last]\tseqno range", [&](td::Slice arg) {
-    auto pos = std::min(arg.find(':'), arg.size());
-    TRY_RESULT(seqno_first, td::to_integer_safe<ton::BlockSeqno>(arg.substr(0, pos)));
-    ++pos;
-    if (pos >= arg.size()) {
-      td::actor::send_closure(indexer, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_first);
-      return td::Status::OK();
-    }
-    TRY_RESULT(seqno_last, td::to_integer_safe<ton::BlockSeqno>(arg.substr(pos, arg.size())));
-    td::actor::send_closure(indexer, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_last);
+    seqno = arg.str();
     return td::Status::OK();
   });
   p.add_checked_option('S', "speed", "display speed true/false", [&](td::Slice arg) {
     const auto str = arg.str();
     if (str == "true") {
-      td::actor::send_closure(indexer, &ton::validator::Indexer::set_display_speed, true);
+      speed = true;
       return td::Status::OK();
     } else if (str == "false") {
-      td::actor::send_closure(indexer, &ton::validator::Indexer::set_display_speed, false);
+      speed = false;
       return td::Status::OK();
     } else {
       return td::Status::Error(ton::ErrorCode::error, "bad value for --progress: not true or false");
     }
   });
 
+  auto S = p.run(argc, argv);
+  if (S.is_error()) {
+    std::cerr << S.move_as_error().message().str() << std::endl;
+    std::_Exit(2);
+  }
+
   td::actor::set_debug(true);
   td::actor::Scheduler scheduler({threads});  // contans a bug: threads not initialized by OptionsParser
   scheduler.run_in_context([&] { indexer = td::actor::create_actor<ton::validator::Indexer>("cool"); });
-  scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
+  scheduler.run_in_context([&] {
+    td::actor::send_closure(indexer, &ton::validator::Indexer::set_db_root, db_root);
+
+    td::actor::send_closure(indexer, &ton::validator::Indexer::set_global_config_path, config_path);
+
+    TRY_RESULT(size, td::to_integer_safe<ton::BlockSeqno>(chunk_size));
+
+    td::actor::send_closure(indexer, &ton::validator::Indexer::set_chunk_size, size);
+
+    auto pos = std::min(seqno.find(':'), seqno.size());
+    TRY_RESULT(seqno_first, td::to_integer_safe<ton::BlockSeqno>(seqno.substr(0, pos)));
+    ++pos;
+    if (pos >= seqno.size()) {
+      td::actor::send_closure(indexer, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_first);
+      return td::Status::OK();
+    }
+    TRY_RESULT(seqno_last, td::to_integer_safe<ton::BlockSeqno>(seqno.substr(pos, seqno.size())));
+    td::actor::send_closure(indexer, &ton::validator::Indexer::set_seqno_range, seqno_first, seqno_last);
+
+    td::actor::send_closure(indexer, &ton::validator::Indexer::set_display_speed, speed);
+  });
   scheduler.run_in_context([&] { td::actor::send_closure(indexer, &ton::validator::Indexer::run); });
   scheduler.run();
   scheduler.stop();
