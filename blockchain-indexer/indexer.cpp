@@ -1604,8 +1604,8 @@ class Indexer : public td::actor::Actor {
         end = seqno_last;
       }
 
-      LOG(WARNING) << "Set for IndexerWorker #" + std::to_string(i) << " seqno start " << start - 1 << " seqno end " << end;
-      td::actor::send_closure(workers.at(i), &IndexerWorker::set_seqno_range, start - 1, end);
+      LOG(WARNING) << "Set for IndexerWorker #" + std::to_string(i) << " seqno start " << start << " seqno end " << end;
+      td::actor::send_closure(workers.at(i), &IndexerWorker::set_seqno_range, start, end);
       seqno_first += per_thread;
     }
   }
