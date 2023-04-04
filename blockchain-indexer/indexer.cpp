@@ -1829,10 +1829,9 @@ int main(int argc, char **argv) {
     indexer = td::actor::create_actor<ton::validator::Indexer>(td::actor::ActorOptions().with_name("CoolBlockIndexer"),
                                                                threads, db_root, config_path, size, seqno_first,
                                                                seqno_last, speed);
-    indexer.release();
-
-    td::actor::send_closure(indexer, &ton::validator::Indexer::run);
   });
+
+  scheduler.run_in_context([&] { td::actor::send_closure(indexer, &ton::validator::Indexer::run); });
   scheduler.run();
   scheduler.stop();
   return 0;
