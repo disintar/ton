@@ -871,12 +871,61 @@ class AsyncRunner : public td::actor::Actor {
 void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, BlockSeqno seqno, bool key_block,
                                                   td::Promise<validator::FileDescription> promise) {
   auto promise_ptr = std::make_shared<td::Promise<validator::FileDescription>>(std::move(promise));
-  auto f = [this, key_block, seqno, account, promise = std::move(promise_ptr)]() mutable {
-    auto &f = get_file_map(PackageId{0, key_block, false});
+  auto &f = get_file_map(PackageId{0, key_block, false});
+
+  auto ff = [seqno, account, promise = std::move(promise_ptr), &f]() mutable {
+
     if (account.is_masterchain()) {
-      auto file_description = get_file_desc_by_seqno(ShardIdFull{masterchainId}, seqno, key_block);
-      auto a = *file_description;
-      promise->set_value(std::move(a));
+      auto shard = ShardIdFull{masterchainId};
+      LOG(WARNING) << "GET file desc by seqno: shard " << shard.to_str() << " seqno: " << seqno;
+
+      for (auto it = f.rbegin(); it != f.rend(); it++) {
+        auto index_it = it->second.first_blocks_min_max_index.find(shard.workchain);
+        if (index_it != it->second.first_blocks_min_max_index.end()) {
+          if (index_it->second.min_seqno <= seqno) {
+            auto i = it->second.first_blocks.find(shard);
+            if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
+              if (it->second.deleted) {
+                promise->set_error(td::Status::Error());
+                return;
+              } else {
+                LOG(WARNING) << index_it->second.max_seqno << " " << index_it->second.min_seqno << " " << seqno;
+                LOG(WARNING) << (index_it->second.max_seqno >= seqno) << " " << (index_it->second.min_seqno <= seqno);
+
+                auto a = it->second;
+                promise->set_value(std::move(a));
+
+                return;
+              }
+            }
+          }
+        }
+      }
+      LOG(WARNING) << "NOT FOUND: " << seqno;
+      for (auto it = f.rbegin(); it != f.rend(); it++) {
+        auto i = it->second.first_blocks.find(shard);
+        if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
+          if (it->second.deleted) {
+            promise->set_error(td::Status::Error());
+            return;
+          } else {
+            auto block = i->second.seqno;
+
+            auto index_it = it->second.first_blocks_min_max_index.find(shard.workchain);
+            if (index_it != it->second.first_blocks_min_max_index.end()) {
+              LOG(WARNING) << "NOT FOUND!" << index_it->second.max_seqno << " " << index_it->second.min_seqno << " "
+                           << seqno << " CONTAINS: " << block << " " << (block <= seqno);
+              LOG(WARNING) << (index_it->second.max_seqno >= seqno) << " " << (index_it->second.min_seqno <= seqno);
+            }
+
+            auto a = it->second;
+            promise->set_value(std::move(a));
+
+            return;
+          }
+        }
+      }
+
       return;
     }
 
@@ -924,7 +973,7 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
     promise->set_error(td::Status::Error());
   };
 
-  td::actor::create_actor<AsyncRunner>("executeasync_desc_by_seqno", std::move(f)).release();
+  td::actor::create_actor<AsyncRunner>("executeasync_desc_by_seqno", std::move(ff)).release();
 }
 
 validator::FileDescription *ArchiveManager::get_file_desc_by_unix_time(AccountIdPrefixFull account, UnixTime ts,
