@@ -1817,15 +1817,21 @@ int main(int argc, char **argv) {
   }
 
   td::actor::set_debug(true);
-  td::actor::Scheduler scheduler({threads});  // contans a bug: threads not initialized by OptionsParser
+  td::actor::Scheduler scheduler({threads});
+  td::uint32 size;
+  ton::BlockSeqno seqno_first;
+  ton::BlockSeqno seqno_last;
+
   scheduler.run_in_context([&] {
-    TRY_RESULT(size, td::to_integer_safe<ton::BlockSeqno>(chunk_size));
+    TRY_RESULT(size, td::to_integer_safe<td::uint32>(chunk_size));
 
     auto pos = std::min(seqno.find(':'), seqno.size());
     TRY_RESULT(seqno_first, td::to_integer_safe<ton::BlockSeqno>(seqno.substr(0, pos)));
     ++pos;
     TRY_RESULT(seqno_last, td::to_integer_safe<ton::BlockSeqno>(seqno.substr(pos, seqno.size())));
+  });
 
+  scheduler.run_in_context([&] {
     indexer = td::actor::create_actor<ton::validator::Indexer>(td::actor::ActorOptions().with_name("CoolBlockIndexer"),
                                                                threads, db_root, config_path, size, seqno_first,
                                                                seqno_last, speed);
