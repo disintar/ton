@@ -895,7 +895,7 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
         }
       }
 
-      LOG(ERROR) << "NOT FOUND: " << seqno;
+      LOG(ERROR) << "NOT FOUND: " << seqno << " Account: " << account.to_str();
       promise.set_error(td::Status::Error());
       return;
     }
@@ -919,7 +919,7 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
       }
     }
 
-    LOG(ERROR) << "NOT FOUND: " << seqno;
+    LOG(ERROR) << "NOT FOUND: " << seqno << " Account: " << account.to_str();
     promise.set_error(td::Status::Error());
   };
 
