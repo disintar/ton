@@ -1532,6 +1532,7 @@ class Indexer : public td::actor::Actor {
       seqno_first += per_thread;
     }
 
+    yield();
     LOG(WARNING) << "Blockchain indexer setup success;";
   }
 
