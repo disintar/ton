@@ -849,6 +849,25 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
       }
 
       LOG(ERROR) << "NOT FOUND: " << seqno << " Account: " << account.to_str();
+
+      for (auto it = f.rbegin(); it != f.rend(); it++) {
+          auto i = it->second.first_blocks.find(shard);
+          if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
+            if (it->second.deleted) {
+              break;
+            } else {
+              auto block = i->second.seqno;
+
+              LOG(ERROR) << "SEQNO FOUND: " << block << " SEQNO REQUEST: " << seqno;
+              LOG(ERROR) << "SEQNO MIN: " << it->second.minmax.min_seqno << " SEQNO MAX: " << it->second.minmax.max_seqno;
+              std::exit(0);
+
+              td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
+                                      std::move(promise));
+              return;
+            }
+          }
+      }
       promise.set_error(td::Status::Error());
       return;
     }
