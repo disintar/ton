@@ -912,7 +912,6 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
           bool found = false;
           for (int i = 0; i < 60; i++) {
             auto shard = shard_prefix(account, i);
-            LOG(ERROR) << "Shard: " << shard.to_str() << " I: " << i;
             auto it2 = it->second.first_blocks.find(shard);
             if (it2 != it->second.first_blocks.end()) {
               if (it2->second.seqno <= seqno) {
