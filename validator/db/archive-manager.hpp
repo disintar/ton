@@ -53,7 +53,7 @@ class FileDescription {
   bool deleted;
 
   std::map<ShardIdFull, Desc> first_blocks;
-  std::map<WorkchainId, MinMax> first_blocks_min_max_index;
+  MinMax minmax;
   td::actor::ActorOwn<ArchiveSlice> file;
 };
 
