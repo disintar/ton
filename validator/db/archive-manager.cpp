@@ -613,11 +613,6 @@ void ArchiveManager::load_package(PackageId id) {
       desc.first_blocks[ShardIdFull{wc, static_cast<ShardId>(e->shard_)}] =
           FileDescription::Desc{s, static_cast<UnixTime>(e->unixtime_), static_cast<LogicalTime>(e->lt_)};
 
-      if (!minmax_inited || s > minmax.max_seqno) {
-        minmax.max_seqno = s;
-        minmax_inited = true;
-      }
-
       if (!minmax_inited || s < minmax.min_seqno) {
         minmax.min_seqno = s;
         minmax_inited = true;
