@@ -843,8 +843,6 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
               return;
             }
           }
-        } else {
-          LOG(WARNING) << "FAST SKIP";
         }
       }
 
@@ -890,8 +888,6 @@ void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, B
             break;
           }
         }
-      } else {
-        LOG(WARNING) << "FAST SKIP";
       }
     }
 
