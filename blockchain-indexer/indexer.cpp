@@ -219,7 +219,7 @@ class Dumper {
 
     const auto lone_blocks_amount = blocks.size();
     const auto lone_states_amount = states.size();
-    if (lone_blocks_amount == 0 & lone_states_amount == 0) {
+    if ((lone_blocks_amount == 0) & (lone_states_amount == 0)) {
       return;
     }
 
@@ -634,6 +634,7 @@ class IndexerWorker : public td::actor::Actor {
       if ((start - end == 0) | (start > end)) {
         LOG(WARNING) << "Total chunks parsed: " << chunk_current_ << " total: MC " << end;
         shutdown();
+        return;
       }
 
       LOG(WARNING) << "Process chunk (" << chunk_current_ << ") From: " << start << " To: " << end;
