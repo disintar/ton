@@ -651,6 +651,7 @@ class IndexerWorker : public td::actor::Actor {
               }
             });
 
+        LOG(WARNING) << "Process SEQNO: " << seqno;
         td::actor::send_closure(actor_id(this), &ton::validator::IndexerWorker::increase_block_padding);
         ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
         td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
@@ -1318,7 +1319,6 @@ class IndexerWorker : public td::actor::Actor {
     LOG(DEBUG) << "increase_block_padding, have: " << block_padding_;
     {
       std::lock_guard<std::mutex> lock(display_mtx_);
-
       ++block_padding_;
     }
 
