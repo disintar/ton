@@ -1,5 +1,12 @@
 #include "json-utils.hpp"
 #include "td/utils/Timer.h"
+#include <string>
+#include <cassert>
+#include <codecvt>
+#include <iostream>
+#include <locale>
+#include <sstream>
+#include <string>
 
 std::vector<std::tuple<int, std::string>> parse_extra_currency(const Ref<vm::Cell> &extra) {
   std::vector<std::tuple<int, std::string>> c_list;
@@ -14,7 +21,7 @@ std::vector<std::tuple<int, std::string>> parse_extra_currency(const Ref<vm::Cel
         return false;
       }
 
-      c_list.emplace_back(x, val->to_dec_string());
+      c_list.emplace_back(x, val->to_hex_string());
 
       return true;
     });
@@ -239,6 +246,50 @@ json parse_state_init(vm::CellSlice state_init) {
   }
 }
 
+std::string map_to_utf8(const long long val) {
+  std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> converter;
+  return converter.to_bytes(static_cast<char32_t>(val));
+}
+
+std::string fetch_string(vm::CellSlice &cs, bool convert_to_utf8 = true) {
+  if (convert_to_utf8) {
+    auto text_size = cs.size() / 8;
+
+    std::string text;
+
+    while (text_size > 0) {
+      text += map_to_utf8(cs.fetch_long(8));
+      text_size -= 1;
+    }
+
+    return text;
+  } else {
+    const unsigned int text_size = cs.size() / 8;
+
+    unsigned char b[text_size];
+    cs.fetch_bytes(b, text_size);
+    std::string tmp(b, b + sizeof b / sizeof b[0]);
+    return tmp;
+  }
+}
+
+std::string parse_snake_data_string(vm::CellSlice &cs, bool convert_to_utf8 = true) {
+  bool has_next_ref = cs.have_refs();
+  std::string text = fetch_string(cs, convert_to_utf8);
+  vm::CellSlice rcf = cs;
+
+  while (has_next_ref) {
+    rcf = load_cell_slice(rcf.prefetch_ref());
+    auto x = fetch_string(rcf, convert_to_utf8);
+
+    text += x;
+
+    has_next_ref = rcf.have_refs();
+  }
+
+  return text;
+}
+
 json parse_message(Ref<vm::Cell> message_any) {
   // int_msg_info$0
   // ext_in_msg_info$10
@@ -342,7 +393,16 @@ json parse_message(Ref<vm::Cell> message_any) {
 
     auto cs = load_cell_slice(root_cell);
     if (cs.size() >= 32) {
-      answer["op_code"] = cs.prefetch_ulong(32);
+      auto a = cs.fetch_ulong(32);
+      answer["op_code"] = a;
+
+      if (a == 0) {
+        try {
+          answer["comment"] = parse_snake_data_string(cs);
+        } catch (...) {
+          LOG(ERROR) << "Can't parse message";
+        }
+      }
     }
 
   } else {
@@ -350,7 +410,16 @@ json parse_message(Ref<vm::Cell> message_any) {
 
     vm::CellBuilder cb;
     if (body.size() >= 32) {
-      answer["op_code"] = body.prefetch_ulong(32);
+      auto a = body.fetch_ulong(32);
+      answer["op_code"] = a;
+
+      if (a == 0) {
+        try {
+          answer["comment"] = parse_snake_data_string(body);
+        } catch (...) {
+          LOG(ERROR) << "Can't parse message";
+        }
+      }
     }
 
     cb.append_cellslice(body);

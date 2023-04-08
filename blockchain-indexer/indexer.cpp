@@ -966,32 +966,32 @@ class IndexerWorker : public td::actor::Actor {
         auto in_msg_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.in_msg_descr), 256,
                                                                      block::tlb::aug_InMsgDescr);
 
-        //          std::vector<json> in_msgs_json;
-        //          while (!in_msg_dict->is_empty()) {
-        //            td::Bits256 last_key;
-        //
-        //            in_msg_dict->get_minmax_key(last_key);
-        //            Ref<vm::CellSlice> data = in_msg_dict->lookup_delete(last_key);
-        //
-        //            json parsed = {{"hash", last_key.to_hex()}, {"message", parse_in_msg(data.write(), workchain)}};
-        //            in_msgs_json.emplace_back(std::move(parsed));
-        //            LOG(DEBUG) << "Parsed in_message: " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
-        //          }
-        //
-        //          auto out_msg_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.out_msg_descr),
-        //                                                                        256, block::tlb::aug_OutMsgDescr);
-        //
-        //          std::vector<json> out_msgs_json;
-        //          while (!out_msg_dict->is_empty()) {
-        //            td::Bits256 last_key;
-        //
-        //            out_msg_dict->get_minmax_key(last_key);
-        //            Ref<vm::CellSlice> data = out_msg_dict->lookup_delete(last_key);
-        //
-        //            json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg(data.write(), workchain)}};
-        //            out_msgs_json.emplace_back(std::move(parsed));
-        //            LOG(DEBUG) << "Parsed out_message: " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
-        //          }
+        std::vector<json> in_msgs_json;
+        while (!in_msg_dict->is_empty()) {
+          td::Bits256 last_key;
+
+          in_msg_dict->get_minmax_key(last_key);
+          Ref<vm::CellSlice> data = in_msg_dict->lookup_delete(last_key);
+
+          json parsed = {{"hash", last_key.to_hex()}, {"message", parse_in_msg(data.write(), workchain)}};
+          in_msgs_json.emplace_back(std::move(parsed));
+          LOG(DEBUG) << "Parsed in_message: " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
+        }
+
+        auto out_msg_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.out_msg_descr), 256,
+                                                                      block::tlb::aug_OutMsgDescr);
+
+        std::vector<json> out_msgs_json;
+        while (!out_msg_dict->is_empty()) {
+          td::Bits256 last_key;
+
+          out_msg_dict->get_minmax_key(last_key);
+          Ref<vm::CellSlice> data = out_msg_dict->lookup_delete(last_key);
+
+          json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg(data.write(), workchain)}};
+          out_msgs_json.emplace_back(std::move(parsed));
+          LOG(DEBUG) << "Parsed out_message: " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
+        }
 
         auto account_blocks_dict = std::make_unique<vm::AugmentedDictionary>(
             vm::load_cell_slice_ref(extra.account_blocks), 256, block::tlb::aug_ShardAccountBlocks);
@@ -1018,12 +1018,6 @@ class IndexerWorker : public td::actor::Actor {
           LOG(DEBUG) << "Parse block start parse account: " << last_key.to_hex() << " " << blkid.to_str() << " "
                      << timer;
           auto hex_addr = last_key.to_hex();
-          // todo: fix
-          //            hex_addr != "3333333333333333333333333333333333333333333333333333333333333333" &&
-          //                hex_addr != "34517C7BDF5187C55AF4F8B61FDC321588C7AB768DEE24B006DF29106458D7CF" &&
-          //                hex_addr != "5555555555555555555555555555555555555555555555555555555555555555" &&
-          //                hex_addr != "0000000000000000000000000000000000000000000000000000000000000000" &&
-          //                hex_addr != "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEF"
 
           if (std::find(accounts_keys.begin(), accounts_keys.end(), last_key) == accounts_keys.end()) {
             accounts_keys.emplace_back(last_key);
