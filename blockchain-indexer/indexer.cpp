@@ -1495,6 +1495,7 @@ class Indexer : public td::actor::Actor {
  public:
   Indexer(td::uint32 threads_, std::string db_root, std::string config_path, td::uint32 chunk_size,
           std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> seqno_s_, bool speed) {
+    dumper_ = std::make_unique<Dumper>("dump_", 5000);
     seqno_s = std::move(seqno_s_);
     threads = threads_;
 
@@ -1523,8 +1524,8 @@ class Indexer : public td::actor::Actor {
     LOG(WARNING) << "Masterchain seqno per worker: " << per_thread;
 
     for (unsigned int i = 0; i < workers_count; i++) {
-      workers.push_back(td::actor::create_actor<ton::validator::IndexerWorker>(
-          "IndexerWorker #" + std::to_string(i), i, dumper_.get()));
+      workers.push_back(td::actor::create_actor<ton::validator::IndexerWorker>("IndexerWorker #" + std::to_string(i), i,
+                                                                               dumper_.get()));
       auto w = &workers.back();
 
       td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size);
@@ -1547,7 +1548,6 @@ class Indexer : public td::actor::Actor {
   void start_up() override {
     LOG(WARNING) << "Go Jhonny, go";
     LOG(DEBUG) << "Use db root: " << db_root_;
-    dumper_ = std::make_unique<Dumper>("dump_", 5000);
 
     auto Sr = create_validator_options();
     if (Sr.is_error()) {
