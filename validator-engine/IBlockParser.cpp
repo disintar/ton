@@ -452,10 +452,10 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
 //  hex_addr != "34517C7BDF5187C55AF4F8B61FDC321588C7AB768DEE24B006DF29106458D7CF" &&
 //  hex_addr != "5555555555555555555555555555555555555555555555555555555555555555" &&
 //  hex_addr != "0000000000000000000000000000000000000000000000000000000000000000" &&
-    if (
-        hex_addr != "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEF") {
-      accounts_keys.push_back(last_key);
-    }
+//    if (
+//        hex_addr != "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEF") {
+    accounts_keys.push_back(last_key);
+//    }
 
     data = account_blocks_dict->lookup_delete(last_key);
 

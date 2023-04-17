@@ -551,6 +551,8 @@ class StateIndexer : public td::actor::Actor {
 };
 
 class IndexerWorker : public td::actor::Actor {
+  td::uint32 my_id;
+
   BlockSeqno seqno_first_ = 0;
   BlockSeqno seqno_last_ = 0;
   int block_padding_ = 0;
@@ -559,8 +561,7 @@ class IndexerWorker : public td::actor::Actor {
   td::uint32 chunk_count_ = 0;
   td::uint32 chunk_current_ = 0;
   std::mutex display_mtx_;
-  Dumper *dumper_;
-  ;
+  Dumper *dumper_{};
 
   std::map<BlockIdExt, json> pending_blocks_;
   std::map<BlockIdExt, td::uint64> pending_blocks_size_;
@@ -575,9 +576,19 @@ class IndexerWorker : public td::actor::Actor {
   bool display_speed_ = false;
   std::unordered_set<std::string> already_traversed_;
   std::mutex parsed_shards_mtx_;
-  td::Promise<unsigned int> shutdown_promise;
+  td::Promise<td::uint32> shutdown_promise;
 
  public:
+  IndexerWorker(td::uint32 my_id_, td::actor::ActorId<ton::validator::ValidatorManagerInterface> v, Dumper *dumper) {
+    my_id = my_id_;
+    validator_manager_ = std::move(v);
+    dumper_ = dumper;
+  }
+
+  void shutdown_actor() {
+    stop();
+  }
+
   void set_seqno_range(BlockSeqno seqno_first, BlockSeqno seqno_last) {
     seqno_first_ = seqno_first;
     seqno_last_ = seqno_last;
@@ -588,10 +599,7 @@ class IndexerWorker : public td::actor::Actor {
   void set_display_speed(bool display_speed) {
     display_speed_ = display_speed;
   }
-  void set_initial_data(td::actor::ActorId<ton::validator::ValidatorManagerInterface> v,
-                        td::Promise<unsigned int> promise, Dumper *dumper) {
-    validator_manager_ = std::move(v);
-    dumper_ = dumper;
+  void set_initial_data(td::Promise<td::uint32> promise) {
     shutdown_promise = std::move(promise);
 
     // separate first parse seqno to prevent WC shard seqno leak
@@ -1451,6 +1459,7 @@ class IndexerWorker : public td::actor::Actor {
     LOG(WARNING) << "Ready to die";
     shutdown_promise.set_value(0);
   }
+
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::vector<td::Bits256> accounts_keys) {
     const auto block_id = handle->id().id;
     const auto id = std::to_string(block_id.workchain) + ":" + std::to_string(block_id.shard) + ":" +
@@ -1484,44 +1493,52 @@ class IndexerWorker : public td::actor::Actor {
 
 class Indexer : public td::actor::Actor {
  public:
-  Indexer(td::uint32 threads, std::string db_root, std::string config_path, td::uint32 chunk_size,
-          BlockSeqno seqno_first, BlockSeqno seqno_last, bool speed) {
-    for (unsigned int i = 0; i < threads; i++) {
-      workers.push_back(td::actor::create_actor<ton::validator::IndexerWorker>("IndexerWorker #" + std::to_string(i)));
+  Indexer(td::uint32 threads_, std::string db_root, std::string config_path, td::uint32 chunk_size,
+          std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> seqno_s_, bool speed) {
+    seqno_s = std::move(seqno_s_);
+    threads = threads_;
+
+    BlockSeqno seqno_first;
+    BlockSeqno seqno_last;
+
+    if (!seqno_s.empty()) {
+      auto t = seqno_s.back();
+      seqno_s.pop_back();
+
+      seqno_first = std::get<0>(t);
+      seqno_last = std::get<1>(t);
+    } else {
+      throw std::invalid_argument("seqno_s invalid");
     }
-
-    db_root_ = std::move(db_root);
-    global_config_ = std::move(config_path);
-
-    for (auto &w : workers) {
-      td::actor::send_closure(w, &IndexerWorker::set_chunk_size, chunk_size);
-      td::actor::send_closure(w, &IndexerWorker::set_display_speed, speed);
-    }
-
-    const auto s = workers.size();
-
-    LOG(WARNING) << "Current chunk size: " << chunk_size_ << " Workers: " << s;
-    LOG(WARNING) << "Total Masterchain seqno: " << seqno_last - seqno_first;
 
     auto blocks_size = seqno_last - seqno_first;
 
-    if (blocks_size < s) {
-      LOG(ERROR) << "Please parse at least " << s << " or set less threads";
-      std::exit(0);
-    };
+    auto workers_count = std::min(blocks_size, threads);
 
-    auto per_thread = (unsigned int)ceil(blocks_size / s);
+    LOG(WARNING) << "Current chunk size: " << chunk_size_ << " Workers: " << workers_count;
+    LOG(WARNING) << "Total Masterchain seqno: " << seqno_last - seqno_first;
+
+    db_root_ = std::move(db_root);
+    global_config_ = std::move(config_path);
+    auto per_thread = (unsigned int)ceil(blocks_size / workers_count);
     LOG(WARNING) << "Masterchain seqno per worker: " << per_thread;
 
-    for (unsigned int i = 0; i < s; i++) {
+    for (unsigned int i = 0; i < workers_count; i++) {
+      workers.push_back(td::actor::create_actor<ton::validator::IndexerWorker>(
+          "IndexerWorker #" + std::to_string(i), i, validator_manager_.get(), dumper_.get()));
+      auto w = &workers.back();
+
+      td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size);
+      td::actor::send_closure(w->get(), &IndexerWorker::set_display_speed, speed);
+
       auto start = seqno_first;
       auto end = seqno_first + per_thread;
-      if ((end > seqno_last) | (i == s - 1)) {
+      if ((end > seqno_last) | (i == workers_count - 1)) {
         end = seqno_last;
       }
 
       LOG(WARNING) << "Set for IndexerWorker #" + std::to_string(i) << " seqno start " << start << " seqno end " << end;
-      td::actor::send_closure(workers.at(i), &IndexerWorker::set_seqno_range, start, end);
+      td::actor::send_closure(w->get(), &IndexerWorker::set_seqno_range, start - 1, end + 1);
       seqno_first += per_thread;
     }
 
@@ -1647,6 +1664,8 @@ class Indexer : public td::actor::Actor {
   std::mutex display_mtx_;
   td::uint32 chunk_size_ = 20000;
   std::unique_ptr<Dumper> dumper_;
+  td::uint32 threads;
+  std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> seqno_s;
 
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
   td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
@@ -1707,25 +1726,72 @@ class Indexer : public td::actor::Actor {
   }
 
  public:
-  void shutdown_worker() {
+  void shutdown_worker(td::uint32 my_id) {
     w_stopped += 1;
 
     if (w_stopped >= workers.size()) {
-      LOG(INFO) << "Ready to die";
-      ///TODO: danger danger
-      LOG(WARNING) << "Calling std::exit(0)";
-      dumper_->forceDump();
-      std::exit(0);
+      if (seqno_s.empty()) {
+        LOG(INFO) << "Ready to die";
+        ///TODO: danger danger
+        LOG(WARNING) << "Calling std::exit(0)";
+        dumper_->forceDump();
+        std::exit(0);
+      } else {
+        w_stopped = 0;
+        while (!workers.empty()) {
+          auto tmp_w = &workers.back();
+          td::actor::send_closure(tmp_w->get(), &IndexerWorker::shutdown_actor);
+          workers.pop_back();
+        }
+
+        BlockSeqno seqno_first;
+        BlockSeqno seqno_last;
+
+        auto t = seqno_s.back();
+        seqno_s.pop_back();
+
+        seqno_first = std::get<0>(t);
+        seqno_last = std::get<1>(t);
+
+        auto blocks_size = seqno_last - seqno_first;
+
+        auto workers_count = std::min(blocks_size, threads);
+
+        LOG(WARNING) << "Current chunk size: " << chunk_size_ << " Workers: " << workers_count;
+        LOG(WARNING) << "Total Masterchain seqno: " << seqno_last - seqno_first;
+
+        auto per_thread = (unsigned int)ceil(blocks_size / workers_count);
+        LOG(WARNING) << "Masterchain seqno per worker: " << per_thread;
+
+        for (unsigned int i = 0; i < workers_count; i++) {
+          workers.push_back(td::actor::create_actor<ton::validator::IndexerWorker>(
+              "IndexerWorker #" + std::to_string(i), i, validator_manager_.get(), dumper_.get()));
+          auto w = &workers.back();
+
+          auto start = seqno_first;
+          auto end = seqno_first + per_thread;
+          if ((end > seqno_last) | (i == workers_count - 1)) {
+            end = seqno_last;
+          }
+
+          td::actor::send_closure(w->get(), &IndexerWorker::set_seqno_range, start - 1, end + 1);
+
+          auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::uint32 s) {
+            td::actor::send_closure(SelfId, &Indexer::shutdown_worker, s);
+          });
+
+          td::actor::send_closure(w->get(), &IndexerWorker::set_initial_data, std::move(P));
+        }
+      }
     }
   }
 
   void sync_complete(const BlockHandle &handle) {
     for (auto &w : workers) {
       auto P = td::PromiseCreator::lambda(
-          [SelfId = actor_id(this)](unsigned int s) { td::actor::send_closure(SelfId, &Indexer::shutdown_worker); });
+          [SelfId = actor_id(this)](td::uint32 s) { td::actor::send_closure(SelfId, &Indexer::shutdown_worker, s); });
 
-      td::actor::send_closure(w, &IndexerWorker::set_initial_data, validator_manager_.get(), std::move(P),
-                              dumper_.get());
+      td::actor::send_closure(w, &IndexerWorker::set_initial_data, std::move(P));
     }
   }
 
@@ -1778,11 +1844,30 @@ int main(int argc, char **argv) {
         return td::Status::OK();
       });
 
-  p.add_checked_option('c', "chunk-size", PSTRING() << "number of blocks per chunk (default=20000)",
-                       [&](td::Slice arg) {
-                         chunk_size = arg.str();
-                         return td::Status::OK();
-                       });
+  std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> seqno_s;
+
+  p.add_checked_option(
+      'c', "chunk-size", PSTRING() << "number of blocks per chunk (default=20000)", [&](td::Slice arg) {
+        chunk_size = arg.str();
+
+        size_t pos = 0;
+        std::string token;
+        auto delimiter = ",";
+
+        while ((pos = chunk_size.find(delimiter)) != std::string::npos) {
+          seqno = chunk_size.substr(0, pos);
+
+          auto d_pos = std::min(seqno.find(':'), seqno.size());
+          auto seqno_first = td::to_integer_safe<ton::BlockSeqno>(seqno.substr(0, d_pos)).move_as_ok();
+          ++d_pos;
+          auto seqno_last = td::to_integer_safe<ton::BlockSeqno>(seqno.substr(d_pos, seqno.size())).move_as_ok();
+
+          seqno_s.emplace_back(seqno_first, seqno_last);
+          chunk_size.erase(0, d_pos + 1);
+        }
+
+        return td::Status::OK();
+      });
 
   p.add_checked_option('s', "seqno", "seqno_first[:seqno_last]\tseqno range", [&](td::Slice arg) {
     seqno = arg.str();
@@ -1812,13 +1897,8 @@ int main(int argc, char **argv) {
   scheduler.run_in_context([&] {
     TRY_RESULT(size, td::to_integer_safe<ton::BlockSeqno>(chunk_size));
 
-    auto pos = std::min(seqno.find(':'), seqno.size());
-    TRY_RESULT(seqno_first, td::to_integer_safe<ton::BlockSeqno>(seqno.substr(0, pos)));
-    ++pos;
-    TRY_RESULT(seqno_last, td::to_integer_safe<ton::BlockSeqno>(seqno.substr(pos, seqno.size())));
-
-    td::actor::create_actor<ton::validator::Indexer>("CoolBlockIndexer", threads, db_root, config_path, size,
-                                                     seqno_first, seqno_last, speed)
+    td::actor::create_actor<ton::validator::Indexer>("CoolBlockIndexer", threads, db_root, config_path, size, seqno_s,
+                                                     speed)
         .release();
 
     return td::Status::OK();
