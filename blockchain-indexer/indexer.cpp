@@ -579,9 +579,8 @@ class IndexerWorker : public td::actor::Actor {
   td::Promise<td::uint32> shutdown_promise;
 
  public:
-  IndexerWorker(td::uint32 my_id_, td::actor::ActorId<ton::validator::ValidatorManagerInterface> v, Dumper *dumper) {
+  IndexerWorker(td::uint32 my_id_, Dumper *dumper) {
     my_id = my_id_;
-    validator_manager_ = std::move(v);
     dumper_ = dumper;
   }
 
@@ -599,7 +598,9 @@ class IndexerWorker : public td::actor::Actor {
   void set_display_speed(bool display_speed) {
     display_speed_ = display_speed;
   }
-  void set_initial_data(td::Promise<td::uint32> promise) {
+  void set_initial_data(td::Promise<td::uint32> promise,
+                        td::actor::ActorId<ton::validator::ValidatorManagerInterface> v) {
+    validator_manager_ = std::move(v);
     shutdown_promise = std::move(promise);
 
     // separate first parse seqno to prevent WC shard seqno leak
@@ -1523,7 +1524,7 @@ class Indexer : public td::actor::Actor {
 
     for (unsigned int i = 0; i < workers_count; i++) {
       workers.push_back(td::actor::create_actor<ton::validator::IndexerWorker>(
-          "IndexerWorker #" + std::to_string(i), i, validator_manager_.get(), dumper_.get()));
+          "IndexerWorker #" + std::to_string(i), i, dumper_.get()));
       auto w = &workers.back();
 
       td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size);
@@ -1763,7 +1764,7 @@ class Indexer : public td::actor::Actor {
 
         for (unsigned int i = 0; i < workers_count; i++) {
           workers.push_back(td::actor::create_actor<ton::validator::IndexerWorker>(
-              "IndexerWorker #" + std::to_string(i), i, validator_manager_.get(), dumper_.get()));
+              "IndexerWorker #" + std::to_string(i), i, dumper_.get()));
           auto w = &workers.back();
 
           auto start = seqno_first;
@@ -1778,7 +1779,7 @@ class Indexer : public td::actor::Actor {
             td::actor::send_closure(SelfId, &Indexer::shutdown_worker, s);
           });
 
-          td::actor::send_closure(w->get(), &IndexerWorker::set_initial_data, std::move(P));
+          td::actor::send_closure(w->get(), &IndexerWorker::set_initial_data, std::move(P), validator_manager_.get());
         }
       }
     }
@@ -1789,7 +1790,7 @@ class Indexer : public td::actor::Actor {
       auto P = td::PromiseCreator::lambda(
           [SelfId = actor_id(this)](td::uint32 s) { td::actor::send_closure(SelfId, &Indexer::shutdown_worker, s); });
 
-      td::actor::send_closure(w, &IndexerWorker::set_initial_data, std::move(P));
+      td::actor::send_closure(w, &IndexerWorker::set_initial_data, std::move(P), validator_manager_.get());
     }
   }
 
