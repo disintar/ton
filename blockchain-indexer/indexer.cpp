@@ -1819,6 +1819,45 @@ int main(int argc, char **argv) {
     std::cout << sb.as_cslice().c_str();
     std::exit(2);
   });
+  std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> seqno_s;
+
+  p.add_checked_option(
+      'c', "chunk-size", PSTRING() << "number of blocks per chunk (default=20000)", [&](td::Slice arg) {
+        chunk_size = arg.str();
+
+        size_t pos = 0;
+        std::string token;
+        auto delimiter = ",";
+        LOG(WARNING) << "FIND!";
+
+        while ((pos = chunk_size.find(delimiter)) != std::string::npos) {
+          seqno = chunk_size.substr(0, pos);
+          LOG(WARNING) << seqno;
+
+          auto d_pos = std::min(seqno.find(':'), seqno.size());
+          auto seqno_first = td::to_integer_safe<ton::BlockSeqno>(seqno.substr(0, d_pos)).move_as_ok();
+          LOG(WARNING) << seqno_first;
+
+          ++d_pos;
+          auto seqno_last = td::to_integer_safe<ton::BlockSeqno>(seqno.substr(d_pos, seqno.size())).move_as_ok();
+          LOG(WARNING) << seqno_last;
+
+          seqno_s.emplace_back(seqno_first, seqno_last);
+          chunk_size.erase(0, d_pos + 1);
+        }
+
+        if (seqno_s.empty()) {
+          auto d_pos = std::min(chunk_size.find(':'), seqno.size());
+          auto seqno_first = td::to_integer_safe<ton::BlockSeqno>(chunk_size.substr(0, d_pos)).move_as_ok();
+          ++d_pos;
+          auto seqno_last =
+              td::to_integer_safe<ton::BlockSeqno>(chunk_size.substr(d_pos, chunk_size.size())).move_as_ok();
+
+          seqno_s.emplace_back(seqno_first, seqno_last);
+        }
+
+        return td::Status::OK();
+      });
   p.add_checked_option('v', "verbosity", "set verbosity level", [&](td::Slice arg) {
     verbosity = td::to_integer<int>(arg);
     SET_VERBOSITY_LEVEL(VERBOSITY_NAME(FATAL) + verbosity);
@@ -1840,31 +1879,6 @@ int main(int argc, char **argv) {
           return td::Status::Error(ton::ErrorCode::error, "bad value for --threads: should be in range [1..256]");
         }
         threads = v;
-
-        return td::Status::OK();
-      });
-
-  std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> seqno_s;
-
-  p.add_checked_option(
-      'c', "chunk-size", PSTRING() << "number of blocks per chunk (default=20000)", [&](td::Slice arg) {
-        chunk_size = arg.str();
-
-        size_t pos = 0;
-        std::string token;
-        auto delimiter = ",";
-
-        while ((pos = chunk_size.find(delimiter)) != std::string::npos) {
-          seqno = chunk_size.substr(0, pos);
-
-          auto d_pos = std::min(seqno.find(':'), seqno.size());
-          auto seqno_first = td::to_integer_safe<ton::BlockSeqno>(seqno.substr(0, d_pos)).move_as_ok();
-          ++d_pos;
-          auto seqno_last = td::to_integer_safe<ton::BlockSeqno>(seqno.substr(d_pos, seqno.size())).move_as_ok();
-
-          seqno_s.emplace_back(seqno_first, seqno_last);
-          chunk_size.erase(0, d_pos + 1);
-        }
 
         return td::Status::OK();
       });
