@@ -1459,7 +1459,6 @@ class IndexerWorker : public td::actor::Actor {
     LOG(WARNING) << "Ready to die";
     shutdown_promise.set_value(0);
   }
-
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::vector<td::Bits256> accounts_keys) {
     const auto block_id = handle->id().id;
     const auto id = std::to_string(block_id.workchain) + ":" + std::to_string(block_id.shard) + ":" +
@@ -1512,8 +1511,8 @@ class Indexer : public td::actor::Actor {
     }
 
     auto blocks_size = seqno_last - seqno_first;
-
-    auto workers_count = std::min(blocks_size, threads);
+    auto cs = (unsigned int)ceil(blocks_size / chunk_size_);
+    auto workers_count = std::min(cs, threads);
 
     LOG(WARNING) << "Current chunk size: " << chunk_size_ << " Workers: " << workers_count;
     LOG(WARNING) << "Total Masterchain seqno: " << seqno_last - seqno_first;
@@ -1754,8 +1753,8 @@ class Indexer : public td::actor::Actor {
         seqno_last = std::get<1>(t);
 
         auto blocks_size = seqno_last - seqno_first;
-
-        auto workers_count = std::min(blocks_size, threads);
+        auto cs = (unsigned int)ceil(blocks_size / chunk_size_);
+        auto workers_count = std::min(cs, threads);
 
         LOG(WARNING) << "Current chunk size: " << chunk_size_ << " Workers: " << workers_count;
         LOG(WARNING) << "Total Masterchain seqno: " << seqno_last - seqno_first;
