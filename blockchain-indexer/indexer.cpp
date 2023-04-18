@@ -1898,7 +1898,7 @@ int main(int argc, char **argv) {
   }
 
   td::actor::set_debug(true);
-  td::actor::Scheduler scheduler({120});  // contans a bug: threads not initialized by OptionsParser
+  td::actor::Scheduler scheduler({threads});  // contans a bug: threads not initialized by OptionsParser
   scheduler.run_in_context([&] {
     TRY_RESULT(size, td::to_integer_safe<ton::BlockSeqno>(chunk_size));
 
