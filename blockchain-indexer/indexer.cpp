@@ -1538,7 +1538,7 @@ class Indexer : public td::actor::Actor {
       }
 
       LOG(WARNING) << "Set for IndexerWorker #" + std::to_string(i) << " seqno start " << start << " seqno end " << end;
-      td::actor::send_closure(w->get(), &IndexerWorker::set_seqno_range, start - 1, end + 1);
+      td::actor::send_closure(w->get(), &IndexerWorker::set_seqno_range, start, end + 1);
       seqno_first += per_thread;
     }
 
@@ -1773,7 +1773,7 @@ class Indexer : public td::actor::Actor {
             end = seqno_last;
           }
 
-          td::actor::send_closure(w->get(), &IndexerWorker::set_seqno_range, start - 1, end + 1);
+          td::actor::send_closure(w->get(), &IndexerWorker::set_seqno_range, start, end + 1);
 
           auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::uint32 s) {
             td::actor::send_closure(SelfId, &Indexer::shutdown_worker, s);
@@ -1898,7 +1898,7 @@ int main(int argc, char **argv) {
   }
 
   td::actor::set_debug(true);
-  td::actor::Scheduler scheduler({threads});  // contans a bug: threads not initialized by OptionsParser
+  td::actor::Scheduler scheduler({120});  // contans a bug: threads not initialized by OptionsParser
   scheduler.run_in_context([&] {
     TRY_RESULT(size, td::to_integer_safe<ton::BlockSeqno>(chunk_size));
 
