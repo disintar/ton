@@ -1285,6 +1285,9 @@ class IndexerWorker : public td::actor::Actor {
           std::exit(0);
         }
 
+        LOG(WARNING) << "SAVE: " << final_id;
+        dumper_->storeBlock(std::move(final_id), std::move(final_json));
+
         if (is_first && !info.not_master) {
           LOG(DEBUG) << "First block, start parse other: " << blkid.to_str() << " " << timer;
           td::actor::send_closure(SelfId, &IndexerWorker::parse_other);
@@ -1292,8 +1295,6 @@ class IndexerWorker : public td::actor::Actor {
           return;
         }
 
-        LOG(WARNING) << "SAVE: " << final_id;
-        dumper_->storeBlock(std::move(final_id), std::move(final_json));
         td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
 
         if (skip_state) {
