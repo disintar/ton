@@ -1288,6 +1288,14 @@ class IndexerWorker : public td::actor::Actor {
         LOG(WARNING) << "SAVE: " << final_id;
         dumper_->storeBlock(std::move(final_id), std::move(final_json));
 
+        if (skip_state) {
+          auto key = std::to_string(blkid.id.workchain) + ":" + std::to_string(blkid.id.shard) + ":" +
+                     std::to_string(blkid.id.seqno);
+          LOG(DEBUG) << "Skip state: " << key;
+
+          dumper_->storeState(std::move(key), R"({"skip": true})");
+        }
+
         if (is_first && !info.not_master) {
           LOG(DEBUG) << "First block, start parse other: " << blkid.to_str() << " " << timer;
           td::actor::send_closure(SelfId, &IndexerWorker::parse_other);
@@ -1296,14 +1304,6 @@ class IndexerWorker : public td::actor::Actor {
         }
 
         td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
-
-        if (skip_state) {
-          auto key = std::to_string(blkid.id.workchain) + ":" + std::to_string(blkid.id.shard) + ":" +
-                     std::to_string(blkid.id.seqno);
-          LOG(DEBUG) << "Skip state: " << key;
-
-          dumper_->storeState(std::move(key), R"({"skip": true})");
-        }
 
         //        } catch (std::exception &e) {
         //          LOG(ERROR) << e.what() << " block error: " << block_id_string;
