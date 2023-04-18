@@ -1292,6 +1292,7 @@ class IndexerWorker : public td::actor::Actor {
           return;
         }
 
+        LOG(WARNING) << "SAVE: " << final_id;
         dumper_->storeBlock(std::move(final_id), std::move(final_json));
         td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
 
