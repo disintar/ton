@@ -1075,13 +1075,11 @@ class IndexerWorker : public td::actor::Actor {
 
         if (!accounts_keys.empty()) {
           //          increase_state_padding();
-          if (is_first && !info.not_master) {
-            LOG(DEBUG) << "Skip 1 mc block in chunk";
-          } else {
-            LOG(DEBUG) << "Send state to parse: " << blkid.to_str() << " " << timer;
-            td::actor::send_closure(SelfId, &IndexerWorker::increase_state_padding);
-            td::actor::send_closure(SelfId, &IndexerWorker::got_state_accounts, block_handle, accounts_keys);
-          }
+
+          LOG(DEBUG) << "Send state to parse: " << blkid.to_str() << " " << timer;
+          td::actor::send_closure(SelfId, &IndexerWorker::increase_state_padding);
+          td::actor::send_closure(SelfId, &IndexerWorker::got_state_accounts, block_handle, accounts_keys);
+
         } else {
           skip_state = true;
         }
