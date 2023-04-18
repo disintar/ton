@@ -1283,7 +1283,6 @@ class IndexerWorker : public td::actor::Actor {
           std::exit(0);
         }
 
-        LOG(WARNING) << "SAVE: " << final_id;
         dumper_->storeBlock(std::move(final_id), std::move(final_json));
 
         if (skip_state) {
