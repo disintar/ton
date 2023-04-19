@@ -1075,11 +1075,11 @@ class IndexerWorker : public td::actor::Actor {
 
         if (!accounts_keys.empty()) {
           //          increase_state_padding();
-
-          LOG(DEBUG) << "Send state to parse: " << blkid.to_str() << " " << timer;
-          td::actor::send_closure(SelfId, &IndexerWorker::increase_state_padding);
-          td::actor::send_closure(SelfId, &IndexerWorker::got_state_accounts, block_handle, accounts_keys);
-
+          if (!is_first) {
+            LOG(DEBUG) << "Send state to parse: " << blkid.to_str() << " " << timer;
+            td::actor::send_closure(SelfId, &IndexerWorker::increase_state_padding);
+            td::actor::send_closure(SelfId, &IndexerWorker::got_state_accounts, block_handle, accounts_keys);
+          }
         } else {
           skip_state = true;
         }
@@ -1283,7 +1283,15 @@ class IndexerWorker : public td::actor::Actor {
           std::exit(0);
         }
 
+        if (is_first && !info.not_master) {
+          LOG(DEBUG) << "First block, start parse other: " << blkid.to_str() << " " << timer;
+          td::actor::send_closure(SelfId, &IndexerWorker::parse_other);
+          td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
+          return;
+        }
+
         dumper_->storeBlock(std::move(final_id), std::move(final_json));
+        td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
 
         if (skip_state) {
           auto key = std::to_string(blkid.id.workchain) + ":" + std::to_string(blkid.id.shard) + ":" +
@@ -1292,15 +1300,6 @@ class IndexerWorker : public td::actor::Actor {
 
           dumper_->storeState(std::move(key), R"({"skip": true})");
         }
-
-        if (is_first && !info.not_master) {
-          LOG(DEBUG) << "First block, start parse other: " << blkid.to_str() << " " << timer;
-          td::actor::send_closure(SelfId, &IndexerWorker::parse_other);
-          td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
-          return;
-        }
-
-        td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
 
         //        } catch (std::exception &e) {
         //          LOG(ERROR) << e.what() << " block error: " << block_id_string;
