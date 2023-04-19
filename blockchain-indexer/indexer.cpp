@@ -82,6 +82,7 @@ class Dumper {
 
       if (joined.size() >= buffer_size) {
         dump();
+        dumpLoners();
       }
     }
   }
@@ -1415,7 +1416,8 @@ class IndexerWorker : public td::actor::Actor {
 
         td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                                 std::move(P));
-      } else {
+      }
+      else {
         shutdown();
       }
     }
