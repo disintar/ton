@@ -192,9 +192,9 @@ class Dumper {
     file_ids.close();
 
     std::ostringstream done_ids;
-    oss_ids << prefix << tag << "_done.json";
+    done_ids << prefix << tag << "_done.json";
     std::ofstream file_done(done_ids.str());
-    file_done << "d";
+    file_done << "done ids";
     file_done.close();
 
     LOG(WARNING) << "Dumped " << dumped_amount << " block/state pairs";
