@@ -183,11 +183,19 @@ class Dumper {
     oss << prefix << tag << ".json";
     std::ofstream file(oss.str());
     file << to_dump;
+    file.close();
 
     std::ostringstream oss_ids;
     oss_ids << prefix << tag << "_ids.json";
     std::ofstream file_ids(oss_ids.str());
     file_ids << to_dump_ids;
+    file_ids.close();
+
+    std::ostringstream done_ids;
+    oss_ids << prefix << tag << "_done.json";
+    std::ofstream file_done(done_ids.str());
+    file_done << "d";
+    file_done.close();
 
     LOG(WARNING) << "Dumped " << dumped_amount << " block/state pairs";
   }
@@ -1416,8 +1424,7 @@ class IndexerWorker : public td::actor::Actor {
 
         td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
                                 std::move(P));
-      }
-      else {
+      } else {
         shutdown();
       }
     }
