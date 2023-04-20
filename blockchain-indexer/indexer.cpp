@@ -1505,6 +1505,8 @@ class Indexer : public td::actor::Actor {
     dumper_ = std::make_unique<Dumper>("dump_", 5000);
     seqno_s = std::move(seqno_s_);
     threads = threads_;
+    chunk_size_ = chunk_size;
+    speed_ = speed;
 
     BlockSeqno seqno_first;
     BlockSeqno seqno_last;
@@ -1670,6 +1672,7 @@ class Indexer : public td::actor::Actor {
   std::mutex display_mtx_;
   td::uint32 chunk_size_ = 20000;
   std::unique_ptr<Dumper> dumper_;
+  bool speed_;
   td::uint32 threads;
   std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> seqno_s;
 
@@ -1773,6 +1776,9 @@ class Indexer : public td::actor::Actor {
           workers.push_back(td::actor::create_actor<ton::validator::IndexerWorker>(
               "IndexerWorker #" + std::to_string(i), i, dumper_.get()));
           auto w = &workers.back();
+
+          td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size_);
+          td::actor::send_closure(w->get(), &IndexerWorker::set_display_speed, speed_);
 
           auto start = seqno_first;
           auto end = seqno_first + per_thread;
@@ -1905,7 +1911,7 @@ int main(int argc, char **argv) {
   }
 
   td::actor::set_debug(true);
-  td::actor::Scheduler scheduler({threads});  // contans a bug: threads not initialized by OptionsParser
+  td::actor::Scheduler scheduler({threads});
   scheduler.run_in_context([&] {
     TRY_RESULT(size, td::to_integer_safe<ton::BlockSeqno>(chunk_size));
 
