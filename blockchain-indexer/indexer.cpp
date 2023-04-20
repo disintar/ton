@@ -1793,6 +1793,7 @@ class Indexer : public td::actor::Actor {
           });
 
           td::actor::send_closure(w->get(), &IndexerWorker::set_initial_data, std::move(P), validator_manager_.get());
+          seqno_first += per_thread;
         }
       }
     }
