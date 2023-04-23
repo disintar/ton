@@ -1083,12 +1083,11 @@ class IndexerWorker : public td::actor::Actor {
         bool skip_state = false;
 
         if (!accounts_keys.empty()) {
-          //          increase_state_padding();
-          //          if (!is_first) {
-          LOG(DEBUG) << "Send state to parse: " << blkid.to_str() << " " << timer;
-          td::actor::send_closure(SelfId, &IndexerWorker::increase_state_padding);
-          td::actor::send_closure(SelfId, &IndexerWorker::got_state_accounts, block_handle, accounts_keys);
-          //          }
+          if (!is_first) {
+            LOG(DEBUG) << "Send state to parse: " << blkid.to_str() << " " << timer;
+            td::actor::send_closure(SelfId, &IndexerWorker::increase_state_padding);
+            td::actor::send_closure(SelfId, &IndexerWorker::got_state_accounts, block_handle, accounts_keys);
+          }
         } else {
           skip_state = true;
         }
@@ -1292,6 +1291,13 @@ class IndexerWorker : public td::actor::Actor {
           std::exit(0);
         }
 
+        if (is_first && !info.not_master) {
+          LOG(DEBUG) << "First block, start parse other: " << blkid.to_str() << " " << timer;
+          td::actor::send_closure(SelfId, &IndexerWorker::parse_other);
+          td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
+          return;
+        }
+
         dumper_->storeBlock(std::move(final_id), std::move(final_json));
         td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
 
@@ -1301,13 +1307,6 @@ class IndexerWorker : public td::actor::Actor {
           LOG(DEBUG) << "Skip state: " << key;
 
           dumper_->storeState(std::move(key), R"({"skip": true})");
-        }
-
-        if (is_first && !info.not_master) {
-          LOG(DEBUG) << "First block, start parse other: " << blkid.to_str() << " " << timer;
-          td::actor::send_closure(SelfId, &IndexerWorker::parse_other);
-//          td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
-          return;
         }
 
         //        } catch (std::exception &e) {
@@ -1779,7 +1778,7 @@ class Indexer : public td::actor::Actor {
 
           td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size_);
           td::actor::send_closure(w->get(), &IndexerWorker::set_display_speed, speed_);
-          ;
+;
           auto end = seqno_first + per_thread;
           if ((end > seqno_last) | (i == workers_count - 1)) {
             end = seqno_last;
