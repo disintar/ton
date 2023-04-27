@@ -378,7 +378,7 @@ struct PyTVM {
     log(log_string, LOG_INFO);
   }
 
-  void set_gasLimit(int gas_limit, int gas_max = -1) {
+  void set_gasLimit(long long gas_limit, long long gas_max = -1) {
     if (gas_max == -1) {
       gas_limits = vm::GasLimits{gas_limit, gas_max};
     } else {
