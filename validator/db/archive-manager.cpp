@@ -165,13 +165,9 @@ void ArchiveManager::get_handle(BlockIdExt block_id, td::Promise<BlockHandle> pr
         td::actor::send_closure(SelfId, &ArchiveManager::get_handle_cont, block_id, idx, std::move(promise));
       }
     });
-
-    auto actor_id = f->file_actor_id();
-    LOG(DEBUG) << "Actor id: " << actor_id.actor_info().get_name().str() << " block_id " << block_id.to_str();
-    td::actor::send_closure(actor_id, &ArchiveSlice::get_handle, block_id, std::move(P));
+    td::actor::send_closure(f->file_actor_id(), &ArchiveSlice::get_handle, block_id, std::move(P));
   } else {
-    auto id = get_max_temp_file_desc_idx();
-    get_handle_cont(block_id, id, std::move(promise));
+    get_handle_cont(block_id, get_max_temp_file_desc_idx(), std::move(promise));
   }
 }
 
@@ -498,21 +494,16 @@ void ArchiveManager::get_block_by_lt(AccountIdPrefixFull account_id, LogicalTime
     promise.set_error(td::Status::Error(ErrorCode::notready, "lt not in db"));
   }
 }
-//
-//void ArchiveManager::get_block_by_seqno(AccountIdPrefixFull account_id, BlockSeqno seqno,
-//                                        td::Promise<ConstBlockHandle> promise) {
-//  auto f = get_file_desc_by_seqno(account_id, seqno, false);
-//  if (f) {
-//    td::actor::send_closure(f->file_actor_id(), &ArchiveSlice::get_block_by_seqno, account_id, seqno,
-//                            std::move(promise));
-//  } else {
-//    promise.set_error(td::Status::Error(ErrorCode::notready, "seqno not in db"));
-//  }
-//}
 
 void ArchiveManager::get_block_by_seqno(AccountIdPrefixFull account_id, BlockSeqno seqno,
                                         td::Promise<ConstBlockHandle> promise) {
-  get_file_desc_by_seqno_async(account_id, seqno, false, std::move(promise));
+  auto f = get_file_desc_by_seqno(account_id, seqno, false);
+  if (f) {
+    td::actor::send_closure(f->file_actor_id(), &ArchiveSlice::get_block_by_seqno, account_id, seqno,
+                            std::move(promise));
+  } else {
+    promise.set_error(td::Status::Error(ErrorCode::notready, "seqno not in db"));
+  }
 }
 
 void ArchiveManager::delete_package(PackageId id, td::Promise<td::Unit> promise) {
@@ -576,7 +567,6 @@ void ArchiveManager::deleted_package(PackageId id, td::Promise<td::Unit> promise
   it->second.file.reset();
   promise.set_value(td::Unit());
 }
-
 void ArchiveManager::load_package(PackageId id) {
   auto key = create_serialize_tl_object<ton_api::db_files_package_key>(id.id, id.key, id.temp);
 
@@ -601,31 +591,14 @@ void ArchiveManager::load_package(PackageId id) {
   }
 
   FileDescription desc{id, false};
-
   if (!id.temp) {
-    auto minmax = FileDescription::MinMax{0, 0};
-    auto minmax_inited = false;
-
     for (auto &e : x->firstblocks_) {
-      auto s = static_cast<BlockSeqno>(e->seqno_);
-      auto wc = e->workchain_;
-
-      desc.first_blocks[ShardIdFull{wc, static_cast<ShardId>(e->shard_)}] =
-          FileDescription::Desc{s, static_cast<UnixTime>(e->unixtime_), static_cast<LogicalTime>(e->lt_)};
-
-      if (!minmax_inited || s < minmax.min_seqno) {
-        minmax.min_seqno = s;
-        minmax_inited = true;
-      }
+      desc.first_blocks[ShardIdFull{e->workchain_, static_cast<ShardId>(e->shard_)}] = FileDescription::Desc{
+          static_cast<BlockSeqno>(e->seqno_), static_cast<UnixTime>(e->unixtime_), static_cast<LogicalTime>(e->lt_)};
     }
-
-    desc.minmax = minmax;
   }
 
-  LOG(WARNING) << "DESC: " << desc.id.name() << " Set max_seqno: " << desc.minmax.max_seqno
-               << " min_seqno: " << desc.minmax.min_seqno;
-
-  desc.file = td::actor::create_actor<ArchiveSlice>("slice", id.id, id.key, id.temp, false, db_root_, read_only_);
+  desc.file = td::actor::create_actor<ArchiveSlice>("slice", id.id, id.key, id.temp, false, db_root_);
 
   get_file_map(id).emplace(id, std::move(desc));
 }
@@ -1239,7 +1212,7 @@ void ArchiveManager::truncate(BlockSeqno masterchain_seqno, ConstBlockHandle han
   }
 }
 
-bool validator::FileDescription::has_account_prefix(AccountIdPrefixFull account_id) const {
+bool ArchiveManager::FileDescription::has_account_prefix(AccountIdPrefixFull account_id) const {
   for (int i = 0; i < 60; i++) {
     auto shard = shard_prefix(account_id, i);
     if (first_blocks.count(shard)) {
