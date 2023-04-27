@@ -22,8 +22,9 @@
 #include "overlay/overlays.h"
 #include "storage/PeerManager.h"
 #include "storage/db.h"
+#include "SpeedLimiter.h"
 
-using namespace ton;
+namespace ton {
 
 class StorageManager : public td::actor::Actor {
  public:
@@ -39,9 +40,12 @@ class StorageManager : public td::actor::Actor {
 
   void start_up() override;
 
-  void add_torrent(Torrent torrent, bool start_download, bool allow_upload, td::Promise<td::Unit> promise);
-  void add_torrent_by_meta(TorrentMeta meta, std::string root_dir, bool start_download, bool allow_upload, td::Promise<td::Unit> promise);
-  void add_torrent_by_hash(td::Bits256 hash, std::string root_dir, bool start_download, bool allow_upload, td::Promise<td::Unit> promise);
+  void add_torrent(Torrent torrent, bool start_download, bool allow_upload, bool copy_inside,
+                   td::Promise<td::Unit> promise);
+  void add_torrent_by_meta(TorrentMeta meta, std::string root_dir, bool start_download, bool allow_upload,
+                           td::Promise<td::Unit> promise);
+  void add_torrent_by_hash(td::Bits256 hash, std::string root_dir, bool start_download, bool allow_upload,
+                           td::Promise<td::Unit> promise);
 
   void set_active_download(td::Bits256 hash, bool active, td::Promise<td::Unit> promise);
   void set_active_upload(td::Bits256 hash, bool active, td::Promise<td::Unit> promise);
@@ -59,6 +63,10 @@ class StorageManager : public td::actor::Actor {
 
   void wait_for_completion(td::Bits256 hash, td::Promise<td::Unit> promise);
   void get_peers_info(td::Bits256 hash, td::Promise<tl_object_ptr<ton_api::storage_daemon_peerList>> promise);
+
+  void get_speed_limits(td::Promise<std::pair<double, double>> promise);  // Download, upload
+  void set_download_speed_limit(double max_speed);
+  void set_upload_speed_limit(double max_speed);
 
  private:
   adnl::AdnlNodeIdShort local_id_;
@@ -86,6 +94,13 @@ class StorageManager : public td::actor::Actor {
 
   std::map<td::Bits256, TorrentEntry> torrents_;
 
+  double download_speed_limit_ = -1.0;
+  double upload_speed_limit_ = -1.0;
+  td::actor::ActorOwn<SpeedLimiter> download_speed_limiter_ =
+      td::actor::create_actor<SpeedLimiter>("DownloadRateLimitrer", -1.0);
+  td::actor::ActorOwn<SpeedLimiter> upload_speed_limiter_ =
+      td::actor::create_actor<SpeedLimiter>("DownloadRateLimitrer", -1.0);
+
   td::Status add_torrent_impl(Torrent torrent, bool start_download, bool allow_upload);
 
   td::Result<TorrentEntry*> get_torrent(td::Bits256 hash) {
@@ -99,10 +114,14 @@ class StorageManager : public td::actor::Actor {
   td::unique_ptr<NodeActor::Callback> create_callback(td::Bits256 hash,
                                                       std::shared_ptr<TorrentEntry::ClosingState> closing_state);
 
+  void loaded_config_from_db(tl_object_ptr<ton_api::storage_db_config> config);
   void load_torrents_from_db(std::vector<td::Bits256> torrents);
   void loaded_torrent_from_db(td::Bits256 hash, td::Result<td::actor::ActorOwn<NodeActor>> R);
   void after_load_torrents_from_db();
+  void db_store_config();
   void db_store_torrent_list();
 
   void on_torrent_closed(Torrent torrent, std::shared_ptr<TorrentEntry::ClosingState> closing_state);
 };
+
+}  // namespace ton

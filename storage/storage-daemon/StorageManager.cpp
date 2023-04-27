@@ -21,6 +21,8 @@
 #include "td/db/RocksDb.h"
 #include "td/actor/MultiPromise.h"
 
+namespace ton {
+
 static overlay::OverlayIdFull get_overlay_id(td::Bits256 hash) {
   td::BufferSlice hash_str(hash.as_slice());
   return overlay::OverlayIdFull(std::move(hash_str));
@@ -48,6 +50,29 @@ void StorageManager::start_up() {
 
   db_ = std::make_shared<db::DbType>(
       std::make_shared<td::RocksDb>(td::RocksDb::open(db_root_ + "/torrent-db").move_as_ok()));
+
+  db::db_get<ton_api::storage_db_config>(
+      *db_, create_hash_tl_object<ton_api::storage_db_key_config>(), true,
+      [SelfId = actor_id(this)](td::Result<tl_object_ptr<ton_api::storage_db_config>> R) {
+        if (R.is_error()) {
+          LOG(ERROR) << "Failed to load config from db: " << R.move_as_error();
+          td::actor::send_closure(SelfId, &StorageManager::loaded_config_from_db, nullptr);
+        } else {
+          td::actor::send_closure(SelfId, &StorageManager::loaded_config_from_db, R.move_as_ok());
+        }
+      });
+}
+
+void StorageManager::loaded_config_from_db(tl_object_ptr<ton_api::storage_db_config> config) {
+  if (config) {
+    LOG(INFO) << "Loaded config from DB. Speed limits: download=" << config->download_speed_limit_
+              << ", upload=" << config->upload_speed_limit_;
+    download_speed_limit_ = config->download_speed_limit_;
+    upload_speed_limit_ = config->upload_speed_limit_;
+    td::actor::send_closure(download_speed_limiter_, &SpeedLimiter::set_max_speed, download_speed_limit_);
+    td::actor::send_closure(upload_speed_limiter_, &SpeedLimiter::set_max_speed, upload_speed_limit_);
+  }
+
   db::db_get<ton_api::storage_db_torrentList>(
       *db_, create_hash_tl_object<ton_api::storage_db_key_torrentList>(), true,
       [SelfId = actor_id(this)](td::Result<tl_object_ptr<ton_api::storage_db_torrentList>> R) {
@@ -77,6 +102,7 @@ void StorageManager::load_torrents_from_db(std::vector<td::Bits256> torrents) {
                                                               client_mode_, overlays_, adnl_, rldp_);
     NodeActor::load_from_db(
         db_, hash, create_callback(hash, entry.closing_state), PeerManager::create_callback(entry.peer_manager.get()),
+        SpeedLimiters{download_speed_limiter_.get(), upload_speed_limiter_.get()},
         [SelfId = actor_id(this), hash,
          promise = ig.get_promise()](td::Result<td::actor::ActorOwn<NodeActor>> R) mutable {
           td::actor::send_closure(SelfId, &StorageManager::loaded_torrent_from_db, hash, std::move(R));
@@ -126,17 +152,33 @@ td::unique_ptr<NodeActor::Callback> StorageManager::create_callback(
   return td::make_unique<Callback>(actor_id(this), hash, std::move(closing_state));
 }
 
-void StorageManager::add_torrent(Torrent torrent, bool start_download, bool allow_upload,
+void StorageManager::add_torrent(Torrent torrent, bool start_download, bool allow_upload, bool copy_inside,
                                  td::Promise<td::Unit> promise) {
+  td::Bits256 hash = torrent.get_hash();
   TRY_STATUS_PROMISE(promise, add_torrent_impl(std::move(torrent), start_download, allow_upload));
   db_store_torrent_list();
-  promise.set_result(td::Unit());
+  if (!copy_inside) {
+    promise.set_result(td::Unit());
+    return;
+  }
+  TorrentEntry& entry = torrents_[hash];
+  std::string new_dir = db_root_ + "/torrent-files/" + hash.to_hex();
+  LOG(INFO) << "Copy torrent to " << new_dir;
+  td::actor::send_closure(
+      entry.actor, &NodeActor::copy_to_new_root_dir, std::move(new_dir),
+      [SelfId = actor_id(this), hash, promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+        if (R.is_error()) {
+          LOG(WARNING) << "Copy torrent: " << R.error();
+          td::actor::send_closure(SelfId, &StorageManager::remove_torrent, hash, false, [](td::Result<td::Unit> R) {});
+        }
+        promise.set_result(std::move(R));
+      });
 }
 
 td::Status StorageManager::add_torrent_impl(Torrent torrent, bool start_download, bool allow_upload) {
   td::Bits256 hash = torrent.get_hash();
   if (torrents_.count(hash)) {
-    return td::Status::Error("Cannot add torrent: duplicate hash");
+    return td::Status::Error(PSTRING() << "Cannot add torrent: duplicate hash " << hash.to_hex());
   }
   TorrentEntry& entry = torrents_[hash];
   entry.hash = hash;
@@ -144,9 +186,9 @@ td::Status StorageManager::add_torrent_impl(Torrent torrent, bool start_download
                                                             client_mode_, overlays_, adnl_, rldp_);
   auto context = PeerManager::create_callback(entry.peer_manager.get());
   LOG(INFO) << "Added torrent " << hash.to_hex() << " , root_dir = " << torrent.get_root_dir();
-  entry.actor =
-      td::actor::create_actor<NodeActor>("Node", 1, std::move(torrent), create_callback(hash, entry.closing_state),
-                                         std::move(context), db_, start_download, allow_upload);
+  entry.actor = td::actor::create_actor<NodeActor>(
+      "Node", 1, std::move(torrent), create_callback(hash, entry.closing_state), std::move(context), db_,
+      SpeedLimiters{download_speed_limiter_.get(), upload_speed_limiter_.get()}, start_download, allow_upload);
   return td::Status::OK();
 }
 
@@ -156,7 +198,7 @@ void StorageManager::add_torrent_by_meta(TorrentMeta meta, std::string root_dir,
   Torrent::Options options;
   options.root_dir = root_dir.empty() ? db_root_ + "/torrent-files/" + hash.to_hex() : root_dir;
   TRY_RESULT_PROMISE(promise, torrent, Torrent::open(std::move(options), std::move(meta)));
-  add_torrent(std::move(torrent), start_download, allow_upload, std::move(promise));
+  add_torrent(std::move(torrent), start_download, allow_upload, false, std::move(promise));
 }
 
 void StorageManager::add_torrent_by_hash(td::Bits256 hash, std::string root_dir, bool start_download, bool allow_upload,
@@ -164,7 +206,7 @@ void StorageManager::add_torrent_by_hash(td::Bits256 hash, std::string root_dir,
   Torrent::Options options;
   options.root_dir = root_dir.empty() ? db_root_ + "/torrent-files/" + hash.to_hex() : root_dir;
   TRY_RESULT_PROMISE(promise, torrent, Torrent::open(std::move(options), hash));
-  add_torrent(std::move(torrent), start_download, allow_upload, std::move(promise));
+  add_torrent(std::move(torrent), start_download, allow_upload, false, std::move(promise));
 }
 
 void StorageManager::set_active_download(td::Bits256 hash, bool active, td::Promise<td::Unit> promise) {
@@ -190,6 +232,18 @@ void StorageManager::get_all_torrents(td::Promise<std::vector<td::Bits256>> prom
     result.push_back(p.first);
   }
   promise.set_result(std::move(result));
+}
+
+void StorageManager::db_store_config() {
+  auto config = create_tl_object<ton_api::storage_db_config>();
+  config->download_speed_limit_ = download_speed_limit_;
+  config->upload_speed_limit_ = upload_speed_limit_;
+  db_->set(create_hash_tl_object<ton_api::storage_db_key_config>(), serialize_tl_object(config, true),
+           [](td::Result<td::Unit> R) {
+             if (R.is_error()) {
+               LOG(ERROR) << "Failed to save config to db: " << R.move_as_error();
+             }
+           });
 }
 
 void StorageManager::db_store_torrent_list() {
@@ -241,19 +295,55 @@ void StorageManager::load_from(td::Bits256 hash, td::optional<TorrentMeta> meta,
                           std::move(promise));
 }
 
+static bool try_rm_empty_dir(const std::string& path) {
+  auto stat = td::stat(path);
+  if (stat.is_error() || !stat.ok().is_dir_) {
+    return true;
+  }
+  size_t cnt = 0;
+  td::WalkPath::run(path, [&](td::CSlice name, td::WalkPath::Type type) {
+    if (type != td::WalkPath::Type::ExitDir) {
+      ++cnt;
+    }
+    if (cnt < 2) {
+      return td::WalkPath::Action::Continue;
+    } else {
+      return td::WalkPath::Action::Abort;
+    }
+  }).ignore();
+  if (cnt == 1) {
+    td::rmdir(path).ignore();
+    return true;
+  }
+  return false;
+}
+
 void StorageManager::on_torrent_closed(Torrent torrent, std::shared_ptr<TorrentEntry::ClosingState> closing_state) {
   if (!closing_state->removing) {
     return;
   }
   if (closing_state->remove_files && torrent.inited_header()) {
+    // Ignore all errors: files may just not exist
     size_t files_count = torrent.get_files_count().unwrap();
     for (size_t i = 0; i < files_count; ++i) {
       std::string path = torrent.get_file_path(i);
       td::unlink(path).ignore();
-      // TODO: Check errors, remove empty directories
+      std::string name = torrent.get_file_name(i).str();
+      for (int j = (int)name.size() - 1; j >= 0; --j) {
+        if (name[j] == '/') {
+          name.resize(j + 1);
+          if (!try_rm_empty_dir(torrent.get_root_dir() + '/' + torrent.get_header().dir_name + '/' + name)) {
+            break;
+          }
+        }
+      }
+      if (!torrent.get_header().dir_name.empty()) {
+        try_rm_empty_dir(torrent.get_root_dir() + '/' + torrent.get_header().dir_name);
+      }
     }
   }
-  td::rmrf(db_root_ + "/torrent-files/" + torrent.get_hash().to_hex()).ignore();
+  std::string path = db_root_ + "/torrent-files/" + torrent.get_hash().to_hex();
+  td::rmrf(path).ignore();
   NodeActor::cleanup_db(db_, torrent.get_hash(),
                         [promise = std::move(closing_state->promise)](td::Result<td::Unit> R) mutable {
                           if (R.is_error()) {
@@ -273,3 +363,29 @@ void StorageManager::get_peers_info(td::Bits256 hash,
   TRY_RESULT_PROMISE(promise, entry, get_torrent(hash));
   td::actor::send_closure(entry->actor, &NodeActor::get_peers_info, std::move(promise));
 }
+
+void StorageManager::get_speed_limits(td::Promise<std::pair<double, double>> promise) {
+  promise.set_result(std::make_pair(download_speed_limit_, upload_speed_limit_));
+}
+
+void StorageManager::set_download_speed_limit(double max_speed) {
+  if (max_speed < 0.0) {
+    max_speed = -1.0;
+  }
+  LOG(INFO) << "Set download speed limit to " << max_speed;
+  download_speed_limit_ = max_speed;
+  td::actor::send_closure(download_speed_limiter_, &SpeedLimiter::set_max_speed, max_speed);
+  db_store_config();
+}
+
+void StorageManager::set_upload_speed_limit(double max_speed) {
+  if (max_speed < 0.0) {
+    max_speed = -1.0;
+  }
+  LOG(INFO) << "Set upload speed limit to " << max_speed;
+  upload_speed_limit_ = max_speed;
+  td::actor::send_closure(upload_speed_limiter_, &SpeedLimiter::set_max_speed, max_speed);
+  db_store_config();
+}
+
+}  // namespace ton

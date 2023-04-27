@@ -19,6 +19,7 @@
 #pragma once
 #include <vector>
 #include <string>
+#include <set>
 #include <stack>
 #include <utility>
 #include <algorithm>
@@ -30,6 +31,7 @@
 #include "parser/srcread.h"
 #include "parser/lexer.h"
 #include "parser/symtable.h"
+#include "td/utils/Status.h"
 
 namespace funC {
 
@@ -39,7 +41,7 @@ extern std::string generated_from;
 
 constexpr int optimize_depth = 20;
 
-const std::string func_version{"0.3.0"};
+const std::string func_version{"0.4.4"};
 
 enum Keyword {
   _Eof = -1,
@@ -157,6 +159,7 @@ struct TypeExpr {
   int minw, maxw;
   static constexpr int w_inf = 1023;
   std::vector<TypeExpr*> args;
+  bool was_forall_var = false;
   TypeExpr(te_type _constr, int _val = 0) : constr(_constr), value(_val), minw(0), maxw(w_inf) {
   }
   TypeExpr(te_type _constr, int _val, int width) : constr(_constr), value(_val), minw(width), maxw(width) {
@@ -263,7 +266,7 @@ struct TypeExpr {
     return new TypeExpr{te_ForAll, body, std::move(list)};
   }
   static bool remove_indirect(TypeExpr*& te, TypeExpr* forbidden = nullptr);
-  static bool remove_forall(TypeExpr*& te);
+  static std::vector<TypeExpr*> remove_forall(TypeExpr*& te);
   static bool remove_forall_in(TypeExpr*& te, TypeExpr* te2, const std::vector<TypeExpr*>& new_vars);
 };
 
@@ -306,10 +309,16 @@ struct TmpVar {
   sym_idx_t name;
   int coord;
   std::unique_ptr<SrcLocation> where;
+  std::vector<std::function<void(const SrcLocation &)>> on_modification;
   TmpVar(var_idx_t _idx, int _cls, TypeExpr* _type = 0, SymDef* sym = 0, const SrcLocation* loc = 0);
   void show(std::ostream& os, int omit_idx = 0) const;
   void dump(std::ostream& os) const;
   void set_location(const SrcLocation& loc);
+  std::string to_string() const {
+    std::ostringstream s;
+    show(s, 2);
+    return s.str();
+  }
 };
 
 struct VarDescr {
@@ -382,7 +391,7 @@ struct VarDescr {
     return val & _Const;
   }
   bool is_int_const() const {
-    return (val & (_Int | _Const)) == (_Int | _Const);
+    return (val & (_Int | _Const)) == (_Int | _Const) && int_const.not_null();
   }
   bool always_nonpos() const {
     return val & _Neg;
@@ -499,7 +508,7 @@ class ListIterator {
     ptr = ptr->next.get();
     return *this;
   }
-  ListIterator& operator++(int) {
+  ListIterator operator++(int) {
     T* z = ptr;
     ptr = ptr->next.get();
     return ListIterator{z};
@@ -675,6 +684,7 @@ typedef std::vector<FormalArg> FormalArgList;
 struct AsmOpList;
 
 struct CodeBlob {
+  enum { _AllowPostModification = 1, _ComputeAsmLtr = 2 };
   int var_cnt, in_var_cnt, op_cnt;
   TypeExpr* ret_type;
   std::string name;
@@ -683,6 +693,7 @@ struct CodeBlob {
   std::unique_ptr<Op> ops;
   std::unique_ptr<Op>* cur_ops;
   std::stack<std::unique_ptr<Op>*> cur_ops_stack;
+  int flags = 0;
   CodeBlob(TypeExpr* ret = nullptr) : var_cnt(0), in_var_cnt(0), op_cnt(0), ret_type(ret), cur_ops(&ops) {
   }
   template <typename... Args>
@@ -722,6 +733,12 @@ struct CodeBlob {
   void mark_noreturn();
   void generate_code(AsmOpList& out_list, int mode = 0);
   void generate_code(std::ostream& os, int mode = 0, int indent = 0);
+
+  void on_var_modification(var_idx_t idx, const SrcLocation& here) const {
+    for (auto& f : vars.at(idx).on_modification) {
+      f(here);
+    }
+  }
 };
 
 /*
@@ -824,6 +841,7 @@ struct SymValConst : sym::SymValBase {
 
 extern int glob_func_cnt, undef_func_cnt, glob_var_cnt;
 extern std::vector<SymDef*> glob_func, glob_vars;
+extern std::set<std::string> prohibited_var_names;
 
 /*
  * 
@@ -831,9 +849,38 @@ extern std::vector<SymDef*> glob_func, glob_vars;
  * 
  */
 
+class ReadCallback {
+public:
+  /// Noncopyable.
+  ReadCallback(ReadCallback const&) = delete;
+  ReadCallback& operator=(ReadCallback const&) = delete;
+
+  enum class Kind
+  {
+    ReadFile,
+    Realpath
+  };
+
+  static std::string kindString(Kind _kind)
+  {
+    switch (_kind)
+    {
+    case Kind::ReadFile:
+      return "source";
+    case Kind::Realpath:
+      return "realpath";
+    default:
+      throw ""; // todo ?
+    }
+  }
+
+  /// File reading or generic query callback.
+  using Callback = std::function<td::Result<std::string>(ReadCallback::Kind, const char*)>;
+};
+
 // defined in parse-func.cpp
 bool parse_source(std::istream* is, const src::FileDescr* fdescr);
-bool parse_source_file(const char* filename, src::Lexem lex = {});
+bool parse_source_file(const char* filename, src::Lexem lex = {}, bool is_main = false);
 bool parse_source_stdin();
 
 extern std::stack<src::SrcLocation> inclusion_locations;
@@ -925,7 +972,7 @@ struct Expr {
   }
   int define_new_vars(CodeBlob& code);
   int predefine_vars();
-  std::vector<var_idx_t> pre_compile(CodeBlob& code, bool lval = false) const;
+  std::vector<var_idx_t> pre_compile(CodeBlob& code, std::vector<std::pair<SymDef*, var_idx_t>>* lval_globs = nullptr) const;
   static std::vector<var_idx_t> pre_compile_let(CodeBlob& code, Expr* lhs, Expr* rhs, const SrcLocation& here);
   var_idx_t new_tmp(CodeBlob& code) const;
   std::vector<var_idx_t> new_tmp_vect(CodeBlob& code) const {
@@ -1617,11 +1664,11 @@ struct Stack {
  * 
  */
 
-typedef std::function<AsmOp(std::vector<VarDescr>&, std::vector<VarDescr>&)> simple_compile_func_t;
+typedef std::function<AsmOp(std::vector<VarDescr>&, std::vector<VarDescr>&, const SrcLocation)> simple_compile_func_t;
 typedef std::function<bool(AsmOpList&, std::vector<VarDescr>&, std::vector<VarDescr>&)> compile_func_t;
 
 inline simple_compile_func_t make_simple_compile(AsmOp op) {
-  return [op](std::vector<VarDescr>& out, std::vector<VarDescr>& in) -> AsmOp { return op; };
+  return [op](std::vector<VarDescr>& out, std::vector<VarDescr>& in, const SrcLocation&) -> AsmOp { return op; };
 }
 
 inline compile_func_t make_ext_compile(std::vector<AsmOp> ops) {
@@ -1660,7 +1707,7 @@ struct SymValAsmFunc : SymValFunc {
                 std::initializer_list<int> ret_order = {}, bool impure = false)
       : SymValFunc(-1, ft, arg_order, ret_order, impure), ext_compile(std::move(_compile)) {
   }
-  bool compile(AsmOpList& dest, std::vector<VarDescr>& out, std::vector<VarDescr>& in) const;
+  bool compile(AsmOpList& dest, std::vector<VarDescr>& out, std::vector<VarDescr>& in, const SrcLocation& where) const;
 };
 
 // defined in builtins.cpp
@@ -1677,6 +1724,44 @@ void define_builtins();
 extern int verbosity, indent, opt_level;
 extern bool stack_layout_comments, op_rewrite_comments, program_envelope, asm_preamble, interactive;
 extern std::string generated_from, boc_output_filename;
+extern ReadCallback::Callback read_callback;
+
+td::Result<std::string> fs_read_callback(ReadCallback::Kind kind, const char* query);
+
+class GlobalPragma {
+ public:
+  explicit GlobalPragma(std::string name) : name_(std::move(name)) {
+  }
+  const std::string& name() const {
+    return name_;
+  }
+  bool enabled() const {
+    return enabled_;
+  }
+  void enable(SrcLocation loc) {
+    enabled_ = true;
+    locs_.push_back(std::move(loc));
+  }
+  void check_enable_in_libs() {
+    if (locs_.empty()) {
+      return;
+    }
+    for (const SrcLocation& loc : locs_) {
+      if (loc.fdescr->is_main) {
+        return;
+      }
+    }
+    locs_[0].show_warning(PSTRING() << "#pragma " << name_
+                                    << " is enabled in included libraries, it may change the behavior of your code. "
+                                    << "Add this #pragma to the main source file to suppress this warning.");
+  }
+
+ private:
+  std::string name_;
+  bool enabled_ = false;
+  std::vector<SrcLocation> locs_;
+};
+extern GlobalPragma pragma_allow_post_modification, pragma_compute_asm_ltr;
 
 /*
  *

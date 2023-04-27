@@ -75,7 +75,7 @@ void ArchiveManager::add_handle(BlockHandle handle, td::Promise<td::Unit> promis
 }
 
 void ArchiveManager::update_handle(BlockHandle handle, td::Promise<td::Unit> promise) {
-  FileDescription *f;
+  const FileDescription *f;
   if (handle->handle_moved_to_archive()) {
     CHECK(handle->inited_unix_time());
     if (!handle->need_flush()) {
@@ -573,7 +573,7 @@ void ArchiveManager::deleted_package(PackageId id, td::Promise<td::Unit> promise
   auto it = m.find(id);
   CHECK(it != m.end());
   CHECK(it->second.deleted);
-  it->second.clear_actor_id();
+  it->second.file.reset();
   promise.set_value(td::Unit());
 }
 
@@ -630,8 +630,8 @@ void ArchiveManager::load_package(PackageId id) {
   get_file_map(id).emplace(id, std::move(desc));
 }
 
-validator::FileDescription *ArchiveManager::get_file_desc(ShardIdFull shard, PackageId id, BlockSeqno seqno,
-                                                          UnixTime ts, LogicalTime lt, bool force) {
+const ArchiveManager::FileDescription *ArchiveManager::get_file_desc(ShardIdFull shard, PackageId id, BlockSeqno seqno,
+                                                                     UnixTime ts, LogicalTime lt, bool force) {
   auto &f = get_file_map(id);
   auto it = f.find(id);
   if (it != f.end()) {
@@ -639,7 +639,7 @@ validator::FileDescription *ArchiveManager::get_file_desc(ShardIdFull shard, Pac
       return nullptr;
     }
     if (force && !id.temp) {
-      update_desc(it->second, shard, seqno, ts, lt);
+      update_desc(f, it->second, shard, seqno, ts, lt);
     }
     return &it->second;
   }
@@ -650,19 +650,18 @@ validator::FileDescription *ArchiveManager::get_file_desc(ShardIdFull shard, Pac
   return add_file_desc(shard, id, seqno, ts, lt);
 }
 
-validator::FileDescription *ArchiveManager::add_file_desc(ShardIdFull shard, PackageId id, BlockSeqno seqno,
-                                                          UnixTime ts, LogicalTime lt) {
+const ArchiveManager::FileDescription *ArchiveManager::add_file_desc(ShardIdFull shard, PackageId id, BlockSeqno seqno,
+                                                                     UnixTime ts, LogicalTime lt) {
   auto &f = get_file_map(id);
   CHECK(f.count(id) == 0);
 
-  FileDescription desc{id, false};
+  FileDescription new_desc{id, false};
   td::mkdir(db_root_ + id.path()).ensure();
   std::string prefix = PSTRING() << db_root_ << id.path() << id.name();
-
-  desc.file = td::actor::create_actor<ArchiveSlice>("slice", id.id, id.key, id.temp, false, db_root_, read_only_);
-
+  new_desc.file = td::actor::create_actor<ArchiveSlice>("slice", id.id, id.key, id.temp, false, db_root_);
+  const FileDescription &desc = f.emplace(id, std::move(new_desc));
   if (!id.temp) {
-    update_desc(desc, shard, seqno, ts, lt);
+    update_desc(f, desc, shard, seqno, ts, lt);
   }
 
   std::vector<tl_object_ptr<ton_api::db_files_package_firstBlock>> vec;
@@ -702,17 +701,16 @@ validator::FileDescription *ArchiveManager::add_file_desc(ShardIdFull shard, Pac
         .ensure();
   }
   index_->commit_transaction().ensure();
-
-  return &f.emplace(id, std::move(desc)).first->second;
+  return &desc;
 }
 
-void ArchiveManager::update_desc(FileDescription &desc, ShardIdFull shard, BlockSeqno seqno, UnixTime ts,
-                                 LogicalTime lt) {
+void ArchiveManager::update_desc(FileMap &f, const FileDescription &desc, ShardIdFull shard, BlockSeqno seqno,
+                                 UnixTime ts, LogicalTime lt) {
   auto it = desc.first_blocks.find(shard);
   if (it != desc.first_blocks.end() && it->second.seqno <= seqno) {
     return;
   }
-  desc.first_blocks[shard] = FileDescription::Desc{seqno, ts, lt};
+  f.set_shard_first_block(desc, shard, FileDescription::Desc{seqno, ts, lt});
   std::vector<tl_object_ptr<ton_api::db_files_package_firstBlock>> vec;
   for (auto &e : desc.first_blocks) {
     vec.push_back(create_tl_object<ton_api::db_files_package_firstBlock>(e.first.workchain, e.first.shard,
@@ -728,260 +726,90 @@ void ArchiveManager::update_desc(FileDescription &desc, ShardIdFull shard, Block
   index_->commit_transaction().ensure();
 }
 
-validator::FileDescription *ArchiveManager::get_file_desc_by_seqno(ShardIdFull shard, BlockSeqno seqno,
-                                                                   bool key_block) {
-  //  LOG(WARNING) << "GET file desc by seqno: shard " << shard.to_str() << " seqno: " << seqno;
-  auto &f = get_file_map(PackageId{0, key_block, false});
-
-  for (auto it = f.rbegin(); it != f.rend(); it++) {
-    auto i = it->second.first_blocks.find(shard);
-    if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
-      if (it->second.deleted) {
-        return nullptr;
-      } else {
-        auto block = i->second.seqno;
-        return &it->second;
-      }
-    }
-  }
-  return nullptr;
+const ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_seqno(ShardIdFull shard, BlockSeqno seqno,
+                                                                              bool key_block) {
+  return get_file_map(PackageId{0, key_block, false}).get_file_desc_by_seqno(shard, seqno);
 }
 
-validator::FileDescription *ArchiveManager::get_file_desc_by_unix_time(ShardIdFull shard, UnixTime ts, bool key_block) {
-  auto &f = get_file_map(PackageId{0, key_block, false});
-  for (auto it = f.rbegin(); it != f.rend(); it++) {
-    auto i = it->second.first_blocks.find(shard);
-    if (i != it->second.first_blocks.end() && i->second.ts <= ts) {
-      if (it->second.deleted) {
-        return nullptr;
-      } else {
-        return &it->second;
-      }
-    }
-  }
-  return nullptr;
+const ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_unix_time(ShardIdFull shard, UnixTime ts,
+                                                                                  bool key_block) {
+  return get_file_map(PackageId{0, key_block, false}).get_file_desc_by_unix_time(shard, ts);
 }
 
-validator::FileDescription *ArchiveManager::get_file_desc_by_lt(ShardIdFull shard, LogicalTime lt, bool key_block) {
-  auto &f = get_file_map(PackageId{0, key_block, false});
-  for (auto it = f.rbegin(); it != f.rend(); it++) {
-    auto i = it->second.first_blocks.find(shard);
-    if (i != it->second.first_blocks.end() && i->second.lt <= lt) {
-      if (it->second.deleted) {
-        return nullptr;
-      } else {
-        return &it->second;
-      }
-    }
-  }
-  return nullptr;
+const ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_lt(ShardIdFull shard, LogicalTime lt,
+                                                                           bool key_block) {
+  return get_file_map(PackageId{0, key_block, false}).get_file_desc_by_lt(shard, lt);
 }
 
-validator::FileDescription *ArchiveManager::get_file_desc_by_seqno(AccountIdPrefixFull account, BlockSeqno seqno,
-                                                                   bool key_block) {
-  auto &f = get_file_map(PackageId{0, key_block, false});
+const ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_seqno(AccountIdPrefixFull account,
+                                                                              BlockSeqno seqno, bool key_block) {
   if (account.is_masterchain()) {
     return get_file_desc_by_seqno(ShardIdFull{masterchainId}, seqno, key_block);
   }
-
-  for (auto it = f.rbegin(); it != f.rend(); it++) {
-    bool found = false;
-    for (int i = 0; i < 60; i++) {
-      auto shard = shard_prefix(account, i);
-      auto it2 = it->second.first_blocks.find(shard);
-      if (it2 != it->second.first_blocks.end()) {
-        if (it2->second.seqno <= seqno) {
-          auto block = it2->second.seqno;
-          return &it->second;
-        }
-        found = true;
-      } else if (found) {
-        break;
-      }
+  auto &f = get_file_map(PackageId{0, key_block, false});
+  const FileDescription *result = nullptr;
+  for (int i = 0; i <= 60; i++) {
+    const FileDescription *desc = f.get_file_desc_by_seqno(shard_prefix(account, i), seqno);
+    if (desc && (!result || result->id < desc->id)) {
+      result = desc;
+    } else if (result && (!desc || desc->id < result->id)) {
+      break;
     }
   }
-  return nullptr;
+  return result;
 }
 
-class AsyncRunner : public td::actor::Actor {
- public:
-  td::Promise<ConstBlockHandle> promise;
-  std::function<void(td::Promise<ConstBlockHandle>)> f;
-
-  explicit AsyncRunner(std::function<void(td::Promise<ConstBlockHandle>)> f_, td::Promise<ConstBlockHandle> promise_) {
-    promise = std::move(promise_);
-    f = std::move(f_);
-  }
-  void start_up() override {
-    f(std::move(promise));
-    stop();
-  }
-
- private:
-  std::function<void()> f_;
-};
-
-void ArchiveManager::get_file_desc_by_seqno_async(AccountIdPrefixFull account, BlockSeqno seqno, bool key_block,
-                                                  td::Promise<ConstBlockHandle> promise) {
-  auto &f = get_file_map(PackageId{0, key_block, false});
-
-  auto ff = [seqno, account, &f](td::Promise<ConstBlockHandle> promise) mutable {
-    if (account.is_masterchain()) {
-      auto shard = ShardIdFull{masterchainId};
-      //      LOG(WARNING) << "GET file desc by seqno: shard " << shard.to_str() << " seqno: " << seqno;
-
-      for (auto it = f.rbegin(); it != f.rend(); it++) {
-        if (it->second.minmax.min_seqno <= seqno) {
-          auto i = it->second.first_blocks.find(shard);
-          if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
-            if (it->second.deleted) {
-              break;
-            } else {
-              auto block = i->second.seqno;
-              td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
-                                      std::move(promise));
-              return;
-            }
-          }
-        }
-      }
-
-      LOG(ERROR) << "NOT FOUND: " << seqno << " Account: " << account.to_str();
-
-      for (auto it = f.rbegin(); it != f.rend(); it++) {
-        auto i = it->second.first_blocks.find(shard);
-        if (i != it->second.first_blocks.end() && i->second.seqno <= seqno) {
-          if (it->second.deleted) {
-            break;
-          } else {
-            auto block = i->second.seqno;
-
-            LOG(ERROR) << "SEQNO FOUND: " << block << " SEQNO REQUEST: " << seqno;
-            LOG(ERROR) << "SEQNO MIN: " << it->second.minmax.min_seqno << " SEQNO MAX: " << it->second.minmax.max_seqno;
-            std::exit(0);
-
-            td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
-                                    std::move(promise));
-            return;
-          }
-        }
-      }
-      promise.set_error(td::Status::Error());
-      return;
-    }
-
-    for (auto it = f.rbegin(); it != f.rend(); it++) {
-      if (it->second.minmax.min_seqno <= seqno) {
-        bool found = false;
-        for (int i = 0; i < 60; i++) {
-          auto shard = shard_prefix(account, i);
-          auto it2 = it->second.first_blocks.find(shard);
-          if (it2 != it->second.first_blocks.end()) {
-            if (it2->second.seqno <= seqno) {
-              auto block = it2->second.seqno;
-              td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
-                                      std::move(promise));
-              return;
-            }
-            found = true;
-          } else if (found) {
-            break;
-          }
-        }
-      }
-    }
-
-    for (auto it = f.rbegin(); it != f.rend(); it++) {
-      bool found = false;
-      for (int i = 0; i < 60; i++) {
-        auto shard = shard_prefix(account, i);
-        auto it2 = it->second.first_blocks.find(shard);
-        if (it2 != it->second.first_blocks.end()) {
-          if (it2->second.seqno <= seqno) {
-            auto block = it2->second.seqno;
-            LOG(ERROR) << "SEQNO FOUND: " << block << " SEQNO REQUEST: " << seqno;
-            LOG(ERROR) << "SEQNO MIN: " << it->second.minmax.min_seqno << " SEQNO MAX: " << it->second.minmax.max_seqno;
-            std::exit(0);
-
-            td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::get_block_by_seqno, account, seqno,
-                                    std::move(promise));
-            return;
-          }
-          found = true;
-        } else if (found) {
-          break;
-        }
-      }
-    }
-
-    LOG(ERROR) << "NOT FOUND: " << seqno << " Account: " << account.to_str();
-    promise.set_error(td::Status::Error());
-  };
-
-  td::actor::create_actor<AsyncRunner>("executeasync_desc_by_seqno", std::move(ff), std::move(promise)).release();
-}
-
-validator::FileDescription *ArchiveManager::get_file_desc_by_unix_time(AccountIdPrefixFull account, UnixTime ts,
-                                                                       bool key_block) {
-  auto &f = get_file_map(PackageId{0, key_block, false});
+const ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_unix_time(AccountIdPrefixFull account,
+                                                                                  UnixTime ts, bool key_block) {
   if (account.is_masterchain()) {
     return get_file_desc_by_unix_time(ShardIdFull{masterchainId}, ts, key_block);
   }
-  for (auto it = f.rbegin(); it != f.rend(); it++) {
-    bool found = false;
-    for (int i = 0; i < 60; i++) {
-      auto shard = shard_prefix(account, i);
-      auto it2 = it->second.first_blocks.find(shard);
-      if (it2 != it->second.first_blocks.end()) {
-        if (it2->second.ts <= ts) {
-          return &it->second;
-        }
-        found = true;
-      } else if (found) {
-        break;
-      }
+  auto &f = get_file_map(PackageId{0, key_block, false});
+  const FileDescription *result = nullptr;
+  for (int i = 0; i <= 60; i++) {
+    const FileDescription *desc = f.get_file_desc_by_unix_time(shard_prefix(account, i), ts);
+    if (desc && (!result || result->id < desc->id)) {
+      result = desc;
+    } else if (result && (!desc || desc->id < result->id)) {
+      break;
     }
   }
-  return nullptr;
+  return result;
 }
 
-validator::FileDescription *ArchiveManager::get_file_desc_by_lt(AccountIdPrefixFull account, LogicalTime lt,
-                                                                bool key_block) {
-  auto &f = get_file_map(PackageId{0, key_block, false});
+const ArchiveManager::FileDescription *ArchiveManager::get_file_desc_by_lt(AccountIdPrefixFull account, LogicalTime lt,
+                                                                           bool key_block) {
   if (account.is_masterchain()) {
     return get_file_desc_by_lt(ShardIdFull{masterchainId}, lt, key_block);
   }
-  for (auto it = f.rbegin(); it != f.rend(); it++) {
-    bool found = false;
-    for (int i = 0; i < 60; i++) {
-      auto shard = shard_prefix(account, i);
-      auto it2 = it->second.first_blocks.find(shard);
-      if (it2 != it->second.first_blocks.end()) {
-        if (it2->second.lt <= lt) {
-          return &it->second;
-        }
-        found = true;
-      } else if (found) {
-        break;
-      }
+  auto &f = get_file_map(PackageId{0, key_block, false});
+  const FileDescription *result = nullptr;
+  for (int i = 0; i <= 60; i++) {
+    const FileDescription *desc = f.get_file_desc_by_lt(shard_prefix(account, i), lt);
+    if (desc && (!result || result->id < desc->id)) {
+      result = desc;
+    } else if (result && (!desc || desc->id < result->id)) {
+      break;
     }
   }
-  return nullptr;
+  return result;
 }
 
-validator::FileDescription *ArchiveManager::get_next_file_desc(FileDescription *f) {
+const ArchiveManager::FileDescription *ArchiveManager::get_next_file_desc(const FileDescription *f) {
   auto &m = get_file_map(f->id);
   auto it = m.find(f->id);
   CHECK(it != m.end());
-  it++;
-  if (it == m.end()) {
-    return nullptr;
-  } else {
-    return &it->second;
+  while (true) {
+    it++;
+    if (it == m.end()) {
+      return nullptr;
+    } else if (!it->second.deleted) {
+      return &it->second;
+    }
   }
 }
 
-validator::FileDescription *ArchiveManager::get_temp_file_desc_by_idx(PackageId idx) {
+const ArchiveManager::FileDescription *ArchiveManager::get_temp_file_desc_by_idx(PackageId idx) {
   auto it = temp_files_.find(idx);
   if (it != temp_files_.end()) {
     if (it->second.deleted) {
@@ -1056,7 +884,7 @@ void ArchiveManager::start_up() {
   td::WalkPath::run(db_root_ + "/archive/states/", [&](td::CSlice fname, td::WalkPath::Type t) -> void {
     if (t == td::WalkPath::Type::NotDir) {
       LOG(ERROR) << "checking file " << fname;
-      auto pos = fname.rfind('/');
+      auto pos = fname.rfind(TD_DIR_SLASH);
       if (pos != td::Slice::npos) {
         fname.remove_prefix(pos + 1);
       }
@@ -1324,13 +1152,17 @@ void ArchiveManager::truncate(BlockSeqno masterchain_seqno, ConstBlockHandle han
     auto it = key_files_.begin();
     while (it != key_files_.end()) {
       if (it->first.id <= masterchain_seqno) {
-        td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::truncate, masterchain_seqno, handle,
-                                ig.get_promise());
+        if (!it->second.deleted) {
+          td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::truncate, masterchain_seqno, handle,
+                                  ig.get_promise());
+        }
         it++;
       } else {
         auto it2 = it;
         it++;
-        td::actor::send_closure(it2->second.file_actor_id(), &ArchiveSlice::destroy, ig.get_promise());
+        if (!it2->second.deleted) {
+          td::actor::send_closure(it2->second.file_actor_id(), &ArchiveSlice::destroy, ig.get_promise());
+        }
         it2->second.file.release();
         index_
             ->erase(create_serialize_tl_object<ton_api::db_files_package_key>(it2->second.id.id, it2->second.id.key,
@@ -1345,13 +1177,17 @@ void ArchiveManager::truncate(BlockSeqno masterchain_seqno, ConstBlockHandle han
     auto it = files_.begin();
     while (it != files_.end()) {
       if (it->first.id <= masterchain_seqno) {
-        td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::truncate, masterchain_seqno, handle,
-                                ig.get_promise());
+        if (!it->second.deleted) {
+          td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::truncate, masterchain_seqno, handle,
+                                  ig.get_promise());
+        }
         it++;
       } else {
         auto it2 = it;
         it++;
-        td::actor::send_closure(it2->second.file_actor_id(), &ArchiveSlice::destroy, ig.get_promise());
+        if (!it2->second.deleted) {
+          td::actor::send_closure(it2->second.file_actor_id(), &ArchiveSlice::destroy, ig.get_promise());
+        }
         it2->second.file.release();
         index_
             ->erase(create_serialize_tl_object<ton_api::db_files_package_key>(it2->second.id.id, it2->second.id.key,
@@ -1411,6 +1247,82 @@ bool validator::FileDescription::has_account_prefix(AccountIdPrefixFull account_
     }
   }
   return false;
+}
+
+void ArchiveManager::FileMap::shard_index_add(const FileDescription &desc) {
+  for (const auto &p : desc.first_blocks) {
+    shards_[p.first].seqno_index_[p.second.seqno] = &desc;
+    shards_[p.first].lt_index_[p.second.lt] = &desc;
+    shards_[p.first].unix_time_index_[p.second.ts] = &desc;
+  }
+}
+
+void ArchiveManager::FileMap::shard_index_del(const FileDescription &desc) {
+  for (const auto &p : desc.first_blocks) {
+    shards_[p.first].seqno_index_.erase(p.second.seqno);
+    shards_[p.first].lt_index_.erase(p.second.lt);
+    shards_[p.first].unix_time_index_.erase(p.second.ts);
+  }
+}
+
+void ArchiveManager::FileMap::set_shard_first_block(const FileDescription &desc, ShardIdFull shard,
+                                                    FileDescription::Desc v) {
+  auto &d = const_cast<FileDescription &>(desc);
+  auto it = d.first_blocks.find(shard);
+  if (it != d.first_blocks.end()) {
+    shards_[shard].seqno_index_.erase(it->second.seqno);
+    shards_[shard].lt_index_.erase(it->second.lt);
+    shards_[shard].unix_time_index_.erase(it->second.ts);
+  }
+  d.first_blocks[shard] = v;
+  shards_[shard].seqno_index_[v.seqno] = &d;
+  shards_[shard].lt_index_[v.lt] = &d;
+  shards_[shard].unix_time_index_[v.ts] = &d;
+}
+
+const ArchiveManager::FileDescription *ArchiveManager::FileMap::get_file_desc_by_seqno(ShardIdFull shard,
+                                                                                       BlockSeqno seqno) const {
+  auto it = shards_.find(shard);
+  if (it == shards_.end()) {
+    return nullptr;
+  }
+  const auto &map = it->second.seqno_index_;
+  auto it2 = map.upper_bound(seqno);
+  if (it2 == map.begin()) {
+    return nullptr;
+  }
+  --it2;
+  return it2->second->deleted ? nullptr : it2->second;
+}
+
+const ArchiveManager::FileDescription *ArchiveManager::FileMap::get_file_desc_by_lt(ShardIdFull shard,
+                                                                                    LogicalTime lt) const {
+  auto it = shards_.find(shard);
+  if (it == shards_.end()) {
+    return nullptr;
+  }
+  const auto &map = it->second.lt_index_;
+  auto it2 = map.upper_bound(lt);
+  if (it2 == map.begin()) {
+    return nullptr;
+  }
+  --it2;
+  return it2->second->deleted ? nullptr : it2->second;
+}
+
+const ArchiveManager::FileDescription *ArchiveManager::FileMap::get_file_desc_by_unix_time(ShardIdFull shard,
+                                                                                           UnixTime ts) const {
+  auto it = shards_.find(shard);
+  if (it == shards_.end()) {
+    return nullptr;
+  }
+  const auto &map = it->second.unix_time_index_;
+  auto it2 = map.upper_bound(ts);
+  if (it2 == map.begin()) {
+    return nullptr;
+  }
+  --it2;
+  return it2->second->deleted ? nullptr : it2->second;
 }
 
 }  // namespace validator

@@ -455,78 +455,85 @@ gas.change_limit(new_limit);
 }
 
 int VmState::step() {
-CHECK(code.not_null() && stack.not_null());
-//VM_LOG(st) << "stack:";  stack->dump(VM_LOG(st));
-//VM_LOG(st) << "; cr0.refcnt = " << get_c0()->get_refcnt() - 1 << std::endl;
-if (stack_trace) {
-  stack->dump(std::cerr, 3);
-}
+  CHECK(code.not_null() && stack.not_null());
+  if (log.log_mask & vm::VmLog::DumpStack) {
+    std::stringstream ss;
+    stack->dump(ss, 3);
+    VM_LOG(this) << "stack:" << ss.str();
+  }
+  if (stack_trace) {
+    stack->dump(std::cerr, 3);
+  }
 
-if (vm_dumper.enable) {
-  vm_dumper.dump_stack(stack);
-}
+  if (vm_dumper.enable) {
+    vm_dumper.dump_stack(stack);
+  }
 
-++steps;
-if (code->size()) {
-  return dispatch->dispatch(this, code.write());
-} else if (code->size_refs()) {
-  VM_LOG(this) << "execute implicit JMPREF";
-  gas.consume_chk(implicit_jmpref_gas_price);
-  Ref<Continuation> cont = Ref<OrdCont>{true, load_cell_slice_ref(code->prefetch_ref()), get_cp()};
-  return jump(std::move(cont));
-} else {
-  VM_LOG(this) << "execute implicit RET";
-  gas.consume_chk(implicit_ret_gas_price);
-  return ret();
-}
+  ++steps;
+  if (code->size()) {
+    VM_LOG_MASK(this, vm::VmLog::ExecLocation) << "code cell hash: " << code->get_base_cell()->get_hash().to_hex() << " offset: " << code->cur_pos();
+    return dispatch->dispatch(this, code.write());
+  } else if (code->size_refs()) {
+    VM_LOG(this) << "execute implicit JMPREF";
+    auto ref_cell = code->prefetch_ref();
+    VM_LOG_MASK(this, vm::VmLog::ExecLocation) << "code cell hash: " << ref_cell->get_hash().to_hex() << " offset: 0";
+    gas.consume_chk(implicit_jmpref_gas_price);
+    Ref<Continuation> cont = Ref<OrdCont>{true, load_cell_slice_ref(std::move(ref_cell)), get_cp()};
+    return jump(std::move(cont));
+  } else {
+    VM_LOG(this) << "execute implicit RET";
+    gas.consume_chk(implicit_ret_gas_price);
+    return ret();
+  }
 }
 
 int VmState::run() {
-if (code.is_null() || stack.is_null()) {
-  // throw VmError{Excno::fatal, "cannot run an uninitialized VM"};
-  return (int)Excno::fatal;  // no ~ for unhandled exceptions
-}
-int res;
-Guard guard(this);
-do {
-  try {
+  if (code.is_null() || stack.is_null()) {
+    // throw VmError{Excno::fatal, "cannot run an uninitialized VM"};
+    return (int)Excno::fatal;  // no ~ for unhandled exceptions
+  }
+  int res;
+  Guard guard(this);
+  do {
     try {
       try {
-        res = step();
-        gas.check();
-      } catch (vm::CellBuilder::CellWriteError) {
-        throw VmError{Excno::cell_ov};
-      } catch (vm::CellBuilder::CellCreateError) {
-        throw VmError{Excno::cell_ov};
-      } catch (vm::CellSlice::CellReadError) {
-        throw VmError{Excno::cell_und};
+        try {
+          res = step();
+          VM_LOG_MASK(this, vm::VmLog::GasRemaining) << "gas remaining: " << gas.gas_remaining;
+          gas.check();
+        } catch (vm::CellBuilder::CellWriteError) {
+          throw VmError{Excno::cell_ov};
+        } catch (vm::CellBuilder::CellCreateError) {
+          throw VmError{Excno::cell_ov};
+        } catch (vm::CellSlice::CellReadError) {
+          throw VmError{Excno::cell_und};
+        }
+      } catch (const VmError& vme) {
+        VM_LOG(this) << "handling exception code " << vme.get_errno() << ": " << vme.get_msg();
+        try {
+          ++steps;
+          res = throw_exception(vme.get_errno());
+        } catch (const VmError& vme2) {
+          VM_LOG(this) << "exception " << vme2.get_errno() << " while handling exception: " << vme.get_msg();
+          return ~vme2.get_errno();
+        }
       }
-    } catch (const VmError& vme) {
-      VM_LOG(this) << "handling exception code " << vme.get_errno() << ": " << vme.get_msg();
-      try {
-        ++steps;
-        res = throw_exception(vme.get_errno());
-      } catch (const VmError& vme2) {
-        VM_LOG(this) << "exception " << vme2.get_errno() << " while handling exception: " << vme.get_msg();
-        return ~vme2.get_errno();
-      }
+    } catch (VmNoGas vmoog) {
+      ++steps;
+      VM_LOG(this) << "unhandled out-of-gas exception: gas consumed=" << gas.gas_consumed()
+                   << ", limit=" << gas.gas_limit;
+      get_stack().clear();
+      get_stack().push_smallint(gas.gas_consumed());
+      return vmoog.get_errno();  // no ~ for unhandled exceptions (to make their faking impossible)
     }
-  } catch (VmNoGas vmoog) {
-    ++steps;
-    VM_LOG(this) << "unhandled out-of-gas exception: gas consumed=" << gas.gas_consumed()
-                 << ", limit=" << gas.gas_limit;
+  } while (!res);
+  if ((res | 1) == -1 && !try_commit()) {
+    VM_LOG(this) << "automatic commit failed (new data or action cells too deep)";
     get_stack().clear();
-    get_stack().push_smallint(gas.gas_consumed());
-    return vmoog.get_errno();  // no ~ for unhandled exceptions (to make their faking impossible)
+    get_stack().push_smallint(0);
+    return ~(int)Excno::cell_ov;
   }
-} while (!res);
-if ((res | 1) == -1 && !try_commit()) {
-  VM_LOG(this) << "automatic commit failed (new data or action cells too deep)";
-  get_stack().clear();
-  get_stack().push_smallint(0);
-  return ~(int)Excno::cell_ov;
-}
-return res;
+  return res;
 }
 
 bool VmState::try_commit() {

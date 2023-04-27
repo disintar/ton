@@ -44,7 +44,7 @@
 #endif
 #include <iostream>
 
-using namespace ton;
+namespace ton {
 
 td::BufferSlice create_query_error(td::CSlice message) {
   return create_serialize_tl_object<ton_api::storage_daemon_queryError>(message.str());
@@ -69,6 +69,7 @@ class StorageDaemon : public td::actor::Actor {
   void start_up() override {
     CHECK(db_root_ != "");
     td::mkdir(db_root_).ensure();
+    db_root_ = td::realpath(db_root_).move_as_ok();
     keyring_ = keyring::Keyring::create(db_root_ + "/keyring");
     {
       auto S = load_global_config();
@@ -179,6 +180,9 @@ class StorageDaemon : public td::actor::Actor {
     dht_id_ = dht_id_full.compute_short_id();
     td::actor::send_closure(adnl_, &adnl::Adnl::add_id, dht_id_full, addr_list, static_cast<td::uint8>(0));
 
+    LOG(INFO) << "Storage daemon ADNL id is " << local_id_;
+    LOG(INFO) << "DHT id is " << dht_id_;
+
     if (client_mode_) {
       auto D = dht::Dht::create_client(dht_id_, db_root_, dht_config_, keyring_.get(), adnl_.get());
       D.ensure();
@@ -285,19 +289,21 @@ class StorageDaemon : public td::actor::Actor {
   void run_control_query(ton_api::storage_daemon_createTorrent &query, td::Promise<td::BufferSlice> promise) {
     // Run in a separate thread
     delay_action(
-        [promise = std::move(promise), manager = manager_.get(), query = std::move(query)]() mutable {
+        [promise = std::move(promise), manager = manager_.get(), db_root = db_root_,
+         query = std::move(query)]() mutable {
           Torrent::Creator::Options options;
           options.piece_size = 128 * 1024;
           options.description = std::move(query.description_);
           TRY_RESULT_PROMISE(promise, torrent, Torrent::Creator::create_from_path(std::move(options), query.path_));
           td::Bits256 hash = torrent.get_hash();
           td::actor::send_closure(manager, &StorageManager::add_torrent, std::move(torrent), false, query.allow_upload_,
+                                  query.copy_inside_,
                                   [manager, hash, promise = std::move(promise)](td::Result<td::Unit> R) mutable {
                                     if (R.is_error()) {
                                       promise.set_error(R.move_as_error());
-                                    } else {
-                                      get_torrent_info_full_serialized(manager, hash, std::move(promise));
+                                      return;
                                     }
+                                    get_torrent_info_full_serialized(manager, hash, std::move(promise));
                                   });
         },
         td::Timestamp::now());
@@ -428,6 +434,52 @@ class StorageDaemon : public td::actor::Actor {
                             }));
   }
 
+  void run_control_query(ton_api::storage_daemon_getTorrentPiecesInfo &query, td::Promise<td::BufferSlice> promise) {
+    td::Bits256 hash = query.hash_;
+    td::actor::send_closure(
+        manager_, &StorageManager::with_torrent, hash,
+        promise.wrap([query = std::move(query)](NodeActor::NodeState state) -> td::Result<td::BufferSlice> {
+          Torrent &torrent = state.torrent;
+          if (!torrent.inited_info()) {
+            return td::Status::Error("Torrent info is not available");
+          }
+          td::uint64 total_pieces = torrent.get_info().pieces_count();
+          td::uint64 range_l = std::min<td::uint64>(total_pieces, query.offset_);
+          td::uint64 size = query.max_pieces_ != -1 ? std::min<td::uint64>(total_pieces - range_l, query.max_pieces_)
+                                                    : total_pieces - range_l;
+          td::BufferSlice piece_ready((size + 7) / 8);
+          std::fill(piece_ready.data(), piece_ready.data() + piece_ready.size(), 0);
+          for (td::uint64 i = range_l; i < range_l + size; ++i) {
+            if (torrent.is_piece_ready(i)) {
+              piece_ready.data()[(i - range_l) / 8] |= (1 << ((i - range_l) % 8));
+            }
+          }
+
+          auto result = create_tl_object<ton_api::storage_daemon_torrentPiecesInfo>();
+          result->total_pieces_ = total_pieces;
+          result->piece_size_ = torrent.get_info().piece_size;
+          result->range_l_ = range_l;
+          result->range_r_ = range_l + size;
+          result->piece_ready_bitset_ = std::move(piece_ready);
+
+          if ((query.flags_ & 1) && torrent.inited_header()) {
+            result->flags_ = 1;
+            auto range = torrent.get_header_parts_range();
+            result->files_.push_back(
+                create_tl_object<ton_api::storage_daemon_filePiecesInfo>("", range.begin, range.end));
+            for (size_t i = 0; i < torrent.get_files_count().value(); ++i) {
+              auto range = torrent.get_file_parts_range(i);
+              result->files_.push_back(create_tl_object<ton_api::storage_daemon_filePiecesInfo>(
+                  torrent.get_file_name(i).str(), range.begin, range.end));
+            }
+          } else {
+            result->flags_ = 0;
+          }
+
+          return serialize_tl_object(result, true);
+        }));
+  }
+
   void run_control_query(ton_api::storage_daemon_setFilePriorityAll &query, td::Promise<td::BufferSlice> promise) {
     TRY_RESULT_PROMISE(promise, priority, td::narrow_cast_safe<td::uint8>(query.priority_));
     td::actor::send_closure(manager_, &StorageManager::set_all_files_priority, query.hash_, priority,
@@ -486,6 +538,24 @@ class StorageDaemon : public td::actor::Actor {
             }));
           }
         });
+  }
+
+  void run_control_query(ton_api::storage_daemon_getSpeedLimits &query, td::Promise<td::BufferSlice> promise) {
+    td::actor::send_closure(manager_, &StorageManager::get_speed_limits,
+                            promise.wrap([](std::pair<double, double> limits) -> td::BufferSlice {
+                              return create_serialize_tl_object<ton_api::storage_daemon_speedLimits>(limits.first,
+                                                                                                     limits.second);
+                            }));
+  }
+
+  void run_control_query(ton_api::storage_daemon_setSpeedLimits &query, td::Promise<td::BufferSlice> promise) {
+    if (query.flags_ & 1) {
+      td::actor::send_closure(manager_, &StorageManager::set_download_speed_limit, query.download_);
+    }
+    if (query.flags_ & 2) {
+      td::actor::send_closure(manager_, &StorageManager::set_upload_speed_limit, query.upload_);
+    }
+    promise.set_result(create_serialize_tl_object<ton_api::storage_daemon_success>());
   }
 
   void run_control_query(ton_api::storage_daemon_getNewContractMessage &query, td::Promise<td::BufferSlice> promise) {
@@ -776,6 +846,7 @@ class StorageDaemon : public td::actor::Actor {
       file->name_ = torrent.get_file_name(i).str();
       file->size_ = torrent.get_file_size(i);
       file->downloaded_size_ = torrent.get_file_ready_size(i);
+      file->flags_ = 0;
       obj.files_.push_back(std::move(file));
     }
   }
@@ -795,6 +866,7 @@ class StorageDaemon : public td::actor::Actor {
                               obj->active_upload_ = state.active_upload;
                               obj->download_speed_ = state.download_speed;
                               obj->upload_speed_ = state.upload_speed;
+                              obj->added_at_ = state.added_at;
                               promise.set_result(std::move(obj));
                             });
   }
@@ -810,8 +882,10 @@ class StorageDaemon : public td::actor::Actor {
                                 auto obj = create_tl_object<ton_api::storage_daemon_torrentFull>();
                                 fill_torrent_info_full(state.torrent, *obj);
                                 obj->torrent_->active_download_ = state.active_download;
+                                obj->torrent_->active_upload_ = state.active_upload;
                                 obj->torrent_->download_speed_ = state.download_speed;
                                 obj->torrent_->upload_speed_ = state.upload_speed;
+                                obj->torrent_->added_at_ = state.added_at;
                                 for (size_t i = 0; i < obj->files_.size(); ++i) {
                                   obj->files_[i]->priority_ =
                                       (i < state.file_priority.size() ? state.file_priority[i] : 1);
@@ -863,6 +937,8 @@ class StorageDaemon : public td::actor::Actor {
     return db_root_ + "/config.json";
   }
 };
+
+}  // namespace ton
 
 int main(int argc, char *argv[]) {
   SET_VERBOSITY_LEVEL(verbosity_WARNING);
@@ -936,8 +1012,8 @@ int main(int argc, char *argv[]) {
 
   scheduler.run_in_context([&] {
     p.run(argc, argv).ensure();
-    td::actor::create_actor<StorageDaemon>("storage-daemon", ip_addr, client_mode, global_config, db_root, control_port,
-                                           enable_storage_provider)
+    td::actor::create_actor<ton::StorageDaemon>("storage-daemon", ip_addr, client_mode, global_config, db_root,
+                                                control_port, enable_storage_provider)
         .release();
   });
   while (scheduler.run(1)) {

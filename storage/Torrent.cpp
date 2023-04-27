@@ -266,7 +266,9 @@ td::Result<std::string> Torrent::get_piece_data(td::uint64 piece_i) {
   if (!inited_info_) {
     return td::Status::Error("Torrent info not inited");
   }
-  CHECK(piece_i < info_.pieces_count());
+  if (piece_i >= info_.pieces_count()) {
+    return td::Status::Error("Piece idx is too big");
+  }
   if (!piece_is_ready_[piece_i]) {
     return td::Status::Error("Piece is not ready");
   }
@@ -291,7 +293,9 @@ td::Result<td::Ref<vm::Cell>> Torrent::get_piece_proof(td::uint64 piece_i) {
   if (!inited_info_) {
     return td::Status::Error("Torrent info not inited");
   }
-  CHECK(piece_i < info_.pieces_count());
+  if (piece_i >= info_.pieces_count()) {
+    return td::Status::Error("Piece idx is too big");
+  }
   return merkle_tree_.gen_proof(piece_i, piece_i);
 }
 
@@ -305,7 +309,9 @@ td::Status Torrent::add_piece(td::uint64 piece_i, td::Slice data, td::Ref<vm::Ce
   if (!proof.is_null()) {
     TRY_STATUS(merkle_tree_.add_proof(proof));
   }
-  CHECK(piece_i < info_.pieces_count());
+  if (piece_i >= info_.pieces_count()) {
+    return td::Status::Error("Piece idx is too big");
+  }
   if (piece_is_ready_[piece_i]) {
     return td::Status::OK();
   }
@@ -696,6 +702,39 @@ void Torrent::load_from_files(std::string files_path) {
   if (added_cnt > 0) {
     LOG(INFO) << "Loaded " << added_cnt << " new pieces for " << get_hash().to_hex();
   }
+}
+
+td::Status Torrent::copy_to(const std::string &new_root_dir) {
+  if (!is_completed() || included_size_ != info_.file_size) {
+    return td::Status::Error("Torrent::copy_to is allowed only for fully completed torrents");
+  }
+  auto get_new_chunk_path = [&](td::Slice name) -> std::string {
+    return PSTRING() << new_root_dir << TD_DIR_SLASH << header_.value().dir_name << TD_DIR_SLASH << name;
+  };
+  std::vector<td::BlobView> new_blobs;
+  for (size_t i = 1; i < chunks_.size(); ++i) {
+    auto &chunk = chunks_[i];
+    std::string new_path = get_new_chunk_path(chunk.name);
+    TRY_STATUS(td::mkpath(new_path));
+    TRY_RESULT(new_blob, td::FileNoCacheBlobView::create(new_path, chunk.size, true));
+    static const td::uint64 BUF_SIZE = 1 << 17;
+    td::BufferSlice buf(BUF_SIZE);
+    for (td::uint64 l = 0; l < chunk.size; l += BUF_SIZE) {
+      td::uint64 r = std::min(chunk.size, l + BUF_SIZE);
+      TRY_RESULT_PREFIX(s, chunk.data.view(buf.as_slice().substr(0, r - l), l),
+                        PSTRING() << "Failed to read " << chunk.name << ": ");
+      if (s.size() != r - l) {
+        return td::Status::Error(PSTRING() << "Failed to read " << chunk.name);
+      }
+      TRY_STATUS_PREFIX(new_blob.write(s, l), PSTRING() << "Failed to write " << chunk.name << ": ");
+    }
+    new_blobs.push_back(std::move(new_blob));
+  }
+  root_dir_ = new_root_dir;
+  for (size_t i = 1; i < chunks_.size(); ++i) {
+    chunks_[i].data = std::move(new_blobs[i - 1]);
+  }
+  return td::Status::OK();
 }
 
 }  // namespace ton
