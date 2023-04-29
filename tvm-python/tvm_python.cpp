@@ -378,10 +378,14 @@ struct PyTVM {
     log(log_string, LOG_INFO);
   }
 
-  void set_gasLimit(long long gas_limit, long long gas_max = -1) {
-    if (gas_max == -1) {
-      gas_limits = vm::GasLimits{gas_limit, gas_max};
+  void set_gasLimit(const std::string& gas_limit_s, const std::string& gas_max_s = "") {
+    auto gas_limit = strtoll(gas_limit_s.c_str(), nullptr, 10);
+
+    if (gas_max_s.empty()) {
+      gas_limits = vm::GasLimits{gas_limit, gas_limit};
     } else {
+      auto gas_max = strtoll(gas_max_s.c_str(), nullptr, 10);
+
       gas_limits = vm::GasLimits{gas_limit, gas_max};
     }
   }
@@ -893,7 +897,7 @@ PYBIND11_MODULE(tvm_python, m) {
       .def("set_state_init", &PyTVM::set_state_init)
       .def("get_stacks", &PyTVM::get_stacks)
       .def("clear_stack", &PyTVM::clear_stack)
-      .def("set_gasLimit", &PyTVM::set_gasLimit, py::arg("gas_limit") = 0, py::arg("gas_max") = -1)
+      .def("set_gasLimit", &PyTVM::set_gasLimit, py::arg("gas_limit") = "0", py::arg("gas_max") = "-1")
       .def("run_vm", &PyTVM::run_vm)
       .def("set_c7", &PyTVM::set_c7, py::arg("unixtime") = 0, py::arg("blocklt") = "0", py::arg("translt") = "0",
            py::arg("randseed") = "", py::arg("balanceGrams") = "", py::arg("address") = "",
