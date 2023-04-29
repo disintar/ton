@@ -328,9 +328,8 @@ struct PyTVM {
   std::vector<std::vector<vm::StackEntry>> stacks;
   std::vector<std::string> vm_ops;
 
-  void set_c7(int c7_unixtime_, const std::string& c7_blocklt_, const std::string& c7_translt_,
-              const std::string& c7_randseed_, const std::string& c7_balanceRemainingGrams_,
-              const std::string& c7_myaddress_, const std::string& c7_globalConfig_) {
+  void set_c7(int c7_unixtime_, std::string c7_blocklt_, std::string c7_translt_, std::string c7_randseed_,
+              std::string c7_balanceRemainingGrams_, std::string c7_myaddress_, std::string c7_globalConfig_) {
     if (!skip_c7) {
       c7_unixtime = c7_unixtime_;
       c7_blocklt = td::dec_string_to_int256(c7_blocklt_);
@@ -378,7 +377,7 @@ struct PyTVM {
     log(log_string, LOG_INFO);
   }
 
-  void set_gasLimit(const std::string& gas_limit_s, const std::string& gas_max_s = "") {
+  void set_gasLimit(std::string gas_limit_s, std::string gas_max_s = "") {
     auto gas_limit = strtoll(gas_limit_s.c_str(), nullptr, 10);
 
     if (gas_max_s.empty()) {
@@ -391,7 +390,7 @@ struct PyTVM {
   }
 
   // @prop Data
-  void set_data(const std::string& data_) {
+  void set_data(std::string data_) {
     log_debug("Start parse data");
     auto data_parsed = parseStringToCell(data_);
     log_debug("Data parsed success");
@@ -409,7 +408,7 @@ struct PyTVM {
   }
 
   // @prop Code
-  void set_code(const std::string& code_) {
+  void set_code(std::string code_) {
     log_debug("Start parse code");
     auto code_parsed = parseStringToCell(code_);
     log_debug("Code parsed success");
@@ -426,7 +425,7 @@ struct PyTVM {
     }
   }
 
-  void set_state_init(const std::string& state_init_) {
+  void set_state_init(std::string state_init_) {
     auto state_init = load_cell_slice(parseStringToCell(state_init_));
     code = state_init.fetch_ref();
     data = state_init.fetch_ref();
@@ -648,7 +647,7 @@ struct PyTVM {
   }
 };
 
-py::object pack_address(const std::string& address) {
+py::object pack_address(std::string address) {
   auto paddr_parse = block::StdAddress::parse(address);
 
   if (paddr_parse.is_ok()) {
@@ -668,7 +667,7 @@ py::object pack_address(const std::string& address) {
 }
 
 // todo: make cell & cell slice bindings
-std::string load_address(const std::string& boc) {
+std::string load_address(std::string boc) {
   auto cell = parseStringToCell(boc);
   auto cs = load_cell_slice(cell);
   ton::StdSmcAddress addr;
@@ -681,7 +680,7 @@ std::string load_address(const std::string& boc) {
   return friendlyAddr.rserialize(true);
 }
 
-std::string onchain_hash_key_to_string(const std::string& hash) {
+std::string onchain_hash_key_to_string(std::string hash) {
   std::vector<td::string> s = {"uri",      "name",         "description", "image",  "image_data", "symbol",
                                "decimals", "amount_style", "render_type", "jetton", "master",     "address"};
 
@@ -757,7 +756,7 @@ std::string parse_chunked_data(vm::CellSlice& cs) {
   return td::base64_encode(slice);
 }
 
-long long parse_op_code(std::string& boc) {
+long long parse_op_code(std::string boc) {
   auto cell = parseStringToCell(boc);
   auto cs = load_cell_slice(cell);
   if (cs.size() < 32) {
@@ -767,7 +766,7 @@ long long parse_op_code(std::string& boc) {
   }
 }
 
-py::dict parse_token_data(const std::string& boc) {
+py::dict parse_token_data(std::string boc) {
   auto cell = parseStringToCell(boc);
   auto cs = load_cell_slice(cell);
 
@@ -831,7 +830,7 @@ py::dict parse_token_data(const std::string& boc) {
   }
 }
 
-std::string get_public_key_from_state_init_wallet(const std::string& boc) {
+std::string get_public_key_from_state_init_wallet(std::string boc) {
   auto cell = load_cell_slice(parseStringToCell(boc));
 
   auto code = cell.fetch_ref();
