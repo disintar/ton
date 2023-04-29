@@ -475,6 +475,8 @@ struct PyTVM {
   }
 
   std::vector<py::object> run_vm() {
+    pybind11::gil_scoped_release release;
+
     if (code.is_null()) {
       throw std::invalid_argument("To run VM, please pass code");
     }
@@ -580,6 +582,8 @@ struct PyTVM {
       log_debug("Parse stack item #" + std::to_string(idx));
       pyStack.push_back(cast_stack_item_to_python_object(stack.at(idx)));
     }
+
+    pybind11::gil_scoped_acquire acquire;
 
     return pyStack;
   }
