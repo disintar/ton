@@ -28,7 +28,7 @@ class PackageWriter : public td::actor::Actor {
 
 class ArchiveFile : public td::actor::Actor {
  public:
-  ArchiveFile(std::string path, UnixTime ts, bool read_only=false) : path_(std::move(path)), ts_(ts), read_only_(read_only) {
+  ArchiveFile(std::string path, UnixTime ts, bool read_only=false) : path_(std::move(path)), ts_(ts), read_only(read_only) {
   }
   void start_up() override;
   void write(FileDb::RefId ref_id, td::BufferSlice data, td::Promise<td::Unit> promise);
@@ -51,7 +51,7 @@ class ArchiveFile : public td::actor::Actor {
 
 class ArchiveManager : public td::actor::Actor {
  public:
-  ArchiveManager(std::string db_root);
+  ArchiveManager(std::string db_root, bool read_only=false);
   void write(UnixTime ts, bool key_block, FileDb::RefId ref_id, td::BufferSlice data, td::Promise<td::Unit> promise);
   void write_handle(BlockHandle handle, td::Promise<td::Unit> promise);
   void read(UnixTime ts, bool key_block, FileDb::RefId ref_id, td::Promise<td::BufferSlice> promise);
@@ -73,6 +73,7 @@ class ArchiveManager : public td::actor::Actor {
     }
     UnixTime unix_time;
     bool key_block;
+    bool read_only_;
 
     std::map<ShardIdFull, Desc> first_blocks;
     td::actor::ActorOwn<ArchiveFile> file;

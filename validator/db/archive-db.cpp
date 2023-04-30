@@ -43,7 +43,7 @@ void ArchiveFile::start_up() {
   }
   package_ = std::make_shared<Package>(R.move_as_ok());
   LOG(DEBUG) << "Open index: " << path_ + ".index";
-  index_ = std::make_shared<td::RocksDb>(td::RocksDb::open(path_ + ".index", read_only_).move_as_ok());
+  index_ = std::make_shared<td::RocksDb>(td::RocksDb::open(path_ + ".index", read_only).move_as_ok());
 
   std::string value;
   auto R2 = index_->get("status", value);
@@ -136,7 +136,8 @@ void ArchiveFile::read_handle(BlockIdExt block_id, td::Promise<BlockHandle> prom
   promise.set_result(create_block_handle(td::BufferSlice{value}));
 }
 
-ArchiveManager::ArchiveManager(std::string db_root) : db_root_(db_root) {
+ArchiveManager::ArchiveManager(std::string db_root, bool read_only) : db_root_(db_root), read_only_(read_only) {
+
 }
 
 void ArchiveManager::write(UnixTime ts, bool key_block, FileDb::RefId ref_id, td::BufferSlice data,
@@ -239,7 +240,7 @@ ArchiveManager::FileDescription *ArchiveManager::add_file(UnixTime ts, bool key_
   FileDescription desc{ts, key_block};
   auto w = td::actor::create_actor<ArchiveFile>(
       PSTRING() << "archivefile" << ts,
-      PSTRING() << db_root_ << "/packed/" << (key_block ? "key" : "") << ts << ".pack", ts, read_only_);
+      PSTRING() << db_root_ << "/packed/" << (key_block ? "key" : "") << ts << ".pack", ts, read_only);
   desc.file = std::move(w);
 
   return &(key_block ? key_files_ : files_).emplace(ts, std::move(desc)).first->second;
@@ -268,7 +269,7 @@ void ArchiveManager::load_package(UnixTime ts, bool key_block) {
   }
   desc.file = td::actor::create_actor<ArchiveFile>(
       PSTRING() << "archivefile" << ts,
-      PSTRING() << db_root_ << "/packed/" << (key_block ? "key" : "") << ts << ".pack", ts, read_only_);
+      PSTRING() << db_root_ << "/packed/" << (key_block ? "key" : "") << ts << ".pack", ts, read_only);
 
   (key_block ? key_files_ : files_).emplace(ts, std::move(desc));
 }
