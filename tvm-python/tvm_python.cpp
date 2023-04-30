@@ -58,6 +58,7 @@ td::Ref<vm::Cell> parseStringToCell(const std::string& base64string) {
 
   return boc_decoded.move_as_ok();
 }
+
 vm::StackEntry cast_python_item_to_stack_entry(const py::handle item) {
   // TODO: maybe add tuple support?
 
@@ -312,14 +313,14 @@ struct PyTVM {
   td::RefInt256 c7_translt = td::make_refint(0);
   td::RefInt256 c7_randseed = td::make_refint(0);
   td::RefInt256 c7_balanceRemainingGrams = td::make_refint(101000000000);
-  std::string c7_myaddress;
+  block::StdAddress c7_myaddress;
   std::string c7_globalConfig;
 
-  int exit_code_out;
-  long long vm_steps_out;
-  long long gas_used_out;
-  long long gas_credit_out;
-  bool success_out;
+  int exit_code_out{};
+  long long vm_steps_out{};
+  long long gas_used_out{};
+  long long gas_credit_out{};
+  bool success_out{};
   std::string vm_final_state_hash_out;
   std::string vm_init_state_hash_out;
   std::string new_data_out;
@@ -328,15 +329,21 @@ struct PyTVM {
   std::vector<std::vector<vm::StackEntry>> stacks;
   std::vector<std::string> vm_ops;
 
-  void set_c7(int c7_unixtime_, std::string c7_blocklt_, std::string c7_translt_, std::string c7_randseed_,
-              std::string c7_balanceRemainingGrams_, std::string c7_myaddress_, std::string c7_globalConfig_) {
+  void set_c7(int c7_unixtime_, const std::string& c7_blocklt_, const std::string& c7_translt_,
+              const std::string& c7_randseed_, const std::string& c7_balanceRemainingGrams_,
+              const std::string& c7_myaddress_, const std::string& c7_globalConfig_) {
     if (!skip_c7) {
       c7_unixtime = c7_unixtime_;
       c7_blocklt = td::dec_string_to_int256(c7_blocklt_);
       c7_translt = td::dec_string_to_int256(c7_translt_);
       c7_randseed = td::dec_string_to_int256(c7_randseed_);
       c7_balanceRemainingGrams = td::dec_string_to_int256(c7_balanceRemainingGrams_);
-      c7_myaddress = c7_myaddress_;
+      if (!c7_myaddress_.empty()) {
+        CHECK(c7_myaddress.parse_addr(c7_myaddress_));
+      } else {
+        c7_myaddress.parse_addr("Ef9Tj6fMJP+OqhAdhKXxq36DL+HYSzCc3+9O6UNzqsgPfYFX");
+      }
+
       c7_globalConfig = c7_globalConfig_;
     } else {
       throw std::invalid_argument("C7 will be skipped, because skip_c7=true");
@@ -377,7 +384,7 @@ struct PyTVM {
     log(log_string, LOG_INFO);
   }
 
-  void set_gasLimit(std::string gas_limit_s, std::string gas_max_s = "") {
+  void set_gasLimit(const std::string& gas_limit_s, const std::string& gas_max_s = "") {
     auto gas_limit = strtoll(gas_limit_s.c_str(), nullptr, 10);
 
     if (gas_max_s.empty()) {
@@ -408,7 +415,7 @@ struct PyTVM {
   }
 
   // @prop Code
-  void set_code(std::string code_) {
+  void set_code(const std::string& code_) {
     log_debug("Start parse code");
     auto code_parsed = parseStringToCell(code_);
     log_debug("Code parsed success");
@@ -425,7 +432,7 @@ struct PyTVM {
     }
   }
 
-  void set_state_init(std::string state_init_) {
+  void set_state_init(const std::string& state_init_) {
     auto state_init = load_cell_slice(parseStringToCell(state_init_));
     code = state_init.fetch_ref();
     data = state_init.fetch_ref();
@@ -447,7 +454,7 @@ struct PyTVM {
     }
   }
 
-  void set_libs(py::list cells) {
+  void set_libs(const py::list& cells) {
     lib_set.clear();  // remove old libs
 
     auto iter = py::iter(std::move(cells));
@@ -474,7 +481,7 @@ struct PyTVM {
   }
 
   std::vector<py::object> run_vm() {
-    pybind11::gil_scoped_release release;
+    pybind11::gil_scoped_acquire gil;
 
     if (code.is_null()) {
       throw std::invalid_argument("To run VM, please pass code");
@@ -498,16 +505,7 @@ struct PyTVM {
 
     auto balance = block::CurrencyCollection{c7_balanceRemainingGrams};
 
-    td::Ref<vm::CellSlice> my_addr;
-    if (!c7_myaddress.empty()) {
-      block::StdAddress tmp;
-      tmp.parse_addr(c7_myaddress);
-      my_addr = block::tlb::MsgAddressInt().pack_std_address(tmp);
-    } else {
-      vm::CellBuilder cb;
-      cb.store_long(0);
-      my_addr = vm::load_cell_slice_ref(cb.finalize());
-    }
+    td::Ref<vm::CellSlice> my_addr = block::tlb::MsgAddressInt().pack_std_address(c7_myaddress);
 
     td::Ref<vm::Cell> global_config;
     if (!c7_globalConfig.empty()) {
@@ -582,8 +580,6 @@ struct PyTVM {
       pyStack.push_back(cast_stack_item_to_python_object(stack.at(idx)));
     }
 
-    pybind11::gil_scoped_acquire acquire;
-
     return pyStack;
   }
 
@@ -647,7 +643,7 @@ struct PyTVM {
   }
 };
 
-py::object pack_address(std::string address) {
+py::object pack_address(const std::string& address) {
   auto paddr_parse = block::StdAddress::parse(address);
 
   if (paddr_parse.is_ok()) {
@@ -667,7 +663,7 @@ py::object pack_address(std::string address) {
 }
 
 // todo: make cell & cell slice bindings
-std::string load_address(std::string boc) {
+std::string load_address(const std::string& boc) {
   auto cell = parseStringToCell(boc);
   auto cs = load_cell_slice(cell);
   ton::StdSmcAddress addr;
@@ -756,7 +752,7 @@ std::string parse_chunked_data(vm::CellSlice& cs) {
   return td::base64_encode(slice);
 }
 
-long long parse_op_code(std::string boc) {
+long long parse_op_code(const std::string& boc) {
   auto cell = parseStringToCell(boc);
   auto cs = load_cell_slice(cell);
   if (cs.size() < 32) {
@@ -766,7 +762,7 @@ long long parse_op_code(std::string boc) {
   }
 }
 
-py::dict parse_token_data(std::string boc) {
+py::dict parse_token_data(const std::string& boc) {
   auto cell = parseStringToCell(boc);
   auto cs = load_cell_slice(cell);
 
@@ -830,7 +826,7 @@ py::dict parse_token_data(std::string boc) {
   }
 }
 
-std::string get_public_key_from_state_init_wallet(std::string boc) {
+std::string get_public_key_from_state_init_wallet(const std::string& boc) {
   auto cell = load_cell_slice(parseStringToCell(boc));
 
   auto code = cell.fetch_ref();
@@ -866,6 +862,9 @@ std::string get_public_key_from_state_init_wallet(std::string boc) {
 }
 
 PYBIND11_MODULE(tvm_python, m) {
+  SET_VERBOSITY_LEVEL(verbosity_INFO);
+  PSLICE() << "123";
+
   static py::exception<vm::VmError> exc(m, "VmError");
   py::register_exception_translator([](std::exception_ptr p) {
     try {
