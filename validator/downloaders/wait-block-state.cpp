@@ -63,14 +63,17 @@ void WaitBlockState::start_up() {
 }
 
 void WaitBlockState::start() {
-  LOG(WARNING) << "Start WaitBlockState for " << handle_->id().to_str() << " received: " << handle_->received_state()
-               << "prev_state: " << prev_state_.is_null() << " block: " << block_.is_null()
-               << " proof: " << handle_->inited_prev() << " proof link: " << handle_->inited_proof();
+  LOG(WARNING) << "Start WaitBlockState for " << handle_->id().to_str() << "; received: " << handle_->received_state()
+               << "; prev_state: " << prev_state_.is_null() << "; block: " << block_.is_null()
+               << "; proof: " << handle_->inited_prev() << "; proof link: " << handle_->inited_proof();
+
+  // received: false prev_state: true block: true proof: false proof link: false
 
   if (reading_from_db_) {
     return;
   }
   if (handle_->received_state()) {
+    LOG(WARNING) << "[1] WaitBlockState for " << handle_->id().to_str();
     reading_from_db_ = true;
 
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
@@ -83,6 +86,8 @@ void WaitBlockState::start() {
     td::actor::send_closure(manager_, &ValidatorManager::get_shard_state_from_db, handle_, std::move(P));
   }
   else if (handle_->id().id.seqno == 0 && next_static_file_attempt_.is_in_past()) {
+    LOG(WARNING) << "[2] WaitBlockState for " << handle_->id().to_str();
+
     next_static_file_attempt_ = td::Timestamp::in(60.0);
     // id.file_hash contrains correct file hash of zero state
     // => if file with this sha256 is found it is garanteed to be correct
@@ -102,6 +107,8 @@ void WaitBlockState::start() {
     td::actor::send_closure(manager_, &ValidatorManager::try_get_static_file, handle_->id().file_hash, std::move(P));
   }
   else if (handle_->id().id.seqno == 0) {
+    LOG(WARNING) << "[3] WaitBlockState for " << handle_->id().to_str();
+
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::BufferSlice> R) {
       if (R.is_error()) {
         td::actor::send_closure(SelfId, &WaitBlockState::failed_to_get_state_from_net,
@@ -114,6 +121,8 @@ void WaitBlockState::start() {
                             std::move(P));
   }
   else if (!handle_->inited_prev() || (!handle_->inited_proof() && !handle_->inited_proof_link())) {
+    LOG(WARNING) << "[3] WaitBlockState for " << handle_->id().to_str();
+
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), handle = handle_](td::Result<td::BufferSlice> R) {
       if (R.is_error()) {
         delay_action([SelfId]() { td::actor::send_closure(SelfId, &WaitBlockState::start); }, td::Timestamp::in(0.1));
@@ -126,6 +135,8 @@ void WaitBlockState::start() {
                             std::move(P));
   }
   else if (prev_state_.is_null()) {
+    LOG(WARNING) << "[4] WaitBlockState for " << handle_->id().to_str();
+
     CHECK(handle_->inited_proof() || handle_->inited_proof_link());
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
       if (R.is_error()) {
@@ -140,6 +151,8 @@ void WaitBlockState::start() {
                             std::move(P));
   }
   else if (handle_->id().is_masterchain() && !handle_->inited_proof()) {
+    LOG(WARNING) << "[5] WaitBlockState for " << handle_->id().to_str();
+
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), handle = handle_](td::Result<td::BufferSlice> R) {
       if (R.is_error()) {
         delay_action([SelfId]() { td::actor::send_closure(SelfId, &WaitBlockState::start); }, td::Timestamp::in(0.1));
@@ -152,6 +165,8 @@ void WaitBlockState::start() {
                             std::move(P));
   }
   else if (block_.is_null()) {
+    LOG(WARNING) << "[6] WaitBlockState for " << handle_->id().to_str();
+
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
         td::actor::send_closure(SelfId, &WaitBlockState::failed_to_get_block_data,
@@ -164,6 +179,8 @@ void WaitBlockState::start() {
     td::actor::send_closure(manager_, &ValidatorManager::wait_block_data, handle_, priority_, timeout_, std::move(P));
   }
   else {
+    LOG(WARNING) << "[7] WaitBlockState for " << handle_->id().to_str();
+
     apply();
   }
 }
