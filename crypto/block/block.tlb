@@ -262,8 +262,7 @@ _ split_depth:(Maybe (## 5)) special:(Maybe TickTock)
 */
 
 account_descr$_ account:^Account last_trans_hash:bits256 
-  last_trans_lt:uint64 shard_account_prev: ^ShardAccount = ShardAccount;
-account_descr_deleted$_ shard_account_prev: ^ShardAccount = ShardAccount;
+  last_trans_lt:uint64 = ShardAccount;
 
 depth_balance$_ split_depth:(#<= 30) balance:CurrencyCollection = DepthBalanceInfo;
 
