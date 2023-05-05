@@ -220,6 +220,9 @@ void WaitBlockState::got_block_data(td::Ref<BlockData> data) {
 
 void WaitBlockState::apply() {
   td::PerfWarningTimer t{"applyblocktostate", 0.1};
+  LOG(WARNING) << "Apply new block: " << prev_state_->get_block_id().id.to_str()
+               << " with old state: " << handle_->id().id.to_str();
+
   auto S = prev_state_.write().apply_block(handle_->id(), block_);
   if (S.is_error()) {
     abort_query(S.move_as_error_prefix("apply error: "));
