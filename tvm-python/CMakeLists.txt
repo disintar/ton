@@ -9,3 +9,11 @@ pybind11_add_module(tvm_python ${PYTHON_TVM_SOURCE})
 target_link_libraries(tvm_python PRIVATE overlay tdutils tdactor adnl tl_api dht
         rldp catchain validatorsession full-node validator-disk validator-hardfork ton_validator
         validator-hardfork fift-lib memprof ${JEMALLOC_LIBRARIES})
+
+
+set(PYTHON_EMULATOR_SOURCE python_ton.cpp)
+
+pybind11_add_module(python_ton ${PYTHON_EMULATOR_SOURCE})
+target_link_libraries(python_ton PRIVATE tonlib overlay tdutils tdactor adnl tl_api dht
+        rldp catchain validatorsession full-node emulator emulator_static validator-disk validator-hardfork ton_validator
+        validator-hardfork fift-lib memprof ${JEMALLOC_LIBRARIES})

@@ -1492,6 +1492,7 @@ class IndexerWorker : public td::actor::Actor {
 
     LOG(DEBUG) << "getting state from db " << handle->id().to_str() << " "
                << td::base64_encode(handle->id().root_hash.as_slice());
+    // todo: load from state_update of block
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle,
                             std::move(P));
   }
