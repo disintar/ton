@@ -30,7 +30,8 @@
 namespace {
 class StringLoggerTail : public td::LogInterface {
  public:
-  explicit StringLoggerTail(size_t max_size = 256) : buf(max_size, '\0') {}
+  explicit StringLoggerTail(size_t max_size = 256) : buf(max_size, '\0') {
+  }
   void append(td::CSlice slice) override {
     if (slice.size() > buf.size()) {
       slice.remove_prefix(slice.size() - buf.size());
@@ -55,12 +56,13 @@ class StringLoggerTail : public td::LogInterface {
       return buf.substr(0, pos);
     }
   }
+
  private:
   std::string buf;
   size_t pos = 0;
   bool truncated = false;
 };
-}
+}  // namespace
 
 namespace block {
 using td::Ref;
@@ -345,12 +347,59 @@ bool Account::unpack(Ref<vm::CellSlice> shard_account, Ref<vm::CellSlice> extra,
   }
   block::gen::Account::Record_account acc;
   block::gen::AccountStorage::Record storage;
-  if (!(tlb::unpack_exact(acc_cs, acc) && (my_addr = acc.addr).not_null() && unpack_address(acc.addr.write()) &&
-        compute_my_addr() && unpack_storage_info(acc.storage_stat.write()) &&
-        tlb::csr_unpack(this->storage = std::move(acc.storage), storage) &&
-        std::max(storage.last_trans_lt, 1ULL) > acc_info.last_trans_lt && balance.unpack(std::move(storage.balance)))) {
+
+  auto extract_acc = tlb::unpack_exact(acc_cs, acc);
+
+  if (!extract_acc) {
+    LOG(ERROR) << "extract_acc unvalid";
     return false;
   }
+
+  auto addr_valid = (my_addr = acc.addr).not_null();
+
+  if (!addr_valid) {
+    LOG(ERROR) << "addr_valid unvalid";
+    return false;
+  }
+
+  auto addr_unpack = unpack_address(acc.addr.write());
+
+  if (!addr_unpack) {
+    LOG(ERROR) << "addr_unpack unvalid";
+    return false;
+  }
+  auto addr_compute = compute_my_addr();
+
+  if (!addr_compute) {
+    LOG(ERROR) << "addr_compute unvalid";
+    return false;
+  }
+  auto storage_info = unpack_storage_info(acc.storage_stat.write());
+
+  if (!storage_info) {
+    LOG(ERROR) << "storage_info unvalid";
+    return false;
+  }
+  auto storage_unpack = tlb::csr_unpack(this->storage = std::move(acc.storage), storage);
+
+  if (!storage_unpack) {
+    LOG(ERROR) << "storage_unpack unvalid";
+    return false;
+  }
+
+  auto storage_trans_lt = std::max(storage.last_trans_lt, 1ULL) > acc_info.last_trans_lt;
+
+  if (!storage_trans_lt) {
+    LOG(ERROR) << "storage_trans_lt unvalid";
+    return false;
+  }
+  auto balance_unpack = balance.unpack(std::move(storage.balance));
+
+  if (!balance_unpack) {
+    LOG(ERROR) << "balance_unpack unvalid";
+    return false;
+  }
+
   is_special = special;
   last_trans_end_lt_ = storage.last_trans_lt;
   switch (block::gen::t_AccountState.get_tag(*storage.state)) {
@@ -2558,17 +2607,12 @@ bool Account::libraries_changed() const {
   }
 }
 
-td::Status FetchConfigParams::fetch_config_params(const block::Config& config,
-                                              Ref<vm::Cell>* old_mparams,
-                                              std::vector<block::StoragePrices>* storage_prices,
-                                              block::StoragePhaseConfig* storage_phase_cfg,
-                                              td::BitArray<256>* rand_seed,
-                                              block::ComputePhaseConfig* compute_phase_cfg,
-                                              block::ActionPhaseConfig* action_phase_cfg,
-                                              td::RefInt256* masterchain_create_fee,
-                                              td::RefInt256* basechain_create_fee,
-                                              ton::WorkchainId wc, 
-                                              ton::UnixTime now) {
+td::Status FetchConfigParams::fetch_config_params(
+    const block::Config& config, Ref<vm::Cell>* old_mparams, std::vector<block::StoragePrices>* storage_prices,
+    block::StoragePhaseConfig* storage_phase_cfg, td::BitArray<256>* rand_seed,
+    block::ComputePhaseConfig* compute_phase_cfg, block::ActionPhaseConfig* action_phase_cfg,
+    td::RefInt256* masterchain_create_fee, td::RefInt256* basechain_create_fee, ton::WorkchainId wc,
+    ton::UnixTime now) {
   *old_mparams = config.get_config_param(9);
   {
     auto res = config.get_storage_prices();

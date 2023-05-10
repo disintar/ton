@@ -11,7 +11,18 @@ target_link_libraries(tvm_python PRIVATE overlay tdutils tdactor adnl tl_api dht
         validator-hardfork fift-lib memprof ${JEMALLOC_LIBRARIES})
 
 
-set(PYTHON_EMULATOR_SOURCE python_ton.cpp)
+set(PYTHON_EMULATOR_SOURCE
+        PyCellSlice.cpp
+        PyCellSlice.h
+        PyCell.cpp
+        PyCell.h
+        PyCellBuilder.cpp
+        PyCellBuilder.h
+        PyDict.cpp
+        PyDict.h
+        PyEmulator.cpp
+        PyEmulator.h
+        python_ton.cpp)
 
 pybind11_add_module(python_ton ${PYTHON_EMULATOR_SOURCE})
 target_link_libraries(python_ton PRIVATE tonlib overlay tdutils tdactor adnl tl_api dht

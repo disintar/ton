@@ -17,7 +17,6 @@ td::Result<std::unique_ptr<TransactionEmulator::EmulationResult>> TransactionEmu
     block::ComputePhaseConfig compute_phase_cfg;
     block::ActionPhaseConfig action_phase_cfg;
     td::RefInt256 masterchain_create_fee, basechain_create_fee;
-    
     if (!utime) {
       utime = unixtime_;
     }
@@ -74,7 +73,7 @@ td::Result<std::unique_ptr<TransactionEmulator::EmulationResult>> TransactionEmu
       return td::Status::Error(PSLICE() << "cannot commit new transaction for smart contract");
     }
 
-    return std::make_unique<TransactionEmulator::EmulationSuccess>(std::move(trans_root), std::move(account), 
+    return std::make_unique<TransactionEmulator::EmulationSuccess>(std::move(trans_root), std::move(account),
       std::move(trans->compute_phase->vm_log), std::move(trans->compute_phase->actions), elapsed);
 }
 
