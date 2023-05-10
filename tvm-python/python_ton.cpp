@@ -122,7 +122,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("set_libs", &PyEmulator::set_libs, py::arg("shardchain_libs_boc"))
       .def("set_debug_enabled", &PyEmulator::set_debug_enabled, py::arg("debug_enabled"))
       .def("emulate_transaction", &PyEmulator::emulate_transaction, py::arg("shard_account_cell"),
-           py::arg("message_cell"), py::arg("unixtime") = "0", py::arg("lt") = "0", py::arg("start_lt") = "0")
+           py::arg("message_cell"), py::arg("unixtime") = "0", py::arg("lt") = "0")
       .def_property("vm_log", &PyEmulator::get_vm_log, &PyEmulator::dummy_set)
       .def_property("vm_exit_code", &PyEmulator::get_vm_exit_code, &PyEmulator::dummy_set)
       .def_property("elapsed_time", &PyEmulator::get_elapsed_time, &PyEmulator::dummy_set)

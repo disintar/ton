@@ -79,8 +79,7 @@ bool PyEmulator::set_debug_enabled(bool debug_enabled) {
 }
 
 bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyCell& message_cell,
-                                     const std::string& unixtime, const std::string& lt_str,
-                                     const std::string& block_start_lt) {
+                                     const std::string& unixtime, const std::string& lt_str) {
   pybind11::gil_scoped_acquire gil;
 
   auto message_cs = vm::load_cell_slice(message_cell.my_cell);
@@ -128,7 +127,7 @@ bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyC
   auto lt = static_cast<td::uint64>(std::stoul(lt_str));
 
   account.now_ = now;
-  account.block_lt = static_cast<td::uint64>(std::stoul(block_start_lt));
+  account.block_lt = lt - lt % block::ConfigInfo::get_lt_align();
 
   bool is_special = wc == ton::masterchainId && emulator->get_config().is_special_smartcontract(addr);
   if (!account.unpack(vm::load_cell_slice_ref(shard_account_cell.my_cell), td::Ref<vm::CellSlice>(), now, is_special)) {
