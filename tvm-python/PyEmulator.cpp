@@ -78,8 +78,9 @@ bool PyEmulator::set_debug_enabled(bool debug_enabled) {
   return true;
 }
 
-bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyCell& message_cell, const std::string& unixtime,
-                                     const std::string& lt_str) {
+bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyCell& message_cell,
+                                     const std::string& unixtime, const std::string& lt_str,
+                                     const std::string& block_start_lt) {
   pybind11::gil_scoped_acquire gil;
 
   auto message_cs = vm::load_cell_slice(message_cell.my_cell);
@@ -124,15 +125,18 @@ bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyC
 
   auto account = block::Account(wc, addr.bits());
   ton::UnixTime now = static_cast<td::uint32>(std::stoul(unixtime));
+  auto lt = static_cast<td::uint64>(std::stoul(lt_str));
+
+  account.now_ = now;
+  account.block_lt = static_cast<td::uint64>(std::stoul(block_start_lt));
 
   bool is_special = wc == ton::masterchainId && emulator->get_config().is_special_smartcontract(addr);
   if (!account.unpack(vm::load_cell_slice_ref(shard_account_cell.my_cell), td::Ref<vm::CellSlice>(), now, is_special)) {
     throw std::invalid_argument("Can't unpack account data");
   }
 
-  auto result = emulator->emulate_transaction(
-      std::move(account), message_cell.my_cell, now,
-      static_cast<td::uint64>(std::stoul(lt_str)), block::transaction::Transaction::tr_ord);
+  auto result = emulator->emulate_transaction(std::move(account), message_cell.my_cell, now, lt,
+                                              block::transaction::Transaction::tr_ord);
 
   if (result.is_error()) {
     throw std::invalid_argument("Emulate transaction failed: " + result.move_as_error().to_string());
