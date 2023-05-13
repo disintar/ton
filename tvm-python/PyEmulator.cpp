@@ -79,8 +79,8 @@ bool PyEmulator::set_debug_enabled(bool debug_enabled) {
 }
 
 bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyCell& message_cell,
-                                     const std::string& unixtime, const std::string& lt_str) {
-  pybind11::gil_scoped_acquire gil;
+                                     const std::string& unixtime, const std::string& lt_str, int vm_ver) {
+  LOG(DEBUG) << 123;
 
   auto message_cs = vm::load_cell_slice(message_cell.my_cell);
   int msg_tag = block::gen::t_CommonMsgInfo.get_tag(message_cs);
@@ -135,7 +135,7 @@ bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyC
   }
 
   auto result = emulator->emulate_transaction(std::move(account), message_cell.my_cell, now, lt,
-                                              block::transaction::Transaction::tr_ord);
+                                              block::transaction::Transaction::tr_ord, vm_ver);
 
   if (result.is_error()) {
     throw std::invalid_argument("Emulate transaction failed: " + result.move_as_error().to_string());

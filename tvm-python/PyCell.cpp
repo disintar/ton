@@ -19,7 +19,11 @@ PyCellSlice PyCell::begin_parse() const {
 }
 
 std::string PyCell::get_hash() const {
-  return my_cell->get_hash().to_hex();
+  if (my_cell.not_null()){
+    return my_cell->get_hash().to_hex();
+  } else {
+    throw std::invalid_argument("Cell is null");
+  }
 }
 
 std::string PyCell::toString() const {
@@ -37,6 +41,10 @@ std::string PyCell::toString() const {
 }
 
 std::string PyCell::dump() const {
+  if (my_cell.is_null()){
+    throw std::invalid_argument("Cell is null");
+  }
+
   std::stringstream os;
   vm::load_cell_slice(my_cell).print_rec(os);
 
@@ -44,6 +52,10 @@ std::string PyCell::dump() const {
 }
 
 std::string PyCell::dump_as_tlb(std::string tlb_type) const {
+  if (my_cell.is_null()){
+    throw std::invalid_argument("Cell is null");
+  }
+
   tlb::TypenameLookup tlb_dict0;
   tlb_dict0.register_types(block::gen::register_simple_types);
 
@@ -61,6 +73,10 @@ std::string PyCell::dump_as_tlb(std::string tlb_type) const {
 }
 
 std::string PyCell::to_boc() const {
+  if (my_cell.is_null()){
+    throw std::invalid_argument("Cell is null");
+  }
+
   return td::base64_encode(std_boc_serialize(my_cell, 31).move_as_ok());
 }
 

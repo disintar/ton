@@ -10,8 +10,8 @@ namespace py = pybind11;
 using namespace pybind11::literals;  // to bring in the `_a` literal
 
 PYBIND11_MODULE(python_ton, m) {
-  SET_VERBOSITY_LEVEL(verbosity_INFO);
-  PSLICE() << "123";
+  SET_VERBOSITY_LEVEL(verbosity_ERROR);
+  PSLICE() << "";
 
   static py::exception<vm::VmError> exc(m, "VmError");
   py::register_exception_translator([](std::exception_ptr p) {
@@ -44,6 +44,8 @@ PYBIND11_MODULE(python_ton, m) {
       .def("preload_int", &PyCellSlice::preload_int, py::arg("bit_len"))
       .def("load_addr", &PyCellSlice::load_addr)
       .def("to_boc", &PyCellSlice::to_boc)
+      //      .def("skip_bits", &PyCellSlice::skip_bits)
+      //      .def("skip_ref", &PyCellSlice::skip_ref)
       .def("dump_as_tlb", &PyCellSlice::dump_as_tlb, py::arg("tlb_type"))
       .def("load_var_integer_str", &PyCellSlice::load_var_integer_str, py::arg("bit_len"), py::arg("sgnd"))
       .def("__repr__", &PyCellSlice::toString)
@@ -122,7 +124,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("set_libs", &PyEmulator::set_libs, py::arg("shardchain_libs_boc"))
       .def("set_debug_enabled", &PyEmulator::set_debug_enabled, py::arg("debug_enabled"))
       .def("emulate_transaction", &PyEmulator::emulate_transaction, py::arg("shard_account_cell"),
-           py::arg("message_cell"), py::arg("unixtime") = "0", py::arg("lt") = "0")
+           py::arg("message_cell"), py::arg("unixtime") = "0", py::arg("lt") = "0", py::arg("vm_ver") = 1)
       .def_property("vm_log", &PyEmulator::get_vm_log, &PyEmulator::dummy_set)
       .def_property("vm_exit_code", &PyEmulator::get_vm_exit_code, &PyEmulator::dummy_set)
       .def_property("elapsed_time", &PyEmulator::get_elapsed_time, &PyEmulator::dummy_set)

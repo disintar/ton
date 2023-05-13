@@ -31,75 +31,76 @@ namespace vm {
 
 using td::Ref;
 struct GasLimits {
-static constexpr long long infty = (1ULL << 63) - 1;
-long long gas_max, gas_limit, gas_credit, gas_remaining, gas_base;
-GasLimits() : gas_max(infty), gas_limit(infty), gas_credit(0), gas_remaining(infty), gas_base(infty) {
-}
-GasLimits(long long _limit, long long _max = infty, long long _credit = 0)
-    : gas_max(_max)
-    , gas_limit(_limit)
-    , gas_credit(_credit)
-    , gas_remaining(_limit + _credit)
-    , gas_base(gas_remaining) {
-}
-long long gas_consumed() const {
-  return gas_base - gas_remaining;
-}
-void set_limits(long long _max, long long _limit, long long _credit = 0);
-void change_base(long long _base) {
-  gas_remaining += _base - gas_base;
-  gas_base = _base;
-}
-void change_limit(long long _limit);
-void consume(long long amount) {
-  // LOG(DEBUG) << "consume " << amount << " gas (" << gas_remaining << " remaining)";
-  gas_remaining -= amount;
-}
-bool try_consume(long long amount) {
-  // LOG(DEBUG) << "try consume " << amount << " gas (" << gas_remaining << " remaining)";
-  return (gas_remaining -= amount) >= 0;
-}
-void gas_exception() const;
-void gas_exception(bool cond) const {
-  if (!cond) {
-    gas_exception();
+  static constexpr long long infty = (1ULL << 63) - 1;
+  long long gas_max, gas_limit, gas_credit, gas_remaining, gas_base;
+  GasLimits() : gas_max(infty), gas_limit(infty), gas_credit(0), gas_remaining(infty), gas_base(infty) {
   }
-}
-void consume_chk(long long amount) {
-  gas_exception(try_consume(amount));
-}
-void check() const {
-  gas_exception(gas_remaining >= 0);
-}
-bool final_ok() const {
-  return gas_remaining >= gas_credit;
-}
+  GasLimits(long long _limit, long long _max = infty, long long _credit = 0)
+      : gas_max(_max)
+      , gas_limit(_limit)
+      , gas_credit(_credit)
+      , gas_remaining(_limit + _credit)
+      , gas_base(gas_remaining) {
+  }
+  long long gas_consumed() const {
+    return gas_base - gas_remaining;
+  }
+  void set_limits(long long _max, long long _limit, long long _credit = 0);
+  void change_base(long long _base) {
+    gas_remaining += _base - gas_base;
+    gas_base = _base;
+  }
+  void change_limit(long long _limit);
+  void consume(long long amount) {
+    // LOG(DEBUG) << "consume " << amount << " gas (" << gas_remaining << " remaining)";
+    gas_remaining -= amount;
+  }
+  bool try_consume(long long amount) {
+    // LOG(DEBUG) << "try consume " << amount << " gas (" << gas_remaining << " remaining)";
+    return (gas_remaining -= amount) >= 0;
+  }
+  void gas_exception() const;
+  void gas_exception(bool cond) const {
+    if (!cond) {
+      gas_exception();
+    }
+  }
+  void consume_chk(long long amount) {
+    gas_exception(try_consume(amount));
+  }
+  void check() const {
+    gas_exception(gas_remaining >= 0);
+  }
+  bool final_ok() const {
+    return gas_remaining >= gas_credit;
+  }
 };
 
 struct CommittedState {
-Ref<vm::Cell> c4, c5;
-bool committed{false};
+  Ref<vm::Cell> c4, c5;
+  bool committed{false};
 };
 
 class VmState final : public VmStateInterface {
-Ref<CellSlice> code;
-Ref<Stack> stack;
-ControlRegs cr;
-CommittedState cstate;
-int cp;
-long long steps{0};
-const DispatchTable* dispatch;
-Ref<QuitCont> quit0, quit1;
-VmLog log;
-GasLimits gas;
-std::vector<Ref<Cell>> libraries;
-td::HashSet<CellHash> loaded_cells;
-td::int64 loaded_cells_count{0};
-int stack_trace{0}, debug_off{0};
-bool chksig_always_succeed{false};
-td::ConstBitPtr missing_library{0};
-td::uint16 max_data_depth = 512; // Default value
-VmDumper vm_dumper;
+  Ref<CellSlice> code;
+  Ref<Stack> stack;
+  ControlRegs cr;
+  CommittedState cstate;
+  int cp;
+  long long steps{0};
+  const DispatchTable* dispatch;
+  Ref<QuitCont> quit0, quit1;
+  VmLog log;
+  GasLimits gas;
+  std::vector<Ref<Cell>> libraries;
+  td::HashSet<CellHash> loaded_cells;
+  td::int64 loaded_cells_count{0};
+  int stack_trace{0}, debug_off{0};
+  int vm_ver{1};
+  bool chksig_always_succeed{false};
+  td::ConstBitPtr missing_library{0};
+  td::uint16 max_data_depth = 512;  // Default value
+  VmDumper vm_dumper;
 
  public:
   enum {
@@ -108,8 +109,6 @@ VmDumper vm_dumper;
     cell_create_gas_price = 500,
     exception_gas_price = 50,
     tuple_entry_gas_price = 1,
-    implicit_jmpref_gas_price = 10,
-    implicit_ret_gas_price = 5,
     free_stack_depth = 32,
     stack_entry_gas_price = 1
   };
@@ -119,7 +118,7 @@ VmDumper vm_dumper;
           std::vector<Ref<Cell>> _libraries = {}, Ref<Tuple> init_c7 = {});
   VmState(Ref<CellSlice> _code, Ref<Stack> _stack, const GasLimits& _gas, int flags = 0, Ref<Cell> _data = {},
           VmLog log = {}, std::vector<Ref<Cell>> _libraries = {}, Ref<Tuple> init_c7 = {});
-  VmState(Ref<CellSlice> _code, Ref<Stack> _stack, VmDumper *vm_dumper_, const GasLimits& _gas, int flags = 0,
+  VmState(Ref<CellSlice> _code, Ref<Stack> _stack, VmDumper* vm_dumper_, const GasLimits& _gas, int flags = 0,
           Ref<Cell> _data = {}, VmLog log = {}, std::vector<Ref<Cell>> _libraries = {}, Ref<Tuple> init_c7 = {});
   template <typename... Args>
   VmState(Ref<Cell> code_cell, Args&&... args)
@@ -133,6 +132,27 @@ VmDumper vm_dumper;
   bool final_gas_ok() const {
     return gas.final_ok();
   }
+
+  int get_implicit_jmpref_gas_price() {
+    if (vm_ver < 1) {
+      return 0;
+    } else {
+      return 10;
+    }
+  }
+
+  int get_implicit_ret_gas_price() {
+    if (vm_ver < 1) {
+      return 0;
+    } else {
+      return 5;
+    }
+  }
+
+  void set_version(int ver) {
+    vm_ver = ver;
+  }
+
   long long gas_consumed() const {
     return gas.gas_consumed();
   }
@@ -333,16 +353,16 @@ VmDumper vm_dumper;
     max_data_depth = depth;
   }
 
-private:
-void init_cregs(bool same_c3 = false, bool push_0 = true);
+ private:
+  void init_cregs(bool same_c3 = false, bool push_0 = true);
 };
 
 int run_vm_code(Ref<CellSlice> _code, Ref<Stack>& _stack, int flags = 0, Ref<Cell>* data_ptr = nullptr, VmLog log = {},
-              long long* steps = nullptr, GasLimits* gas_limits = nullptr, std::vector<Ref<Cell>> libraries = {},
-              Ref<Tuple> init_c7 = {}, Ref<Cell>* actions_ptr = nullptr);
+                long long* steps = nullptr, GasLimits* gas_limits = nullptr, std::vector<Ref<Cell>> libraries = {},
+                Ref<Tuple> init_c7 = {}, Ref<Cell>* actions_ptr = nullptr);
 int run_vm_code(Ref<CellSlice> _code, Stack& _stack, int flags = 0, Ref<Cell>* data_ptr = nullptr, VmLog log = {},
-              long long* steps = nullptr, GasLimits* gas_limits = nullptr, std::vector<Ref<Cell>> libraries = {},
-              Ref<Tuple> init_c7 = {}, Ref<Cell>* actions_ptr = nullptr);
+                long long* steps = nullptr, GasLimits* gas_limits = nullptr, std::vector<Ref<Cell>> libraries = {},
+                Ref<Tuple> init_c7 = {}, Ref<Cell>* actions_ptr = nullptr);
 
 Ref<vm::Cell> lookup_library_in(td::ConstBitPtr key, Ref<vm::Cell> lib_root);
 

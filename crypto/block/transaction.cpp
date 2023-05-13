@@ -1129,6 +1129,7 @@ bool Transaction::prepare_compute_phase(const ComputePhaseConfig& cfg) {
     }
   }
   vm::VmState vm{new_code, std::move(stack), gas, 1, new_data, vm_log, compute_vm_libraries(cfg)};
+  vm.set_version(cfg.vm_ver);
   vm.set_max_data_depth(cfg.max_vm_data_depth);
   vm.set_c7(prepare_vm_c7(cfg));  // tuple with SmartContractInfo
   vm.set_chksig_always_succeed(cfg.ignore_chksig);

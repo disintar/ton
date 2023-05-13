@@ -477,12 +477,12 @@ int VmState::step() {
     VM_LOG(this) << "execute implicit JMPREF";
     auto ref_cell = code->prefetch_ref();
     VM_LOG_MASK(this, vm::VmLog::ExecLocation) << "code cell hash: " << ref_cell->get_hash().to_hex() << " offset: 0";
-    gas.consume_chk(implicit_jmpref_gas_price);
+    gas.consume_chk(get_implicit_jmpref_gas_price());
     Ref<Continuation> cont = Ref<OrdCont>{true, load_cell_slice_ref(std::move(ref_cell)), get_cp()};
     return jump(std::move(cont));
   } else {
     VM_LOG(this) << "execute implicit RET";
-    gas.consume_chk(implicit_ret_gas_price);
+    gas.consume_chk(get_implicit_ret_gas_price());
     return ret();
   }
 }
