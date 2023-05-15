@@ -9,9 +9,14 @@
 namespace py = pybind11;
 using namespace pybind11::literals;  // to bring in the `_a` literal
 
+void globalSetVerbosity(int vb){
+  int v = VERBOSITY_NAME(FATAL) + vb;
+  SET_VERBOSITY_LEVEL(v);
+}
+
 PYBIND11_MODULE(python_ton, m) {
-  SET_VERBOSITY_LEVEL(verbosity_DEBUG);
   PSLICE() << "";
+  SET_VERBOSITY_LEVEL(verbosity_ERROR);
 
   static py::exception<vm::VmError> exc(m, "VmError");
   py::register_exception_translator([](std::exception_ptr p) {
@@ -115,6 +120,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("__repr__", &PyDict::toString);
 
   m.def("parseStringToCell", parseStringToCell, py::arg("cell_boc"));
+  m.def("globalSetVerbosity", globalSetVerbosity, py::arg("verbosity"));
 
   py::class_<PyEmulator>(m, "PyEmulator")
       .def(py::init<PyCell, int>(), py::arg("global_config_boc"), py::arg("vm_log_verbosity") = 0)
