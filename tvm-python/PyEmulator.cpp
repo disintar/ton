@@ -80,8 +80,6 @@ bool PyEmulator::set_debug_enabled(bool debug_enabled) {
 
 bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyCell& message_cell,
                                      const std::string& unixtime, const std::string& lt_str, int vm_ver) {
-  LOG(DEBUG) << 123;
-
   auto message_cs = vm::load_cell_slice(message_cell.my_cell);
   int msg_tag = block::gen::t_CommonMsgInfo.get_tag(message_cs);
 
@@ -137,6 +135,81 @@ bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyC
   auto result = emulator->emulate_transaction(std::move(account), message_cell.my_cell, now, lt,
                                               block::transaction::Transaction::tr_ord, vm_ver);
 
+  if (result.is_error()) {
+    throw std::invalid_argument("Emulate transaction failed: " + result.move_as_error().to_string());
+  }
+
+  auto emulation_result = result.move_as_ok();
+
+  auto external_not_accepted =
+      dynamic_cast<emulator::TransactionEmulator::EmulationExternalNotAccepted*>(emulation_result.get());
+  if (external_not_accepted) {
+    transaction_cell = td::Ref<vm::Cell>();
+    actions_cell = td::Ref<vm::Cell>();
+    vm_log = std::move(external_not_accepted->vm_log);
+    vm_exit_code = external_not_accepted->vm_exit_code;
+    elapsed_time = external_not_accepted->elapsed_time;
+    return false;
+  }
+
+  auto emulation_success = dynamic_cast<emulator::TransactionEmulator::EmulationSuccess&>(*emulation_result);
+  transaction_cell = std::move(emulation_success.transaction);
+
+  auto new_shard_account_cell = vm::CellBuilder()
+                                    .store_ref(emulation_success.account.total_state)
+                                    .store_bits(emulation_success.account.last_trans_hash_.as_bitslice())
+                                    .store_long(emulation_success.account.last_trans_lt_)
+                                    .finalize();
+
+  account_cell = std::move(new_shard_account_cell);
+  actions_cell = std::move(emulation_success.actions);
+
+  return true;
+}
+
+bool PyEmulator::emulate_tick_tock_transaction(const PyCell& shard_account_boc, bool is_tock,
+                                               const std::string& unixtime, const std::string& lt_str, int vm_ver) {
+  auto shard_account_cell = shard_account_boc.my_cell;
+
+  if (shard_account_cell.is_null()) {
+    throw std::invalid_argument("Shard account is null");
+  }
+  auto shard_account_slice = vm::load_cell_slice(shard_account_cell);
+  block::gen::ShardAccount::Record shard_account;
+  if (!tlb::unpack(shard_account_slice, shard_account)) {
+    throw std::invalid_argument("Can't unpack shard account cell");
+  }
+
+  td::Ref<vm::CellSlice> addr_slice;
+  auto account_slice = vm::load_cell_slice(shard_account.account);
+  if (block::gen::t_Account.get_tag(account_slice) == block::gen::Account::account_none) {
+    throw std::invalid_argument("Can't run tick/tock transaction on account_none");
+  }
+  block::gen::Account::Record_account account_record;
+  if (!tlb::unpack(account_slice, account_record)) {
+    throw std::invalid_argument("Can't unpack account cell");
+  }
+  addr_slice = std::move(account_record.addr);
+  ton::WorkchainId wc;
+  ton::StdSmcAddress addr;
+  if (!block::tlb::t_MsgAddressInt.extract_std_address(addr_slice, wc, addr)) {
+    throw std::invalid_argument("Can't extract account address");
+  }
+
+  auto account = block::Account(wc, addr.bits());
+  ton::UnixTime now = static_cast<td::uint32>(std::stoul(unixtime));
+  auto lt = static_cast<td::uint64>(std::stoul(lt_str));
+
+  account.now_ = now;
+  account.block_lt = lt - lt % block::ConfigInfo::get_lt_align();
+
+  bool is_special = wc == ton::masterchainId && emulator->get_config().is_special_smartcontract(addr);
+  if (!account.unpack(vm::load_cell_slice_ref(shard_account_cell), td::Ref<vm::CellSlice>(), now, is_special)) {
+    throw std::invalid_argument("Can't unpack shard account");
+  }
+
+  auto trans_type = is_tock ? block::transaction::Transaction::tr_tock : block::transaction::Transaction::tr_tick;
+  auto result = emulator->emulate_transaction(std::move(account), {}, now, 0, trans_type, vm_ver);
   if (result.is_error()) {
     throw std::invalid_argument("Emulate transaction failed: " + result.move_as_error().to_string());
   }

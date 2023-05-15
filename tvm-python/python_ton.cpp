@@ -10,7 +10,7 @@ namespace py = pybind11;
 using namespace pybind11::literals;  // to bring in the `_a` literal
 
 PYBIND11_MODULE(python_ton, m) {
-  SET_VERBOSITY_LEVEL(verbosity_ERROR);
+  SET_VERBOSITY_LEVEL(verbosity_DEBUG);
   PSLICE() << "";
 
   static py::exception<vm::VmError> exc(m, "VmError");
@@ -44,8 +44,9 @@ PYBIND11_MODULE(python_ton, m) {
       .def("preload_int", &PyCellSlice::preload_int, py::arg("bit_len"))
       .def("load_addr", &PyCellSlice::load_addr)
       .def("to_boc", &PyCellSlice::to_boc)
-      //      .def("skip_bits", &PyCellSlice::skip_bits)
-      //      .def("skip_ref", &PyCellSlice::skip_ref)
+      .def("get_hash", &PyCellSlice::get_hash)
+      .def("skip_bits", &PyCellSlice::skip_bits, py::arg("bits"), py::arg("last"))
+      .def("skip_refs", &PyCellSlice::skip_refs, py::arg("n"), py::arg("last"))
       .def("dump_as_tlb", &PyCellSlice::dump_as_tlb, py::arg("tlb_type"))
       .def("load_var_integer_str", &PyCellSlice::load_var_integer_str, py::arg("bit_len"), py::arg("sgnd"))
       .def("__repr__", &PyCellSlice::toString)
@@ -82,6 +83,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("get_cell", &PyCellBuilder::get_cell)
       .def("store_ref", &PyCellBuilder::store_ref)
       .def("dump", &PyCellBuilder::dump)
+      .def("get_hash", &PyCellBuilder::get_hash)
       .def("dump_as_tlb", &PyCellBuilder::dump_as_tlb, py::arg("tlb_type"))
       .def("to_boc", &PyCellBuilder::to_boc)
       .def("__repr__", &PyCellBuilder::toString);
@@ -125,6 +127,8 @@ PYBIND11_MODULE(python_ton, m) {
       .def("set_debug_enabled", &PyEmulator::set_debug_enabled, py::arg("debug_enabled"))
       .def("emulate_transaction", &PyEmulator::emulate_transaction, py::arg("shard_account_cell"),
            py::arg("message_cell"), py::arg("unixtime") = "0", py::arg("lt") = "0", py::arg("vm_ver") = 1)
+      .def("emulate_tick_tock_transaction", &PyEmulator::emulate_tick_tock_transaction, py::arg("shard_account_boc"),
+           py::arg("is_tock"), py::arg("unixtime") = "0", py::arg("lt") = "0", py::arg("vm_ver") = 1)
       .def_property("vm_log", &PyEmulator::get_vm_log, &PyEmulator::dummy_set)
       .def_property("vm_exit_code", &PyEmulator::get_vm_exit_code, &PyEmulator::dummy_set)
       .def_property("elapsed_time", &PyEmulator::get_elapsed_time, &PyEmulator::dummy_set)

@@ -137,6 +137,12 @@ std::string PyCellBuilder::dump() const {
   return os.str();
 }
 
+std::string PyCellBuilder::get_hash() const {
+  const auto c = my_builder.finalize_copy();
+
+  return c->get_hash().to_hex();
+}
+
 std::string PyCellBuilder::dump_as_tlb(std::string tlb_type) const {
   tlb::TypenameLookup tlb_dict0;
   tlb_dict0.register_types(block::gen::register_simple_types);
@@ -157,4 +163,3 @@ std::string PyCellBuilder::dump_as_tlb(std::string tlb_type) const {
 std::string PyCellBuilder::to_boc() const {
   return td::base64_encode(std_boc_serialize(my_builder.finalize_copy(), 31).move_as_ok());
 }
-

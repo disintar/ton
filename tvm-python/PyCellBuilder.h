@@ -33,6 +33,7 @@ class PyCellBuilder {
   PyCell get_cell();
   std::string toString() const;
   std::string dump() const;
+  std::string get_hash() const;
   std::string dump_as_tlb(std::string tlb_type) const;
   std::string to_boc() const;
 

@@ -101,6 +101,38 @@ std::string PyCellSlice::to_boc() const {
   return td::base64_encode(std_boc_serialize(cb.finalize(), 31).move_as_ok());
 }
 
+std::string PyCellSlice::get_hash() const {
+  vm::CellBuilder cb;
+  cb.append_cellslice(my_cell_slice.clone());
+  const auto c = cb.finalize();
+
+  return c->get_hash().to_hex();
+}
+
+bool PyCellSlice::skip_bits(unsigned int bits, bool last) {
+  bool cs;
+
+  if (!last) {
+    cs = my_cell_slice.skip_first(bits);
+  } else {
+    cs = my_cell_slice.skip_last(bits);
+  }
+
+  return cs;
+}
+
+bool PyCellSlice::skip_refs(unsigned n, bool last) {
+  bool cs;
+
+  if (!last) {
+    cs = my_cell_slice.skip_first(0, n);
+  } else {
+    cs = my_cell_slice.skip_first(0, n);
+  }
+
+  return cs;
+}
+
 std::string PyCellSlice::dump_as_tlb(std::string tlb_type) const {
   tlb::TypenameLookup tlb_dict0;
   tlb_dict0.register_types(block::gen::register_simple_types);
