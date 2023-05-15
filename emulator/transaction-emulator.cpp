@@ -9,7 +9,8 @@ using namespace std::string_literals;
 
 namespace emulator {
 td::Result<std::unique_ptr<TransactionEmulator::EmulationResult>> TransactionEmulator::emulate_transaction(
-    block::Account&& account, td::Ref<vm::Cell> msg_root, ton::UnixTime utime, ton::LogicalTime lt, int trans_type, int vm_ver) {
+    block::Account&& account, td::Ref<vm::Cell> msg_root, ton::UnixTime utime, ton::LogicalTime lt, int trans_type,
+    int vm_ver) {
   td::Ref<vm::Cell> old_mparams;
   std::vector<block::StoragePrices> storage_prices;
   block::StoragePhaseConfig storage_phase_cfg{&storage_prices};

@@ -13,3 +13,5 @@ test/regression-tests.cache/
 **/*build*/
 .idea
 .vscode
+tvm-python
+tmp_acc_test/*
