@@ -25,7 +25,6 @@
 #include "validator/stats-merger.h"
 #include "td/actor/MultiPromise.h"
 
-
 namespace ton {
 
 namespace validator {
@@ -221,7 +220,31 @@ void RootDb::get_block_candidate(PublicKey source, BlockIdExt id, FileHash colla
 void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
                                td::Promise<td::Ref<ShardState>> promise) {
   if (publisher_) {
-    publisher_->storeBlockState(handle, state);
+    const auto prev_id = handle->one_prev(true);
+
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), next_handle = handle, next_state = state,
+                                         publisher = publisher_, prev_id](td::Result<BlockHandle> R) mutable {
+      if (R.is_error()) {
+        LOG(ERROR) << "Can't find handle for prev block state " << prev_id.to_str();
+        publisher->storeBlockState(next_handle, next_state);
+      } else {
+        auto P2 = td::PromiseCreator::lambda([next_handle = next_handle, next_state = next_state, publisher = publisher,
+                                              prev_id](td::Result<td::Ref<vm::DataCell>> R) mutable {
+          if (R.is_error()) {
+            LOG(ERROR) << "Can't find prev block state for" << prev_id.to_str();
+            publisher->storeBlockState(next_handle, next_state);
+          } else {
+            auto root_cell = R.move_as_ok();
+            publisher->storeBlockStateWithPrev(next_handle, root_cell, next_state);
+          }
+        });
+
+        const auto handle = R.move_as_ok();
+        td::actor::send_closure(SelfId, &RootDb::get_block_state_root_cell, handle, std::move(P2));
+      }
+    });
+
+    td::actor::send_closure(actor_id(this), &RootDb::get_block_handle, prev_id, std::move(P));
   }
 
   if (handle->moved_to_archive()) {

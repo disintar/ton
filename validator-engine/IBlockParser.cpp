@@ -61,6 +61,32 @@ void BlockParser::storeBlockState(BlockHandle handle, td::Ref<ShardState> state)
   handleBlockProgress(handle->id());
 }
 
+void BlockParser::storeBlockStateWithPrev(BlockHandle handle, td::Ref<vm::Cell> prev_state, td::Ref<ShardState> state) {
+  std::lock_guard<std::mutex> lock(maps_mtx_);
+  LOG(WARNING) << "Store prev state: " << state->get_block_id().to_str();
+  const std::string key = std::to_string(handle->id().id.workchain) + ":" + std::to_string(handle->id().id.shard) +
+                          ":" + std::to_string(handle->id().id.seqno);
+  auto states_vec = stored_states_.find(key);
+  if (states_vec == stored_states_.end()) {
+    std::vector<std::pair<BlockHandle, td::Ref<ShardState>>> vec;
+    vec.emplace_back(std::pair{handle, state});
+    stored_states_.insert({key, vec});
+  } else {
+    states_vec->second.emplace_back(std::pair{handle, state});
+  }
+
+  auto prev_states_vec = stored_prev_states_.find(key);
+  if (prev_states_vec == stored_prev_states_.end()) {
+    std::vector<std::pair<BlockHandle, td::Ref<vm::Cell>>> prev_state_vec;
+    prev_state_vec.emplace_back(std::pair{handle, prev_state});
+    stored_prev_states_.insert({key, prev_state_vec});
+  } else {
+    prev_states_vec->second.emplace_back(std::pair{handle, prev_state});
+  }
+
+  handleBlockProgress(handle->id());
+}
+
 void BlockParser::handleBlockProgress(BlockIdExt id) {
   const std::string key =
       std::to_string(id.id.workchain) + ":" + std::to_string(id.id.shard) + ":" + std::to_string(id.id.seqno);
@@ -93,6 +119,21 @@ void BlockParser::handleBlockProgress(BlockIdExt id) {
     return;
   }
 
+  bool with_prev_state = false;
+  td::Ref<vm::Cell> prev_state;
+
+  auto prev_states_vec_found = stored_prev_states_.find(key);
+  if (!(prev_states_vec_found == stored_prev_states_.end())) {
+    const auto prev_states_vec = prev_states_vec_found->second;
+
+    auto prev_state_found_iter = std::find_if(prev_states_vec.begin(), prev_states_vec.end(),
+                                              [&id](const auto& s) { return s.first->id() == id; });
+    if (!(prev_state_found_iter == prev_states_vec.end())) {
+      with_prev_state = true;
+      prev_state = prev_state_found_iter->second;
+    }
+  }
+
   const auto applied_parsed = parseBlockApplied(id);
   enqueuePublishBlockApplied(applied_parsed);
 
@@ -101,8 +142,14 @@ void BlockParser::handleBlockProgress(BlockIdExt id) {
     enqueuePublishBlockData(block_parsed.first);
 
     try {
+      td::optional<td::Ref<vm::Cell>> prev_state_opt;
+
+      if (with_prev_state) {
+        prev_state_opt = prev_state;
+      }
+
       const auto state_parsed =
-          parseBlockState(id, state_found_iter->first, state_found_iter->second, block_parsed.second);
+          parseBlockState(id, state_found_iter->first, state_found_iter->second, block_parsed.second, prev_state_opt);
       enqueuePublishBlockState(state_parsed);
     } catch (vm::VmError& e) {
       LOG(ERROR) << "VM ERROR: state " << e.get_msg();
@@ -115,6 +162,10 @@ void BlockParser::handleBlockProgress(BlockIdExt id) {
   stored_applied_.erase(stored_applied_.find(key));
   stored_blocks_.erase(stored_blocks_.find(key));
   stored_states_.erase(stored_states_.find(key));
+
+  if (with_prev_state) {
+    stored_prev_states_.erase(stored_prev_states_.find(key));
+  }
 }
 
 std::string BlockParser::parseBlockApplied(BlockIdExt id) {
@@ -137,8 +188,8 @@ std::string BlockParser::parseBlockApplied(BlockIdExt id) {
   return dump;
 }
 
-std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(BlockIdExt id, BlockHandle handle,
-                                                                             td::Ref<BlockData> data) {
+std::pair<std::string, std::vector<std::pair<td::Bits256, int>>> BlockParser::parseBlockData(
+    BlockIdExt id, const BlockHandle& handle, const td::Ref<BlockData>& data) {
   LOG(DEBUG) << "Parse Data" << id.to_str();
 
   //  CHECK(block.not_null());
@@ -436,7 +487,7 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
          */
 
   std::vector<json> accounts;
-  std::vector<td::Bits256> accounts_keys;
+  std::vector<std::pair<td::Bits256, int>> accounts_keys;
 
   while (!account_blocks_dict->is_empty()) {
     td::Bits256 last_key;
@@ -445,17 +496,6 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
     account_blocks_dict->get_minmax_key(last_key);
     auto hex_addr = last_key.to_hex();
     LOG(DEBUG) << "Parse: " << blkid.to_str() << " at " << hex_addr;
-
-    // todo: fix
-
-//  hex_addr != "3333333333333333333333333333333333333333333333333333333333333333" &&
-//  hex_addr != "34517C7BDF5187C55AF4F8B61FDC321588C7AB768DEE24B006DF29106458D7CF" &&
-//  hex_addr != "5555555555555555555555555555555555555555555555555555555555555555" &&
-//  hex_addr != "0000000000000000000000000000000000000000000000000000000000000000" &&
-//    if (
-//        hex_addr != "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEF") {
-    accounts_keys.push_back(last_key);
-//    }
 
     data = account_blocks_dict->lookup_delete(last_key);
 
@@ -492,6 +532,8 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
 
       ++count;
     };
+
+    accounts_keys.emplace_back(last_key, count);
     LOG(DEBUG) << "Parse: " << blkid.to_str() << " at " << hex_addr << " transactions success";
 
     account_block_parsed["transactions"] = transactions;
@@ -707,16 +749,27 @@ std::pair<std::string, std::vector<td::Bits256>> BlockParser::parseBlockData(Blo
   return std::pair{dump, accounts_keys};
 }
 
-std::string BlockParser::parseBlockState(BlockIdExt id, BlockHandle handle, td::Ref<ShardState> state,
-                                         std::vector<td::Bits256> accounts_keys) {
-  LOG(WARNING) << "Parse state: " << id.to_str();
+std::string BlockParser::parseBlockState(BlockIdExt id, const BlockHandle& handle, const td::Ref<ShardState>& state,
+                                         const std::vector<std::pair<td::Bits256, int>>& accounts_keys,
+                                         const td::optional<td::Ref<vm::Cell>>& prev_state) {
+  bool with_prev_state = true;
+  if (!prev_state) {
+    with_prev_state = false;
+  }
+
+  LOG(WARNING) << "Parse state: " << id.to_str() << " with prev state: " << with_prev_state;
 
   CHECK(state.not_null());
 
   auto root_cell = state->root_cell();
 
   block::gen::ShardStateUnsplit::Record shard_state;
+  block::gen::ShardStateUnsplit::Record prev_shard_state;
   CHECK(tlb::unpack_cell(root_cell, shard_state));
+
+  if (with_prev_state) {
+    CHECK(tlb::unpack_cell(prev_state.value(), prev_shard_state));
+  }
 
   std::vector<std::tuple<int, std::string>> dummy;
 
@@ -799,13 +852,35 @@ std::string BlockParser::parseBlockState(BlockIdExt id, BlockHandle handle, td::
 
   vm::AugmentedDictionary accounts{vm::load_cell_slice_ref(shard_state.accounts), 256, block::tlb::aug_ShardAccounts};
 
-  std::vector<json> accounts_list;
+  td::unique_ptr<vm::AugmentedDictionary> prev_accounts;
 
-  for (const auto& account : accounts_keys) {
+  if (with_prev_state) {
+    prev_accounts = td::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(prev_shard_state.accounts), 256,
+                                                             block::tlb::aug_ShardAccounts);
+  }
+
+  std::vector<json> accounts_list;
+  json data;
+
+  for (const auto& pair : accounts_keys) {
+    auto account = pair.first;
+
+    if (with_prev_state && pair.second > 1) {
+      auto prev_acc = prev_accounts->lookup(account.cbits(), 256);
+
+      vm::CellBuilder b;
+      b.append_cellslice(prev_acc);
+      const auto prev_state_acc = td::base64_encode(std_boc_serialize(b.finalize(), 31).move_as_ok());
+      data["prev_state"] = prev_state_acc;
+
+      LOG(DEBUG) << "In account " << account.to_hex() << " several transactions in one block save prev state for emulation";
+    }
+
     LOG(DEBUG) << "Parse " << account.to_hex();
     auto result = accounts.lookup_extra(account.cbits(), 256);
     auto value = result.first;
     auto extra = result.second;
+
     if (value.not_null()) {
       block::gen::ShardAccount::Record sa;
       block::gen::DepthBalanceInfo::Record dbi;
@@ -814,7 +889,6 @@ std::string BlockParser::parseBlockState(BlockIdExt id, BlockHandle handle, td::
       CHECK(tlb::unpack(extra.write(), dbi));
       CHECK(tlb::unpack(dbi.balance.write(), dbi_cc));
 
-      json data;
       data["balance"] = {
           {"split_depth", dbi.split_depth},
           {"grams", block::tlb::t_Grams.as_integer(dbi_cc.grams)->to_dec_string()},

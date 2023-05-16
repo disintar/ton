@@ -30,8 +30,9 @@ class IBlockParser {
   virtual void storeBlockApplied(BlockIdExt id) = 0;
   virtual void storeBlockData(BlockHandle handle, td::Ref<BlockData> block) = 0;
   virtual void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) = 0;
+  virtual void storeBlockStateWithPrev(BlockHandle handle, td::Ref<vm::Cell> prev_state,
+                                       td::Ref<ShardState> state) = 0;
 };
-
 
 class BlockParser : public IBlockParser {
  public:
@@ -42,6 +43,8 @@ class BlockParser : public IBlockParser {
   void storeBlockApplied(BlockIdExt id) final;
   void storeBlockData(BlockHandle handle, td::Ref<BlockData> block) final;
   void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) final;
+  void storeBlockStateWithPrev(BlockHandle handle, td::Ref<vm::Cell> prev_state,
+                               td::Ref<ShardState> state) final;
 
   void setPostProcessor(std::function<std::string(std::string)>);
 
@@ -51,9 +54,11 @@ class BlockParser : public IBlockParser {
   void handleBlockProgress(BlockIdExt id);
 
   std::string parseBlockApplied(BlockIdExt id);
-  std::pair<std::string, std::vector<td::Bits256>> parseBlockData(BlockIdExt id, BlockHandle handle, td::Ref<BlockData> data);
-  std::string parseBlockState(BlockIdExt id, BlockHandle handle, td::Ref<ShardState> state, std::vector<td::Bits256> accounts_keys);
-
+  std::pair<std::string, std::vector<std::pair<td::Bits256, int>>> parseBlockData(BlockIdExt id, const BlockHandle& handle,
+                                                                  const td::Ref<BlockData>& data);
+  std::string parseBlockState(BlockIdExt id, const BlockHandle& handle, const td::Ref<ShardState>& state,
+                                           const std::vector<std::pair<td::Bits256, int>>& accounts_keys,
+                                           const td::optional<td::Ref<vm::Cell>>& prev_state);
   void enqueuePublishBlockApplied(std::string json);
   void enqueuePublishBlockData(std::string json);
   void enqueuePublishBlockState(std::string json);
@@ -68,12 +73,13 @@ class BlockParser : public IBlockParser {
 
   std::mutex maps_mtx_;
   std::map<std::string, BlockIdExt> stored_applied_;
-  std::map<std::string, std::vector<std::pair<BlockHandle, td::Ref<BlockData>>>> stored_blocks_;  // multimap?
-  std::map<std::string, std::vector<std::pair<BlockHandle, td::Ref<ShardState>>>> stored_states_; // multimap?
+  std::map<std::string, std::vector<std::pair<BlockHandle, td::Ref<BlockData>>>> stored_blocks_;        // multimap?
+  std::map<std::string, std::vector<std::pair<BlockHandle, td::Ref<ShardState>>>> stored_states_;       // multimap?
+  std::map<std::string, std::vector<std::pair<BlockHandle, td::Ref<vm::Cell>>>> stored_prev_states_;  // multimap?
 
   // mb rewrite with https://github.com/andreiavrammsd/cpp-channel
 
-  std::atomic_bool running_ = true; // TODO: stop_token when c++20
+  std::atomic_bool running_ = true;  // TODO: stop_token when c++20
 
   std::mutex publish_applied_mtx_;
   std::condition_variable publish_applied_cv_;
@@ -91,5 +97,5 @@ class BlockParser : public IBlockParser {
   std::thread publish_states_thread_;
 };
 
-}
+}  // namespace ton::validator
 #endif  //TON_IBLOCKPARSER_HPP
