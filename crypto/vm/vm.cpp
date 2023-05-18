@@ -141,6 +141,7 @@ if (dt) {
   dispatch = dt;
   return true;
 } else {
+  LOG(ERROR) << "Failed to init cp: " << new_cp;
   return false;
 }
 }
