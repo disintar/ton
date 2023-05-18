@@ -276,6 +276,10 @@ std::string PyDict::toString() const {
   std::stringstream os;
   const auto d = *my_dict;
   td::Ref<vm::Cell> root = d.get_root_cell();
+  if (root.is_null()) {
+    return "<VmDict null>";
+  }
+
   vm::load_cell_slice(root).dump(os);
 
   auto t = os.str();

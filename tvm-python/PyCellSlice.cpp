@@ -16,6 +16,12 @@
 #include <queue>
 #include "block/block-auto.h"
 #include "PyCellSlice.h"
+#include <string>
+#include <cassert>
+#include <codecvt>
+#include <iostream>
+#include <locale>
+#include <sstream>
 
 std::string PyCellSlice::load_uint(unsigned n) {
   const auto tmp = my_cell_slice.fetch_int256(n, false);
@@ -45,6 +51,37 @@ std::string PyCellSlice::toString() const {
   t.pop_back();
 
   return "<CellSlice " + t + ">";
+}
+
+std::string map_to_utf8(const long long val) {
+  std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> converter;
+  return converter.to_bytes(static_cast<char32_t>(val));
+}
+
+std::string fetch_string(vm::CellSlice& cs, unsigned int text_size, bool convert_to_utf8 = true) {
+  if (convert_to_utf8) {
+    std::string text;
+
+    while (text_size > 0) {
+      text += map_to_utf8(cs.fetch_long(8));
+      text_size -= 1;
+    }
+
+    return text;
+  } else {
+    unsigned char b[text_size];
+    cs.fetch_bytes(b, text_size);
+    std::string tmp(b, b + sizeof b / sizeof b[0]);
+    return tmp;
+  }
+}
+
+std::string PyCellSlice::load_string(unsigned int text_size, bool convert_to_utf8) {
+  if (text_size == 0) {
+    text_size = my_cell_slice.size() / 8;
+  }
+
+  return fetch_string(my_cell_slice, text_size, convert_to_utf8);
 }
 
 std::string PyCellSlice::load_addr() {

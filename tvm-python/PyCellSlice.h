@@ -22,8 +22,8 @@ class PyCellSlice {
   std::string preload_uint(unsigned int n);
   std::string load_int(unsigned n);
   std::string preload_int(unsigned n) const;
-  bool skip_bits(unsigned int n, bool last=false);
-  bool skip_refs(unsigned n, bool last=false);
+  bool skip_bits(unsigned int n, bool last = false);
+  bool skip_refs(unsigned n, bool last = false);
   std::string toString() const;
   std::string load_addr();
   PyCellSlice fetch_ref();
@@ -33,6 +33,7 @@ class PyCellSlice {
   std::string to_boc() const;
   std::string get_hash() const;
   std::string dump_as_tlb(std::string tlb_type) const;
+  std::string load_string(unsigned int text_size = 0, bool convert_to_utf8 = true);
   unsigned bits() const;
   unsigned refs() const;
 

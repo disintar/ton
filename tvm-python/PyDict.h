@@ -21,11 +21,17 @@ class PyDict {
   unsigned int key_len;
   bool sgnd;
 
-  explicit PyDict(int key_len_, bool sgnd_ = false) {
-    vm::Dictionary my_dict_t{key_len_};
+  explicit PyDict(int key_len_, bool sgnd_ = false, std::optional<PyCellSlice> cs_root = std::optional<PyCellSlice>()) {
+    if (cs_root) {
+      vm::Dictionary my_dict_t{vm::DictNonEmpty(),cs_root.value().my_cell_slice, key_len_};
+      my_dict = std::make_unique<vm::Dictionary>(my_dict_t);
+    } else {
+      vm::Dictionary my_dict_t{key_len_};
+      my_dict = std::make_unique<vm::Dictionary>(my_dict_t);
+    }
+
     key_len = key_len_;
     sgnd = sgnd_;
-    my_dict = std::make_unique<vm::Dictionary>(my_dict_t);
   }
 
   PyCell get_pycell() const;

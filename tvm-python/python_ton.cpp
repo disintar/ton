@@ -9,7 +9,7 @@
 namespace py = pybind11;
 using namespace pybind11::literals;  // to bring in the `_a` literal
 
-void globalSetVerbosity(int vb){
+void globalSetVerbosity(int vb) {
   int v = VERBOSITY_NAME(FATAL) + vb;
   SET_VERBOSITY_LEVEL(v);
 }
@@ -52,6 +52,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("get_hash", &PyCellSlice::get_hash)
       .def("skip_bits", &PyCellSlice::skip_bits, py::arg("bits"), py::arg("last"))
       .def("skip_refs", &PyCellSlice::skip_refs, py::arg("n"), py::arg("last"))
+      .def("load_string", &PyCellSlice::load_string, py::arg("text_size") = 0, py::arg("convert_to_utf8") = true)
       .def("dump_as_tlb", &PyCellSlice::dump_as_tlb, py::arg("tlb_type"))
       .def("load_var_integer_str", &PyCellSlice::load_var_integer_str, py::arg("bit_len"), py::arg("sgnd"))
       .def("__repr__", &PyCellSlice::toString)
@@ -94,7 +95,8 @@ PYBIND11_MODULE(python_ton, m) {
       .def("__repr__", &PyCellBuilder::toString);
 
   py::class_<PyDict>(m, "PyDict")
-      .def(py::init<int, bool>(), py::arg("bit_len"), py::arg("signed") = false)
+      .def(py::init<int, bool, std::optional<PyCellSlice>>(), py::arg("bit_len"), py::arg("signed") = false,
+           py::arg("cs_root") = py::none())
       .def("get_pycell", &PyDict::get_pycell)
       .def("is_empty", &PyDict::is_empty)
       .def("set_str", &PyDict::set, py::arg("key"), py::arg("value"), py::arg("mode") = "set", py::arg("key_len") = 0,
