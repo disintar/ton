@@ -231,8 +231,11 @@ json parse_state_init(vm::CellSlice state_init) {
     }
 
     LOG(DEBUG) << "Write libs!";
-    LOG(DEBUG) << "Write libs! " << state_init_parsed.library->prefetch_ulong(1);
-    if ((int)state_init_parsed.library->prefetch_ulong(1) == 1) {  // if not empty
+    const auto lib = state_init_parsed.library;
+    LOG(DEBUG) << "Write libs! bits: " << lib->size() << " refs: " << lib->size_refs();
+
+    // todo: parse bit (?)
+    if (!lib->empty() && lib->size_refs() > 0) {  // if not empty
       auto c = state_init_parsed.library->prefetch_ref();
       if (c.not_null()) {
         answer["libs"] = parse_libraries(c);
