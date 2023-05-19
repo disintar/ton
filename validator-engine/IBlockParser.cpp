@@ -868,12 +868,15 @@ std::string BlockParser::parseBlockState(BlockIdExt id, const BlockHandle& handl
     if (with_prev_state && pair.second > 1) {
       auto prev_acc = prev_accounts->lookup(account.cbits(), 256);
 
-      vm::CellBuilder b;
-      b.append_cellslice(prev_acc);
-      const auto prev_state_acc = td::base64_encode(std_boc_serialize(b.finalize(), 31).move_as_ok());
-      data["prev_state"] = prev_state_acc;
+      if (prev_acc.not_null() && (prev_acc->have_refs() || !prev_acc->empty())) {
+        vm::CellBuilder b;
+        b.append_cellslice(prev_acc);
+        const auto prev_state_acc = td::base64_encode(std_boc_serialize(b.finalize(), 31).move_as_ok());
+        data["prev_state"] = prev_state_acc;
 
-      LOG(DEBUG) << "In account " << account.to_hex() << " several transactions in one block save prev state for emulation";
+        LOG(DEBUG) << "In account " << account.to_hex()
+                   << " several transactions in one block save prev state for emulation";
+      }
     }
 
     LOG(DEBUG) << "Parse " << account.to_hex();
@@ -938,17 +941,19 @@ std::string BlockParser::parseBlockState(BlockIdExt id, const BlockHandle& handl
         auto tag = block::gen::t_AccountState.get_tag(as.state.write());
 
         if (tag == block::gen::t_AccountState.account_uninit) {
+          LOG(DEBUG) << "Unpack uninit " << account.to_hex();
           data["account"]["state"] = {{"type", "uninit"}};
         }
 
         else if (tag == block::gen::t_AccountState.account_active) {
           block::gen::AccountState::Record_account_active active_account;
+          LOG(DEBUG) << "Unpack active " << account.to_hex();
           CHECK(tlb::unpack(as.state.write(), active_account));
 
           try {
             data["account"]["state"] = {{"type", "active"}, {"state_init", parse_state_init(active_account.x.write())}};
           } catch (...) {
-            LOG(ERROR) << "State init parse fail";
+            LOG(ERROR) << "State init parse fail " << account.to_hex();
             data["account"]["state"] = {{"type", "uninit"}};
           }
 
@@ -956,11 +961,13 @@ std::string BlockParser::parseBlockState(BlockIdExt id, const BlockHandle& handl
 
         else if (tag == block::gen::t_AccountState.account_frozen) {
           block::gen::AccountState::Record_account_frozen f{};
+          LOG(DEBUG) << "Unpack frozen " << account.to_hex();
           CHECK(tlb::unpack(as.state.write(), f))
           data["account"]["state"] = {{"type", "frozen"}, {"state_hash", f.state_hash.to_hex()}};
         }
       }
 
+      LOG(DEBUG) << "End with: " << account.to_hex();
       accounts_list.push_back(data);
     }
   }
