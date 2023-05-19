@@ -970,6 +970,8 @@ class IndexerWorker : public td::actor::Actor {
                                           {"extra", parse_extra_currency(value_flow.created.extra)}};
         answer["ValueFlow"]["minted"] = {{"grams", value_flow.minted.grams->to_dec_string()},
                                          {"extra", parse_extra_currency(value_flow.minted.extra)}};
+        answer["ValueFlow"]["burned"] = {{"grams", value_flow.burned.grams->to_dec_string()},
+                                         {"extra", parse_extra_currency(value_flow.burned.extra)}};
         LOG(DEBUG) << "Parse block got ValueFlow: " << blkid.to_str() << " " << timer;
 
         /* tlb
@@ -1779,7 +1781,7 @@ class Indexer : public td::actor::Actor {
 
           td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size_);
           td::actor::send_closure(w->get(), &IndexerWorker::set_display_speed, speed_);
-;
+          ;
           auto end = seqno_first + per_thread;
           if ((end > seqno_last) | (i == workers_count - 1)) {
             end = seqno_last;

@@ -233,8 +233,13 @@ json parse_state_init(vm::CellSlice state_init) {
     LOG(DEBUG) << "Write libs!";
     LOG(DEBUG) << "Write libs! " << state_init_parsed.library->prefetch_ulong(1);
     if ((int)state_init_parsed.library->prefetch_ulong(1) == 1) {  // if not empty
-      answer["libs"] = parse_libraries(state_init_parsed.library->prefetch_ref());
-      LOG(DEBUG) << "Libs written " << t;
+      auto c = state_init_parsed.library->prefetch_ref();
+      if (c.not_null()) {
+        answer["libs"] = parse_libraries(c);
+        LOG(DEBUG) << "Libs written " << t;
+      } else {
+        LOG(DEBUG) << "Libs skip";
+      }
     }
 
     answer["type"] = "success";
