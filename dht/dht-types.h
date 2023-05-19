@@ -173,7 +173,7 @@ class DhtKeyDescription {
 class DhtValue {
  public:
   static constexpr td::uint32 max_value_size() {
-    return 768;
+    return 768 * 2;
   }
 
   DhtValue(DhtKeyDescription key, td::BufferSlice value, td::uint32 ttl, td::BufferSlice signature)
