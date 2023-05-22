@@ -56,8 +56,12 @@ bool PyEmulator::set_ignore_chksig(bool ignore_chksig) {
 }
 
 bool PyEmulator::set_config(const PyCell& config_params_cell) {
+  // todo: pass ConfigParams as root cell
+  const block::StdAddress res =
+      block::StdAddress::parse("-1:5555555555555555555555555555555555555555555555555555555555555555").move_as_ok();
+
   auto global_config =
-      block::Config(config_params_cell.my_cell, td::Bits256::zero(),
+      block::Config(config_params_cell.my_cell, res.addr,
                     block::Config::needWorkchainInfo | block::Config::needSpecialSmc | block::Config::needCapabilities);
 
   if (global_config.unpack().is_error()) {
@@ -199,7 +203,6 @@ bool PyEmulator::emulate_tick_tock_transaction(const PyCell& shard_account_boc, 
   auto account = block::Account(wc, addr.bits());
   ton::UnixTime now = static_cast<td::uint32>(std::stoul(unixtime));
   auto lt = static_cast<td::uint64>(std::stoul(lt_str));
-
   account.now_ = now;
   account.block_lt = lt - lt % block::ConfigInfo::get_lt_align();
 
@@ -209,7 +212,7 @@ bool PyEmulator::emulate_tick_tock_transaction(const PyCell& shard_account_boc, 
   }
 
   auto trans_type = is_tock ? block::transaction::Transaction::tr_tock : block::transaction::Transaction::tr_tick;
-  auto result = emulator->emulate_transaction(std::move(account), {}, now, 0, trans_type, vm_ver);
+  auto result = emulator->emulate_transaction(std::move(account), {}, now, lt, trans_type, vm_ver);
   if (result.is_error()) {
     throw std::invalid_argument("Emulate transaction failed: " + result.move_as_error().to_string());
   }

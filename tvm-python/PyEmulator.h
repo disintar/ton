@@ -42,8 +42,12 @@ class PyEmulator {
   int vm_exit_code;
 
   PyEmulator(const PyCell& config_params_cell, int vm_log_verbosity) {
+    // todo: pass ConfigParams as root cell
+    const block::StdAddress res =
+        block::StdAddress::parse("-1:5555555555555555555555555555555555555555555555555555555555555555").move_as_ok();
+
     auto global_config = block::Config(
-        config_params_cell.my_cell, td::Bits256::zero(),
+        config_params_cell.my_cell, res.addr,
         block::Config::needWorkchainInfo | block::Config::needSpecialSmc | block::Config::needCapabilities);
 
     if (global_config.unpack().is_error()) {
