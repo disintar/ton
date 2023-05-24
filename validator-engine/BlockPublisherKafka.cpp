@@ -24,7 +24,7 @@ void BlockPublisherKafka::publishBlockApplied(unsigned long long shard, std::str
     }
 
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-applied-mainnet")
-                         .partition(0)
+                         .partition(shard_to_partition[shard])
                          .payload(json));
   } catch (std::exception& e) {
     const auto id = to_string(json::parse(json)["id"]);
@@ -53,7 +53,7 @@ void BlockPublisherKafka::publishBlockData(unsigned long long shard, std::string
     }
 
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-data-mainnet")
-                         .partition(0)
+                         .partition(shard_to_partition[shard])
                          .payload(json));
   } catch (std::exception& e) {
     const auto id = to_string(json::parse(json)["id"]);
@@ -74,7 +74,7 @@ void BlockPublisherKafka::publishBlockState(unsigned long long shard, std::strin
     }
 
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-state-mainnet")
-                         .partition(0)
+                         .partition(shard_to_partition[shard])
                          .payload(json));
   } catch (std::exception& e) {
     const auto id = to_string(json::parse(json)["id"]);
