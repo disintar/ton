@@ -21,7 +21,7 @@ class IBLockPublisher {
   virtual void publishBlockApplied(unsigned long long shard, std::string json) = 0;
   virtual void publishBlockData(unsigned long long shard, std::string json) = 0;
   virtual void publishBlockState(unsigned long long shard, std::string json) = 0;
-  virtual void deliver();
+  virtual void deliver() = 0;
 };
 
 class IBlockParser {
