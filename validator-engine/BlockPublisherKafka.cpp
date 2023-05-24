@@ -7,7 +7,8 @@ BlockPublisherKafka::BlockPublisherKafka(const std::string& endpoint)
     : producer(cppkafka::Configuration{{"metadata.broker.list", endpoint},
                                        {"message.max.bytes", "1000000000"},  // max
                                        {"acks", "1"},
-                                       {"debug", "msg,broker,topic"}}) {
+                                       {"debug", "msg,broker,topic"},
+                                       {"queue.buffering.max.ms", "500"}}) {
 }
 
 void BlockPublisherKafka::publishBlockApplied(unsigned long long shard, std::string json) {
