@@ -13,6 +13,7 @@ class BlockPublisherKafka : public IBLockPublisher {
   void publishBlockApplied(unsigned long long shard, std::string json) override;
   void publishBlockData(unsigned long long shard, std::string json) override;
   void publishBlockState(unsigned long long shard, std::string json) override;
+  void deliver() override;
 
  private:
   void publishBlockError(const std::string& id, const std::string& error);

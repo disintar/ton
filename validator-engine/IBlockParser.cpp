@@ -1215,8 +1215,10 @@ void BlockParser::publish_applied_worker() {
   while (should_run) {
     std::unique_lock lock(publish_applied_mtx_);
     publish_applied_cv_.wait(lock, [this] { return !publish_applied_queue_.empty() || !running_; });
-    if (publish_applied_queue_.empty())
-      return;
+    if (publish_applied_queue_.empty()) {
+      publisher_->deliver();
+      continue;
+    }
 
     auto block = std::move(publish_applied_queue_.front());
     publish_applied_queue_.pop();
@@ -1233,13 +1235,15 @@ void BlockParser::publish_blocks_worker() {
   while (should_run) {
     std::unique_lock lock(publish_blocks_mtx_);
     publish_blocks_cv_.wait(lock, [this] { return !publish_blocks_queue_.empty() || !running_; });
-    if (publish_blocks_queue_.empty())
-      return;
+    if (publish_blocks_queue_.empty()) {
+      publisher_->deliver();
+      continue;
+    }
 
     auto block = std::move(publish_blocks_queue_.front());
     publish_blocks_queue_.pop();
 
-    should_run = running_ || !publish_blocks_queue_.empty();
+    should_run = running_;
     lock.unlock();
 
     publisher_->publishBlockData(std::get<0>(block), std::get<1>(block));
@@ -1251,13 +1255,14 @@ void BlockParser::publish_states_worker() {
   while (should_run) {
     std::unique_lock lock(publish_states_mtx_);
     publish_states_cv_.wait(lock, [this] { return !publish_states_queue_.empty() || !running_; });
-    if (publish_states_queue_.empty())
-      return;
-
+    if (publish_states_queue_.empty()) {
+      publisher_->deliver();
+      continue;
+    }
     auto state = std::move(publish_states_queue_.front());
     publish_states_queue_.pop();
 
-    should_run = running_ || !publish_states_queue_.empty();
+    should_run = running_;
     lock.unlock();
 
     publisher_->publishBlockState(std::get<0>(state), std::get<1>(state));
