@@ -10,12 +10,20 @@ BlockPublisherKafka::BlockPublisherKafka(const std::string& endpoint)
                                        {"debug", "msg,broker,topic"}}) {
 }
 
-void BlockPublisherKafka::publishBlockApplied(std::string json) {
+void BlockPublisherKafka::publishBlockApplied(unsigned long long shard, std::string json) {
   std::lock_guard<std::mutex> guard(net_mtx);
   LOG(INFO) << "[block-applied] Sending " << json.size() << " bytes to Kafka";
   try {
     const char* value = getenv("KAFKA_APPLY_TOPIC");
-    producer.produce(cppkafka::MessageBuilder(value ? value : "block-applied-mainnet").partition(0).payload(json));
+
+    if (shard_to_partition.find(shard) == shard_to_partition.end()) {
+      max_partition++;
+      shard_to_partition[shard] = max_partition;
+    }
+
+    producer.produce(cppkafka::MessageBuilder(value ? value : "block-applied-mainnet")
+                         .partition(shard_to_partition[shard])
+                         .payload(json));
     producer.flush(std::chrono::milliseconds(100000));
   } catch (std::exception& e) {
     const auto id = to_string(json::parse(json)["id"]);
@@ -24,12 +32,20 @@ void BlockPublisherKafka::publishBlockApplied(std::string json) {
   }
 }
 
-void BlockPublisherKafka::publishBlockData(std::string json) {
+void BlockPublisherKafka::publishBlockData(unsigned long long shard, std::string json) {
   std::lock_guard<std::mutex> guard(net_mtx);
   LOG(INFO) << "[block-data] Sending " << json.size() << " bytes to Kafka";
   try {
     const char* value = getenv("KAFKA_BLOCK_TOPIC");
-    producer.produce(cppkafka::MessageBuilder(value ? value : "block-data-mainnet").partition(0).payload(json));
+
+    if (shard_to_partition.find(shard) == shard_to_partition.end()) {
+      max_partition++;
+      shard_to_partition[shard] = max_partition;
+    }
+
+    producer.produce(cppkafka::MessageBuilder(value ? value : "block-data-mainnet")
+                         .partition(shard_to_partition[shard])
+                         .payload(json));
     producer.flush(std::chrono::milliseconds(100000));
   } catch (std::exception& e) {
     const auto id = to_string(json::parse(json)["id"]);
@@ -38,12 +54,20 @@ void BlockPublisherKafka::publishBlockData(std::string json) {
   }
 }
 
-void BlockPublisherKafka::publishBlockState(std::string json) {
+void BlockPublisherKafka::publishBlockState(unsigned long long shard, std::string json) {
   std::lock_guard<std::mutex> guard(net_mtx);
   LOG(INFO) << "[block-state] Sending " << json.size() << " bytes to Kafka";
   try {
     const char* value = getenv("KAFKA_STATE_TOPIC");
-    producer.produce(cppkafka::MessageBuilder(value ? value : "block-state-mainnet").partition(0).payload(json));
+
+    if (shard_to_partition.find(shard) == shard_to_partition.end()) {
+      max_partition++;
+      shard_to_partition[shard] = max_partition;
+    }
+
+    producer.produce(cppkafka::MessageBuilder(value ? value : "block-state-mainnet")
+                         .partition(shard_to_partition[shard])
+                         .payload(json));
     producer.flush(std::chrono::milliseconds(100000));
   } catch (std::exception& e) {
     const auto id = to_string(json::parse(json)["id"]);

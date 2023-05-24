@@ -7,7 +7,6 @@ endif ()
 
 set(INDEXER_SOURCE indexer.cpp json.hpp json-utils.cpp json-utils.hpp
         ../validator-engine/IBlockParser.hpp ../validator-engine/IBlockParser.cpp
-        ../validator-engine/BlockPublisherFS.hpp ../validator-engine/BlockPublisherFS.cpp
         ../validator-engine/BlockPublisherKafka.hpp ../validator-engine/BlockPublisherKafka.cpp
         ../validator-engine/IBlockRequestReceiver.hpp
         ../validator-engine/BlockRequestReceiverKafka.hpp ../validator-engine/BlockRequestReceiverKafka.cpp

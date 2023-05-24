@@ -10,7 +10,7 @@ set(VALIDATOR_ENGINE_SOURCE
   IBlockParser.hpp
   IBlockParser.cpp
   BlockPublisherKafka.hpp BlockPublisherKafka.cpp
-        BlockPublisherFS.cpp BlockPublisherFS.hpp IBlockRequestReceiver.hpp BlockRequestReceiverKafka.cpp BlockRequestReceiverKafka.hpp)
+         IBlockRequestReceiver.hpp BlockRequestReceiverKafka.cpp BlockRequestReceiverKafka.hpp)
 
 add_executable(validator-engine ${VALIDATOR_ENGINE_SOURCE})
 target_link_libraries(validator-engine overlay tdutils tdactor adnl tl_api dht

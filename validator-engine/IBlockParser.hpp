@@ -18,9 +18,9 @@ class IBLockPublisher {
  public:
   virtual ~IBLockPublisher() = default;
 
-  virtual void publishBlockApplied(std::string json) = 0;
-  virtual void publishBlockData(std::string json) = 0;
-  virtual void publishBlockState(std::string json) = 0;
+  virtual void publishBlockApplied(unsigned long long shard, std::string json) = 0;
+  virtual void publishBlockData(unsigned long long shard, std::string json) = 0;
+  virtual void publishBlockState(unsigned long long shard, std::string json) = 0;
 };
 
 class IBlockParser {
@@ -59,9 +59,9 @@ class BlockParser : public IBlockParser {
   std::string parseBlockState(BlockIdExt id, const BlockHandle& handle, const td::Ref<ShardState>& state,
                                            const std::vector<std::pair<td::Bits256, int>>& accounts_keys,
                                            const td::optional<td::Ref<vm::Cell>>& prev_state);
-  void enqueuePublishBlockApplied(std::string json);
-  void enqueuePublishBlockData(std::string json);
-  void enqueuePublishBlockState(std::string json);
+  void enqueuePublishBlockApplied(unsigned long long shard, std::string json);
+  void enqueuePublishBlockData(unsigned long long shard, std::string json);
+  void enqueuePublishBlockState(unsigned long long shard, std::string json);
 
   void publish_applied_worker();
   void publish_blocks_worker();
@@ -83,17 +83,17 @@ class BlockParser : public IBlockParser {
 
   std::mutex publish_applied_mtx_;
   std::condition_variable publish_applied_cv_;
-  std::queue<std::string> publish_applied_queue_;
+  std::queue<std::tuple<unsigned long long, std::string>> publish_applied_queue_;
   std::thread publish_applied_thread_;
 
   std::mutex publish_blocks_mtx_;
   std::condition_variable publish_blocks_cv_;
-  std::queue<std::string> publish_blocks_queue_;
+  std::queue<std::tuple<unsigned long long, std::string>> publish_blocks_queue_;
   std::thread publish_blocks_thread_;
 
   std::mutex publish_states_mtx_;
   std::condition_variable publish_states_cv_;
-  std::queue<std::string> publish_states_queue_;
+  std::queue<std::tuple<unsigned long long, std::string>> publish_states_queue_;
   std::thread publish_states_thread_;
 };
 

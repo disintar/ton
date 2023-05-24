@@ -135,11 +135,11 @@ void BlockParser::handleBlockProgress(BlockIdExt id) {
   }
 
   const auto applied_parsed = parseBlockApplied(id);
-  enqueuePublishBlockApplied(applied_parsed);
+  enqueuePublishBlockApplied(id.id.shard, applied_parsed);
 
   try {
     const auto block_parsed = parseBlockData(id, block_found_iter->first, block_found_iter->second);
-    enqueuePublishBlockData(block_parsed.first);
+    enqueuePublishBlockData(id.id.shard, block_parsed.first);
 
     try {
       td::optional<td::Ref<vm::Cell>> prev_state_opt;
@@ -150,7 +150,7 @@ void BlockParser::handleBlockProgress(BlockIdExt id) {
 
       const auto state_parsed =
           parseBlockState(id, state_found_iter->first, state_found_iter->second, block_parsed.second, prev_state_opt);
-      enqueuePublishBlockState(state_parsed);
+      enqueuePublishBlockState(id.id.shard, state_parsed);
     } catch (vm::VmError& e) {
       LOG(ERROR) << "VM ERROR: state " << e.get_msg();
     }
@@ -1186,26 +1186,26 @@ void BlockParser::gotState(BlockHandle handle, td::Ref<ShardState> state, std::v
     dump = post_processor_(dump);
   }
 
-  enqueuePublishBlockState(dump);
+  enqueuePublishBlockState(block_id.id.shard, dump);
 }
 
-void BlockParser::enqueuePublishBlockApplied(std::string json) {
+void BlockParser::enqueuePublishBlockApplied(unsigned long long shard, std::string json) {
   std::unique_lock lock(publish_applied_mtx_);
-  publish_applied_queue_.emplace(json);
+  publish_applied_queue_.emplace(shard, json);
   lock.unlock();
   publish_applied_cv_.notify_one();
 }
 
-void BlockParser::enqueuePublishBlockData(std::string json) {
+void BlockParser::enqueuePublishBlockData(unsigned long long shard, std::string json) {
   std::unique_lock lock(publish_blocks_mtx_);
-  publish_blocks_queue_.emplace(json);
+  publish_blocks_queue_.emplace(shard, json);
   lock.unlock();
   publish_blocks_cv_.notify_one();
 }
 
-void BlockParser::enqueuePublishBlockState(std::string json) {
+void BlockParser::enqueuePublishBlockState(unsigned long long shard, std::string json) {
   std::unique_lock lock(publish_states_mtx_);
-  publish_states_queue_.emplace(json);
+  publish_states_queue_.emplace(shard, json);
   lock.unlock();
   publish_states_cv_.notify_one();
 }
@@ -1224,7 +1224,7 @@ void BlockParser::publish_applied_worker() {
     should_run = running_ || !publish_applied_queue_.empty();
     lock.unlock();
 
-    publisher_->publishBlockApplied(block);
+    publisher_->publishBlockApplied(std::get<0>(block), std::get<1>(block));
   }
 }
 
@@ -1242,7 +1242,7 @@ void BlockParser::publish_blocks_worker() {
     should_run = running_ || !publish_blocks_queue_.empty();
     lock.unlock();
 
-    publisher_->publishBlockData(block);
+    publisher_->publishBlockData(std::get<0>(block), std::get<1>(block));
   }
 }
 
@@ -1260,7 +1260,7 @@ void BlockParser::publish_states_worker() {
     should_run = running_ || !publish_states_queue_.empty();
     lock.unlock();
 
-    publisher_->publishBlockState(state);
+    publisher_->publishBlockState(std::get<0>(state), std::get<1>(state));
   }
 }
 
