@@ -1216,7 +1216,6 @@ void BlockParser::publish_applied_worker() {
     std::unique_lock lock(publish_applied_mtx_);
     publish_applied_cv_.wait(lock, [this] { return !publish_applied_queue_.empty() || !running_; });
     if (publish_applied_queue_.empty()) {
-      publisher_->deliver();
       continue;
     }
 
@@ -1236,7 +1235,6 @@ void BlockParser::publish_blocks_worker() {
     std::unique_lock lock(publish_blocks_mtx_);
     publish_blocks_cv_.wait(lock, [this] { return !publish_blocks_queue_.empty() || !running_; });
     if (publish_blocks_queue_.empty()) {
-      publisher_->deliver();
       continue;
     }
 
@@ -1256,7 +1254,6 @@ void BlockParser::publish_states_worker() {
     std::unique_lock lock(publish_states_mtx_);
     publish_states_cv_.wait(lock, [this] { return !publish_states_queue_.empty() || !running_; });
     if (publish_states_queue_.empty()) {
-      publisher_->deliver();
       continue;
     }
     auto state = std::move(publish_states_queue_.front());
