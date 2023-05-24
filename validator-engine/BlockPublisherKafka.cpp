@@ -8,7 +8,8 @@ BlockPublisherKafka::BlockPublisherKafka(const std::string& endpoint)
                                        {"message.max.bytes", "1000000000"},  // max
                                        {"acks", "1"},
                                        {"debug", "msg,broker,topic"},
-                                       {"queue.buffering.max.ms", "2000"}}) {
+                                       {"queue.buffering.max.ms", "2000"},
+      }) {
 }
 
 void BlockPublisherKafka::publishBlockApplied(unsigned long long shard, std::string json) {
@@ -23,7 +24,7 @@ void BlockPublisherKafka::publishBlockApplied(unsigned long long shard, std::str
     }
 
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-applied-mainnet")
-                         .partition(shard_to_partition[shard])
+                         .partition(0)
                          .payload(json));
   } catch (std::exception& e) {
     const auto id = to_string(json::parse(json)["id"]);
@@ -52,7 +53,7 @@ void BlockPublisherKafka::publishBlockData(unsigned long long shard, std::string
     }
 
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-data-mainnet")
-                         .partition(shard_to_partition[shard])
+                         .partition(0)
                          .payload(json));
   } catch (std::exception& e) {
     const auto id = to_string(json::parse(json)["id"]);
@@ -73,7 +74,7 @@ void BlockPublisherKafka::publishBlockState(unsigned long long shard, std::strin
     }
 
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-state-mainnet")
-                         .partition(shard_to_partition[shard])
+                         .partition(0)
                          .payload(json));
   } catch (std::exception& e) {
     const auto id = to_string(json::parse(json)["id"]);
