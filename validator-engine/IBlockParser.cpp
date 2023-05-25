@@ -97,29 +97,34 @@ void BlockParser::handleBlockProgress(BlockIdExt id, td::Promise<std::tuple<td::
 
   auto applied_found = stored_applied_.find(key);
   if (applied_found == stored_applied_.end()) {
+    P.set_value(std::make_tuple("", ""));
     return;
   }
   const auto applied = applied_found->second;
 
   auto blocks_vec_found = stored_blocks_.find(key);
   if (blocks_vec_found == stored_blocks_.end()) {
+    P.set_value(std::make_tuple("", ""));
     return;
   }
   const auto blocks_vec = blocks_vec_found->second;
   auto block_found_iter =
       std::find_if(blocks_vec.begin(), blocks_vec.end(), [&id](const auto& b) { return b.first->id() == id; });
   if (block_found_iter == blocks_vec.end()) {
+    P.set_value(std::make_tuple("", ""));
     return;
   }
 
   auto states_vec_found = stored_states_.find(key);
   if (states_vec_found == stored_states_.end()) {
+    P.set_value(std::make_tuple("", ""));
     return;
   }
   const auto states_vec = states_vec_found->second;
   auto state_found_iter =
       std::find_if(states_vec.begin(), states_vec.end(), [&id](const auto& s) { return s.first->id() == id; });
   if (state_found_iter == states_vec.end()) {
+    P.set_value(std::make_tuple("", ""));
     return;
   }
 

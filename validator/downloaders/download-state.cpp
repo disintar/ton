@@ -200,10 +200,14 @@ void DownloadShardState::written_shard_state(td::Ref<ShardState> state) {
     auto final_publish = td::PromiseCreator::lambda(
         [handle_id, publisher = publisher_, shard](td::Result<std::tuple<std::string, std::string>> R) {
           if (R.is_ok()) {
-            LOG(WARNING) << "Send parsed data&state: " << handle_id.to_str();
-            const auto f = R.move_as_ok();
-            publisher->enqueuePublishBlockData(shard, std::get<0>(f));
-            publisher->enqueuePublishBlockState(shard, std::get<1>(f));
+            const auto answer = R.move_as_ok();
+
+            // skip
+            if (!std::get<0>(answer).empty()) {
+              LOG(WARNING) << "Send parsed data&state: " << handle_id.to_str();
+              publisher->enqueuePublishBlockData(shard, std::get<0>(answer));
+              publisher->enqueuePublishBlockState(shard, std::get<1>(answer));
+            }
           } else {
             LOG(FATAL) << "Failed to parse!";
           }
