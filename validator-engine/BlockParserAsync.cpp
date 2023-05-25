@@ -327,6 +327,8 @@ class AsyncStateIndexer : public td::actor::Actor {
                            std::to_string(block_id.id.seqno);
 
     try {
+      LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
+
       final_json = answer.dump(-1);
       final_promise.set_value(std::move(final_json));
     } catch (...) {
@@ -336,7 +338,6 @@ class AsyncStateIndexer : public td::actor::Actor {
       std::exit(0);
     }
 
-    LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
     stop();
     return true;
   }

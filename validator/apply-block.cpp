@@ -260,11 +260,13 @@ void ApplyBlock::applied_set() {
   handle_->set_applied();
   auto publisher_ = manager_.get_actor_unsafe().get_block_publisher();
   if (publisher_) {
-    const auto shard = handle_->id().id.shard;
+    const auto handle_id = handle_->id();
+    const auto shard = handle_id.id.shard;
 
-    auto final_publish =
-        td::PromiseCreator::lambda([publisher = publisher_, shard](td::Result<std::tuple<std::string, std::string>> R) {
+    auto final_publish = td::PromiseCreator::lambda(
+        [handle_id, publisher = publisher_, shard](td::Result<std::tuple<std::string, std::string>> R) {
           if (R.is_ok()) {
+            LOG(WARNING) << "Send parsed data&state: " << handle_id.to_str();
             const auto f = R.move_as_ok();
             publisher->enqueuePublishBlockData(shard, std::get<0>(f));
             publisher->enqueuePublishBlockState(shard, std::get<1>(f));

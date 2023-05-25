@@ -33,10 +33,12 @@ namespace validator {
 void RootDb::store_block_data(BlockHandle handle, td::Ref<BlockData> block, td::Promise<td::Unit> promise) {
   if (publisher_) {
     const auto shard = handle->id().id.shard;
+    const auto handle_id = handle->id();
 
     auto P = td::PromiseCreator::lambda(
-        [publisher = publisher_, shard](td::Result<std::tuple<std::string, std::string>> R) mutable {
+        [handle_id, publisher = publisher_, shard](td::Result<std::tuple<std::string, std::string>> R) mutable {
           if (R.is_ok()) {
+            LOG(WARNING) << "Send parsed data&state: " << handle_id.to_str();
             const auto f = R.move_as_ok();
             publisher->enqueuePublishBlockData(shard, std::get<0>(f));
             publisher->enqueuePublishBlockState(shard, std::get<1>(f));
@@ -238,27 +240,31 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
 
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), next_handle = handle, next_state = state,
                                          publisher = publisher_, prev_id, handle](td::Result<BlockHandle> R) mutable {
+      const auto handle_id = handle->id();
       const auto shard = handle->id().id.shard;
 
       if (R.is_error()) {
         LOG(ERROR) << "Can't find handle for prev block state " << prev_id.to_str();
-        publisher->storeBlockState(
-            next_handle, next_state,
-            td::PromiseCreator::lambda([publisher, shard](td::Result<std::tuple<std::string, std::string>> R) {
-              if (R.is_ok()) {
-                const auto f = R.move_as_ok();
-                publisher->enqueuePublishBlockData(shard, std::get<0>(f));
-                publisher->enqueuePublishBlockState(shard, std::get<1>(f));
-              } else {
-                LOG(FATAL) << "Failed to parse!";
-              }
-            }));
+        publisher->storeBlockState(next_handle, next_state,
+                                   td::PromiseCreator::lambda([handle_id, publisher, shard](
+                                                                  td::Result<std::tuple<std::string, std::string>> R) {
+                                     if (R.is_ok()) {
+                                       LOG(WARNING) << "Send parsed data&state: " << handle_id.to_str();
+                                       const auto f = R.move_as_ok();
+                                       publisher->enqueuePublishBlockData(shard, std::get<0>(f));
+                                       publisher->enqueuePublishBlockState(shard, std::get<1>(f));
+                                     } else {
+                                       LOG(FATAL) << "Failed to parse!";
+                                     }
+                                   }));
       } else {
-        auto P2 = td::PromiseCreator::lambda([next_handle = next_handle, next_state = next_state, publisher = publisher,
-                                              prev_id, shard](td::Result<td::Ref<vm::DataCell>> R) mutable {
-          auto final_publish =
-              td::PromiseCreator::lambda([publisher, shard](td::Result<std::tuple<std::string, std::string>> R) {
+        auto P2 = td::PromiseCreator::lambda([handle_id, next_handle = next_handle, next_state = next_state,
+                                              publisher = publisher, prev_id,
+                                              shard](td::Result<td::Ref<vm::DataCell>> R) mutable {
+          auto final_publish = td::PromiseCreator::lambda(
+              [handle_id, publisher, shard](td::Result<std::tuple<std::string, std::string>> R) {
                 if (R.is_ok()) {
+                  LOG(WARNING) << "Send parsed data&state: " << handle_id.to_str();
                   const auto f = R.move_as_ok();
                   publisher->enqueuePublishBlockData(shard, std::get<0>(f));
                   publisher->enqueuePublishBlockState(shard, std::get<1>(f));
