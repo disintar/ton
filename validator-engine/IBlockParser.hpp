@@ -24,45 +24,27 @@ class IBLockPublisher {
   virtual void deliver() = 0;
 };
 
-class IBlockParser {
- public:
-  virtual ~IBlockParser() = default;
-
-  virtual void storeBlockApplied(BlockIdExt id) = 0;
-  virtual void storeBlockData(BlockHandle handle, td::Ref<BlockData> block) = 0;
-  virtual void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) = 0;
-  virtual void storeBlockStateWithPrev(BlockHandle handle, td::Ref<vm::Cell> prev_state,
-                                       td::Ref<ShardState> state) = 0;
-};
-
-class BlockParser : public IBlockParser {
+class BlockParser {
  public:
   explicit BlockParser(std::unique_ptr<IBLockPublisher> publisher);
-  ~BlockParser() override;
+  ~BlockParser();
 
  public:
-  void storeBlockApplied(BlockIdExt id) final;
-  void storeBlockData(BlockHandle handle, td::Ref<BlockData> block) final;
-  void storeBlockState(BlockHandle handle, td::Ref<ShardState> state) final;
-  void storeBlockStateWithPrev(BlockHandle handle, td::Ref<vm::Cell> prev_state,
-                               td::Ref<ShardState> state) final;
+  void storeBlockApplied(BlockIdExt id, td::Promise<std::tuple<td::string, td::string>> P);
+  void storeBlockData(BlockHandle handle, td::Ref<BlockData> block, td::Promise<std::tuple<td::string, td::string>> P);
+  void storeBlockState(BlockHandle handle, td::Ref<ShardState> state,
+                       td::Promise<std::tuple<td::string, td::string>> P);
+  void storeBlockStateWithPrev(BlockHandle handle, td::Ref<vm::Cell> prev_state, td::Ref<ShardState> state,
+                               td::Promise<std::tuple<td::string, td::string>> P);
 
-  void setPostProcessor(std::function<std::string(std::string)>);
+  void enqueuePublishBlockApplied(unsigned long long shard, const std::string& json);
+  void enqueuePublishBlockData(unsigned long long shard, const std::string& json);
+  void enqueuePublishBlockState(unsigned long long shard, const std::string& json);
 
  private:
-  void gotState(BlockHandle handle, td::Ref<ShardState> state, std::vector<td::Bits256> accounts_keys);
-
-  void handleBlockProgress(BlockIdExt id);
+  void handleBlockProgress(BlockIdExt id, td::Promise<std::tuple<td::string, td::string>> P);
 
   std::string parseBlockApplied(BlockIdExt id);
-  std::pair<std::string, std::vector<std::pair<td::Bits256, int>>> parseBlockData(BlockIdExt id, const BlockHandle& handle,
-                                                                  const td::Ref<BlockData>& data);
-  std::string parseBlockState(BlockIdExt id, const BlockHandle& handle, const td::Ref<ShardState>& state,
-                                           const std::vector<std::pair<td::Bits256, int>>& accounts_keys,
-                                           const td::optional<td::Ref<vm::Cell>>& prev_state);
-  void enqueuePublishBlockApplied(unsigned long long shard, std::string json);
-  void enqueuePublishBlockData(unsigned long long shard, std::string json);
-  void enqueuePublishBlockState(unsigned long long shard, std::string json);
 
   void publish_applied_worker();
   void publish_blocks_worker();
@@ -74,8 +56,8 @@ class BlockParser : public IBlockParser {
 
   std::mutex maps_mtx_;
   std::map<std::string, BlockIdExt> stored_applied_;
-  std::map<std::string, std::vector<std::pair<BlockHandle, td::Ref<BlockData>>>> stored_blocks_;        // multimap?
-  std::map<std::string, std::vector<std::pair<BlockHandle, td::Ref<ShardState>>>> stored_states_;       // multimap?
+  std::map<std::string, std::vector<std::pair<BlockHandle, td::Ref<BlockData>>>> stored_blocks_;      // multimap?
+  std::map<std::string, std::vector<std::pair<BlockHandle, td::Ref<ShardState>>>> stored_states_;     // multimap?
   std::map<std::string, std::vector<std::pair<BlockHandle, td::Ref<vm::Cell>>>> stored_prev_states_;  // multimap?
 
   // mb rewrite with https://github.com/andreiavrammsd/cpp-channel

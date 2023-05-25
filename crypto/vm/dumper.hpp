@@ -16,7 +16,7 @@ class VmDumper {
     vm_ops = vm_ops_;
   }
 
-  explicit VmDumper(VmDumper *dumper_) {
+  explicit VmDumper(VmDumper* dumper_) {
     stacks = dumper_->stacks;
     vm_ops = dumper_->vm_ops;
     enable = true;
@@ -33,9 +33,7 @@ class VmDumper {
 
     std::vector<StackEntry> current_stack;
 
-    stack->for_each_scalar([&current_stack](const StackEntry& stackPointer) {
-      current_stack.push_back(stackPointer);
-    });
+    stack->for_each_scalar([&current_stack](const StackEntry& stackPointer) { current_stack.push_back(stackPointer); });
 
     stacks->push_back(std::move(current_stack));
   };

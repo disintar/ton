@@ -29,7 +29,7 @@ namespace validator {
 class Db : public td::actor::Actor {
  public:
   virtual ~Db() = default;
-  virtual void set_block_publisher(IBlockParser* publisher) {
+  virtual void set_block_publisher(BlockParser* publisher) {
 //    LOG(ERROR) << "set_block_publisher";
   }
   virtual void clear_boc_cache() {

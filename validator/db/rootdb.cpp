@@ -24,6 +24,7 @@
 #include "common/checksum.h"
 #include "validator/stats-merger.h"
 #include "td/actor/MultiPromise.h"
+#include "blockchain-indexer/json.hpp"
 
 namespace ton {
 
@@ -31,7 +32,20 @@ namespace validator {
 
 void RootDb::store_block_data(BlockHandle handle, td::Ref<BlockData> block, td::Promise<td::Unit> promise) {
   if (publisher_) {
-    publisher_->storeBlockData(handle, block);
+    const auto shard = handle->id().id.shard;
+
+    auto P = td::PromiseCreator::lambda(
+        [publisher = publisher_, shard](td::Result<std::tuple<std::string, std::string>> R) mutable {
+          if (R.is_ok()) {
+            const auto f = R.move_as_ok();
+            publisher->enqueuePublishBlockData(shard, std::get<0>(f));
+            publisher->enqueuePublishBlockState(shard, std::get<1>(f));
+          } else {
+            LOG(FATAL) << "Failed to parse!";
+          }
+        });
+
+    publisher_->storeBlockData(handle, block, std::move(P));
   }
 
   if (handle->received()) {
@@ -223,19 +237,42 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
     const auto prev_id = handle->one_prev(true);
 
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), next_handle = handle, next_state = state,
-                                         publisher = publisher_, prev_id](td::Result<BlockHandle> R) mutable {
+                                         publisher = publisher_, prev_id, handle](td::Result<BlockHandle> R) mutable {
+      const auto shard = handle->id().id.shard;
+
       if (R.is_error()) {
         LOG(ERROR) << "Can't find handle for prev block state " << prev_id.to_str();
-        publisher->storeBlockState(next_handle, next_state);
+        publisher->storeBlockState(
+            next_handle, next_state,
+            td::PromiseCreator::lambda([publisher, shard](td::Result<std::tuple<std::string, std::string>> R) {
+              if (R.is_ok()) {
+                const auto f = R.move_as_ok();
+                publisher->enqueuePublishBlockData(shard, std::get<0>(f));
+                publisher->enqueuePublishBlockState(shard, std::get<1>(f));
+              } else {
+                LOG(FATAL) << "Failed to parse!";
+              }
+            }));
       } else {
         auto P2 = td::PromiseCreator::lambda([next_handle = next_handle, next_state = next_state, publisher = publisher,
-                                              prev_id](td::Result<td::Ref<vm::DataCell>> R) mutable {
+                                              prev_id, shard](td::Result<td::Ref<vm::DataCell>> R) mutable {
+          auto final_publish =
+              td::PromiseCreator::lambda([publisher, shard](td::Result<std::tuple<std::string, std::string>> R) {
+                if (R.is_ok()) {
+                  const auto f = R.move_as_ok();
+                  publisher->enqueuePublishBlockData(shard, std::get<0>(f));
+                  publisher->enqueuePublishBlockState(shard, std::get<1>(f));
+                } else {
+                  LOG(FATAL) << "Failed to parse!";
+                }
+              });
+
           if (R.is_error()) {
             LOG(ERROR) << "Can't find prev block state for" << prev_id.to_str();
-            publisher->storeBlockState(next_handle, next_state);
+            publisher->storeBlockState(next_handle, next_state, std::move(final_publish));
           } else {
             auto root_cell = R.move_as_ok();
-            publisher->storeBlockStateWithPrev(next_handle, root_cell, next_state);
+            publisher->storeBlockStateWithPrev(next_handle, root_cell, next_state, std::move(final_publish));
           }
         });
 

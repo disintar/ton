@@ -379,12 +379,12 @@ class ValidatorManagerImpl : public ValidatorManager {
     UNREACHABLE();
   }
 
-  void set_block_publisher(std::unique_ptr<IBlockParser> publisher) override {
+  void set_block_publisher(std::unique_ptr<BlockParser> publisher) override {
     //    LOG(ERROR) << "set_block_publisher";
     publisher_ = std::move(publisher);
     td::actor::send_closure(db_, &Db::set_block_publisher, publisher_.get());
   }
-  IBlockParser *get_block_publisher() override {
+  BlockParser *get_block_publisher() override {
     return publisher_.get();
   }
   void clear_celldb_boc_cache() override {
@@ -401,7 +401,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   }
 
  private:
-  std::unique_ptr<IBlockParser> publisher_;
+  std::unique_ptr<BlockParser> publisher_;
 
  private:
   PublicKeyHash local_id_;

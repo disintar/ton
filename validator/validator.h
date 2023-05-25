@@ -223,7 +223,7 @@ class ValidatorManagerInterface : public td::actor::Actor {
   virtual void get_archive_slice(td::uint64 archive_id, td::uint64 offset, td::uint32 limit,
                                  td::Promise<td::BufferSlice> promise) = 0;
 
-  virtual void set_block_publisher(std::unique_ptr<IBlockParser> publisher) {
+  virtual void set_block_publisher(std::unique_ptr<BlockParser> publisher) {
     //    LOG(ERROR) << "set_block_publisher";
   }  ///TODO: make it pure virtual
   virtual void clear_celldb_boc_cache() {

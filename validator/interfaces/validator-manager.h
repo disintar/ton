@@ -170,11 +170,11 @@ class ValidatorManager : public ValidatorManagerInterface {
 
   virtual void log_validator_session_stats(BlockIdExt block_id, validatorsession::ValidatorSessionStats stats) = 0;
 
-  void set_block_publisher(std::unique_ptr<IBlockParser> publisher) override {
+  void set_block_publisher(std::unique_ptr<BlockParser> publisher) override {
 //    LOG(ERROR) << "set_block_publisher";
   } ///TODO: make it pure virtual
 
-  virtual IBlockParser* get_block_publisher() {
+  virtual BlockParser* get_block_publisher() {
     // TODO: make it pure virtual
   }
 

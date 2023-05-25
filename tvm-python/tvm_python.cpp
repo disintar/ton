@@ -4,8 +4,6 @@
 #include <codecvt>
 #include <iostream>
 #include <locale>
-#include <sstream>
-#include <string>
 
 #include "vm/vm.h"
 #include "vm/vmstate.h"

@@ -543,17 +543,17 @@ class ValidatorManagerImpl : public ValidatorManager {
 
   void log_validator_session_stats(BlockIdExt block_id, validatorsession::ValidatorSessionStats stats) override;
 
-  void set_block_publisher(std::unique_ptr<IBlockParser> publisher) override {
+  void set_block_publisher(std::unique_ptr<BlockParser> publisher) override {
     publisher_ = std::move(publisher);
     td::actor::send_closure(db_, &Db::set_block_publisher, publisher_.get());
   }
 
-  IBlockParser* get_block_publisher() override {
+  BlockParser* get_block_publisher() override {
     return publisher_.get();
   }
 
  private:
-  std::unique_ptr<IBlockParser> publisher_;
+  std::unique_ptr<BlockParser> publisher_;
 
  private:
   td::Timestamp resend_shard_blocks_at_;

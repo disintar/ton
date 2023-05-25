@@ -78,7 +78,7 @@ class RootDb : public Db {
       : validator_manager_(validator_manager), root_path_(std::move(root_path)), read_only_(read_only) {
   }
 
-  void set_block_publisher(IBlockParser* publisher) override {
+  void set_block_publisher(BlockParser* publisher) override {
     if (publisher == nullptr) {
       LOG(ERROR) << "Received nullptr IBlockPublisher";
       return;
@@ -198,7 +198,7 @@ class RootDb : public Db {
   td::actor::ActorOwn<StaticFilesDb> static_files_db_;
   td::actor::ActorOwn<ArchiveManager> archive_db_;
 
-  IBlockParser* publisher_ = nullptr;
+  BlockParser* publisher_ = nullptr;
   void get_block_state_root_cell(ConstBlockHandle handle, td::Promise<td::Ref<vm::DataCell>> promise) override;
 };
 
