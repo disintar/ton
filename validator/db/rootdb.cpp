@@ -241,6 +241,7 @@ void RootDb::get_block_candidate(PublicKey source, BlockIdExt id, FileHash colla
 void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
                                td::Promise<td::Ref<ShardState>> promise) {
   if (publisher_) {
+    LOG(WARNING) << "Start finding prev state for: " << handle->id();
     const auto prev_id = handle->one_prev(true);
 
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), next_handle = handle, next_state = state,
@@ -275,6 +276,7 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
             LOG(ERROR) << "Can't find prev block state for" << prev_id.to_str();
             publisher->storeBlockState(next_handle, next_state, std::move(final_publish));
           } else {
+            LOG(WARNING) << "Found prev state for: " << next_handle->id();
             auto root_cell = R.move_as_ok();
             publisher->storeBlockStateWithPrev(next_handle, root_cell, next_state, std::move(final_publish));
           }
