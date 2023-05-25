@@ -329,7 +329,11 @@ class AsyncStateIndexer : public td::actor::Actor {
     try {
       LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
 
-      final_json = answer.dump(-1);
+      json to_dump = {{"id", std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
+                                 std::to_string(block_id.id.seqno)},
+                      {"data", answer}};
+
+      final_json = to_dump.dump(-1);
       final_promise.set_value(std::move(final_json));
     } catch (...) {
       LOG(ERROR) << "Cant dump state: " << final_id;
@@ -797,7 +801,7 @@ void BlockParserAsync::parseBlockData() {
       {"id", std::to_string(workchain) + ":" + std::to_string(blkid.id.shard) + ":" + std::to_string(blkid.seqno())},
       {"data", answer}};
 
-  parsed_data = to_dump.dump();
+  parsed_data = to_dump.dump(-1);
 
   auto Pfinal = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::string> potential_state) {
     if (potential_state.is_ok()) {
