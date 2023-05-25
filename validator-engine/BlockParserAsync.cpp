@@ -77,7 +77,7 @@ class AsyncStateIndexer : public td::actor::Actor {
 
   void start_up() override {
     try {
-      LOG(DEBUG) << "Parse accounts states " << block_id_string << " " << timer;
+      LOG(WARNING) << "Parse accounts states " << block_id_string << " " << timer;
 
       block::gen::ShardStateUnsplit::Record shard_state;
       CHECK(tlb::unpack_cell(std::move(root_cell), shard_state));
@@ -320,7 +320,7 @@ class AsyncStateIndexer : public td::actor::Actor {
 
   bool finalize() {
     answer["accounts"] = json_accounts;
-    LOG(DEBUG) << "Parse accounts states all accounts parsed " << block_id_string << " " << timer;
+    LOG(WARNING) << "Parse accounts states all accounts parsed " << block_id_string << " " << timer;
 
     std::string final_json;
     std::string final_id = std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
@@ -348,7 +348,7 @@ class AsyncStateIndexer : public td::actor::Actor {
 };
 
 void BlockParserAsync::parseBlockData() {
-  LOG(DEBUG) << "Parse Data" << id.to_str();
+  LOG(WARNING) << "Parse block data" << id.to_str();
 
   auto blkid = data->block_id();
   LOG(DEBUG) << "Parse: " << blkid.to_str();
@@ -821,7 +821,7 @@ void BlockParserAsync::parseBlockData() {
                                              std::move(Pfinal))
       .release();
 
-  LOG(DEBUG) << "Parse: " << blkid.to_str() << " success";
+  LOG(WARNING) << "Parsed: " << blkid.to_str() << " success";
 };
 
 void BlockParserAsync::saveStateData(std::string tmp_state) {
@@ -830,6 +830,7 @@ void BlockParserAsync::saveStateData(std::string tmp_state) {
 }
 
 void BlockParserAsync::finalize() {
+  LOG(WARNING) << "Send: " << id.to_str() << " success";
   P.set_value(std::make_tuple(parsed_data, parsed_state));
 }
 }  // namespace ton::validator

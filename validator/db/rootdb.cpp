@@ -242,57 +242,50 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
                                td::Promise<td::Ref<ShardState>> promise) {
   if (publisher_) {
     const auto prev_id = handle->one_prev(true);
-    const auto handle_id = handle->id();
-    const auto shard = handle_id.id.shard;
 
-    auto final_publish = td::PromiseCreator::lambda(
-        [handle_id, publisher = publisher_, shard](td::Result<std::tuple<std::string, std::string>> R) {
-          if (R.is_ok()) {
-            const auto answer = R.move_as_ok();
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), next_handle = handle, next_state = state,
+                                         publisher = publisher_, prev_id](td::Result<BlockHandle> R) mutable {
+      const auto handle_id = next_handle->id();
+      const auto shard = next_handle->id().id.shard;
 
-            // skip
-            if (!std::get<0>(answer).empty()) {
-              LOG(WARNING) << "Send parsed data&state: " << handle_id.to_str();
-              publisher->enqueuePublishBlockData(shard, std::get<0>(answer));
-              publisher->enqueuePublishBlockState(shard, std::get<1>(answer));
+      auto final_publish =
+          td::PromiseCreator::lambda([handle_id, publisher, shard](td::Result<std::tuple<std::string, std::string>> R) {
+            if (R.is_ok()) {
+              const auto answer = R.move_as_ok();
+
+              // skip
+              if (!std::get<0>(answer).empty()) {
+                LOG(WARNING) << "Send parsed data&state: " << handle_id.to_str();
+                publisher->enqueuePublishBlockData(shard, std::get<0>(answer));
+                publisher->enqueuePublishBlockState(shard, std::get<1>(answer));
+              }
+            } else {
+              LOG(FATAL) << "Failed to parse!";
             }
+          });
+
+      if (R.is_error()) {
+        LOG(ERROR) << "Can't find handle for prev block state " << prev_id.to_str();
+        publisher->storeBlockState(next_handle, next_state, std::move(final_publish));
+      } else {
+        auto P2 = td::PromiseCreator::lambda([final_publish = std::move(final_publish), next_handle = next_handle,
+                                              next_state = next_state, publisher = publisher,
+                                              prev_id](td::Result<td::Ref<vm::DataCell>> R) mutable {
+          if (R.is_error()) {
+            LOG(ERROR) << "Can't find prev block state for" << prev_id.to_str();
+            publisher->storeBlockState(next_handle, next_state, std::move(final_publish));
           } else {
-            LOG(FATAL) << "Failed to parse!";
+            auto root_cell = R.move_as_ok();
+            publisher->storeBlockStateWithPrev(next_handle, root_cell, next_state, std::move(final_publish));
           }
         });
 
-    publisher_->storeBlockState(handle, state, std::move(final_publish));
+        const auto new_handle = R.move_as_ok();
+        td::actor::send_closure(SelfId, &RootDb::get_block_state_root_cell, new_handle, std::move(P2));
+      }
+    });
 
-    // This is extremely slow
-    //    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), next_handle = handle, next_state = state,
-    //                                         publisher = publisher_, prev_id, handle](td::Result<BlockHandle> R) mutable {
-    //      const auto handle_id = handle->id();
-    //      const auto shard = handle->id().id.shard;
-    //
-
-    //
-    //      if (R.is_error()) {
-    //        LOG(ERROR) << "Can't find handle for prev block state " << prev_id.to_str();
-    //        publisher->storeBlockState(next_handle, next_state, std::move(final_publish));
-    //      } else {
-    //        auto P2 = td::PromiseCreator::lambda([final_publish = std::move(final_publish), next_handle = next_handle,
-    //                                              next_state = next_state, publisher = publisher,
-    //                                              prev_id](td::Result<td::Ref<vm::DataCell>> R) mutable {
-    //          if (R.is_error()) {
-    //            LOG(ERROR) << "Can't find prev block state for" << prev_id.to_str();
-    //            publisher->storeBlockState(next_handle, next_state, std::move(final_publish));
-    //          } else {
-    //            auto root_cell = R.move_as_ok();
-    //            publisher->storeBlockStateWithPrev(next_handle, root_cell, next_state, std::move(final_publish));
-    //          }
-    //        });
-    //
-    //        const auto new_handle = R.move_as_ok();
-    //        td::actor::send_closure(SelfId, &RootDb::get_block_state_root_cell, new_handle, std::move(P2));
-    //      }
-    //    });
-
-    //    td::actor::send_closure(actor_id(this), &RootDb::get_block_handle, prev_id, std::move(P));
+    td::actor::send_closure(actor_id(this), &RootDb::get_block_handle, prev_id, std::move(P));
   }
 
   if (handle->moved_to_archive()) {

@@ -44,6 +44,7 @@ void BlockParser::storeBlockData(BlockHandle handle, td::Ref<BlockData> block,
   }
 
   handleBlockProgress(handle->id(), std::move(P));
+  LOG(WARNING) << "Stored block: " << block->block_id().to_str();
 }
 
 void BlockParser::storeBlockState(BlockHandle handle, td::Ref<ShardState> state,
@@ -62,6 +63,7 @@ void BlockParser::storeBlockState(BlockHandle handle, td::Ref<ShardState> state,
   }
 
   handleBlockProgress(handle->id(), std::move(P));
+  LOG(WARNING) << "Stored state: " << state->get_block_id().to_str();
 }
 
 void BlockParser::storeBlockStateWithPrev(BlockHandle handle, td::Ref<vm::Cell> prev_state, td::Ref<ShardState> state,
@@ -89,6 +91,7 @@ void BlockParser::storeBlockStateWithPrev(BlockHandle handle, td::Ref<vm::Cell> 
   }
 
   handleBlockProgress(handle->id(), std::move(P));
+  LOG(WARNING) << "Stored prev state: " << state->get_block_id().to_str();
 }
 
 void BlockParser::handleBlockProgress(BlockIdExt id, td::Promise<std::tuple<td::string, td::string>> P) {
