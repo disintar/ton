@@ -24,12 +24,14 @@ td::Result<std::unique_ptr<TransactionEmulator::EmulationResult>> TransactionEmu
     utime = (unsigned)std::time(nullptr);
   }
 
-  auto fetch_res = block::FetchConfigParams::fetch_config_params(
-      config_, &old_mparams, &storage_prices, &storage_phase_cfg, &rand_seed_, &compute_phase_cfg, &action_phase_cfg,
-      &masterchain_create_fee, &basechain_create_fee, account.workchain, utime);
-  if (fetch_res.is_error()) {
-    return fetch_res.move_as_error_prefix("cannot fetch config params ");
-  }
+    auto fetch_res = block::FetchConfigParams::fetch_config_params(config_, prev_blocks_info_, &old_mparams,
+                                                                   &storage_prices, &storage_phase_cfg,
+                                                                   &rand_seed_, &compute_phase_cfg,
+                                                                   &action_phase_cfg, &masterchain_create_fee,
+                                                                   &basechain_create_fee, account.workchain, utime);
+    if(fetch_res.is_error()) {
+        return fetch_res.move_as_error_prefix("cannot fetch config params ");
+    }
 
   vm::init_op_cp0(debug_enabled_);
 
@@ -270,4 +272,8 @@ void TransactionEmulator::set_debug_enabled(bool debug_enabled) {
   debug_enabled_ = debug_enabled;
 }
 
-}  // namespace emulator
+void TransactionEmulator::set_prev_blocks_info(td::Ref<vm::Tuple> prev_blocks_info) {
+  prev_blocks_info_ = std::move(prev_blocks_info);
+}
+
+} // namespace emulator
