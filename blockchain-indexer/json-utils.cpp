@@ -170,9 +170,10 @@ json parse_libraries(Ref<vm::Cell> lib_cell) {
       };
 
       libs.emplace_back(std::move(lib_json));
-      //      out_msgs_list.emplace_back(parse_message(o_msg));
-      return libs;
+      //      out_msgs_list.emplace_back(parse_message(o_msg))
     }
+
+    return libs;
   } catch (...) {
     LOG(ERROR) << "ERROR IN LOADING LIBRARY";
     return libs;
