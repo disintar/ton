@@ -415,7 +415,7 @@ json parse_message(Ref<vm::Cell> message_any) {
     }
 
   } else {
-    body.skip_first(1);
+    body.skip_first(1); // Either
 
     vm::CellBuilder cb;
     cb.append_cellslice(body);

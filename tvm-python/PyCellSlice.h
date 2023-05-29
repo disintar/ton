@@ -35,6 +35,7 @@ class PyCellSlice {
   std::string dump_as_tlb(std::string tlb_type) const;
   std::string load_string(unsigned int text_size = 0, bool convert_to_utf8 = true);
   PyCellSlice load_tlb(std::string tlb_type);
+  std::string load_snake_string();
   int bselect(unsigned bits, std::string mask);
   unsigned bits() const;
   unsigned refs() const;

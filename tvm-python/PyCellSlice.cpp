@@ -74,7 +74,7 @@ std::string map_to_utf8(const long long val) {
   return converter.to_bytes(static_cast<char32_t>(val));
 }
 
-std::string fetch_string(vm::CellSlice& cs, unsigned int text_size, bool convert_to_utf8 = true) {
+std::string fetch_string(vm::CellSlice &cs, unsigned int text_size, bool convert_to_utf8 = true) {
   if (convert_to_utf8) {
     std::string text;
 
@@ -250,6 +250,49 @@ std::string PyCellSlice::dump_as_tlb(std::string tlb_type) const {
 
   auto output = ss.str();
   return output;
+}
+
+std::string fetch_string(vm::CellSlice &cs, bool convert_to_utf8 = true) {
+  if (convert_to_utf8) {
+    auto text_size = cs.size() / 8;
+
+    std::string text;
+
+    while (text_size > 0) {
+      text += map_to_utf8(cs.fetch_long(8));
+      text_size -= 1;
+    }
+
+    return text;
+  } else {
+    const unsigned int text_size = cs.size() / 8;
+
+    unsigned char b[text_size];
+    cs.fetch_bytes(b, text_size);
+    std::string tmp(b, b + sizeof b / sizeof b[0]);
+    return tmp;
+  }
+}
+
+std::string parse_snake_data_string(vm::CellSlice &cs, bool convert_to_utf8 = true) {
+  bool has_next_ref = cs.have_refs();
+  std::string text = fetch_string(cs, convert_to_utf8);
+  vm::CellSlice rcf = cs;
+
+  while (has_next_ref) {
+    rcf = load_cell_slice(rcf.prefetch_ref());
+    auto x = fetch_string(rcf, convert_to_utf8);
+
+    text += x;
+
+    has_next_ref = rcf.have_refs();
+  }
+
+  return text;
+}
+
+std::string PyCellSlice::load_snake_string() {
+  return parse_snake_data_string(my_cell_slice);
 }
 
 unsigned PyCellSlice::bits() const {
