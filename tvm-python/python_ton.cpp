@@ -50,6 +50,8 @@ PYBIND11_MODULE(python_ton, m) {
       .def("load_addr", &PyCellSlice::load_addr)
       .def("to_boc", &PyCellSlice::to_boc)
       .def("get_hash", &PyCellSlice::get_hash)
+      .def("load_tlb", &PyCellSlice::load_tlb, py::arg("tlb_type"))
+      .def("bselect", &PyCellSlice::bselect, py::arg("bits"), py::arg("mask"))
       .def("skip_bits", &PyCellSlice::skip_bits, py::arg("bits"), py::arg("last"))
       .def("skip_refs", &PyCellSlice::skip_refs, py::arg("n"), py::arg("last"))
       .def("load_string", &PyCellSlice::load_string, py::arg("text_size") = 0, py::arg("convert_to_utf8") = true)

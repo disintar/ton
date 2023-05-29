@@ -141,6 +141,10 @@ ext_out_msg_info$11 src:MsgAddress dest:MsgAddressExt
 
 tick_tock$_ tick:Bool tock:Bool = TickTock;
 
+_ split_depth:(Maybe (## 5)) = SplitDepth;
+_ special:(Maybe TickTock) = Special;
+_ library:(HashmapE 256 SimpleLib) = DictWithSimpleLibs;
+
 _ split_depth:(Maybe (## 5)) special:(Maybe TickTock)
   code:(Maybe ^Cell) data:(Maybe ^Cell)
   library:(Maybe ^Cell) = StateInit;
@@ -241,7 +245,7 @@ account$1 addr:MsgAddressInt storage_stat:StorageInfo
           storage:AccountStorage = Account;
 
 account_storage$_ last_trans_lt:uint64
-    balance:CurrencyCollection state:AccountState 
+    balance:CurrencyCollection state:AccountState
   = AccountStorage;
 
 account_uninit$00 = AccountState;
