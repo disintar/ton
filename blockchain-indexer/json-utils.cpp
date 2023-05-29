@@ -418,6 +418,10 @@ json parse_message(Ref<vm::Cell> message_any) {
     body.skip_first(1);
 
     vm::CellBuilder cb;
+    cb.append_cellslice(body);
+    auto body_cell = cb.finalize();
+    answer["body"] = dump_as_boc(body_cell);
+
     if (body.size() >= 32) {
       auto a = body.fetch_ulong(32);
       answer["op_code"] = a;
@@ -430,11 +434,6 @@ json parse_message(Ref<vm::Cell> message_any) {
         }
       }
     }
-
-    cb.append_cellslice(body);
-    auto body_cell = cb.finalize();
-
-    answer["body"] = dump_as_boc(body_cell);
   }
 
   return answer;
