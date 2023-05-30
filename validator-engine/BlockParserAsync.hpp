@@ -89,7 +89,7 @@ class StartupBlockParser : public td::actor::Actor {
         td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
       } else {
         auto handle = R.move_as_ok();
-        LOG(DEBUG) << "got latest data handle for block " << handle->id().to_str();
+        LOG(INFO) << "got latest data handle for block " << handle->id().to_str();
         td::actor::send_closure(SelfId, &StartupBlockParser::receive_first_handle, handle);
       }
     });
