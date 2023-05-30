@@ -27,6 +27,7 @@
 #include "manager.h"
 #include "ton/ton-io.hpp"
 #include "td/utils/overloaded.h"
+#include "validator-engine/BlockParserAsync.hpp"
 
 namespace ton {
 
@@ -581,7 +582,8 @@ void ValidatorManagerImpl::get_shard_state_from_db(ConstBlockHandle handle, td::
   td::actor::send_closure(db_, &Db::get_block_state, handle, std::move(promise));
 }
 
-void ValidatorManagerImpl::get_shard_state_root_cell_from_db(ConstBlockHandle handle, td::Promise<td::Ref<vm::DataCell>> promise) {
+void ValidatorManagerImpl::get_shard_state_root_cell_from_db(ConstBlockHandle handle,
+                                                             td::Promise<td::Ref<vm::DataCell>> promise) {
   td::actor::send_closure(db_, &Db::get_block_state_root_cell, handle, std::move(promise));
 }
 
@@ -708,7 +710,7 @@ void ValidatorManagerImpl::store_persistent_state_file(BlockIdExt block_id, Bloc
 }
 
 void ValidatorManagerImpl::store_persistent_state_file_gen(BlockIdExt block_id, BlockIdExt masterchain_block_id,
-                                                           std::function<td::Status(td::FileFd&)> write_data,
+                                                           std::function<td::Status(td::FileFd &)> write_data,
                                                            td::Promise<td::Unit> promise) {
   td::actor::send_closure(db_, &Db::store_persistent_state_file_gen, block_id, masterchain_block_id,
                           std::move(write_data), std::move(promise));
@@ -938,11 +940,27 @@ void ValidatorManagerImpl::started(ValidatorManagerInitResult R) {
   last_masterchain_seqno_ = last_masterchain_block_id_.id.seqno;
   last_masterchain_state_ = std::move(R.state);
 
+  if (publisher_ != nullptr) {
+    LOG(WARNING) << "Start getting last blocks for sending them to kafka";
+    auto P = td::PromiseCreator::lambda(
+        [](td::Result<std::tuple<std::vector<BlockHandle>, std::vector<td::Ref<BlockData>>,
+                                 std::vector<td::Ref<ShardState>>, std::vector<td::Ref<vm::Cell>>>>
+               R) {
+          if (R.is_error()) {
+            auto e = R.move_as_error();
+            LOG(ERROR) << "Failed to parse initial blocks: " << e;
+          } else {
+          }
+        });
+
+    BlockHandle tmp(last_masterchain_block_handle_);
+    td::actor::create_actor<StartupBlockParser>("StartupBlockParser", actor_id(this), std::move(tmp), std::move(P))
+        .release();
+  }
+
   //new_masterchain_block();
 
-  LOG(WARNING) << "initial read complete: " << last_masterchain_block_handle_->id() << " "
-               << last_masterchain_block_id_;
-
+  LOG(WARNING) << "initial read complete: " << last_masterchain_block_handle_->id();
   callback_->initial_read_complete(last_masterchain_block_handle_);
 }
 

@@ -34,6 +34,7 @@
 #include <queue>
 #include <chrono>
 #include <thread>
+#include "validator/interfaces/validator-manager.h"
 
 namespace ton::validator {
 
@@ -66,6 +67,62 @@ class BlockParserAsync : public td::actor::Actor {
   td::Promise<std::tuple<td::string, td::string>> P;
   std::string parsed_data;
   std::string parsed_state;
+};
+
+class StartupBlockParser : public td::actor::Actor {
+ public:
+  StartupBlockParser(td::actor::ActorId<ValidatorManagerInterface> validator_id,
+                     BlockHandle last_masterchain_block_handle_,
+                     td::Promise<std::tuple<std::vector<BlockHandle>, std::vector<td::Ref<BlockData>>,
+                                            std::vector<td::Ref<ShardState>>, std::vector<td::Ref<vm::Cell>>>>
+                         P_) {
+    last_masterchain_block_handle = std::move(last_masterchain_block_handle_);
+    manager = std::move(validator_id);
+    P_final = std::move(P_);
+  }
+
+  void start_up() override {
+    // separate first parse seqno to prevent WC shard seqno leak
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
+      if (R.is_error()) {
+        auto err = R.move_as_error();
+        td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
+      } else {
+        auto handle = R.move_as_ok();
+        LOG(DEBUG) << "got latest data handle for block " << handle->id().to_str();
+        td::actor::send_closure(SelfId, &StartupBlockParser::receive_first_handle, handle);
+      }
+    });
+
+    ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
+    td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
+                            last_masterchain_block_handle->id().seqno() - k, std::move(P));
+  }
+
+  void receive_first_handle(std::shared_ptr<const BlockHandleInterface> handle);
+  void end_with_error(td::Status err);
+  void receive_handle(std::shared_ptr<const BlockHandleInterface> handle);
+  void parse_shard(ton::BlockIdExt shard_id);
+  void parse_other();
+  void receive_shard_handle(ConstBlockHandle handle);
+  void receive_block(td::Ref<BlockData> block);
+
+  void pad();
+  void ipad();
+
+ private:
+  BlockHandle last_masterchain_block_handle;
+  td::Promise<std::tuple<std::vector<BlockHandle>, std::vector<td::Ref<BlockData>>, std::vector<td::Ref<ShardState>>,
+                         std::vector<td::Ref<vm::Cell>>>>
+      P_final;
+  td::actor::ActorId<ValidatorManagerInterface> manager;
+  std::vector<ConstBlockHandle> block_handles;
+  std::vector<td::Ref<BlockData>> blocks;
+  std::vector<td::Ref<ShardState>> states;
+  std::vector<td::Ref<vm::Cell>> prev_states;
+  std::vector<std::string> parsed_shards;
+  int padding = 0;
+  const int k = 100;
 };
 
 }  // namespace ton::validator

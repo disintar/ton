@@ -833,4 +833,163 @@ void BlockParserAsync::finalize() {
   LOG(WARNING) << "Send: " << id.to_str() << " success";
   P.set_value(std::make_tuple(parsed_data, parsed_state));
 }
+
+void StartupBlockParser::end_with_error(td::Status err) {
+  P_final.set_error(std::move(err));
+  stop();
+}
+
+void StartupBlockParser::receive_first_handle(std::shared_ptr<const BlockHandleInterface> handle) {
+  LOG(WARNING) << "Receive first block for initial last blocks parse: " << handle->id().to_str();
+
+  auto P = td::PromiseCreator::lambda(
+      [SelfId = actor_id(this), parsed_shards = &parsed_shards](td::Result<td::Ref<BlockData>> R) {
+        if (R.is_error()) {
+          auto err = R.move_as_error();
+          td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
+        } else {
+          auto block = R.move_as_ok();
+
+          block::gen::Block::Record blk;
+          block::gen::BlockExtra::Record extra;
+          block::gen::McBlockExtra::Record mc_extra;
+          if (!tlb::unpack_cell(block->root_cell(), blk) || !tlb::unpack_cell(blk.extra, extra) ||
+              !extra.custom->have_refs() || !tlb::unpack_cell(extra.custom->prefetch_ref(), mc_extra)) {
+            td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error,
+                                    td::Status::Error(-1, "cannot unpack header of block"));
+          }
+          block::ShardConfig shards(mc_extra.shard_hashes->prefetch_ref());
+
+          auto parseShards = [parsed_shards = parsed_shards](McShardHash &ms) {
+            parsed_shards->emplace_back(ms.top_block_id().to_str());
+            return 1;
+          };
+
+          shards.process_shard_hashes(parseShards);
+
+          td::actor::send_closure(SelfId, &StartupBlockParser::parse_other);
+        }
+      });
+
+  td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_data_from_db, handle, std::move(P));
+}
+
+void StartupBlockParser::receive_handle(ConstBlockHandle handle) {
+  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
+    if (R.is_error()) {
+      auto err = R.move_as_error();
+      td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
+    } else {
+      auto block = R.move_as_ok();
+
+      block::gen::Block::Record blk;
+      block::gen::BlockExtra::Record extra;
+      block::gen::McBlockExtra::Record mc_extra;
+      if (!tlb::unpack_cell(block->root_cell(), blk) || !tlb::unpack_cell(blk.extra, extra) ||
+          !extra.custom->have_refs() || !tlb::unpack_cell(extra.custom->prefetch_ref(), mc_extra)) {
+        td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error,
+                                td::Status::Error(-1, "cannot unpack header of block"));
+      }
+      block::ShardConfig shards(mc_extra.shard_hashes->prefetch_ref());
+
+      auto parseShards = [SelfId](McShardHash &ms) {
+        const auto _id = ms.top_block_id().to_str();
+        td::actor::send_closure_later(SelfId, &StartupBlockParser::parse_shard, ms.top_block_id());
+        return 1;
+      };
+
+      shards.process_shard_hashes(parseShards);
+
+      td::actor::send_closure(SelfId, &StartupBlockParser::receive_block, std::move(block));
+    }
+  });
+
+  block_handles.push_back(handle);
+  td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_data_from_db, handle, std::move(P));
+}
+
+void StartupBlockParser::receive_shard_handle(ConstBlockHandle handle) {
+  auto P = td::PromiseCreator::lambda(
+      [SelfId = actor_id(this), block_handles = &block_handles, handle](td::Result<td::Ref<BlockData>> R) {
+        if (R.is_error()) {
+          auto err = R.move_as_error();
+          td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
+        } else {
+          auto block = R.move_as_ok();
+          for (auto i : handle->prev()) {
+            block_handles->push_back(handle);
+            td::actor::send_closure(SelfId, &StartupBlockParser::pad);
+            td::actor::send_closure_later(SelfId, &StartupBlockParser::parse_shard, i);
+          }
+
+          td::actor::send_closure(SelfId, &StartupBlockParser::receive_block, std::move(block));
+        }
+      });
+
+  block_handles.push_back(handle);
+  td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_data_from_db, handle, std::move(P));
+}
+
+void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id) {
+  if (std::find(parsed_shards.begin(), parsed_shards.end(), shard_id.to_str()) == parsed_shards.end()) {
+    td::actor::send_closure(actor_id(this), &StartupBlockParser::pad);
+
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
+      if (R.is_error()) {
+        auto err = R.move_as_error();
+        td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
+      } else {
+        auto handle = R.move_as_ok();
+        td::actor::send_closure(SelfId, &StartupBlockParser::receive_shard_handle, handle);
+      }
+    });
+
+    LOG(WARNING) << "Receive parse shards: " << shard_id.to_str();
+    ton::AccountIdPrefixFull pfx{shard_id.id.workchain, shard_id.id.shard};
+    td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, shard_id.seqno(),
+                            std::move(P));
+  }
+}
+
+void StartupBlockParser::receive_block(td::Ref<BlockData> block) {
+  blocks.push_back(std::move(block));
+  td::actor::send_closure(actor_id(this), &StartupBlockParser::ipad);
+}
+
+void StartupBlockParser::parse_other() {
+  auto end = last_masterchain_block_handle->id().seqno();
+
+  for (auto seqno = last_masterchain_block_handle->id().seqno() - k + 1; seqno != end + 1; ++seqno) {
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
+      if (R.is_error()) {
+        auto err = R.move_as_error();
+        td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
+      } else {
+        auto handle = R.move_as_ok();
+        td::actor::send_closure(SelfId, &StartupBlockParser::receive_handle, handle);
+      }
+    });
+
+    LOG(WARNING) << "Receive other MC blocks for initial last blocks parse: " << seqno;
+
+    td::actor::send_closure(actor_id(this), &StartupBlockParser::pad);
+    ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
+    td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno, std::move(P));
+  }
+}
+
+void StartupBlockParser::pad() {
+  padding++;
+}
+
+void StartupBlockParser::ipad() {
+  padding--;
+  LOG(WARNING) << "To load: " << padding;
+
+  if (padding == 0) {
+    td::actor::send_closure(actor_id(this), &StartupBlockParser::end_with_error,
+                            td::Status::Error(-1, "cannot unpack header of block"));
+  }
+}
+
 }  // namespace ton::validator
