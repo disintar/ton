@@ -910,15 +910,13 @@ void StartupBlockParser::receive_handle(ConstBlockHandle handle) {
 
 void StartupBlockParser::receive_shard_handle(ConstBlockHandle handle) {
   auto P = td::PromiseCreator::lambda(
-      [SelfId = actor_id(this), block_handles = &block_handles, handle](td::Result<td::Ref<BlockData>> R) {
+      [SelfId = actor_id(this), handle](td::Result<td::Ref<BlockData>> R) {
         if (R.is_error()) {
           auto err = R.move_as_error();
           td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
         } else {
           auto block = R.move_as_ok();
           for (auto i : handle->prev()) {
-            block_handles->push_back(handle);
-            td::actor::send_closure(SelfId, &StartupBlockParser::pad);
             td::actor::send_closure_later(SelfId, &StartupBlockParser::parse_shard, i);
           }
 
