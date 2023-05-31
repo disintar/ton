@@ -109,10 +109,9 @@ class StartupBlockParser : public td::actor::Actor {
   void parse_other();
   void receive_shard_handle(ConstBlockHandle handle);
   void receive_block(ConstBlockHandle handle, td::Ref<BlockData> block);
-  void receive_states(ConstBlockHandle handle, td::Promise<std::tuple<td::Ref<vm::Cell>, td::Ref<vm::Cell>>> P);
-  void receive_prev_states(ConstBlockHandle handle, td::Promise<std::tuple<td::Ref<vm::Cell>>> P);
-  void request_prev_state(const ConstBlockHandle& handle, td::Promise<td::Ref<vm::Cell>> P);
-  void request_prev_state_final(std::shared_ptr<const BlockHandleInterface> handle, td::Promise<td::Ref<vm::DataCell>> P);
+  void receive_states(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state);
+  void request_prev_state(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state, std::shared_ptr<const BlockHandleInterface> prev_handle);
+  void request_prev_state_final(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state, td::Ref<vm::Cell> prev_state);
 
   void pad();
   void ipad();
