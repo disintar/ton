@@ -970,7 +970,7 @@ void StartupBlockParser::receive_block(ConstBlockHandle handle, td::Ref<BlockDat
       });
 
   LOG(WARNING) << " send get shard state query for " << handle->id().to_str();
-  td::actor::send_closure(manager, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle, std::move(P));
+  td::actor::send_closure(manager, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, std::move(handle), std::move(P));
 }
 
 void StartupBlockParser::parse_other() {

@@ -345,6 +345,8 @@ void RootDb::get_block_state(ConstBlockHandle handle, td::Promise<td::Ref<ShardS
 }
 
 void RootDb::get_block_state_root_cell(ConstBlockHandle handle, td::Promise<td::Ref<vm::DataCell>> promise) {
+  LOG(WARNING) << "Send: load_cell " << handle->id().to_str();
+
   if (handle->inited_state_boc()) {
     if (handle->deleted_state_boc()) {
       promise.set_error(td::Status::Error(ErrorCode::error, "state already gc'd"));
