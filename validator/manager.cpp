@@ -44,7 +44,7 @@
 #include "common/delay.h"
 
 #include "validator/stats-merger.h"
-
+#include "validator-engine/BlockParserAsync.hpp"
 #include <fstream>
 
 namespace ton {
@@ -215,10 +215,8 @@ void ValidatorManagerImpl::prevalidate_block(BlockBroadcast broadcast, td::Promi
     return;
   }
   td::actor::create_actor<ValidateBroadcast>("broadcast", std::move(broadcast), last_masterchain_block_handle_,
-                                             last_masterchain_state_, last_known_key_block_handle_,
-                                             publisher_.get(),
-                                             actor_id(this),
-                                             td::Timestamp::in(2.0), std::move(promise))
+                                             last_masterchain_state_, last_known_key_block_handle_, publisher_.get(),
+                                             actor_id(this), td::Timestamp::in(2.0), std::move(promise))
       .release();
 }
 
@@ -394,7 +392,7 @@ void ValidatorManagerImpl::add_external_message(td::Ref<ExtMessage> msg) {
   auto id = message->ext_id();
   auto address = message->address();
   unsigned long per_address_limit = 256;
-  if(ext_addr_messages_.count(address) < per_address_limit) {
+  if (ext_addr_messages_.count(address) < per_address_limit) {
     if (ext_messages_hashes_.count(id.hash) == 0) {
       ext_messages_.emplace(id, std::move(message));
       ext_messages_hashes_.emplace(id.hash, id);
@@ -408,8 +406,7 @@ void ValidatorManagerImpl::check_external_message(td::BufferSlice data, td::Prom
     promise.set_error(td::Status::Error(ErrorCode::notready, "not ready"));
     return;
   }
-  run_check_external_message(std::move(data), state->get_ext_msg_limits(), actor_id(this),
-                             std::move(promise));
+  run_check_external_message(std::move(data), state->get_ext_msg_limits(), actor_id(this), std::move(promise));
 }
 
 void ValidatorManagerImpl::new_ihr_message(td::BufferSlice data) {
@@ -1074,7 +1071,7 @@ void ValidatorManagerImpl::store_persistent_state_file(BlockIdExt block_id, Bloc
 }
 
 void ValidatorManagerImpl::store_persistent_state_file_gen(BlockIdExt block_id, BlockIdExt masterchain_block_id,
-                                                           std::function<td::Status(td::FileFd&)> write_data,
+                                                           std::function<td::Status(td::FileFd &)> write_data,
                                                            td::Promise<td::Unit> promise) {
   td::actor::send_closure(db_, &Db::store_persistent_state_file_gen, block_id, masterchain_block_id,
                           std::move(write_data), std::move(promise));
@@ -1728,6 +1725,29 @@ void ValidatorManagerImpl::completed_prestart_sync() {
 
   LOG(WARNING) << "initial read complete: " << last_masterchain_block_handle_->id() << " "
                << last_masterchain_block_id_;
+
+  if (publisher_ != nullptr) {
+    //new_masterchain_block();
+
+    LOG(WARNING) << "Start getting last blocks for sending them to kafka";
+    auto P = td::PromiseCreator::lambda(
+        [](td::Result<std::tuple<std::vector<BlockHandle>, std::vector<td::Ref<BlockData>>,
+                                 std::vector<td::Ref<ShardState>>, std::vector<td::Ref<vm::Cell>>>>
+               R) {
+          if (R.is_error()) {
+            auto e = R.move_as_error();
+            LOG(ERROR) << "Failed to parse initial blocks: " << e;
+          } else {
+          }
+        });
+
+    BlockHandle tmp(last_masterchain_block_handle_);
+    LOG(WARNING) << "Start worker";
+    td::actor::create_actor<StartupBlockParser>("StartupBlockParser", actor_id(this), std::move(tmp), std::move(P))
+        .release();
+  } else {
+    LOG(WARNING) << "Skip read old blocks, publisher not set";
+  }
   callback_->initial_read_complete(last_masterchain_block_handle_);
 }
 
@@ -1764,7 +1784,7 @@ void ValidatorManagerImpl::update_shards() {
   td::uint32 threshold = 9407194;
   bool force_group_id_upgrade = last_masterchain_seqno_ == threshold;
   auto legacy_opts_hash = opts.get_hash();
-  if (last_masterchain_seqno_ >= threshold) { //TODO move to get_consensus_config()
+  if (last_masterchain_seqno_ >= threshold) {  //TODO move to get_consensus_config()
     opts.proto_version = std::max<td::uint32>(opts.proto_version, 1);
   }
   auto opts_hash = opts.get_hash();
@@ -1854,7 +1874,6 @@ void ValidatorManagerImpl::update_shards() {
       if (!validator_id.is_zero()) {
         auto legacy_val_group_id = get_validator_set_id(shard, val_set, legacy_opts_hash, key_seqno, opts);
         auto val_group_id = get_validator_set_id(shard, val_set, opts_hash, key_seqno, opts);
-
 
         auto it = validator_groups_.find(legacy_val_group_id);
         if (it != validator_groups_.end()) {
@@ -2579,9 +2598,9 @@ void ValidatorManagerImpl::log_validator_session_stats(BlockIdExt block_id,
   }
 
   std::vector<tl_object_ptr<ton_api::validatorSession_statsRound>> rounds;
-  for (const auto& round : stats.rounds) {
+  for (const auto &round : stats.rounds) {
     std::vector<tl_object_ptr<ton_api::validatorSession_statsProducer>> producers;
-    for (const auto& producer : round.producers) {
+    for (const auto &producer : round.producers) {
       producers.push_back(create_tl_object<ton_api::validatorSession_statsProducer>(
           producer.id.bits256_value(), producer.block_status, producer.block_timestamp));
     }
