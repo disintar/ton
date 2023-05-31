@@ -267,18 +267,19 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
 
       if (R.is_error()) {
         LOG(ERROR) << "Can't find handle for prev block state " << prev_id.to_str();
-        publisher->storeBlockState(next_handle, next_state, std::move(final_publish));
+        publisher->storeBlockState(next_handle, next_state->root_cell(), std::move(final_publish));
       } else {
         auto P2 = td::PromiseCreator::lambda([final_publish = std::move(final_publish), next_handle = next_handle,
                                               next_state = next_state, publisher = publisher,
                                               prev_id](td::Result<td::Ref<vm::DataCell>> R) mutable {
           if (R.is_error()) {
             LOG(ERROR) << "Can't find prev block state for" << prev_id.to_str();
-            publisher->storeBlockState(next_handle, next_state, std::move(final_publish));
+            publisher->storeBlockState(next_handle, next_state->root_cell(), std::move(final_publish));
           } else {
             LOG(WARNING) << "Found prev state for: " << next_handle->id();
             auto root_cell = R.move_as_ok();
-            publisher->storeBlockStateWithPrev(next_handle, root_cell, next_state, std::move(final_publish));
+            publisher->storeBlockStateWithPrev(next_handle, std::move(root_cell),
+                                               next_state->root_cell(), std::move(final_publish));
           }
         });
 

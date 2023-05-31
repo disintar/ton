@@ -47,51 +47,51 @@ void BlockParser::storeBlockData(BlockHandle handle, td::Ref<BlockData> block,
   LOG(WARNING) << "Stored block: " << block->block_id().to_str();
 }
 
-void BlockParser::storeBlockState(BlockHandle handle, td::Ref<ShardState> state,
+void BlockParser::storeBlockState(const BlockHandle& handle, td::Ref<vm::Cell> state,
                                   td::Promise<std::tuple<td::string, td::string>> P) {
   std::lock_guard<std::mutex> lock(maps_mtx_);
-  LOG(WARNING) << "Store state: " << state->get_block_id().to_str();
+  LOG(WARNING) << "Store state: " << handle->id().to_str();
   const std::string key = std::to_string(handle->id().id.workchain) + ":" + std::to_string(handle->id().id.shard) +
                           ":" + std::to_string(handle->id().id.seqno);
   auto states_vec = stored_states_.find(key);
   if (states_vec == stored_states_.end()) {
-    std::vector<std::pair<BlockHandle, td::Ref<ShardState>>> vec;
-    vec.emplace_back(std::pair{handle, state});
+    std::vector<std::pair<BlockHandle, td::Ref<vm::Cell>>> vec;
+    vec.emplace_back(std::pair{handle, std::move(state)});
     stored_states_.insert({key, vec});
   } else {
-    states_vec->second.emplace_back(std::pair{handle, state});
+    states_vec->second.emplace_back(std::pair{handle, std::move(state)});
   }
 
   handleBlockProgress(handle->id(), std::move(P));
-  LOG(WARNING) << "Stored state: " << state->get_block_id().to_str();
+  LOG(WARNING) << "Stored state: " <<  handle->id().to_str();
 }
 
-void BlockParser::storeBlockStateWithPrev(BlockHandle handle, td::Ref<vm::Cell> prev_state, td::Ref<ShardState> state,
+void BlockParser::storeBlockStateWithPrev(const BlockHandle& handle, td::Ref<vm::Cell> prev_state, td::Ref<vm::Cell> state,
                                           td::Promise<std::tuple<td::string, td::string>> P) {
   std::lock_guard<std::mutex> lock(maps_mtx_);
-  LOG(WARNING) << "Store prev state: " << state->get_block_id().to_str();
+  LOG(WARNING) << "Store prev state: " << handle->id().to_str();
   const std::string key = std::to_string(handle->id().id.workchain) + ":" + std::to_string(handle->id().id.shard) +
                           ":" + std::to_string(handle->id().id.seqno);
   auto states_vec = stored_states_.find(key);
   if (states_vec == stored_states_.end()) {
-    std::vector<std::pair<BlockHandle, td::Ref<ShardState>>> vec;
-    vec.emplace_back(std::pair{handle, state});
+    std::vector<std::pair<BlockHandle, td::Ref<vm::Cell>>> vec;
+    vec.emplace_back(std::pair{handle, std::move(state)});
     stored_states_.insert({key, vec});
   } else {
-    states_vec->second.emplace_back(std::pair{handle, state});
+    states_vec->second.emplace_back(std::pair{handle, std::move(state)});
   }
 
   auto prev_states_vec = stored_prev_states_.find(key);
   if (prev_states_vec == stored_prev_states_.end()) {
     std::vector<std::pair<BlockHandle, td::Ref<vm::Cell>>> prev_state_vec;
-    prev_state_vec.emplace_back(std::pair{handle, prev_state});
+    prev_state_vec.emplace_back(std::pair{handle, std::move(prev_state)});
     stored_prev_states_.insert({key, prev_state_vec});
   } else {
     prev_states_vec->second.emplace_back(std::pair{handle, prev_state});
   }
 
   handleBlockProgress(handle->id(), std::move(P));
-  LOG(WARNING) << "Stored prev state: " << state->get_block_id().to_str();
+  LOG(WARNING) << "Stored prev state: " << handle->id().to_str();
 }
 
 void BlockParser::handleBlockProgress(BlockIdExt id, td::Promise<std::tuple<td::string, td::string>> P) {
@@ -158,7 +158,7 @@ void BlockParser::handleBlockProgress(BlockIdExt id, td::Promise<std::tuple<td::
 
   BlockHandle handle = block_found_iter->first;
   td::Ref<BlockData> data = block_found_iter->second;
-  td::Ref<vm::Cell> state = state_found_iter->second->root_cell();
+  td::Ref<vm::Cell> state = state_found_iter->second;
 
   td::actor::create_actor<BlockParserAsync>("BlockParserAsync", id, handle, data, state, prev_state_opt, std::move(P))
       .release();

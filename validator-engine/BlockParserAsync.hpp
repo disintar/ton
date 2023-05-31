@@ -108,7 +108,11 @@ class StartupBlockParser : public td::actor::Actor {
   void parse_shard(ton::BlockIdExt shard_id);
   void parse_other();
   void receive_shard_handle(ConstBlockHandle handle);
-  void receive_block(td::Ref<BlockData> block);
+  void receive_block(ConstBlockHandle handle, td::Ref<BlockData> block);
+  void receive_states(ConstBlockHandle handle, td::Promise<std::tuple<td::Ref<vm::Cell>, td::Ref<vm::Cell>>> P);
+  void receive_prev_states(ConstBlockHandle handle, td::Promise<std::tuple<td::Ref<vm::Cell>>> P);
+  void request_prev_state(const ConstBlockHandle& handle, td::Promise<td::Ref<vm::Cell>> P);
+  void request_prev_state_final(std::shared_ptr<const BlockHandleInterface> handle, td::Promise<td::Ref<vm::DataCell>> P);
 
   void pad();
   void ipad();
@@ -121,7 +125,7 @@ class StartupBlockParser : public td::actor::Actor {
   td::actor::ActorId<ValidatorManagerInterface> manager;
   std::vector<ConstBlockHandle> block_handles;
   std::vector<td::Ref<BlockData>> blocks;
-  std::vector<td::Ref<ShardState>> states;
+  std::vector<td::Ref<vm::Cell>> states;
   std::vector<td::Ref<vm::Cell>> prev_states;
   std::vector<std::string> parsed_shards;
   int padding = 0;
