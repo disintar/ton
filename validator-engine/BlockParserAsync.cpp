@@ -954,7 +954,7 @@ void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id) {
 
 void StartupBlockParser::receive_block(ConstBlockHandle handle, td::Ref<BlockData> block) {
   auto P = td::PromiseCreator::lambda(
-      [SelfId = actor_id(this), handle, block = std::move(block)](td::Result<td::Ref<vm::DataCell>> R) {
+      [SelfId = actor_id(this), handle](td::Result<td::Ref<vm::DataCell>> R) {
         if (R.is_error()) {
           auto err = R.move_as_error();
           LOG(ERROR) << err.to_string() << " state error";
@@ -963,7 +963,7 @@ void StartupBlockParser::receive_block(ConstBlockHandle handle, td::Ref<BlockDat
           auto root_cell = R.move_as_ok();
 
           LOG(WARNING) << " send receive_states";
-          td::actor::send_closure(SelfId, &StartupBlockParser::receive_states, handle, block, std::move(root_cell));
+//          td::actor::send_closure(SelfId, &StartupBlockParser::receive_states, handle, block, std::move(root_cell));
         }
       });
 
