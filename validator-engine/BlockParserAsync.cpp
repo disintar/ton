@@ -956,7 +956,7 @@ void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id) {
 void StartupBlockParser::receive_block(ConstBlockHandle handle, td::Ref<BlockData> block) {
   LOG(WARNING) << " send get shard state query for " << handle->id().to_str();
   td::actor::send_closure(
-      manager, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, std::move(handle),
+      manager, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle,
       td::PromiseCreator::lambda(
           [SelfId = actor_id(this), handle, block = std::move(block)](td::Result<td::Ref<vm::DataCell>> R) {
             if (R.is_error()) {
