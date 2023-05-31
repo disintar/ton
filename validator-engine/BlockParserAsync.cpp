@@ -843,9 +843,10 @@ void StartupBlockParser::receive_first_handle(std::shared_ptr<const BlockHandleI
   LOG(WARNING) << "Receive first block for initial last blocks parse: " << handle->id().to_str();
 
   auto P = td::PromiseCreator::lambda(
-      [SelfId = actor_id(this), parsed_shards = &parsed_shards](td::Result<td::Ref<BlockData>> R) {
+      [SelfId = actor_id(this), parsed_shards = &parsed_shards, handle](td::Result<td::Ref<BlockData>> R) {
         if (R.is_error()) {
           auto err = R.move_as_error();
+          LOG(ERROR) << "failed query: " << err << " block: " << handle->id().to_str();
           td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
         } else {
           auto block = R.move_as_ok();
@@ -875,9 +876,10 @@ void StartupBlockParser::receive_first_handle(std::shared_ptr<const BlockHandleI
 }
 
 void StartupBlockParser::receive_handle(ConstBlockHandle handle) {
-  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
+  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), handle](td::Result<td::Ref<BlockData>> R) {
     if (R.is_error()) {
       auto err = R.move_as_error();
+      LOG(ERROR) << "failed query: " << err << " block: " << handle->id().to_str();
       td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
     } else {
       auto block = R.move_as_ok();
@@ -909,20 +911,20 @@ void StartupBlockParser::receive_handle(ConstBlockHandle handle) {
 }
 
 void StartupBlockParser::receive_shard_handle(ConstBlockHandle handle) {
-  auto P = td::PromiseCreator::lambda(
-      [SelfId = actor_id(this), handle](td::Result<td::Ref<BlockData>> R) {
-        if (R.is_error()) {
-          auto err = R.move_as_error();
-          td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
-        } else {
-          auto block = R.move_as_ok();
-          for (auto i : handle->prev()) {
-            td::actor::send_closure_later(SelfId, &StartupBlockParser::parse_shard, i);
-          }
+  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), handle](td::Result<td::Ref<BlockData>> R) {
+    if (R.is_error()) {
+      auto err = R.move_as_error();
+      LOG(ERROR) << "failed query: " << err << " block: " << handle->id().to_str();
+      td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
+    } else {
+      auto block = R.move_as_ok();
+      for (auto i : handle->prev()) {
+        td::actor::send_closure_later(SelfId, &StartupBlockParser::parse_shard, i);
+      }
 
-          td::actor::send_closure(SelfId, &StartupBlockParser::receive_block, std::move(block));
-        }
-      });
+      td::actor::send_closure(SelfId, &StartupBlockParser::receive_block, std::move(block));
+    }
+  });
 
   block_handles.push_back(handle);
   td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_data_from_db, handle, std::move(P));
@@ -932,9 +934,10 @@ void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id) {
   if (std::find(parsed_shards.begin(), parsed_shards.end(), shard_id.to_str()) == parsed_shards.end()) {
     td::actor::send_closure(actor_id(this), &StartupBlockParser::pad);
 
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), shard_id](td::Result<ConstBlockHandle> R) {
       if (R.is_error()) {
         auto err = R.move_as_error();
+        LOG(ERROR) << "failed query: " << err << " block: " << shard_id.to_str();
         td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
       } else {
         auto handle = R.move_as_ok();
@@ -958,9 +961,10 @@ void StartupBlockParser::parse_other() {
   auto end = last_masterchain_block_handle->id().seqno();
 
   for (auto seqno = last_masterchain_block_handle->id().seqno() - k + 1; seqno != end + 1; ++seqno) {
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), seqno](td::Result<ConstBlockHandle> R) {
       if (R.is_error()) {
         auto err = R.move_as_error();
+        LOG(ERROR) << "failed query: " << err  << " MC seqno: " << seqno;
         td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
       } else {
         auto handle = R.move_as_ok();

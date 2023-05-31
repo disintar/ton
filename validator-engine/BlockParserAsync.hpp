@@ -87,6 +87,7 @@ class StartupBlockParser : public td::actor::Actor {
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
       if (R.is_error()) {
         auto err = R.move_as_error();
+LOG(ERROR) << "failed query: " << err;
         td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
       } else {
         auto handle = R.move_as_ok();
