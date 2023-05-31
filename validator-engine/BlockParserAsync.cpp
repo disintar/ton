@@ -919,6 +919,7 @@ void StartupBlockParser::receive_shard_handle(ConstBlockHandle handle) {
     } else {
       auto block = R.move_as_ok();
       for (auto i : handle->prev()) {
+        LOG(WARNING) << "Send find prev shard: " << i.to_str();
         td::actor::send_closure_later(SelfId, &StartupBlockParser::parse_shard, i);
       }
 
@@ -926,7 +927,7 @@ void StartupBlockParser::receive_shard_handle(ConstBlockHandle handle) {
     }
   });
 
-  block_handles.push_back(handle);
+  LOG(WARNING) << "Send get_block_data_from_db for shard";
   td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_data_from_db, handle, std::move(P));
 }
 
@@ -941,6 +942,7 @@ void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id) {
         td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
       } else {
         auto handle = R.move_as_ok();
+        LOG(WARNING) << "Send receive_shard_handle";
         td::actor::send_closure(SelfId, &StartupBlockParser::receive_shard_handle, handle);
       }
     });
@@ -954,7 +956,7 @@ void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id) {
 
 void StartupBlockParser::receive_block(ConstBlockHandle handle, td::Ref<BlockData> block) {
   auto P = td::PromiseCreator::lambda(
-      [SelfId = actor_id(this), handle](td::Result<td::Ref<vm::DataCell>> R) {
+      [SelfId = actor_id(this), handle, block = std::move(block)](td::Result<td::Ref<vm::DataCell>> R) {
         if (R.is_error()) {
           auto err = R.move_as_error();
           LOG(ERROR) << err.to_string() << " state error";
@@ -963,11 +965,11 @@ void StartupBlockParser::receive_block(ConstBlockHandle handle, td::Ref<BlockDat
           auto root_cell = R.move_as_ok();
 
           LOG(WARNING) << " send receive_states";
-//          td::actor::send_closure(SelfId, &StartupBlockParser::receive_states, handle, block, std::move(root_cell));
+          td::actor::send_closure(SelfId, &StartupBlockParser::receive_states, handle, block, std::move(root_cell));
         }
       });
 
-  LOG(WARNING) << " send get shard state query";
+  LOG(WARNING) << " send get shard state query for " << handle->id().to_str();
   td::actor::send_closure(manager, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle, std::move(P));
 }
 
