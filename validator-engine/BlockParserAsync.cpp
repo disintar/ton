@@ -857,7 +857,7 @@ void StartupBlockParser::receive_first_handle(std::shared_ptr<const BlockHandleI
           if (!tlb::unpack_cell(block->root_cell(), blk) || !tlb::unpack_cell(blk.extra, extra) ||
               !extra.custom->have_refs() || !tlb::unpack_cell(extra.custom->prefetch_ref(), mc_extra)) {
             td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error,
-                                    td::Status::Error(-1, "cannot unpack header of block"));
+                                    td::Status::Error(-1, "cannot unpack header of block " + handle->id().to_str()));
           }
           block::ShardConfig shards(mc_extra.shard_hashes->prefetch_ref());
 
@@ -890,7 +890,7 @@ void StartupBlockParser::receive_handle(ConstBlockHandle handle) {
       if (!tlb::unpack_cell(block->root_cell(), blk) || !tlb::unpack_cell(blk.extra, extra) ||
           !extra.custom->have_refs() || !tlb::unpack_cell(extra.custom->prefetch_ref(), mc_extra)) {
         td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error,
-                                td::Status::Error(-1, "cannot unpack header of block"));
+                                td::Status::Error(-1, "cannot unpack header of block " + handle->id().to_str()));
       }
       block::ShardConfig shards(mc_extra.shard_hashes->prefetch_ref());
 
