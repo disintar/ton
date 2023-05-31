@@ -875,7 +875,7 @@ void StartupBlockParser::receive_first_handle(std::shared_ptr<const BlockHandleI
   td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_data_from_db, handle, std::move(P));
 }
 
-void StartupBlockParser::receive_handle(ConstBlockHandle handle) {
+void StartupBlockParser::receive_handle(std::shared_ptr<const BlockHandleInterface> handle) {
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), handle](td::Result<td::Ref<BlockData>> R) {
     if (R.is_error()) {
       auto err = R.move_as_error();
@@ -910,7 +910,7 @@ void StartupBlockParser::receive_handle(ConstBlockHandle handle) {
   td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_data_from_db, handle, std::move(P));
 }
 
-void StartupBlockParser::receive_shard_handle(ConstBlockHandle handle) {
+void StartupBlockParser::receive_shard_handle(std::shared_ptr<const BlockHandleInterface> handle) {
   LOG(WARNING) << "Send get_block_data_from_db for shard";
   td::actor::send_closure(
       manager, &ValidatorManagerInterface::get_block_data_from_db, handle,
@@ -953,23 +953,23 @@ void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id) {
   }
 }
 
-void StartupBlockParser::receive_block(ConstBlockHandle handle, td::Ref<BlockData> block) {
+void StartupBlockParser::receive_block(std::shared_ptr<const BlockHandleInterface> handle, td::Ref<BlockData> block) {
   LOG(WARNING) << " send get shard state query for " << handle->id().to_str();
-  td::actor::send_closure(
-      manager, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle,
-      td::PromiseCreator::lambda(
-          [SelfId = actor_id(this), handle, block = std::move(block)](td::Result<td::Ref<vm::DataCell>> R) {
-            if (R.is_error()) {
-              auto err = R.move_as_error();
-              LOG(ERROR) << err.to_string() << " state error";
-              td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
-            } else {
-              auto root_cell = R.move_as_ok();
+  td::actor::send_closure(manager, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle,
+                          td::PromiseCreator::lambda([SelfId = actor_id(this), handle, block = std::move(block)](
+                                                         td::Result<td::Ref<vm::DataCell>> R) mutable {
+                            if (R.is_error()) {
+                              auto err = R.move_as_error();
+                              LOG(ERROR) << err.to_string() << " state error";
+                              td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
+                            } else {
+                              auto root_cell = R.move_as_ok();
 
-              LOG(WARNING) << " send receive_states";
-              td::actor::send_closure(SelfId, &StartupBlockParser::receive_states, handle, block, std::move(root_cell));
-            }
-          }));
+                              LOG(WARNING) << " send receive_states";
+                              td::actor::send_closure(SelfId, &StartupBlockParser::receive_states, handle,
+                                                      std::move(block), std::move(root_cell));
+                            }
+                          }));
 }
 
 void StartupBlockParser::parse_other() {
@@ -1015,38 +1015,39 @@ void StartupBlockParser::receive_states(ConstBlockHandle handle, td::Ref<BlockDa
 
   td::actor::send_closure(actor_id(this), &StartupBlockParser::pad);
   ton::AccountIdPrefixFull pfx{handle->id().id.workchain, handle->id().id.shard};
-  td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
-                          handle->id().seqno() - 1,
-                          td::PromiseCreator::lambda([SelfId = actor_id(this), handle, block = std::move(block),
-                                                      state = std::move(state)](td::Result<ConstBlockHandle> R) {
-                            if (R.is_error()) {
-                              auto err = R.move_as_error();
-                              LOG(ERROR) << "failed query with prev state";
-                              td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
-                            } else {
-                              auto prev_handle = R.move_as_ok();
+  td::actor::send_closure(
+      manager, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, handle->id().seqno() - 1,
+      td::PromiseCreator::lambda([SelfId = actor_id(this), handle, block = std::move(block),
+                                  state = std::move(state)](td::Result<ConstBlockHandle> R) mutable {
+        if (R.is_error()) {
+          auto err = R.move_as_error();
+          LOG(ERROR) << "failed query with prev state";
+          td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
+        } else {
+          auto prev_handle = R.move_as_ok();
 
-                              td::actor::send_closure(SelfId, &StartupBlockParser::request_prev_state, handle, block,
-                                                      state, std::move(prev_handle));
-                            }
-                          }));
+          td::actor::send_closure(SelfId, &StartupBlockParser::request_prev_state, handle, std::move(block),
+                                  std::move(state), std::move(prev_handle));
+        }
+      }));
 }
 
 void StartupBlockParser::request_prev_state(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state,
                                             std::shared_ptr<const BlockHandleInterface> prev_handle) {
-  td::actor::send_closure(manager, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, prev_handle,
-                          td::PromiseCreator::lambda([SelfId = actor_id(this), handle, block = std::move(block),
-                                                      state = std::move(state)](td::Result<td::Ref<vm::DataCell>> R) {
-                            if (R.is_error()) {
-                              auto err = R.move_as_error();
-                              LOG(ERROR) << "failed to get prev shard state: ";
-                              td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
-                            } else {
-                              auto prev_state = R.move_as_ok();
-                              td::actor::send_closure(SelfId, &StartupBlockParser::request_prev_state_final, handle,
-                                                      block, state, std::move(prev_state));
-                            }
-                          }));
+  td::actor::send_closure(
+      manager, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, prev_handle,
+      td::PromiseCreator::lambda([SelfId = actor_id(this), handle, block = std::move(block),
+                                  state = std::move(state)](td::Result<td::Ref<vm::DataCell>> R) mutable {
+        if (R.is_error()) {
+          auto err = R.move_as_error();
+          LOG(ERROR) << "failed to get prev shard state: ";
+          td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
+        } else {
+          auto prev_state = R.move_as_ok();
+          td::actor::send_closure(SelfId, &StartupBlockParser::request_prev_state_final, handle, block,
+                                  std::move(state), std::move(prev_state));
+        }
+      }));
 }
 
 void StartupBlockParser::request_prev_state_final(ConstBlockHandle handle, td::Ref<BlockData> block,
