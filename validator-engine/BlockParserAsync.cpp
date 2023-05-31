@@ -962,11 +962,13 @@ void StartupBlockParser::receive_block(ConstBlockHandle handle, td::Ref<BlockDat
         } else {
           auto root_cell = R.move_as_ok();
 
+          LOG(WARNING) << " send receive_states";
           td::actor::send_closure(SelfId, &StartupBlockParser::receive_states, handle, std::move(block),
                                   std::move(root_cell));
         }
       });
 
+  LOG(WARNING) << " send get shard state query";
   td::actor::send_closure(manager, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle,
                           std::move(tmpP));
 }
