@@ -76,6 +76,7 @@ class StartupBlockParser : public td::actor::Actor {
                      td::Promise<std::tuple<std::vector<BlockHandle>, std::vector<td::Ref<BlockData>>,
                                             std::vector<td::Ref<ShardState>>, std::vector<td::Ref<vm::Cell>>>>
                          P_) {
+    LOG(WARNING) << "Start worker StartupBlockParser";
     last_masterchain_block_handle = std::move(last_masterchain_block_handle_);
     manager = std::move(validator_id);
     P_final = std::move(P_);
@@ -89,12 +90,13 @@ class StartupBlockParser : public td::actor::Actor {
         td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
       } else {
         auto handle = R.move_as_ok();
-        LOG(INFO) << "got latest data handle for block " << handle->id().to_str();
+        LOG(WARNING) << "got latest data handle for block " << handle->id().to_str();
         td::actor::send_closure(SelfId, &StartupBlockParser::receive_first_handle, handle);
       }
     });
 
     ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
+    LOG(WARNING) << "Run get block";
     td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                             last_masterchain_block_handle->id().seqno() - k, std::move(P));
   }

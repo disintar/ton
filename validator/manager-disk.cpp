@@ -955,6 +955,7 @@ void ValidatorManagerImpl::started(ValidatorManagerInitResult R) {
       });
 
   BlockHandle tmp(last_masterchain_block_handle_);
+  LOG(WARNING) << "Start worker";
   td::actor::create_actor<StartupBlockParser>("StartupBlockParser", actor_id(this), std::move(tmp), std::move(P))
       .release();
 
