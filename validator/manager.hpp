@@ -28,7 +28,6 @@
 #include "state-serializer.hpp"
 #include "rldp/rldp.h"
 #include "token-manager.h"
-#include "validator-engine/BlockParserAsync.hpp"
 
 #include <map>
 #include <set>
@@ -547,22 +546,6 @@ class ValidatorManagerImpl : public ValidatorManager {
   void set_block_publisher(std::unique_ptr<BlockParser> publisher) override {
     publisher_ = std::move(publisher);
     td::actor::send_closure(db_, &Db::set_block_publisher, publisher_.get());
-
-    LOG(WARNING) << "Start getting last blocks for sending them to kafka";
-    auto P = td::PromiseCreator::lambda(
-        [](td::Result<std::tuple<std::vector<BlockHandle>, std::vector<td::Ref<BlockData>>,
-                                 std::vector<td::Ref<ShardState>>, std::vector<td::Ref<vm::Cell>>>>
-               R) {
-          if (R.is_error()) {
-            auto e = R.move_as_error();
-            LOG(ERROR) << "Failed to parse initial blocks: " << e;
-          } else {
-          }
-        });
-
-    BlockHandle tmp(last_masterchain_block_handle_);
-    td::actor::create_actor<StartupBlockParser>("StartupBlockParser", actor_id(this), std::move(tmp), std::move(P))
-        .release();
   }
 
   BlockParser* get_block_publisher() override {

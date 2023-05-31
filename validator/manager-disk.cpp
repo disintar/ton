@@ -27,6 +27,7 @@
 #include "manager.h"
 #include "ton/ton-io.hpp"
 #include "td/utils/overloaded.h"
+#include "validator-engine/BlockParserAsync.hpp"
 
 namespace ton {
 
@@ -940,6 +941,22 @@ void ValidatorManagerImpl::started(ValidatorManagerInitResult R) {
   last_masterchain_state_ = std::move(R.state);
 
   //new_masterchain_block();
+
+  LOG(WARNING) << "Start getting last blocks for sending them to kafka";
+  auto P = td::PromiseCreator::lambda(
+      [](td::Result<std::tuple<std::vector<BlockHandle>, std::vector<td::Ref<BlockData>>,
+                               std::vector<td::Ref<ShardState>>, std::vector<td::Ref<vm::Cell>>>>
+             R) {
+        if (R.is_error()) {
+          auto e = R.move_as_error();
+          LOG(ERROR) << "Failed to parse initial blocks: " << e;
+        } else {
+        }
+      });
+
+  BlockHandle tmp(last_masterchain_block_handle_);
+  td::actor::create_actor<StartupBlockParser>("StartupBlockParser", actor_id(this), std::move(tmp), std::move(P))
+      .release();
 
   LOG(WARNING) << "initial read complete: " << last_masterchain_block_handle_->id();
   callback_->initial_read_complete(last_masterchain_block_handle_);
