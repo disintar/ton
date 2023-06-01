@@ -104,11 +104,11 @@ class StartupBlockParser : public td::actor::Actor {
 
   void receive_first_handle(std::shared_ptr<const BlockHandleInterface> handle);
   void end_with_error(td::Status err);
-  void receive_handle_block(std::shared_ptr<const BlockHandleInterface> handle);
-  void receive_handle_state(std::shared_ptr<const BlockHandleInterface> handle);
+  void receive_handle(std::shared_ptr<const BlockHandleInterface> handle);
   void parse_shard(ton::BlockIdExt shard_id);
   void parse_other();
   void receive_shard_handle(ConstBlockHandle handle);
+  void receive_block(ConstBlockHandle handle, td::Ref<BlockData> block);
   void receive_states(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state);
   void request_prev_state(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state, std::shared_ptr<const BlockHandleInterface> prev_handle);
   void request_prev_state_final(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state, td::Ref<vm::Cell> prev_state);
@@ -123,9 +123,9 @@ class StartupBlockParser : public td::actor::Actor {
       P_final;
   td::actor::ActorId<ValidatorManagerInterface> manager;
   std::vector<ConstBlockHandle> block_handles;
-  std::map<ConstBlockHandle, td::Ref<BlockData>> blocks;
-  std::map<ConstBlockHandle, td::Ref<vm::Cell>> states;
-  std::map<ConstBlockHandle, td::Ref<vm::Cell>> prev_states;
+  std::vector<td::Ref<BlockData>> blocks;
+  std::vector<td::Ref<vm::Cell>> states;
+  std::vector<td::Ref<vm::Cell>> prev_states;
   std::vector<std::string> parsed_shards;
   int padding = 0;
   const int k = 3;
