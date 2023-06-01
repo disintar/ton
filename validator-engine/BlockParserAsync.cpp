@@ -875,44 +875,38 @@ void StartupBlockParser::receive_first_handle(std::shared_ptr<const BlockHandleI
   td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_data_from_db, handle, std::move(P));
 }
 
-void StartupBlockParser::receive_handle(std::shared_ptr<const BlockHandleInterface> handle) {
-  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), handle, blocks=&blocks](td::Result<td::Ref<BlockData>> R) {
-    if (R.is_error()) {
-      auto err = R.move_as_error();
-      LOG(ERROR) << "failed query: " << err << " block: " << handle->id().to_str();
-      td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
-    } else {
-      auto block = R.move_as_ok();
-      blocks->insert(std::make_pair(handle, block));
+void StartupBlockParser::receive_handle_block(std::shared_ptr<const BlockHandleInterface> handle) {
+  auto P =
+      td::PromiseCreator::lambda([SelfId = actor_id(this), handle, blocks = &blocks](td::Result<td::Ref<BlockData>> R) {
+        if (R.is_error()) {
+          auto err = R.move_as_error();
+          LOG(ERROR) << "failed query: " << err << " block: " << handle->id().to_str();
+          td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
+        } else {
+          auto block = R.move_as_ok();
+          blocks->insert(std::make_pair(handle, block));
 
-      block::gen::Block::Record blk;
-      block::gen::BlockExtra::Record extra;
-      block::gen::McBlockExtra::Record mc_extra;
-      if (!tlb::unpack_cell(block->root_cell(), blk) || !tlb::unpack_cell(blk.extra, extra) ||
-          !extra.custom->have_refs() || !tlb::unpack_cell(extra.custom->prefetch_ref(), mc_extra)) {
-        td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error,
-                                td::Status::Error(-1, "cannot unpack header of block " + handle->id().to_str()));
-      }
-      block::ShardConfig shards(mc_extra.shard_hashes->prefetch_ref());
+          if (handle->id().is_masterchain()) {
+            block::gen::Block::Record blk;
+            block::gen::BlockExtra::Record extra;
+            block::gen::McBlockExtra::Record mc_extra;
+            if (!tlb::unpack_cell(block->root_cell(), blk) || !tlb::unpack_cell(blk.extra, extra) ||
+                !extra.custom->have_refs() || !tlb::unpack_cell(extra.custom->prefetch_ref(), mc_extra)) {
+              td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error,
+                                      td::Status::Error(-1, "cannot unpack header of block " + handle->id().to_str()));
+            }
+            block::ShardConfig shards(mc_extra.shard_hashes->prefetch_ref());
 
-      auto parseShards = [SelfId](McShardHash &ms) {
-        const auto _id = ms.top_block_id().to_str();
-        td::actor::send_closure_later(SelfId, &StartupBlockParser::parse_shard, ms.top_block_id());
-        return 1;
-      };
+            auto parseShards = [SelfId](McShardHash &ms) {
+              const auto _id = ms.top_block_id().to_str();
+              td::actor::send_closure_later(SelfId, &StartupBlockParser::parse_shard, ms.top_block_id());
+              return 1;
+            };
 
-      shards.process_shard_hashes(parseShards);
-    }
-  });
-
-//  block_handles.push_back(handle);
-
-  auto P2 = td::PromiseCreator::lambda([this, SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
-    LOG(WARNING) << "123, azazaza: " << R.is_ok();
-  });
-
-  td::actor::send_closure(manager, &ValidatorManagerInterface::get_shard_state_from_db, handle, std::move(P2));
-  LOG(WARNING) << " sendEDEDEDE get shard state query for " << handle->id().to_str();
+            shards.process_shard_hashes(parseShards);
+          }
+        }
+      });
 
   td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_data_from_db, handle, std::move(P));
 }
@@ -933,7 +927,7 @@ void StartupBlockParser::receive_shard_handle(std::shared_ptr<const BlockHandleI
             td::actor::send_closure_later(SelfId, &StartupBlockParser::parse_shard, i);
           }
 
-          td::actor::send_closure(SelfId, &StartupBlockParser::receive_block, handle);
+//          td::actor::send_closure(SelfId, &StartupBlockParser::receive_block, handle);
         }
       }));
 }
@@ -953,6 +947,7 @@ void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id) {
             td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
           } else {
             auto handle = R.move_as_ok();
+
             LOG(WARNING) << "Send receive_shard_handle";
             td::actor::send_closure(SelfId, &StartupBlockParser::receive_shard_handle, handle);
           }
@@ -960,7 +955,7 @@ void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id) {
   }
 }
 
-void StartupBlockParser::receive_block(std::shared_ptr<const BlockHandleInterface> handle) {
+void StartupBlockParser::receive_handle_state(std::shared_ptr<const BlockHandleInterface> handle) {
   LOG(WARNING) << " send get shard state query for " << handle->id().to_str();
   //  auto P = td::PromiseCreator::lambda(
   //      [SelfId = actor_id(this), handle, block = std::move(block)](td::Result<td::Ref<ShardState>> R) mutable {
@@ -1002,7 +997,20 @@ void StartupBlockParser::parse_other() {
             td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
           } else {
             auto handle = R.move_as_ok();
-            td::actor::send_closure(SelfId, &StartupBlockParser::receive_handle, handle);
+            td::actor::send_closure(SelfId, &StartupBlockParser::receive_handle_block, handle);
+          }
+        }));
+
+    td::actor::send_closure(
+        manager, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
+        td::PromiseCreator::lambda([SelfId = actor_id(this), seqno](td::Result<ConstBlockHandle> R) {
+          if (R.is_error()) {
+            auto err = R.move_as_error();
+            LOG(ERROR) << "failed query: " << err << " MC seqno: " << seqno;
+            td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
+          } else {
+            auto handle = R.move_as_ok();
+            td::actor::send_closure(SelfId, &StartupBlockParser::receive_handle_state, handle);
           }
         }));
   }
