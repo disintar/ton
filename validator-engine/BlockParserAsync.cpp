@@ -876,13 +876,14 @@ void StartupBlockParser::receive_first_handle(std::shared_ptr<const BlockHandleI
 }
 
 void StartupBlockParser::receive_handle(std::shared_ptr<const BlockHandleInterface> handle) {
-  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), handle](td::Result<td::Ref<BlockData>> R) {
+  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), handle, blocks=&blocks](td::Result<td::Ref<BlockData>> R) {
     if (R.is_error()) {
       auto err = R.move_as_error();
       LOG(ERROR) << "failed query: " << err << " block: " << handle->id().to_str();
       td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
     } else {
       auto block = R.move_as_ok();
+      blocks->insert(std::make_pair(handle, block));
 
       block::gen::Block::Record blk;
       block::gen::BlockExtra::Record extra;
@@ -902,7 +903,7 @@ void StartupBlockParser::receive_handle(std::shared_ptr<const BlockHandleInterfa
 
       shards.process_shard_hashes(parseShards);
 
-      td::actor::send_closure(SelfId, &StartupBlockParser::receive_block, handle, std::move(block));
+      td::actor::send_closure(SelfId, &StartupBlockParser::receive_block, handle);
     }
   });
 
@@ -926,7 +927,7 @@ void StartupBlockParser::receive_shard_handle(std::shared_ptr<const BlockHandleI
             td::actor::send_closure_later(SelfId, &StartupBlockParser::parse_shard, i);
           }
 
-          td::actor::send_closure(SelfId, &StartupBlockParser::receive_block, handle, std::move(block));
+          td::actor::send_closure(SelfId, &StartupBlockParser::receive_block, handle);
         }
       }));
 }
@@ -953,7 +954,7 @@ void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id) {
   }
 }
 
-void StartupBlockParser::receive_block(std::shared_ptr<const BlockHandleInterface> handle, td::Ref<BlockData> block) {
+void StartupBlockParser::receive_block(std::shared_ptr<const BlockHandleInterface> handle) {
   LOG(WARNING) << " send get shard state query for " << handle->id().to_str();
   //  auto P = td::PromiseCreator::lambda(
   //      [SelfId = actor_id(this), handle, block = std::move(block)](td::Result<td::Ref<ShardState>> R) mutable {
