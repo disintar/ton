@@ -876,34 +876,34 @@ void StartupBlockParser::receive_first_handle(std::shared_ptr<const BlockHandleI
 }
 
 void StartupBlockParser::receive_handle(std::shared_ptr<const BlockHandleInterface> handle) {
-//  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), handle, blocks=&blocks](td::Result<td::Ref<BlockData>> R) {
-//    if (R.is_error()) {
-//      auto err = R.move_as_error();
-//      LOG(ERROR) << "failed query: " << err << " block: " << handle->id().to_str();
-//      td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
-//    } else {
-//      auto block = R.move_as_ok();
-//      blocks->insert(std::make_pair(handle, block));
-//
-//      block::gen::Block::Record blk;
-//      block::gen::BlockExtra::Record extra;
-//      block::gen::McBlockExtra::Record mc_extra;
-//      if (!tlb::unpack_cell(block->root_cell(), blk) || !tlb::unpack_cell(blk.extra, extra) ||
-//          !extra.custom->have_refs() || !tlb::unpack_cell(extra.custom->prefetch_ref(), mc_extra)) {
-//        td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error,
-//                                td::Status::Error(-1, "cannot unpack header of block " + handle->id().to_str()));
-//      }
-//      block::ShardConfig shards(mc_extra.shard_hashes->prefetch_ref());
-//
-//      auto parseShards = [SelfId](McShardHash &ms) {
-//        const auto _id = ms.top_block_id().to_str();
-//        td::actor::send_closure_later(SelfId, &StartupBlockParser::parse_shard, ms.top_block_id());
-//        return 1;
-//      };
-//
-//      shards.process_shard_hashes(parseShards);
-//    }
-//  });
+  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), handle, blocks=&blocks](td::Result<td::Ref<BlockData>> R) {
+    if (R.is_error()) {
+      auto err = R.move_as_error();
+      LOG(ERROR) << "failed query: " << err << " block: " << handle->id().to_str();
+      td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
+    } else {
+      auto block = R.move_as_ok();
+      blocks->insert(std::make_pair(handle, block));
+
+      block::gen::Block::Record blk;
+      block::gen::BlockExtra::Record extra;
+      block::gen::McBlockExtra::Record mc_extra;
+      if (!tlb::unpack_cell(block->root_cell(), blk) || !tlb::unpack_cell(blk.extra, extra) ||
+          !extra.custom->have_refs() || !tlb::unpack_cell(extra.custom->prefetch_ref(), mc_extra)) {
+        td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error,
+                                td::Status::Error(-1, "cannot unpack header of block " + handle->id().to_str()));
+      }
+      block::ShardConfig shards(mc_extra.shard_hashes->prefetch_ref());
+
+      auto parseShards = [SelfId](McShardHash &ms) {
+        const auto _id = ms.top_block_id().to_str();
+        td::actor::send_closure_later(SelfId, &StartupBlockParser::parse_shard, ms.top_block_id());
+        return 1;
+      };
+
+      shards.process_shard_hashes(parseShards);
+    }
+  });
 
 //  block_handles.push_back(handle);
 
@@ -914,7 +914,7 @@ void StartupBlockParser::receive_handle(std::shared_ptr<const BlockHandleInterfa
   td::actor::send_closure(manager, &ValidatorManagerInterface::get_shard_state_from_db, handle, std::move(P2));
   LOG(WARNING) << " sendEDEDEDE get shard state query for " << handle->id().to_str();
 
-//  td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_data_from_db, handle, std::move(P));
+  td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_data_from_db, handle, std::move(P));
 }
 
 void StartupBlockParser::receive_shard_handle(std::shared_ptr<const BlockHandleInterface> handle) {
