@@ -902,13 +902,12 @@ void StartupBlockParser::receive_handle(std::shared_ptr<const BlockHandleInterfa
       };
 
       shards.process_shard_hashes(parseShards);
-
-      td::actor::send_closure(SelfId, &StartupBlockParser::receive_block, handle);
     }
   });
 
   block_handles.push_back(handle);
   td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_data_from_db, handle, std::move(P));
+  td::actor::send_closure(actor_id(this), &StartupBlockParser::receive_block, handle);
 }
 
 void StartupBlockParser::receive_shard_handle(std::shared_ptr<const BlockHandleInterface> handle) {
