@@ -914,7 +914,7 @@ void StartupBlockParser::receive_handle(std::shared_ptr<const BlockHandleInterfa
   td::actor::send_closure(manager, &ValidatorManagerInterface::get_shard_state_from_db, handle, std::move(P2));
   LOG(WARNING) << " sendEDEDEDE get shard state query for " << handle->id().to_str();
 
-//  td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_data_from_db, handle, std::move(P));
+  td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_data_from_db, handle, std::move(P));
 }
 
 void StartupBlockParser::receive_shard_handle(std::shared_ptr<const BlockHandleInterface> handle) {
