@@ -1006,9 +1006,13 @@ void StartupBlockParser::ipad() {
   LOG(WARNING) << "To load: " << padding;
 
   if (padding == 0) {
-    // TODO: fix
-    LOG(WARNING) << "GOT: H: " << block_handles.size() << " B: " << blocks.size() << " S: " << states.size()
-                 << " PS: " << prev_states.size();
+    if (block_handles.size() != blocks.size() && blocks.size() != states.size() &&
+        states.size() != prev_states.size()) {
+      P_final.set_error(td::Status::Error(-1, "Size of handles, blocks, states, prev states missmatch"));
+    } else {
+      auto t = std::make_tuple(std::move(block_handles), std::move(blocks), std::move(states), std::move(prev_states));
+      P_final.set_value(std::move(t));
+    }
   }
 }
 

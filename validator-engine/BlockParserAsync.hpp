@@ -40,7 +40,7 @@ namespace ton::validator {
 
 class BlockParserAsync : public td::actor::Actor {
  public:
-  BlockParserAsync(BlockIdExt id_, BlockHandle handle_, td::Ref<BlockData> data_, td::Ref<vm::Cell> state_,
+  BlockParserAsync(BlockIdExt id_, ConstBlockHandle handle_, td::Ref<BlockData> data_, td::Ref<vm::Cell> state_,
                    td::optional<td::Ref<vm::Cell>> prev_state_, td::Promise<std::tuple<td::string, td::string>> P_) {
     id = id_;
     handle = std::move(handle_);
@@ -60,7 +60,7 @@ class BlockParserAsync : public td::actor::Actor {
 
  private:
   BlockIdExt id;
-  BlockHandle handle;
+  ConstBlockHandle handle;
   td::Ref<BlockData> data;
   td::Ref<vm::Cell> state;
   td::optional<td::Ref<vm::Cell>> prev_state;
@@ -73,8 +73,8 @@ class StartupBlockParser : public td::actor::Actor {
  public:
   StartupBlockParser(td::actor::ActorId<ValidatorManagerInterface> validator_id,
                      BlockHandle last_masterchain_block_handle_,
-                     td::Promise<std::tuple<std::vector<BlockHandle>, std::vector<td::Ref<BlockData>>,
-                                            std::vector<td::Ref<ShardState>>, std::vector<td::Ref<vm::Cell>>>>
+                     td::Promise<std::tuple<std::vector<ConstBlockHandle>, std::vector<td::Ref<BlockData>>, std::vector<td::Ref<vm::Cell>>,
+                                            std::vector<td::Ref<vm::Cell>>>>
                          P_) {
     LOG(WARNING) << "Start worker StartupBlockParser";
     last_masterchain_block_handle = std::move(last_masterchain_block_handle_);
@@ -118,7 +118,7 @@ class StartupBlockParser : public td::actor::Actor {
 
  private:
   BlockHandle last_masterchain_block_handle;
-  td::Promise<std::tuple<std::vector<BlockHandle>, std::vector<td::Ref<BlockData>>, std::vector<td::Ref<ShardState>>,
+  td::Promise<std::tuple<std::vector<ConstBlockHandle>, std::vector<td::Ref<BlockData>>, std::vector<td::Ref<vm::Cell>>,
                          std::vector<td::Ref<vm::Cell>>>>
       P_final;
   td::actor::ActorId<ValidatorManagerInterface> manager;
@@ -128,7 +128,7 @@ class StartupBlockParser : public td::actor::Actor {
   std::vector<td::Ref<vm::Cell>> prev_states;
   std::vector<std::string> parsed_shards;
   int padding = 0;
-  const int k = 3;
+  const int k = 100;
 };
 
 }  // namespace ton::validator

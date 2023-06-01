@@ -28,7 +28,7 @@ void BlockParser::storeBlockApplied(BlockIdExt id, td::Promise<std::tuple<td::st
   handleBlockProgress(id, std::move(P));
 }
 
-void BlockParser::storeBlockData(BlockHandle handle, td::Ref<BlockData> block,
+void BlockParser::storeBlockData(ConstBlockHandle handle, td::Ref<BlockData> block,
                                  td::Promise<std::tuple<td::string, td::string>> P) {
   std::lock_guard<std::mutex> lock(maps_mtx_);
   LOG(WARNING) << "Store block: " << block->block_id().to_str();
@@ -36,7 +36,7 @@ void BlockParser::storeBlockData(BlockHandle handle, td::Ref<BlockData> block,
                           ":" + std::to_string(handle->id().id.seqno);
   auto blocks_vec = stored_blocks_.find(key);
   if (blocks_vec == stored_blocks_.end()) {
-    std::vector<std::pair<BlockHandle, td::Ref<BlockData>>> vec;
+    std::vector<std::pair<ConstBlockHandle, td::Ref<BlockData>>> vec;
     vec.emplace_back(std::pair{handle, block});
     stored_blocks_.insert({key, vec});
   } else {
@@ -47,7 +47,7 @@ void BlockParser::storeBlockData(BlockHandle handle, td::Ref<BlockData> block,
   LOG(WARNING) << "Stored block: " << block->block_id().to_str();
 }
 
-void BlockParser::storeBlockState(const BlockHandle& handle, td::Ref<vm::Cell> state,
+void BlockParser::storeBlockState(const ConstBlockHandle& handle, td::Ref<vm::Cell> state,
                                   td::Promise<std::tuple<td::string, td::string>> P) {
   std::lock_guard<std::mutex> lock(maps_mtx_);
   LOG(WARNING) << "Store state: " << handle->id().to_str();
@@ -55,7 +55,7 @@ void BlockParser::storeBlockState(const BlockHandle& handle, td::Ref<vm::Cell> s
                           ":" + std::to_string(handle->id().id.seqno);
   auto states_vec = stored_states_.find(key);
   if (states_vec == stored_states_.end()) {
-    std::vector<std::pair<BlockHandle, td::Ref<vm::Cell>>> vec;
+    std::vector<std::pair<ConstBlockHandle, td::Ref<vm::Cell>>> vec;
     vec.emplace_back(std::pair{handle, std::move(state)});
     stored_states_.insert({key, vec});
   } else {
@@ -66,7 +66,7 @@ void BlockParser::storeBlockState(const BlockHandle& handle, td::Ref<vm::Cell> s
   LOG(WARNING) << "Stored state: " <<  handle->id().to_str();
 }
 
-void BlockParser::storeBlockStateWithPrev(const BlockHandle& handle, td::Ref<vm::Cell> prev_state, td::Ref<vm::Cell> state,
+void BlockParser::storeBlockStateWithPrev(const ConstBlockHandle& handle, td::Ref<vm::Cell> prev_state, td::Ref<vm::Cell> state,
                                           td::Promise<std::tuple<td::string, td::string>> P) {
   std::lock_guard<std::mutex> lock(maps_mtx_);
   LOG(WARNING) << "Store prev state: " << handle->id().to_str();
@@ -74,7 +74,7 @@ void BlockParser::storeBlockStateWithPrev(const BlockHandle& handle, td::Ref<vm:
                           ":" + std::to_string(handle->id().id.seqno);
   auto states_vec = stored_states_.find(key);
   if (states_vec == stored_states_.end()) {
-    std::vector<std::pair<BlockHandle, td::Ref<vm::Cell>>> vec;
+    std::vector<std::pair<ConstBlockHandle, td::Ref<vm::Cell>>> vec;
     vec.emplace_back(std::pair{handle, std::move(state)});
     stored_states_.insert({key, vec});
   } else {
@@ -83,7 +83,7 @@ void BlockParser::storeBlockStateWithPrev(const BlockHandle& handle, td::Ref<vm:
 
   auto prev_states_vec = stored_prev_states_.find(key);
   if (prev_states_vec == stored_prev_states_.end()) {
-    std::vector<std::pair<BlockHandle, td::Ref<vm::Cell>>> prev_state_vec;
+    std::vector<std::pair<ConstBlockHandle, td::Ref<vm::Cell>>> prev_state_vec;
     prev_state_vec.emplace_back(std::pair{handle, std::move(prev_state)});
     stored_prev_states_.insert({key, prev_state_vec});
   } else {
@@ -156,7 +156,7 @@ void BlockParser::handleBlockProgress(BlockIdExt id, td::Promise<std::tuple<td::
   const auto shard = id.id.shard;
   enqueuePublishBlockApplied(shard, applied_parsed);
 
-  BlockHandle handle = block_found_iter->first;
+  ConstBlockHandle handle = block_found_iter->first;
   td::Ref<BlockData> data = block_found_iter->second;
   td::Ref<vm::Cell> state = state_found_iter->second;
 

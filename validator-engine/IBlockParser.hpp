@@ -31,10 +31,10 @@ class BlockParser {
 
  public:
   void storeBlockApplied(BlockIdExt id, td::Promise<std::tuple<td::string, td::string>> P);
-  void storeBlockData(BlockHandle handle, td::Ref<BlockData> block, td::Promise<std::tuple<td::string, td::string>> P);
-  void storeBlockState(const BlockHandle& handle, td::Ref<vm::Cell> state,
+  void storeBlockData(ConstBlockHandle handle, td::Ref<BlockData> block, td::Promise<std::tuple<td::string, td::string>> P);
+  void storeBlockState(const ConstBlockHandle& handle, td::Ref<vm::Cell> state,
                        td::Promise<std::tuple<td::string, td::string>> P);
-  void storeBlockStateWithPrev(const BlockHandle& handle, td::Ref<vm::Cell> prev_state, td::Ref<vm::Cell> state,
+  void storeBlockStateWithPrev(const ConstBlockHandle& handle, td::Ref<vm::Cell> prev_state, td::Ref<vm::Cell> state,
                                td::Promise<std::tuple<td::string, td::string>> P);
 
   void enqueuePublishBlockApplied(unsigned long long shard, const std::string& json);
@@ -56,9 +56,9 @@ class BlockParser {
 
   std::mutex maps_mtx_;
   std::map<std::string, BlockIdExt> stored_applied_;
-  std::map<std::string, std::vector<std::pair<BlockHandle, td::Ref<BlockData>>>> stored_blocks_;      // multimap?
-  std::map<std::string, std::vector<std::pair<BlockHandle, td::Ref<vm::Cell>>>> stored_states_;     // multimap?
-  std::map<std::string, std::vector<std::pair<BlockHandle, td::Ref<vm::Cell>>>> stored_prev_states_;  // multimap?
+  std::map<std::string, std::vector<std::pair<ConstBlockHandle, td::Ref<BlockData>>>> stored_blocks_;      // multimap?
+  std::map<std::string, std::vector<std::pair<ConstBlockHandle, td::Ref<vm::Cell>>>> stored_states_;     // multimap?
+  std::map<std::string, std::vector<std::pair<ConstBlockHandle, td::Ref<vm::Cell>>>> stored_prev_states_;  // multimap?
 
   // mb rewrite with https://github.com/andreiavrammsd/cpp-channel
 
