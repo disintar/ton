@@ -927,7 +927,7 @@ void StartupBlockParser::receive_shard_handle(std::shared_ptr<const BlockHandleI
             td::actor::send_closure_later(SelfId, &StartupBlockParser::parse_shard, i);
           }
 
-//          td::actor::send_closure(SelfId, &StartupBlockParser::receive_block, handle);
+          //          td::actor::send_closure(SelfId, &StartupBlockParser::receive_block, handle);
         }
       }));
 }
@@ -997,7 +997,8 @@ void StartupBlockParser::parse_other() {
             td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
           } else {
             auto handle = R.move_as_ok();
-            td::actor::send_closure(SelfId, &StartupBlockParser::receive_handle_block, std::move(handle));
+            LOG(WARNING) << "HERE";
+            td::actor::send_closure(SelfId, &StartupBlockParser::receive_handle_state, std::move(handle));
           }
         }));
 
@@ -1010,8 +1011,8 @@ void StartupBlockParser::parse_other() {
             td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
           } else {
             auto handle = R.move_as_ok();
-            LOG(WARNING) << "HERE";
-            td::actor::send_closure(SelfId, &StartupBlockParser::receive_handle_state, std::move(handle));
+            LOG(WARNING) << "THERE";
+            td::actor::send_closure(SelfId, &StartupBlockParser::receive_handle_block, std::move(handle));
           }
         }));
   }
