@@ -1016,7 +1016,6 @@ void StartupBlockParser::ipad() {
 void StartupBlockParser::receive_states(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state) {
   LOG(WARNING) << "Request prev state: " << handle->id().seqno();
 
-  td::actor::send_closure(actor_id(this), &StartupBlockParser::pad);
   ton::AccountIdPrefixFull pfx{handle->id().id.workchain, handle->id().id.shard};
   td::actor::send_closure(
       manager, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, handle->id().seqno() - 1,
