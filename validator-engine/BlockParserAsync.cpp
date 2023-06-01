@@ -1060,9 +1060,6 @@ void StartupBlockParser::request_prev_state(ConstBlockHandle handle, td::Ref<Blo
 void StartupBlockParser::request_prev_state_final(ConstBlockHandle handle, td::Ref<BlockData> block,
                                                   td::Ref<vm::Cell> state, td::Ref<vm::Cell> prev_state) {
   block_handles.push_back(std::move(handle));
-  blocks.push_back(std::move(block));
-  states.push_back(std::move(state));
-  prev_states.push_back(std::move(prev_state));
 
   td::actor::send_closure(actor_id(this), &StartupBlockParser::ipad);
 }
