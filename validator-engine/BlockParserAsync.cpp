@@ -972,11 +972,11 @@ void StartupBlockParser::receive_handle_state(std::shared_ptr<const BlockHandleI
   //        }
   //      });
   //
-  auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this)](td::Result<td::Ref<vm::DataCell>> R) {
+  auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
     LOG(WARNING) << "123, azazaza: " << R.is_ok();
   });
 
-  td::actor::send_closure(manager, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle, std::move(P));
+  td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_data_from_db, handle, std::move(P));
   LOG(WARNING) << " sendEDEDEDE get shard state query for " << handle->id().to_str();
 }
 
