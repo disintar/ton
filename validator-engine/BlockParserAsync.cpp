@@ -997,7 +997,7 @@ void StartupBlockParser::parse_other() {
             td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
           } else {
             auto handle = R.move_as_ok();
-            td::actor::send_closure(SelfId, &StartupBlockParser::receive_handle_block, handle);
+            td::actor::send_closure(SelfId, &StartupBlockParser::receive_handle_block, std::move(handle));
           }
         }));
 
@@ -1010,7 +1010,8 @@ void StartupBlockParser::parse_other() {
             td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
           } else {
             auto handle = R.move_as_ok();
-            td::actor::send_closure(SelfId, &StartupBlockParser::receive_handle_state, handle);
+            LOG(WARNING) << "HERE";
+            td::actor::send_closure(SelfId, &StartupBlockParser::receive_handle_state, std::move(handle));
           }
         }));
   }
