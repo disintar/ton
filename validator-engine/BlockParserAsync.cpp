@@ -840,7 +840,7 @@ void StartupBlockParser::end_with_error(td::Status err) {
 }
 
 void StartupBlockParser::receive_first_handle(std::shared_ptr<const BlockHandleInterface> handle) {
-  LOG(WARNING) << "Receive first block for initial last blocks parse: " << handle->id().to_str();
+  LOG(DEBUG) << "Receive first block for initial last blocks parse: " << handle->id().to_str();
 
   auto P = td::PromiseCreator::lambda(
       [SelfId = actor_id(this), parsed_shards = &parsed_shards, handle](td::Result<td::Ref<BlockData>> R) {
@@ -911,7 +911,7 @@ void StartupBlockParser::receive_handle(std::shared_ptr<const BlockHandleInterfa
 }
 
 void StartupBlockParser::receive_shard_handle(std::shared_ptr<const BlockHandleInterface> handle) {
-  LOG(WARNING) << "Send get_block_data_from_db for shard";
+  LOG(DEBUG) << "Send get_block_data_from_db for shard";
   td::actor::send_closure(
       manager, &ValidatorManagerInterface::get_block_data_from_db, handle,
       td::PromiseCreator::lambda([SelfId = actor_id(this), handle](td::Result<td::Ref<BlockData>> R) {
@@ -922,7 +922,7 @@ void StartupBlockParser::receive_shard_handle(std::shared_ptr<const BlockHandleI
         } else {
           auto block = R.move_as_ok();
           for (auto i : handle->prev()) {
-            LOG(WARNING) << "Send find prev shard: " << i.to_str();
+            LOG(DEBUG) << "Send find prev shard: " << i.to_str();
             td::actor::send_closure_later(SelfId, &StartupBlockParser::parse_shard, i);
           }
 
@@ -935,7 +935,7 @@ void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id) {
   if (std::find(parsed_shards.begin(), parsed_shards.end(), shard_id.to_str()) == parsed_shards.end()) {
     td::actor::send_closure(actor_id(this), &StartupBlockParser::pad);
 
-    LOG(WARNING) << "Receive parse shards: " << shard_id.to_str();
+    LOG(DEBUG) << "Receive parse shards: " << shard_id.to_str();
     ton::AccountIdPrefixFull pfx{shard_id.id.workchain, shard_id.id.shard};
     td::actor::send_closure(
         manager, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, shard_id.seqno(),
@@ -946,7 +946,7 @@ void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id) {
             td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
           } else {
             auto handle = R.move_as_ok();
-            LOG(WARNING) << "Send receive_shard_handle";
+            LOG(DEBUG) << "Send receive_shard_handle";
             td::actor::send_closure(SelfId, &StartupBlockParser::receive_shard_handle, handle);
           }
         }));
@@ -954,7 +954,7 @@ void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id) {
 }
 
 void StartupBlockParser::receive_block(std::shared_ptr<const BlockHandleInterface> handle, td::Ref<BlockData> block) {
-  LOG(WARNING) << " send get shard state query for " << handle->id().to_str();
+  LOG(DEBUG) << " send get shard state query for " << handle->id().to_str();
   auto P = td::PromiseCreator::lambda(
       [SelfId = actor_id(this), handle, block = std::move(block)](td::Result<td::Ref<vm::DataCell>> R) mutable {
         if (R.is_error()) {
@@ -964,21 +964,21 @@ void StartupBlockParser::receive_block(std::shared_ptr<const BlockHandleInterfac
         } else {
           auto root_cell = R.move_as_ok();
 
-          LOG(WARNING) << " send receive_states";
+          LOG(DEBUG) << " send receive_states";
           td::actor::send_closure(SelfId, &StartupBlockParser::receive_states, handle, std::move(block),
                                   std::move(root_cell));
         }
       });
 
   td::actor::send_closure(manager, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle, std::move(P));
-  LOG(WARNING) << " sendEDEDEDE get shard state query for " << handle->id().to_str();
+  LOG(DEBUG) << " sendEDEDEDE get shard state query for " << handle->id().to_str();
 }
 
 void StartupBlockParser::parse_other() {
   auto end = last_masterchain_block_handle->id().seqno();
 
   for (auto seqno = last_masterchain_block_handle->id().seqno() - k + 1; seqno != end + 1; ++seqno) {
-    LOG(WARNING) << "Receive other MC blocks for initial last blocks parse: " << seqno;
+    LOG(DEBUG) << "Receive other MC blocks for initial last blocks parse: " << seqno;
 
     td::actor::send_closure(actor_id(this), &StartupBlockParser::pad);
     ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
@@ -1003,7 +1003,7 @@ void StartupBlockParser::pad() {
 
 void StartupBlockParser::ipad() {
   padding--;
-  LOG(WARNING) << "To load: " << padding;
+  LOG(DEBUG) << "To load: " << padding;
 
   if (padding == 0) {
     if (block_handles.size() != blocks.size() && blocks.size() != states.size() &&
@@ -1017,7 +1017,7 @@ void StartupBlockParser::ipad() {
 }
 
 void StartupBlockParser::receive_states(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state) {
-  LOG(WARNING) << "Request prev state: " << handle->id().seqno();
+  LOG(DEBUG) << "Request prev state: " << handle->id().seqno();
 
   ton::AccountIdPrefixFull pfx{handle->id().id.workchain, handle->id().id.shard};
   td::actor::send_closure(
