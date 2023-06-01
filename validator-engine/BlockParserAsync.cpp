@@ -988,6 +988,7 @@ void StartupBlockParser::parse_other() {
 
     td::actor::send_closure(actor_id(this), &StartupBlockParser::pad);
     ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
+
     td::actor::send_closure(
         manager, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
         td::PromiseCreator::lambda([SelfId = actor_id(this), seqno](td::Result<ConstBlockHandle> R) {
@@ -1002,19 +1003,19 @@ void StartupBlockParser::parse_other() {
           }
         }));
 
-    td::actor::send_closure(
-        manager, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
-        td::PromiseCreator::lambda([SelfId = actor_id(this), seqno](td::Result<ConstBlockHandle> R) {
-          if (R.is_error()) {
-            auto err = R.move_as_error();
-            LOG(ERROR) << "failed query: " << err << " MC seqno: " << seqno;
-            td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
-          } else {
-            auto handle = R.move_as_ok();
-            LOG(WARNING) << "THERE";
-            td::actor::send_closure(SelfId, &StartupBlockParser::receive_handle_block, std::move(handle));
-          }
-        }));
+//    td::actor::send_closure(
+//        manager, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
+//        td::PromiseCreator::lambda([SelfId = actor_id(this), seqno](td::Result<ConstBlockHandle> R) {
+//          if (R.is_error()) {
+//            auto err = R.move_as_error();
+//            LOG(ERROR) << "failed query: " << err << " MC seqno: " << seqno;
+//            td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
+//          } else {
+//            auto handle = R.move_as_ok();
+//            LOG(WARNING) << "THERE";
+//            td::actor::send_closure(SelfId, &StartupBlockParser::receive_handle_block, std::move(handle));
+//          }
+//        }));
   }
 }
 
