@@ -907,7 +907,6 @@ void StartupBlockParser::receive_handle(std::shared_ptr<const BlockHandleInterfa
         }
       });
 
-  block_handles.push_back(handle);
   td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_data_from_db, handle, std::move(P));
 }
 
@@ -1009,7 +1008,7 @@ void StartupBlockParser::ipad() {
   if (padding == 0) {
     // TODO: fix
     LOG(WARNING) << "GOT: H: " << block_handles.size() << " B: " << blocks.size() << " S: " << states.size()
-                 << " PS: " << block_handles.size();
+                 << " PS: " << prev_states.size();
   }
 }
 
