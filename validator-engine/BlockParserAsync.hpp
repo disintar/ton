@@ -110,6 +110,8 @@ class StartupBlockParser : public td::actor::Actor {
   void receive_shard_handle(ConstBlockHandle handle);
   void receive_block(ConstBlockHandle handle, td::Ref<BlockData> block);
   void receive_states(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state);
+  void start_wait_next(BlockIdExt block);
+  void set_next_ready();
   void request_prev_state(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state, std::shared_ptr<const BlockHandleInterface> prev_handle);
   void request_prev_state_final(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state, td::Ref<vm::Cell> prev_state);
 
@@ -129,6 +131,7 @@ class StartupBlockParser : public td::actor::Actor {
   std::vector<std::string> parsed_shards;
   int padding = 0;
   const int k = 100;
+  bool next_ready = false;
 };
 
 }  // namespace ton::validator

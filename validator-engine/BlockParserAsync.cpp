@@ -36,6 +36,7 @@
 #include "BlockParserAsync.hpp"
 #include "blockchain-indexer/json.hpp"
 #include "blockchain-indexer/json-utils.hpp"
+#include "td/utils/port/sleep.h"
 
 namespace ton::validator {
 
@@ -1001,11 +1002,42 @@ void StartupBlockParser::pad() {
   padding++;
 }
 
+void StartupBlockParser::set_next_ready() {
+  next_ready = true;
+}
+
+void StartupBlockParser::start_wait_next(BlockIdExt block) {
+  ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
+  const auto seqno = block.seqno();
+
+  td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
+                          td::PromiseCreator::lambda([SelfId = actor_id(this), block](td::Result<ConstBlockHandle> R) {
+                            if (R.is_error()) {
+                              auto err = R.move_as_error();
+                              LOG(ERROR) << "failed query next MC seqno: " << block.seqno() << " wait 1 sec";
+                              td::usleep_for(1000);
+                              td::actor::send_closure(SelfId, &StartupBlockParser::start_wait_next, block);
+                            } else {
+                              auto handle = R.move_as_ok();
+
+                              td::actor::send_closure(SelfId, &StartupBlockParser::set_next_ready);
+                              td::actor::send_closure(SelfId, &StartupBlockParser::pad);
+                              td::actor::send_closure(SelfId, &StartupBlockParser::receive_handle, handle);
+                            }
+                          }));
+}
+
 void StartupBlockParser::ipad() {
   padding--;
   LOG(DEBUG) << "To load: " << padding;
 
   if (padding == 0) {
+    if (!next_ready) {
+      const auto next_block = last_masterchain_block_handle->one_next(true);
+      LOG(INFO) << "Initial read of last " << k << " blocks end, start wait for " << next_block.to_str();
+      td::actor::send_closure(actor_id(this), &StartupBlockParser::start_wait_next, next_block);
+    }
+
     if (block_handles.size() != blocks.size() && blocks.size() != states.size() &&
         states.size() != prev_states.size()) {
       P_final.set_error(td::Status::Error(-1, "Size of handles, blocks, states, prev states missmatch"));
