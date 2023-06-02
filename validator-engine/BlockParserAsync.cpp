@@ -1007,11 +1007,10 @@ void StartupBlockParser::set_next_ready(ConstBlockHandle b) {
   next_download--;
 }
 
-void StartupBlockParser::start_wait_next(BlockIdExt block) {
+void StartupBlockParser::start_wait_next(BlockSeqno block) {
   ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
-  const auto seqno = block.seqno();
 
-  td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, seqno,
+  td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, block,
                           td::PromiseCreator::lambda([SelfId = actor_id(this), block](td::Result<ConstBlockHandle> R) {
                             if (R.is_error()) {
                               auto err = R.move_as_error();
@@ -1034,8 +1033,8 @@ void StartupBlockParser::ipad() {
 
   if (padding == 0) {
     if (next_download != 0) {
-      const auto next_block = last_masterchain_block_handle->one_next(true);
-      LOG(INFO) << "Initial read of last " << k << " blocks end, start wait for " << next_block.to_str();
+      const auto next_block = last_masterchain_block_handle->id().seqno() + 1;
+      LOG(INFO) << "Initial read of last " << k << " blocks end, start wait for " << next_block;
       td::actor::send_closure(actor_id(this), &StartupBlockParser::start_wait_next, next_block);
     }
 

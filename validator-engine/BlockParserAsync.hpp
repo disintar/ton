@@ -112,7 +112,7 @@ class StartupBlockParser : public td::actor::Actor {
   void receive_shard_handle(ConstBlockHandle handle);
   void receive_block(ConstBlockHandle handle, td::Ref<BlockData> block);
   void receive_states(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state);
-  void start_wait_next(BlockIdExt block);
+  void start_wait_next(BlockSeqno block);
   void set_next_ready(ConstBlockHandle b);
   void request_prev_state(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state,
                           std::shared_ptr<const BlockHandleInterface> prev_handle);
