@@ -896,8 +896,9 @@ void StartupBlockParser::receive_handle(std::shared_ptr<const BlockHandleInterfa
           }
           block::ShardConfig shards(mc_extra.shard_hashes->prefetch_ref());
 
-          auto parseShards = [SelfId](McShardHash &ms) {
+          auto parseShards = [SelfId, handle](McShardHash &ms) {
             const auto _id = ms.top_block_id().to_str();
+            LOG(INFO) << "FOR: " << handle->id().to_str() << "GO FOR: " << ms.top_block_id().to_str();
             td::actor::send_closure_later(SelfId, &StartupBlockParser::parse_shard, ms.top_block_id());
             return 1;
           };
@@ -1037,15 +1038,16 @@ void StartupBlockParser::ipad() {
       const auto next_block = last_masterchain_block_handle->id().seqno() + 1;
       LOG(INFO) << "Initial read of last " << k << " blocks end, start wait for " << next_block;
       td::actor::send_closure(actor_id(this), &StartupBlockParser::start_wait_next, next_block);
-    }
-
-    if (block_handles.size() != blocks.size() && blocks.size() != states.size() &&
-        states.size() != prev_states.size()) {
-      P_final.set_error(td::Status::Error(-1, "Size of handles, blocks, states, prev states missmatch"));
     } else {
-      LOG(INFO) << "Initial read of last " << k << " blocks complete";
-      auto t = std::make_tuple(std::move(block_handles), std::move(blocks), std::move(states), std::move(prev_states));
-      P_final.set_value(std::move(t));
+      if (block_handles.size() != blocks.size() && blocks.size() != states.size() &&
+          states.size() != prev_states.size()) {
+        P_final.set_error(td::Status::Error(-1, "Size of handles, blocks, states, prev states missmatch"));
+      } else {
+        LOG(INFO) << "Initial read of last " << k << " blocks complete";
+        auto t =
+            std::make_tuple(std::move(block_handles), std::move(blocks), std::move(states), std::move(prev_states));
+        P_final.set_value(std::move(t));
+      }
     }
   }
 }
