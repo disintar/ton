@@ -73,11 +73,13 @@ class StartupBlockParser : public td::actor::Actor {
  public:
   StartupBlockParser(td::actor::ActorId<ValidatorManagerInterface> validator_id,
                      BlockHandle last_masterchain_block_handle_,
-                     td::Promise<std::tuple<std::vector<ConstBlockHandle>, std::vector<td::Ref<BlockData>>, std::vector<td::Ref<vm::Cell>>,
-                                            std::vector<td::Ref<vm::Cell>>>>
+                     td::Promise<std::tuple<std::vector<ConstBlockHandle>, std::vector<td::Ref<BlockData>>,
+                                            std::vector<td::Ref<vm::Cell>>, std::vector<td::Ref<vm::Cell>>>>
                          P_) {
     LOG(WARNING) << "Start worker StartupBlockParser";
-    last_masterchain_block_handle = std::move(last_masterchain_block_handle_);
+
+    ConstBlockHandle h(last_masterchain_block_handle_);
+    last_masterchain_block_handle = std::move(h);
     manager = std::move(validator_id);
     P_final = std::move(P_);
   }
@@ -111,15 +113,17 @@ class StartupBlockParser : public td::actor::Actor {
   void receive_block(ConstBlockHandle handle, td::Ref<BlockData> block);
   void receive_states(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state);
   void start_wait_next(BlockIdExt block);
-  void set_next_ready();
-  void request_prev_state(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state, std::shared_ptr<const BlockHandleInterface> prev_handle);
-  void request_prev_state_final(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state, td::Ref<vm::Cell> prev_state);
+  void set_next_ready(ConstBlockHandle b);
+  void request_prev_state(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state,
+                          std::shared_ptr<const BlockHandleInterface> prev_handle);
+  void request_prev_state_final(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state,
+                                td::Ref<vm::Cell> prev_state);
 
   void pad();
   void ipad();
 
  private:
-  BlockHandle last_masterchain_block_handle;
+  ConstBlockHandle last_masterchain_block_handle;
   td::Promise<std::tuple<std::vector<ConstBlockHandle>, std::vector<td::Ref<BlockData>>, std::vector<td::Ref<vm::Cell>>,
                          std::vector<td::Ref<vm::Cell>>>>
       P_final;
@@ -131,7 +135,7 @@ class StartupBlockParser : public td::actor::Actor {
   std::vector<std::string> parsed_shards;
   int padding = 0;
   const int k = 100;
-  bool next_ready = false;
+  int next_download = 5;
 };
 
 }  // namespace ton::validator

@@ -979,7 +979,7 @@ void StartupBlockParser::parse_other() {
   auto end = last_masterchain_block_handle->id().seqno();
 
   for (auto seqno = last_masterchain_block_handle->id().seqno() - k + 1; seqno != end + 1; ++seqno) {
-    LOG(DEBUG) << "Receive other MC blocks for initial last blocks parse: " << seqno;
+    LOG(WARNING) << "Receive other MC blocks for initial last blocks parse: " << seqno;
 
     td::actor::send_closure(actor_id(this), &StartupBlockParser::pad);
     ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
@@ -1002,8 +1002,9 @@ void StartupBlockParser::pad() {
   padding++;
 }
 
-void StartupBlockParser::set_next_ready() {
-  next_ready = true;
+void StartupBlockParser::set_next_ready(ConstBlockHandle b) {
+  last_masterchain_block_handle = std::move(b);
+  next_download--;
 }
 
 void StartupBlockParser::start_wait_next(BlockIdExt block) {
@@ -1020,7 +1021,7 @@ void StartupBlockParser::start_wait_next(BlockIdExt block) {
                             } else {
                               auto handle = R.move_as_ok();
 
-                              td::actor::send_closure(SelfId, &StartupBlockParser::set_next_ready);
+                              td::actor::send_closure(SelfId, &StartupBlockParser::set_next_ready, handle);
                               td::actor::send_closure(SelfId, &StartupBlockParser::pad);
                               td::actor::send_closure(SelfId, &StartupBlockParser::receive_handle, handle);
                             }
@@ -1032,7 +1033,7 @@ void StartupBlockParser::ipad() {
   LOG(DEBUG) << "To load: " << padding;
 
   if (padding == 0) {
-    if (!next_ready) {
+    if (next_download != 0) {
       const auto next_block = last_masterchain_block_handle->one_next(true);
       LOG(INFO) << "Initial read of last " << k << " blocks end, start wait for " << next_block.to_str();
       td::actor::send_closure(actor_id(this), &StartupBlockParser::start_wait_next, next_block);
