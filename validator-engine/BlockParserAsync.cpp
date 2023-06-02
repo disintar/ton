@@ -943,8 +943,9 @@ void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id) {
         td::PromiseCreator::lambda([SelfId = actor_id(this), shard_id](td::Result<ConstBlockHandle> R) {
           if (R.is_error()) {
             auto err = R.move_as_error();
-            LOG(ERROR) << "failed query: " << err << " block: " << shard_id.to_str();
-            td::actor::send_closure(SelfId, &StartupBlockParser::end_with_error, std::move(err));
+            LOG(ERROR) << "failed query: " << err << " block: " << shard_id.to_str() << " wait shard for 1 sec";
+            td::usleep_for(1000000);
+            td::actor::send_closure(SelfId, &StartupBlockParser::parse_shard, shard_id);
           } else {
             auto handle = R.move_as_ok();
             LOG(DEBUG) << "Send receive_shard_handle";
@@ -1015,7 +1016,7 @@ void StartupBlockParser::start_wait_next(BlockSeqno block) {
                             if (R.is_error()) {
                               auto err = R.move_as_error();
                               LOG(ERROR) << "failed query next MC seqno: " << block << " wait 1 sec";
-                              td::usleep_for(1000);
+                              td::usleep_for(1000000);
                               td::actor::send_closure(SelfId, &StartupBlockParser::start_wait_next, block);
                             } else {
                               auto handle = R.move_as_ok();
