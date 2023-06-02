@@ -1042,6 +1042,7 @@ void StartupBlockParser::ipad() {
         states.size() != prev_states.size()) {
       P_final.set_error(td::Status::Error(-1, "Size of handles, blocks, states, prev states missmatch"));
     } else {
+      LOG(INFO) << "Initial read of last " << k << " blocks complete";
       auto t = std::make_tuple(std::move(block_handles), std::move(blocks), std::move(states), std::move(prev_states));
       P_final.set_value(std::move(t));
     }
