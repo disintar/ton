@@ -134,7 +134,7 @@ class StartupBlockParser : public td::actor::Actor {
   std::vector<td::Ref<vm::Cell>> prev_states;
   std::vector<std::string> parsed_shards;
   int padding = 0;
-  const int k = 100;
+  const int k = 20;
   int next_download = 5;
 };
 
