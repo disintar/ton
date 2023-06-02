@@ -1014,7 +1014,7 @@ void StartupBlockParser::start_wait_next(BlockSeqno block) {
                           td::PromiseCreator::lambda([SelfId = actor_id(this), block](td::Result<ConstBlockHandle> R) {
                             if (R.is_error()) {
                               auto err = R.move_as_error();
-                              LOG(ERROR) << "failed query next MC seqno: " << block.seqno() << " wait 1 sec";
+                              LOG(ERROR) << "failed query next MC seqno: " << block << " wait 1 sec";
                               td::usleep_for(1000);
                               td::actor::send_closure(SelfId, &StartupBlockParser::start_wait_next, block);
                             } else {
