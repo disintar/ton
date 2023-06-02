@@ -899,7 +899,7 @@ void StartupBlockParser::receive_handle(std::shared_ptr<const BlockHandleInterfa
           auto parseShards = [SelfId, handle](McShardHash &ms) {
             const auto _id = ms.top_block_id().to_str();
             LOG(INFO) << "FOR: " << handle->id().to_str() << "GO FOR: " << ms.top_block_id().to_str();
-            td::actor::send_closure_later(SelfId, &StartupBlockParser::parse_shard, ms.top_block_id());
+            td::actor::send_closure(SelfId, &StartupBlockParser::parse_shard, ms.top_block_id(), true);
             return 1;
           };
 
@@ -925,7 +925,7 @@ void StartupBlockParser::receive_shard_handle(std::shared_ptr<const BlockHandleI
           auto block = R.move_as_ok();
           for (auto i : handle->prev()) {
             LOG(DEBUG) << "Send find prev shard: " << i.to_str();
-            td::actor::send_closure_later(SelfId, &StartupBlockParser::parse_shard, i);
+            td::actor::send_closure(SelfId, &StartupBlockParser::parse_shard, i, true);
           }
 
           td::actor::send_closure(SelfId, &StartupBlockParser::receive_block, handle, std::move(block));
