@@ -107,7 +107,7 @@ class StartupBlockParser : public td::actor::Actor {
   void receive_first_handle(std::shared_ptr<const BlockHandleInterface> handle);
   void end_with_error(td::Status err);
   void receive_handle(std::shared_ptr<const BlockHandleInterface> handle);
-  void parse_shard(ton::BlockIdExt shard_id);
+  void parse_shard(ton::BlockIdExt shard_id, bool pad = true);
   void parse_other();
   void receive_shard_handle(ConstBlockHandle handle);
   void receive_block(ConstBlockHandle handle, td::Ref<BlockData> block);

@@ -933,9 +933,11 @@ void StartupBlockParser::receive_shard_handle(std::shared_ptr<const BlockHandleI
       }));
 }
 
-void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id) {
+void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id, bool pad) {
   if (std::find(parsed_shards.begin(), parsed_shards.end(), shard_id.to_str()) == parsed_shards.end()) {
-    td::actor::send_closure(actor_id(this), &StartupBlockParser::pad);
+    if (pad) {
+      td::actor::send_closure(actor_id(this), &StartupBlockParser::pad);
+    }
 
     LOG(DEBUG) << "Receive parse shards: " << shard_id.to_str();
     ton::AccountIdPrefixFull pfx{shard_id.id.workchain, shard_id.id.shard};
@@ -945,11 +947,12 @@ void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id) {
           if (R.is_error()) {
             auto err = R.move_as_error();
             LOG(ERROR) << "failed query: " << err << " block: " << shard_id.to_str() << " wait shard for 1 sec";
+            td::actor::send_closure(SelfId, &StartupBlockParser::ipad);
             td::usleep_for(1000000);
-            td::actor::send_closure(SelfId, &StartupBlockParser::parse_shard, shard_id);
+            td::actor::send_closure(SelfId, &StartupBlockParser::parse_shard, shard_id, false);
           } else {
             auto handle = R.move_as_ok();
-            LOG(DEBUG) << "Send receive_shard_handle";
+            LOG(DEBUG) << "Send receive_shard_handle: " << shard_id.to_str();
             td::actor::send_closure(SelfId, &StartupBlockParser::receive_shard_handle, handle);
           }
         }));
