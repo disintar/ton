@@ -78,7 +78,7 @@ class AsyncStateIndexer : public td::actor::Actor {
 
   void start_up() override {
     try {
-      LOG(WARNING) << "Parse accounts states " << block_id_string << " " << timer;
+      LOG(DEBUG) << "Parse accounts states " << block_id_string << " " << timer;
 
       block::gen::ShardStateUnsplit::Record shard_state;
       CHECK(tlb::unpack_cell(std::move(root_cell), shard_state));
@@ -321,7 +321,7 @@ class AsyncStateIndexer : public td::actor::Actor {
 
   bool finalize() {
     answer["accounts"] = json_accounts;
-    LOG(WARNING) << "Parse accounts states all accounts parsed " << block_id_string << " " << timer;
+    LOG(DEBUG) << "Parse accounts states all accounts parsed " << block_id_string << " " << timer;
 
     std::string final_json;
     std::string final_id = std::to_string(block_id.id.workchain) + ":" + std::to_string(block_id.id.shard) + ":" +
@@ -339,7 +339,7 @@ class AsyncStateIndexer : public td::actor::Actor {
     } catch (...) {
       LOG(ERROR) << "Cant dump state: " << final_id;
 
-      LOG(WARNING) << "Calling std::exit(0)";
+      LOG(DEBUG) << "Calling std::exit(0)";
       std::exit(0);
     }
 
@@ -349,10 +349,10 @@ class AsyncStateIndexer : public td::actor::Actor {
 };
 
 void BlockParserAsync::parseBlockData() {
-  LOG(WARNING) << "Parse block data" << id.to_str();
+  LOG(DEBUG) << "Parse block data" << id.to_str();
 
   auto blkid = data->block_id();
-  LOG(DEBUG) << "Parse: " << blkid.to_str();
+  LOG(WARNING) << "Parse: " << blkid.id.to_str();
 
   auto block_root = data->root_cell();
   if (block_root.is_null()) {
@@ -822,7 +822,7 @@ void BlockParserAsync::parseBlockData() {
                                              std::move(Pfinal))
       .release();
 
-  LOG(WARNING) << "Parsed: " << blkid.to_str() << " success";
+  LOG(DEBUG) << "Parsed: " << blkid.to_str() << " success";
 };
 
 void BlockParserAsync::saveStateData(std::string tmp_state) {
@@ -831,7 +831,7 @@ void BlockParserAsync::saveStateData(std::string tmp_state) {
 }
 
 void BlockParserAsync::finalize() {
-  LOG(WARNING) << "Send: " << id.to_str() << " success";
+  LOG(DEBUG) << "Send: " << id.to_str() << " success";
   P.set_value(std::make_tuple(parsed_data, parsed_state));
 }
 

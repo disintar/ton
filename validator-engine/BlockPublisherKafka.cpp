@@ -9,13 +9,12 @@ BlockPublisherKafka::BlockPublisherKafka(const std::string& endpoint)
                                        {"retry.backoff.ms", 500},
                                        {"retries", 2147483647},
                                        {"acks", "1"},
-                                       {"debug", "msg,broker,topic"},
                                        {"queue.buffering.max.ms", 500}}) {
 }
 
 void BlockPublisherKafka::publishBlockApplied(unsigned long long shard, std::string json) {
   std::lock_guard<std::mutex> guard(net_mtx);
-  LOG(INFO) << "[block-applied] Sending " << json.size() << " bytes to Kafka";
+  LOG(DEBUG) << "[block-applied] Sending " << json.size() << " bytes to Kafka";
   try {
     const char* value = getenv("KAFKA_APPLY_TOPIC");
 
@@ -44,7 +43,7 @@ void BlockPublisherKafka::deliver() {
 
 void BlockPublisherKafka::publishBlockData(unsigned long long shard, std::string json) {
   std::lock_guard<std::mutex> guard(net_mtx);
-  LOG(INFO) << "[block-data] Sending " << json.size() << " bytes to Kafka";
+  LOG(DEBUG) << "[block-data] Sending " << json.size() << " bytes to Kafka";
   try {
     const char* value = getenv("KAFKA_BLOCK_TOPIC");
 
@@ -65,7 +64,7 @@ void BlockPublisherKafka::publishBlockData(unsigned long long shard, std::string
 
 void BlockPublisherKafka::publishBlockState(unsigned long long shard, std::string json) {
   std::lock_guard<std::mutex> guard(net_mtx);
-  LOG(INFO) << "[block-state] Sending " << json.size() << " bytes to Kafka";
+  LOG(DEBUG) << "[block-state] Sending " << json.size() << " bytes to Kafka";
   try {
     const char* value = getenv("KAFKA_STATE_TOPIC");
 
