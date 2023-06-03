@@ -1185,9 +1185,9 @@ bool Transaction::prepare_compute_phase(const ComputePhaseConfig& cfg) {
     was_activated = true;
     acc_status = Account::acc_active;
   }
-  LOG(INFO) << "steps: " << vm.get_steps_count() << " gas: used=" << gas.gas_consumed() << ", max=" << gas.gas_max
+  LOG(DEBUG) << "steps: " << vm.get_steps_count() << " gas: used=" << gas.gas_consumed() << ", max=" << gas.gas_max
             << ", limit=" << gas.gas_limit << ", credit=" << gas.gas_credit;
-  LOG(INFO) << "out_of_gas=" << cp.out_of_gas << ", accepted=" << cp.accepted << ", success=" << cp.success
+  LOG(DEBUG) << "out_of_gas=" << cp.out_of_gas << ", accepted=" << cp.accepted << ", success=" << cp.success
             << ", time=" << elapsed << "s";
   if (logger != nullptr) {
     cp.vm_log = logger->get_log();
