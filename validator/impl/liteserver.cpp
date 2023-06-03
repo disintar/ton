@@ -76,7 +76,7 @@ LiteQuery::LiteQuery(WorkchainId wc, StdSmcAddress  acc_addr, td::actor::ActorId
 }
 
 void LiteQuery::abort_query(td::Status reason) {
-  LOG(INFO) << "aborted liteserver query: " << reason.to_string();
+  LOG(DEBUG) << "aborted liteserver query: " << reason.to_string();
   if (acc_state_promise_) {
     acc_state_promise_.set_error(std::move(reason));
   } else if (promise_) {
@@ -86,7 +86,7 @@ void LiteQuery::abort_query(td::Status reason) {
 }
 
 void LiteQuery::abort_query_ext(td::Status reason, std::string comment) {
-  LOG(INFO) << "aborted liteserver query: " << comment << " : " << reason.to_string();
+  LOG(DEBUG) << "aborted liteserver query: " << comment << " : " << reason.to_string();
   if (promise_) {
     promise_.set_error(reason.move_as_error_prefix(comment + " : "));
   }
@@ -231,7 +231,7 @@ void LiteQuery::perform_getVersion() {
 }
 
 void LiteQuery::perform_getMasterchainInfo(int mode) {
-  LOG(INFO) << "started a getMasterchainInfo(" << mode << ") liteserver query";
+  LOG(DEBUG) << "started a getMasterchainInfo(" << mode << ") liteserver query";
   if (mode > 0) {
     fatal_error("unsupported getMasterchainInfo mode");
     return;
@@ -606,7 +606,7 @@ bool LiteQuery::request_mc_block_data_state(BlockIdExt blkid) {
 }
 
 bool LiteQuery::request_block_data_state(BlockIdExt blkid) {
-  LOG(INFO) << "requesting state for block (" << blkid.to_str() << ")";
+  LOG(DEBUG) << "requesting state for block (" << blkid.to_str() << ")";
   return request_block_data(blkid) && request_block_state(blkid);
 }
 
@@ -751,7 +751,7 @@ bool LiteQuery::request_zero_state(BlockIdExt blkid) {
 }
 
 void LiteQuery::perform_getAccountState(BlockIdExt blkid, WorkchainId workchain, StdSmcAddress addr, int mode) {
-  LOG(INFO) << "started a getAccountState(" << blkid.to_str() << ", " << workchain << ", " << addr.to_hex() << ", "
+  LOG(DEBUG) << "started a getAccountState(" << blkid.to_str() << ", " << workchain << ", " << addr.to_hex() << ", "
             << mode << ") liteserver query";
   if (blkid.id.workchain != masterchainId && blkid.id.workchain != workchain) {
     fatal_error("reference block for a getAccountState() must belong to the masterchain");
@@ -1137,7 +1137,7 @@ bool LiteQuery::make_ancestor_block_proof(Ref<vm::Cell>& proof, Ref<vm::Cell> st
 }
 
 void LiteQuery::continue_getAccountState() {
-  LOG(INFO) << "continue getAccountState() query";
+  LOG(DEBUG) << "continue getAccountState() query";
   if (acc_workchain_ == masterchainId) {
     blk_id_ = base_blk_id_;
     block_ = mc_block_;
@@ -2591,7 +2591,7 @@ void LiteQuery::continue_getValidatorStats(int mode, int limit, Bits256 start_af
 }
 
 void LiteQuery::perform_getShardBlockProof(BlockIdExt blkid) {
-  LOG(INFO) << "started a getMasterchainInfo(" << blkid.to_str() << ") liteserver query";
+  LOG(DEBUG) << "started a getMasterchainInfo(" << blkid.to_str() << ") liteserver query";
   if (!blkid.is_valid_ext()) {
     fatal_error("invalid block id");
     return;

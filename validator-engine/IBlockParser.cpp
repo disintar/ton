@@ -21,7 +21,7 @@ BlockParser::~BlockParser() {
 
 void BlockParser::storeBlockApplied(BlockIdExt id, td::Promise<std::tuple<td::string, td::string>> P) {
   std::lock_guard<std::mutex> lock(maps_mtx_);
-  LOG(WARNING) << "Store applied: " << id.to_str();
+  LOG(DEBUG) << "Store applied: " << id.to_str();
   const std::string key =
       std::to_string(id.id.workchain) + ":" + std::to_string(id.id.shard) + ":" + std::to_string(id.id.seqno);
   stored_applied_.insert({key, id});

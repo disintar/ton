@@ -390,7 +390,7 @@ td::Status MasterchainStateQ::mc_reinit() {
 }
 
 td::Status MasterchainStateQ::apply_block(BlockIdExt id, td::Ref<BlockData> block) {
-  LOG(WARNING) << "Apply new block: " << id.id.to_str() << " with old state: " << blkid.id.to_str();
+  LOG(DEBUG) << "Apply new block: " << id.id.to_str() << " with old state: " << blkid.id.to_str();
 
   auto err = ShardStateQ::apply_block(id, block);
   if (err.is_error()) {

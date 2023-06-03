@@ -612,7 +612,7 @@ int run_vm_code(Ref<CellSlice> code, Ref<Stack>& stack, int flags, Ref<Cell>* da
   }
   if (gas_limits) {
     *gas_limits = vm.get_gas_limits();
-    LOG(INFO) << "steps: " << vm.get_steps_count() << " gas: used=" << gas_limits->gas_consumed()
+    LOG(DEBUG) << "steps: " << vm.get_steps_count() << " gas: used=" << gas_limits->gas_consumed()
               << ", max=" << gas_limits->gas_max << ", limit=" << gas_limits->gas_limit
               << ", credit=" << gas_limits->gas_credit;
   }
