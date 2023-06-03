@@ -10,7 +10,7 @@ BlockPublisherKafka::BlockPublisherKafka(const std::string& endpoint)
                                        {"retries", 2147483647},
                                        {"acks", "1"},
                                        {"queue.buffering.max.ms", 5},
-                                       {"queue.buffering.max.messages", 0},
+                                       {"queue.buffering.max.messages", 10000000},
                                        {"queue.buffering.max.kbytes", 100048576},
       }) {
 }
