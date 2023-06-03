@@ -951,16 +951,18 @@ void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id, bool pad, bool sl
     ton::AccountIdPrefixFull pfx{shard_id.id.workchain, shard_id.id.shard};
     td::actor::send_closure(
         manager, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, shard_id.seqno(),
-        td::PromiseCreator::lambda([SelfId = actor_id(this), shard_id](td::Result<ConstBlockHandle> R) {
-          if (R.is_error()) {
-            auto err = R.move_as_error();
-            td::actor::send_closure(SelfId, &StartupBlockParser::parse_shard, shard_id, false, true);
-          } else {
-            auto handle = R.move_as_ok();
-            LOG(DEBUG) << "Send receive_shard_handle: " << shard_id.to_str();
-            td::actor::send_closure(SelfId, &StartupBlockParser::receive_shard_handle, handle);
-          }
-        }));
+        td::PromiseCreator::lambda(
+            [SelfId = actor_id(this), shard_id, parsed_shards = &parsed_shards](td::Result<ConstBlockHandle> R) {
+              if (R.is_error()) {
+                auto err = R.move_as_error();
+                td::actor::send_closure(SelfId, &StartupBlockParser::parse_shard, shard_id, false, true);
+              } else {
+                auto handle = R.move_as_ok();
+                LOG(DEBUG) << "Send receive_shard_handle: " << shard_id.to_str();
+                parsed_shards->emplace_back(shard_id.to_str());
+                td::actor::send_closure(SelfId, &StartupBlockParser::receive_shard_handle, handle);
+              }
+            }));
   }
 }
 
