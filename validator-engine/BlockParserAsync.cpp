@@ -952,7 +952,6 @@ void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id, bool pad, bool sl
         td::PromiseCreator::lambda([SelfId = actor_id(this), shard_id](td::Result<ConstBlockHandle> R) {
           if (R.is_error()) {
             auto err = R.move_as_error();
-            td::actor::send_closure(SelfId, &StartupBlockParser::ipad);
             td::actor::send_closure(SelfId, &StartupBlockParser::parse_shard, shard_id, false, true);
           } else {
             auto handle = R.move_as_ok();
