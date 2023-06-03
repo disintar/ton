@@ -937,8 +937,8 @@ void StartupBlockParser::receive_shard_handle(std::shared_ptr<const BlockHandleI
 void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id, bool pad, bool sleep) {
   if (std::find(parsed_shards.begin(), parsed_shards.end(), shard_id.to_str()) == parsed_shards.end()) {
     if (sleep) {
-      LOG(ERROR) << "failed query block: " << shard_id.to_str() << " wait shard for 1 sec";
-      alarm_timestamp() = td::Timestamp::in(1000000000);
+      LOG(ERROR) << "failed query block: " << shard_id.to_str() << " wait shard for 10 sec";
+      td::usleep_for(10000000);
     }
 
     if (pad) {
@@ -1018,8 +1018,8 @@ void StartupBlockParser::set_next_ready(ConstBlockHandle b) {
 
 void StartupBlockParser::start_wait_next(BlockSeqno block, bool sleep) {
   if (sleep) {
-    LOG(ERROR) << "failed query next MC seqno: " << block << " wait 1 sec";
-    alarm_timestamp() = td::Timestamp::in(1000000000);
+    LOG(ERROR) << "failed query next MC seqno: " << block << " wait 10 sec";
+    td::usleep_for(10000000);
   }
 
   ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
