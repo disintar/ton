@@ -9,7 +9,9 @@ BlockPublisherKafka::BlockPublisherKafka(const std::string& endpoint)
                                        {"retry.backoff.ms", 500},
                                        {"retries", 2147483647},
                                        {"acks", "1"},
-                                       {"queue.buffering.max.ms", 500}}) {
+                                       {"queue.buffering.max.ms", 500},
+                                       {"queue.buffering.max.messages", 0}
+      }) {
 }
 
 void BlockPublisherKafka::publishBlockApplied(unsigned long long shard, std::string json) {
