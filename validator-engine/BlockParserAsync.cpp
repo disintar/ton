@@ -37,6 +37,7 @@
 #include "blockchain-indexer/json.hpp"
 #include "blockchain-indexer/json-utils.hpp"
 #include "td/utils/port/sleep.h"
+#include "td/utils/Time.h"
 
 namespace ton::validator {
 
@@ -899,7 +900,7 @@ void StartupBlockParser::receive_handle(std::shared_ptr<const BlockHandleInterfa
           auto parseShards = [SelfId, handle](McShardHash &ms) {
             const auto _id = ms.top_block_id().to_str();
             LOG(INFO) << "FOR: " << handle->id().to_str() << "GO FOR: " << ms.top_block_id().to_str();
-            td::actor::send_closure(SelfId, &StartupBlockParser::parse_shard, ms.top_block_id(), true);
+            td::actor::send_closure(SelfId, &StartupBlockParser::parse_shard, ms.top_block_id(), true, false);
             return 1;
           };
 
@@ -925,7 +926,7 @@ void StartupBlockParser::receive_shard_handle(std::shared_ptr<const BlockHandleI
           auto block = R.move_as_ok();
           for (auto i : handle->prev()) {
             LOG(DEBUG) << "Send find prev shard: " << i.to_str();
-            td::actor::send_closure(SelfId, &StartupBlockParser::parse_shard, i, true);
+            td::actor::send_closure(SelfId, &StartupBlockParser::parse_shard, i, true, false);
           }
 
           td::actor::send_closure(SelfId, &StartupBlockParser::receive_block, handle, std::move(block));
@@ -933,8 +934,13 @@ void StartupBlockParser::receive_shard_handle(std::shared_ptr<const BlockHandleI
       }));
 }
 
-void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id, bool pad) {
+void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id, bool pad, bool sleep) {
   if (std::find(parsed_shards.begin(), parsed_shards.end(), shard_id.to_str()) == parsed_shards.end()) {
+    if (sleep) {
+      LOG(ERROR) << "failed query block: " << shard_id.to_str() << " wait shard for 1 sec";
+      alarm_timestamp() = td::Timestamp::in(1000000);
+    }
+
     if (pad) {
       td::actor::send_closure(actor_id(this), &StartupBlockParser::pad);
     }
@@ -946,10 +952,8 @@ void StartupBlockParser::parse_shard(ton::BlockIdExt shard_id, bool pad) {
         td::PromiseCreator::lambda([SelfId = actor_id(this), shard_id](td::Result<ConstBlockHandle> R) {
           if (R.is_error()) {
             auto err = R.move_as_error();
-            LOG(ERROR) << "failed query: " << err << " block: " << shard_id.to_str() << " wait shard for 1 sec";
             td::actor::send_closure(SelfId, &StartupBlockParser::ipad);
-            td::usleep_for(1000000);
-            td::actor::send_closure(SelfId, &StartupBlockParser::parse_shard, shard_id, false);
+            td::actor::send_closure(SelfId, &StartupBlockParser::parse_shard, shard_id, false, true);
           } else {
             auto handle = R.move_as_ok();
             LOG(DEBUG) << "Send receive_shard_handle: " << shard_id.to_str();
@@ -1012,16 +1016,18 @@ void StartupBlockParser::set_next_ready(ConstBlockHandle b) {
   next_download--;
 }
 
-void StartupBlockParser::start_wait_next(BlockSeqno block) {
-  ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
+void StartupBlockParser::start_wait_next(BlockSeqno block, bool sleep) {
+  if (sleep) {
+    LOG(ERROR) << "failed query next MC seqno: " << block << " wait 1 sec";
+    alarm_timestamp() = td::Timestamp::in(1000000);
+  }
 
+  ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
   td::actor::send_closure(manager, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, block,
                           td::PromiseCreator::lambda([SelfId = actor_id(this), block](td::Result<ConstBlockHandle> R) {
                             if (R.is_error()) {
                               auto err = R.move_as_error();
-                              LOG(ERROR) << "failed query next MC seqno: " << block << " wait 1 sec";
-                              td::usleep_for(1000000);
-                              td::actor::send_closure(SelfId, &StartupBlockParser::start_wait_next, block);
+                              td::actor::send_closure(SelfId, &StartupBlockParser::start_wait_next, block, true);
                             } else {
                               auto handle = R.move_as_ok();
 
@@ -1040,7 +1046,7 @@ void StartupBlockParser::ipad() {
     if (next_download != 0) {
       const auto next_block = last_masterchain_block_handle->id().seqno() + 1;
       LOG(INFO) << "Initial read of last " << k << " blocks end, start wait for " << next_block;
-      td::actor::send_closure(actor_id(this), &StartupBlockParser::start_wait_next, next_block);
+      td::actor::send_closure(actor_id(this), &StartupBlockParser::start_wait_next, next_block, false);
     } else {
       if (block_handles.size() != blocks.size() && blocks.size() != states.size() &&
           states.size() != prev_states.size()) {
