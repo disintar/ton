@@ -134,8 +134,8 @@ class StartupBlockParser : public td::actor::Actor {
   std::vector<td::Ref<vm::Cell>> prev_states;
   std::vector<std::string> parsed_shards;
   int padding = 0;
-  const int k = 100;
-  int next_download = 100;
+  const int k = 10;
+  int next_download = 10;
 };
 
 }  // namespace ton::validator

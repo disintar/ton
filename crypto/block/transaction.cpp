@@ -2034,7 +2034,7 @@ int Transaction::try_action_reserve_currency(vm::CellSlice& cs, ActionPhase& ap,
     return -1;
   }
   int mode = rec.mode;
-  LOG(INFO) << "in try_action_reserve_currency(" << mode << ")";
+  LOG(DEBUG) << "in try_action_reserve_currency(" << mode << ")";
   CurrencyCollection reserve, newc;
   if (!reserve.validate_unpack(std::move(rec.currency))) {
     LOG(DEBUG) << "cannot parse currency field in action_reserve_currency";
@@ -2085,7 +2085,7 @@ int Transaction::try_action_reserve_currency(vm::CellSlice& cs, ActionPhase& ap,
   ap.reserved_balance += std::move(reserve);
   CHECK(ap.reserved_balance.is_valid());
   CHECK(ap.remaining_balance.is_valid());
-  LOG(INFO) << "changed remaining balance to " << ap.remaining_balance.to_str() << ", reserved balance to "
+  LOG(DEBUG) << "changed remaining balance to " << ap.remaining_balance.to_str() << ", reserved balance to "
             << ap.reserved_balance.to_str();
   ap.spec_actions++;
   return 0;
