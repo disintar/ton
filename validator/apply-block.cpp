@@ -270,7 +270,7 @@ void ApplyBlock::applied_set() {
 
             // skip
             if (!std::get<0>(answer).empty()) {
-              LOG(WARNING) << "Send parsed data&state: " << handle_id.to_str();
+              LOG(DEBUG) << "Send parsed data&state: " << handle_id.to_str();
               publisher->enqueuePublishBlockData(shard, std::get<0>(answer));
               publisher->enqueuePublishBlockState(shard, std::get<1>(answer));
             }

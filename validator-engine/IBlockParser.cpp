@@ -31,7 +31,7 @@ void BlockParser::storeBlockApplied(BlockIdExt id, td::Promise<std::tuple<td::st
 void BlockParser::storeBlockData(ConstBlockHandle handle, td::Ref<BlockData> block,
                                  td::Promise<std::tuple<td::string, td::string>> P) {
   std::lock_guard<std::mutex> lock(maps_mtx_);
-  LOG(WARNING) << "Store block: " << block->block_id().to_str();
+  LOG(DEBUG) << "Store block: " << block->block_id().to_str();
   const std::string key = std::to_string(handle->id().id.workchain) + ":" + std::to_string(handle->id().id.shard) +
                           ":" + std::to_string(handle->id().id.seqno);
   auto blocks_vec = stored_blocks_.find(key);
@@ -44,13 +44,13 @@ void BlockParser::storeBlockData(ConstBlockHandle handle, td::Ref<BlockData> blo
   }
 
   handleBlockProgress(handle->id(), std::move(P));
-  LOG(WARNING) << "Stored block: " << block->block_id().to_str();
+  LOG(DEBUG) << "Stored block: " << block->block_id().to_str();
 }
 
 void BlockParser::storeBlockState(const ConstBlockHandle& handle, td::Ref<vm::Cell> state,
                                   td::Promise<std::tuple<td::string, td::string>> P) {
   std::lock_guard<std::mutex> lock(maps_mtx_);
-  LOG(WARNING) << "Store state: " << handle->id().to_str();
+  LOG(DEBUG) << "Store state: " << handle->id().to_str();
   const std::string key = std::to_string(handle->id().id.workchain) + ":" + std::to_string(handle->id().id.shard) +
                           ":" + std::to_string(handle->id().id.seqno);
   auto states_vec = stored_states_.find(key);
@@ -63,13 +63,13 @@ void BlockParser::storeBlockState(const ConstBlockHandle& handle, td::Ref<vm::Ce
   }
 
   handleBlockProgress(handle->id(), std::move(P));
-  LOG(WARNING) << "Stored state: " <<  handle->id().to_str();
+  LOG(DEBUG) << "Stored state: " <<  handle->id().to_str();
 }
 
 void BlockParser::storeBlockStateWithPrev(const ConstBlockHandle& handle, td::Ref<vm::Cell> prev_state, td::Ref<vm::Cell> state,
                                           td::Promise<std::tuple<td::string, td::string>> P) {
   std::lock_guard<std::mutex> lock(maps_mtx_);
-  LOG(WARNING) << "Store prev state: " << handle->id().to_str();
+  LOG(DEBUG) << "Store prev state: " << handle->id().to_str();
   const std::string key = std::to_string(handle->id().id.workchain) + ":" + std::to_string(handle->id().id.shard) +
                           ":" + std::to_string(handle->id().id.seqno);
   auto states_vec = stored_states_.find(key);
@@ -91,7 +91,7 @@ void BlockParser::storeBlockStateWithPrev(const ConstBlockHandle& handle, td::Re
   }
 
   handleBlockProgress(handle->id(), std::move(P));
-  LOG(WARNING) << "Stored prev state: " << handle->id().to_str();
+  LOG(DEBUG) << "Stored prev state: " << handle->id().to_str();
 }
 
 void BlockParser::handleBlockProgress(BlockIdExt id, td::Promise<std::tuple<td::string, td::string>> P) {

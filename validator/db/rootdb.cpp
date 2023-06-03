@@ -42,7 +42,7 @@ void RootDb::store_block_data(BlockHandle handle, td::Ref<BlockData> block, td::
 
             // skip
             if (!std::get<0>(answer).empty()) {
-              LOG(WARNING) << "Send parsed data&state: " << handle_id.to_str();
+              LOG(DEBUG) << "Send parsed data&state: " << handle_id.to_str();
               const auto f = R.move_as_ok();
               publisher->enqueuePublishBlockData(shard, std::get<0>(answer));
               publisher->enqueuePublishBlockState(shard, std::get<1>(answer));
@@ -257,7 +257,7 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
 
               // skip
               if (!std::get<0>(answer).empty()) {
-                LOG(WARNING) << "Send parsed data&state: " << handle_id.to_str();
+                LOG(DEBUG) << "Send parsed data&state: " << handle_id.to_str();
                 publisher->enqueuePublishBlockData(shard, std::get<0>(answer));
                 publisher->enqueuePublishBlockState(shard, std::get<1>(answer));
               }
