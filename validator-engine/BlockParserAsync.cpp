@@ -72,6 +72,8 @@ class AsyncStateIndexer : public td::actor::Actor {
       with_prev_state = false;
     }
 
+    LOG(INFO) << "Parse state: " << block_id.id.to_str() << " with prev state: " << with_prev_state;
+
     prev_root_cell = std::move(prev_root_cell_);
     accounts_keys = std::move(accounts_keys_);
     final_promise = std::move(final_promise_);
@@ -353,7 +355,7 @@ void BlockParserAsync::parseBlockData() {
   LOG(DEBUG) << "Parse block data" << id.to_str();
 
   auto blkid = data->block_id();
-  LOG(WARNING) << "Parse: " << blkid.id.to_str();
+  LOG(INFO) << "Parse block: " << blkid.id.to_str();
 
   auto block_root = data->root_cell();
   if (block_root.is_null()) {

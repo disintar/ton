@@ -63,11 +63,11 @@ void BlockParser::storeBlockState(const ConstBlockHandle& handle, td::Ref<vm::Ce
   }
 
   handleBlockProgress(handle->id(), std::move(P));
-  LOG(DEBUG) << "Stored state: " <<  handle->id().to_str();
+  LOG(DEBUG) << "Stored state: " << handle->id().to_str();
 }
 
-void BlockParser::storeBlockStateWithPrev(const ConstBlockHandle& handle, td::Ref<vm::Cell> prev_state, td::Ref<vm::Cell> state,
-                                          td::Promise<std::tuple<td::string, td::string>> P) {
+void BlockParser::storeBlockStateWithPrev(const ConstBlockHandle& handle, td::Ref<vm::Cell> prev_state,
+                                          td::Ref<vm::Cell> state, td::Promise<std::tuple<td::string, td::string>> P) {
   std::lock_guard<std::mutex> lock(maps_mtx_);
   LOG(DEBUG) << "Store prev state: " << handle->id().to_str();
   const std::string key = std::to_string(handle->id().id.workchain) + ":" + std::to_string(handle->id().id.shard) +
@@ -173,7 +173,7 @@ void BlockParser::handleBlockProgress(BlockIdExt id, td::Promise<std::tuple<td::
 }
 
 std::string BlockParser::parseBlockApplied(BlockIdExt id) {
-  LOG(DEBUG) << "Parse Applied" << id.to_str();
+  LOG(INFO) << "Parse Applied: " << id.id.to_str();
 
   json to_dump = {{"file_hash", id.file_hash.to_hex()},
                   {"root_hash", id.root_hash.to_hex()},
