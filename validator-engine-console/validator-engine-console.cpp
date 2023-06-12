@@ -137,8 +137,12 @@ void ValidatorEngineConsole::run() {
   add_query_runner(std::make_unique<QueryRunnerImpl<SignCertificateQuery>>());
   add_query_runner(std::make_unique<QueryRunnerImpl<ImportCertificateQuery>>());
   add_query_runner(std::make_unique<QueryRunnerImpl<GetOverlaysStatsQuery>>());
+  add_query_runner(std::make_unique<QueryRunnerImpl<GetOverlaysStatsJsonQuery>>());
   add_query_runner(std::make_unique<QueryRunnerImpl<ImportShardOverlayCertificateQuery>>());
   add_query_runner(std::make_unique<QueryRunnerImpl<SignShardOverlayCertificateQuery>>());
+  add_query_runner(std::make_unique<QueryRunnerImpl<GetPerfTimerStatsJsonQuery>>());
+  add_query_runner(std::make_unique<QueryRunnerImpl<GetShardOutQueueSizeQuery>>());
+  add_query_runner(std::make_unique<QueryRunnerImpl<SetExtMessagesBroadcastDisabledQuery>>());
 }
 
 bool ValidatorEngineConsole::envelope_send_query(td::BufferSlice query, td::Promise<td::BufferSlice> promise) {
@@ -167,7 +171,10 @@ bool ValidatorEngineConsole::envelope_send_query(td::BufferSlice query, td::Prom
   return true;
 }
 
-void ValidatorEngineConsole::got_result() {
+void ValidatorEngineConsole::got_result(bool success) {
+  if (!success && ex_mode_) {
+    std::_Exit(2);
+  }
   running_queries_--;
   if (!running_queries_ && ex_queries_.size() > 0) {
     auto data = std::move(ex_queries_[0]);

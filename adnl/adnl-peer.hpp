@@ -88,6 +88,8 @@ class AdnlPeerPairImpl : public AdnlPeerPair {
   void update_addr_list(AdnlAddressList addr_list) override;
   void update_peer_id(AdnlNodeIdFull id) override;
 
+  void get_conn_ip_str(td::Promise<td::string> promise) override;
+
   void got_data_from_db(td::Result<AdnlDbItem> R);
   void got_data_from_static_nodes(td::Result<AdnlNode> R);
   void got_data_from_dht(td::Result<AdnlNode> R);
@@ -150,6 +152,9 @@ class AdnlPeerPairImpl : public AdnlPeerPair {
       }
     }
   }
+
+  void request_reverse_ping();
+  void request_reverse_ping_result(td::Result<td::Unit> R);
 
   struct Conn {
     class ConnCallback : public AdnlNetworkConnection::Callback {
@@ -248,6 +253,13 @@ class AdnlPeerPairImpl : public AdnlPeerPair {
   td::Timestamp next_dht_query_at_ = td::Timestamp::never();
   td::Timestamp next_db_update_at_ = td::Timestamp::never();
   td::Timestamp retry_send_at_ = td::Timestamp::never();
+
+  td::Timestamp last_received_packet_ = td::Timestamp::never();
+  td::Timestamp try_reinit_at_ = td::Timestamp::never();
+
+  bool has_reverse_addr_ = false;
+  td::Timestamp request_reverse_ping_after_ = td::Timestamp::now();
+  bool request_reverse_ping_active_ = false;
 };
 
 class AdnlPeerImpl : public AdnlPeer {
@@ -265,6 +277,7 @@ class AdnlPeerImpl : public AdnlPeer {
   void update_addr_list(AdnlNodeIdShort local_id, td::uint32 local_mode, td::actor::ActorId<AdnlLocalId> local_actor,
                         AdnlAddressList addr_list) override;
   void update_dht_node(td::actor::ActorId<dht::Dht> dht_node) override;
+  void get_conn_ip_str(AdnlNodeIdShort l_id, td::Promise<td::string> promise) override;
   //void check_signature(td::BufferSlice data, td::BufferSlice signature, td::Promise<td::Unit> promise) override;
 
   AdnlPeerImpl(td::actor::ActorId<AdnlNetworkManager> network_manager, td::actor::ActorId<AdnlPeerTable> peer_table,

@@ -24,6 +24,7 @@
 #include "td/utils/Slice.h"
 #include "td/utils/UInt.h"
 #include "td/utils/misc.h"
+#include "td/utils/optional.h"
 
 #include <cinttypes>
 
@@ -49,12 +50,6 @@ using ValidatorSessionId = td::Bits256;
 
 constexpr WorkchainId masterchainId = -1, basechainId = 0, workchainInvalid = 0x80000000;
 constexpr ShardId shardIdAll = (1ULL << 63);
-
-constexpr unsigned split_merge_delay = 100;        // prepare (delay) split/merge for 100 seconds
-constexpr unsigned split_merge_interval = 100;     // split/merge is enabled during 60 second interval
-constexpr unsigned min_split_merge_interval = 30;  // split/merge interval must be at least 30 seconds
-constexpr unsigned max_split_merge_delay =
-    1000;  // end of split/merge interval must be at most 1000 seconds in the future
 
 enum GlobalCapabilities {
   capIhrEnabled = 1,
@@ -447,11 +442,23 @@ struct ValidatorDescr {
   }
 };
 
+struct CatChainOptions {
+  double idle_timeout = 16.0;
+  td::uint32 max_deps = 4;
+  td::uint32 max_serialized_block_size = 16 * 1024;
+  bool block_hash_covers_data = false;
+  // Max block height = max_block_height_coeff * (1 + N / max_deps) / 1000
+  // N - number of participants
+  // 0 - unlimited
+  td::uint64 max_block_height_coeff = 0;
+
+  bool debug_disable_db = false;
+};
+
 struct ValidatorSessionConfig {
   td::uint32 proto_version = 0;
 
-  /* double */ double catchain_idle_timeout = 16.0;
-  td::uint32 catchain_max_deps = 4;
+  CatChainOptions catchain_opts;
 
   td::uint32 round_candidates = 3;
   /* double */ double next_candidate_delay = 2.0;
@@ -462,6 +469,8 @@ struct ValidatorSessionConfig {
   td::uint32 max_collated_data_size = (4 << 20);
 
   bool new_catchain_ids = false;
+
+  static const td::uint32 BLOCK_HASH_COVERS_DATA_FROM_VERSION = 2;
 };
 
 }  // namespace ton

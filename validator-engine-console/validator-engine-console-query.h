@@ -33,6 +33,7 @@
 #include "td/utils/SharedSlice.h"
 #include "td/utils/port/IPAddress.h"
 #include "td/actor/actor.h"
+#include "ton/ton-types.h"
 
 #include "keys/keys.hpp"
 
@@ -192,6 +193,20 @@ class Query : public td::actor::Actor {
   }
   virtual std::string name() const = 0;
   void handle_error(td::Status error);
+
+  static std::string time_to_human(int unixtime) {
+    char time_buffer[80];
+    time_t rawtime = unixtime;
+    struct tm tInfo;
+#if defined(_WIN32) || defined(_WIN64)
+    struct tm* timeinfo = localtime_s(&tInfo, &rawtime) ? nullptr : &tInfo;
+#else
+    struct tm* timeinfo = localtime_r(&rawtime, &tInfo);
+#endif
+    assert(timeinfo == &tInfo);
+    strftime(time_buffer, 80, "%c", timeinfo);
+    return std::string(time_buffer);
+  }
 
  protected:
   td::actor::ActorId<ValidatorEngineConsole> console_;
@@ -923,6 +938,28 @@ class GetOverlaysStatsQuery : public Query {
   }
 };
 
+class GetOverlaysStatsJsonQuery : public Query {
+ public:
+  GetOverlaysStatsJsonQuery(td::actor::ActorId<ValidatorEngineConsole> console, Tokenizer tokenizer)
+      : Query(console, std::move(tokenizer)) {
+  }
+  td::Status run() override;
+  td::Status send() override;
+  td::Status receive(td::BufferSlice data) override;
+  static std::string get_name() {
+    return "getoverlaysstatsjson";
+  }
+  static std::string get_help() {
+    return "getoverlaysstatsjson <outfile>\tgets stats for all overlays and writes to json file";
+  }
+  std::string name() const override {
+    return get_name();
+  }
+  
+private:
+ std::string file_name_;
+};
+
 class SignCertificateQuery : public Query {
  public:
   SignCertificateQuery(td::actor::ActorId<ValidatorEngineConsole> console, Tokenizer tokenizer)
@@ -1039,3 +1076,71 @@ class ImportShardOverlayCertificateQuery : public Query {
   std::string in_file_;
 };
 
+class GetPerfTimerStatsJsonQuery : public Query {
+ public:
+  GetPerfTimerStatsJsonQuery(td::actor::ActorId<ValidatorEngineConsole> console, Tokenizer tokenizer)
+      : Query(console, std::move(tokenizer)) {
+  }
+  td::Status run() override;
+  td::Status send() override;
+  td::Status receive(td::BufferSlice data) override;
+  static std::string get_name() {
+    return "getperftimerstatsjson";
+  }
+  static std::string get_help() {
+    return "getperftimerstatsjson <outfile>\tgets min, average and max event processing time for last 60, 300 and 3600 seconds and writes to json file";
+  }
+  std::string name() const override {
+    return get_name();
+  }
+
+ private:
+  std::string file_name_;
+};
+
+class GetShardOutQueueSizeQuery : public Query {
+ public:
+  GetShardOutQueueSizeQuery(td::actor::ActorId<ValidatorEngineConsole> console, Tokenizer tokenizer)
+      : Query(console, std::move(tokenizer)) {
+  }
+  td::Status run() override;
+  td::Status send() override;
+  td::Status receive(td::BufferSlice data) override;
+  static std::string get_name() {
+    return "getshardoutqueuesize";
+  }
+  static std::string get_help() {
+    return "getshardoutqueuesize <wc> <shard> <seqno> [<dest_wc> <dest_shard>]\treturns number of messages in the "
+           "queue of the given shard. Destination shard is optional.";
+  }
+  std::string name() const override {
+    return get_name();
+  }
+
+ private:
+  ton::BlockId block_id_;
+  td::optional<ton::ShardIdFull> dest_;
+};
+
+class SetExtMessagesBroadcastDisabledQuery : public Query {
+ public:
+  SetExtMessagesBroadcastDisabledQuery(td::actor::ActorId<ValidatorEngineConsole> console, Tokenizer tokenizer)
+      : Query(console, std::move(tokenizer)) {
+  }
+  td::Status run() override;
+  td::Status send() override;
+  td::Status receive(td::BufferSlice data) override;
+  static std::string get_name() {
+    return "setextmessagesbroadcastdisabled";
+  }
+  static std::string get_help() {
+    return "setextmessagesbroadcastdisabled <value>\tdisable broadcasting and rebroadcasting ext messages; value is 0 "
+           "or 1.";
+  }
+  std::string name() const override {
+    return get_name();
+  }
+
+ private:
+  bool value;
+};

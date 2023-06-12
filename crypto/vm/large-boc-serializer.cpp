@@ -14,6 +14,7 @@
     You should have received a copy of the GNU Lesser General Public License
     along with TON Blockchain Library.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include <map>
 #include "vm/boc.h"
 #include "vm/boc-writers.h"
 #include "vm/cellslice.h"
@@ -312,7 +313,7 @@ td::Status LargeBocSerializer::serialize(td::FileFd& fd, int mode) {
     return td::Status::Error("bag of cells is too large");
   }
 
-  boc_writers::FileWriter writer{fd, info.total_size};
+  boc_writers::FileWriter writer{fd, (size_t) info.total_size};
   auto store_ref = [&](unsigned long long value) {
     writer.store_uint(value, info.ref_byte_size);
   };

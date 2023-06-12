@@ -1998,7 +1998,7 @@ TypeExpr* parse_anonymous_constructor(Lexer& lex, Constructor& cs) {
       if (types[i].parent_type_idx >= 0) {
         types[i].parent_type_idx = -2;
       }
-      delete cs2;
+      cs2->~Constructor();
       return TypeExpr::mk_apply_empty(lex.cur().loc, 0, &types[i]);
     }
   }
@@ -2423,7 +2423,7 @@ std::vector<const src::FileDescr*> source_fdescr;
 
 bool parse_source(std::istream* is, src::FileDescr* fdescr) {
   src::SourceReader reader{is, fdescr};
-  src::Lexer lex{reader, true, "(){}:;? #$. ^~ #", "//", "/*", "*/"};
+  src::Lexer lex{reader, true, "(){}:;? #$. ^~ #", "//", "/*", "*/", ""};
   while (lex.tp() != src::_Eof) {
     parse_constructor_def(lex);
     // std::cerr << lex.cur().str << '\t' << lex.cur().name_str() << std::endl;

@@ -27,6 +27,12 @@ namespace ton {
 
 namespace validatorsession {
 
+constexpr int VERBOSITY_NAME(VALIDATOR_SESSION_WARNING) = verbosity_WARNING;
+constexpr int VERBOSITY_NAME(VALIDATOR_SESSION_NOTICE) = verbosity_DEBUG;
+constexpr int VERBOSITY_NAME(VALIDATOR_SESSION_INFO) = verbosity_DEBUG;
+constexpr int VERBOSITY_NAME(VALIDATOR_SESSION_DEBUG) = verbosity_DEBUG;
+constexpr int VERBOSITY_NAME(VALIDATOR_SESSION_EXTRA_DEBUG) = verbosity_DEBUG + 1;
+
 using ValidatorSessionRootHash = td::Bits256;
 using ValidatorSessionFileHash = td::Bits256;
 using ValidatorSessionCollatedDataFileHash = td::Bits256;
@@ -37,11 +43,10 @@ inline ValidatorSessionCandidateId skip_round_candidate_id() {
 }
 
 struct ValidatorSessionOptions {
-  ValidatorSessionOptions() {
-  }
-  ValidatorSessionOptions(const ValidatorSessionConfig &conf);
-  double catchain_idle_timeout = 16.0;
-  td::uint32 catchain_max_deps = 4;
+  ValidatorSessionOptions() = default;
+  explicit ValidatorSessionOptions(const ValidatorSessionConfig &conf);
+
+  CatChainOptions catchain_opts;
 
   td::uint32 round_candidates = 3;
   double next_candidate_delay = 2.0;
@@ -62,6 +67,33 @@ struct ValidatorSessionNode {
   PublicKey pub_key;
   adnl::AdnlNodeIdShort adnl_id;
   ValidatorWeight weight;
+};
+
+struct ValidatorSessionStats {
+  enum { status_none = 0, status_received = 1, status_rejected = 2, status_approved = 3 };
+
+  struct Producer {
+    PublicKeyHash id = PublicKeyHash::zero();
+    int block_status = status_none;
+    td::uint64 block_timestamp = 0;
+  };
+  struct Round {
+    td::uint64 timestamp = 0;
+    std::vector<Producer> producers;
+  };
+
+  td::uint32 first_round;
+  std::vector<Round> rounds;
+
+  td::uint64 timestamp = 0;
+  PublicKeyHash self = PublicKeyHash::zero();
+  PublicKeyHash creator = PublicKeyHash::zero();
+  td::uint32 total_validators = 0;
+  ValidatorWeight total_weight = 0;
+  td::uint32 signatures = 0;
+  ValidatorWeight signatures_weight = 0;
+  td::uint32 approve_signatures = 0;
+  ValidatorWeight approve_signatures_weight = 0;
 };
 
 }  // namespace validatorsession

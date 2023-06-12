@@ -53,7 +53,10 @@ AcceptBlockQuery::AcceptBlockQuery(BlockIdExt id, td::Ref<BlockData> data, std::
     , is_fork_(false)
     , send_broadcast_(send_broadcast)
     , manager_(manager)
-    , promise_(std::move(promise)) {
+    , promise_(std::move(promise))
+    , perf_timer_("acceptblock", 0.1, [manager](double duration) {
+        send_closure(manager, &ValidatorManager::add_perf_timer_stat, "acceptblock", duration);
+      }) {
   state_keep_old_hash_.clear();
   state_old_hash_.clear();
   state_hash_.clear();
@@ -71,7 +74,10 @@ AcceptBlockQuery::AcceptBlockQuery(AcceptBlockQuery::IsFake fake, BlockIdExt id,
     , is_fork_(false)
     , send_broadcast_(false)
     , manager_(manager)
-    , promise_(std::move(promise)) {
+    , promise_(std::move(promise))
+    , perf_timer_("acceptblock", 0.1, [manager](double duration) {
+        send_closure(manager, &ValidatorManager::add_perf_timer_stat, "acceptblock", duration);
+      }) {
   state_keep_old_hash_.clear();
   state_old_hash_.clear();
   state_hash_.clear();
@@ -86,7 +92,10 @@ AcceptBlockQuery::AcceptBlockQuery(ForceFork ffork, BlockIdExt id, td::Ref<Block
     , is_fork_(true)
     , send_broadcast_(false)
     , manager_(manager)
-    , promise_(std::move(promise)) {
+    , promise_(std::move(promise))
+    , perf_timer_("acceptblock", 0.1, [manager](double duration) {
+        send_closure(manager, &ValidatorManager::add_perf_timer_stat, "acceptblock", duration);
+      }) {
   state_keep_old_hash_.clear();
   state_old_hash_.clear();
   state_hash_.clear();
@@ -216,6 +225,9 @@ bool AcceptBlockQuery::create_new_proof() {
   }
   // 5. finish constructing Merkle proof from visited cells
   auto proof = vm::MerkleProof::generate(block_root_, usage_tree.get());
+  if (proof.is_null()) {
+    return fatal_error("cannot create proof");
+  }
   proof_roots_.push_back(proof);
   // 6. extract some information from state update
   state_old_hash_ = upd_cs.prefetch_ref(0)->get_hash(0).bits();

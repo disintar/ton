@@ -32,6 +32,7 @@
 #include "vm/cells/MerkleUpdate.h"
 #include <map>
 #include <queue>
+#include "common/global-version.h"
 
 namespace ton {
 
@@ -40,7 +41,7 @@ using td::Ref;
 
 class Collator final : public td::actor::Actor {
   static constexpr int supported_version() {
-    return 3;
+    return SUPPORTED_VERSION;
   }
   static constexpr long long supported_capabilities() {
     return ton::capCreateStatsEnabled | ton::capBounceMsgBody | ton::capReportVersion | ton::capShortDequeue;
@@ -73,6 +74,7 @@ class Collator final : public td::actor::Actor {
   Ref<ValidatorSet> validator_set_;
   td::actor::ActorId<ValidatorManager> manager;
   td::Timestamp timeout;
+  td::Timestamp queue_cleanup_timeout_, soft_timeout_, medium_timeout_;
   td::Promise<BlockCandidate> main_promise;
   ton::BlockSeqno last_block_seqno{0};
   ton::BlockSeqno prev_mc_block_seqno{0};
@@ -103,19 +105,7 @@ class Collator final : public td::actor::Actor {
     return 2;
   }
 
-  static td::Result<std::unique_ptr<block::ConfigInfo>>
-                     impl_fetch_config_params(std::unique_ptr<block::ConfigInfo> config,
-                                              Ref<vm::Cell>* old_mparams,
-                                              std::vector<block::StoragePrices>* storage_prices,
-                                              block::StoragePhaseConfig* storage_phase_cfg,
-                                              td::BitArray<256>* rand_seed,
-                                              block::ComputePhaseConfig* compute_phase_cfg,
-                                              block::ActionPhaseConfig* action_phase_cfg,
-                                              td::RefInt256* masterchain_create_fee,
-                                              td::RefInt256* basechain_create_fee,
-                                              WorkchainId wc);
-
-  static td::Result<std::unique_ptr<block::Transaction>>
+  static td::Result<std::unique_ptr<block::transaction::Transaction>>
                         impl_create_ordinary_transaction(Ref<vm::Cell> msg_root,
                                                          block::Account* acc,
                                                          UnixTime utime, LogicalTime lt,
@@ -208,7 +198,7 @@ class Collator final : public td::actor::Actor {
   std::vector<Ref<vm::Cell>> collated_roots_;
   std::unique_ptr<ton::BlockCandidate> block_candidate;
 
-  td::PerfWarningTimer perf_timer_{"collate", 0.1};
+  td::PerfWarningTimer perf_timer_;
   //
   block::Account* lookup_account(td::ConstBitPtr addr) const;
   std::unique_ptr<block::Account> make_account_from(td::ConstBitPtr addr, Ref<vm::CellSlice> account,
@@ -284,7 +274,7 @@ class Collator final : public td::actor::Actor {
   td::Result<bool> register_shard_signatures_cell(Ref<vm::Cell> shard_blk_signatures);
   td::Result<bool> register_shard_signatures(td::Slice shard_blk_signatures_boc);
   void register_new_msg(block::NewOutMsg msg);
-  void register_new_msgs(block::Transaction& trans);
+  void register_new_msgs(block::transaction::Transaction& trans);
   bool process_new_messages(bool enqueue_only = false);
   int process_one_new_message(block::NewOutMsg msg, bool enqueue_only = false, Ref<vm::Cell>* is_special = nullptr);
   bool process_inbound_internal_messages();

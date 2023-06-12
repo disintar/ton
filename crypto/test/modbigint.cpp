@@ -289,7 +289,7 @@ struct MixedRadix {
   }
 
   explicit operator long long() const {
-    long long acc = 0.;
+    unsigned long long acc = 0;
     for (int i = N - 1; i >= 0; --i) {
       acc = acc * mod[i] + a[i];
     }
@@ -786,7 +786,9 @@ struct ModArray {
   }
 
   ModArray& operator/=(const ModArray& other) {
-    assert(try_divide(other) && "division by zero?");
+    if (!try_divide(other)) {
+      assert(false); // division by zero?
+    }
     return *this;
   }
 
@@ -901,7 +903,7 @@ struct ModArray {
     }
     for (; i < size; i++) {
       pow += 8;
-      acc = (acc << 8) + arr[i];
+      acc = (acc * 256) + arr[i];
       if (pow >= 56) {
         lshift_add(pow, acc);
         acc = pow = 0;
@@ -1051,7 +1053,9 @@ void init_invm() {
   for (int i = 0; i < mod_cnt; i++) {
     assert(mod[i] > 0 && mod[i] <= (1 << 30));
     for (int j = 0; j < i; j++) {
-      assert(gcdx(mod[i], mod[j], invm[i][j], invm[j][i]) == 1);
+      if (gcdx(mod[i], mod[j], invm[i][j], invm[j][i]) != 1) {
+        assert(false);
+      }
       if (invm[i][j] < 0) {
         invm[i][j] += mod[j];
       }

@@ -310,32 +310,52 @@ td::Status Config::visit_validator_params() const {
 ton::ValidatorSessionConfig Config::get_consensus_config() const {
   auto cc = get_config_param(29);
   ton::ValidatorSessionConfig c;
-  auto set = [&c](auto& r) {
-    c.catchain_idle_timeout = r.consensus_timeout_ms * 0.001;
-    c.catchain_max_deps = r.catchain_max_deps;
+  auto set_v1 = [&](auto& r) {
+    c.catchain_opts.idle_timeout = r.consensus_timeout_ms * 0.001;
+    c.catchain_opts.max_deps = r.catchain_max_deps;
     c.round_candidates = r.round_candidates;
     c.next_candidate_delay = r.next_candidate_delay_ms * 0.001;
     c.round_attempt_duration = r.attempt_duration;
     c.max_round_attempts = r.fast_attempts;
     c.max_block_size = r.max_block_bytes;
     c.max_collated_data_size = r.max_collated_bytes;
-    return true;
   };
-  auto set_new_cc_ids = [&c] (auto& r) {
+  auto set_v2 = [&] (auto& r) {
+    set_v1(r);
     c.new_catchain_ids = r.new_catchain_ids;
-    return true;
   };
-  auto set_proto = [&c](auto& r) {
+  auto set_v3 = [&](auto& r) {
+    set_v2(r);
     c.proto_version = r.proto_version;
-    return true;
+  };
+  auto set_v4 = [&](auto& r) {
+    set_v3(r);
+    td::uint64 max_blocks_coeff = r.catchain_max_blocks_coeff;
+    if (max_blocks_coeff == 0) {
+      c.catchain_opts.max_block_height_coeff = 0;
+    } else {
+      auto catchain_config = get_catchain_validators_config();
+      td::uint64 catchain_lifetime = std::max(catchain_config.mc_cc_lifetime, catchain_config.shard_cc_lifetime);
+      c.catchain_opts.max_block_height_coeff = catchain_lifetime * max_blocks_coeff;
+    }
   };
   if (cc.not_null()) {
-    block::gen::ConsensusConfig::Record_consensus_config_v3 r2;
-    block::gen::ConsensusConfig::Record_consensus_config_new r1;
-    block::gen::ConsensusConfig::Record_consensus_config r0;
-    (tlb::unpack_cell(cc, r2) && set(r2) && set_new_cc_ids(r2) && set_proto(r2)) ||
-    (tlb::unpack_cell(cc, r1) && set(r1) && set_new_cc_ids(r1)) ||
-    (tlb::unpack_cell(cc, r0) && set(r0));
+    block::gen::ConsensusConfig::Record_consensus_config_v4 r4;
+    block::gen::ConsensusConfig::Record_consensus_config_v3 r3;
+    block::gen::ConsensusConfig::Record_consensus_config_new r2;
+    block::gen::ConsensusConfig::Record_consensus_config r1;
+    if (tlb::unpack_cell(cc, r4)) {
+      set_v4(r4);
+    } else if (tlb::unpack_cell(cc, r3)) {
+      set_v3(r3);
+    } else if (tlb::unpack_cell(cc, r2)) {
+      set_v2(r2);
+    } else if (tlb::unpack_cell(cc, r1)) {
+      set_v1(r1);
+    }
+  }
+  if (c.proto_version >= ton::ValidatorSessionConfig::BLOCK_HASH_COVERS_DATA_FROM_VERSION) {
+    c.catchain_opts.block_hash_covers_data = true;
   }
   return c;
 }
@@ -835,11 +855,12 @@ Ref<McShardHash> McShardHash::from_block(Ref<vm::Cell> block_root, const ton::Fi
   ton::RootHash rhash = block_root->get_hash().bits();
   CurrencyCollection fees_collected, funds_created;
   if (init_fees) {
-    block::gen::ValueFlow::Record flow;
-    if (!(tlb::unpack_cell(rec.value_flow, flow) && fees_collected.unpack(flow.fees_collected) &&
-          funds_created.unpack(flow.r2.created))) {
+    block::ValueFlow flow;
+    if (!flow.unpack(vm::load_cell_slice_ref(rec.value_flow))) {
       return {};
     }
+    fees_collected = flow.fees_collected;
+    funds_created = flow.created;
   }
   return Ref<McShardHash>(true, ton::BlockId{ton::ShardIdFull(shard), (unsigned)info.seq_no}, info.start_lt,
                           info.end_lt, info.gen_utime, rhash, fhash, fees_collected, funds_created, ~0U,
@@ -889,11 +910,12 @@ Ref<McShardDescr> McShardDescr::from_block(Ref<vm::Cell> block_root, Ref<vm::Cel
   ton::RootHash rhash = block_root->get_hash().bits();
   CurrencyCollection fees_collected, funds_created;
   if (init_fees) {
-    block::gen::ValueFlow::Record flow;
-    if (!(tlb::unpack_cell(rec.value_flow, flow) && fees_collected.unpack(flow.fees_collected) &&
-          funds_created.unpack(flow.r2.created))) {
+    block::ValueFlow flow;
+    if (!flow.unpack(vm::load_cell_slice_ref(rec.value_flow))) {
       return {};
     }
+    fees_collected = flow.fees_collected;
+    funds_created = flow.created;
   }
   auto res = Ref<McShardDescr>(true, ton::BlockId{ton::ShardIdFull(shard), (unsigned)info.seq_no}, info.start_lt,
                                info.end_lt, info.gen_utime, rhash, fhash, fees_collected, funds_created, ~0U,
@@ -1893,6 +1915,65 @@ std::vector<ton::ValidatorDescr> Config::compute_total_validator_set(int next) c
   return res.move_as_ok()->export_validator_set();
 }
 
+td::Result<SizeLimitsConfig> Config::get_size_limits_config() const {
+  SizeLimitsConfig limits;
+  td::Ref<vm::Cell> param = get_config_param(43);
+  if (param.is_null()) {
+    return limits;
+  }
+  auto unpack_v1 = [&](auto& rec) {
+    limits.max_msg_bits = rec.max_msg_bits;
+    limits.max_msg_cells = rec.max_msg_cells;
+    limits.max_library_cells = rec.max_library_cells;
+    limits.max_vm_data_depth = static_cast<td::uint16>(rec.max_vm_data_depth);
+    limits.ext_msg_limits.max_size = rec.max_ext_msg_size;
+    limits.ext_msg_limits.max_depth = static_cast<td::uint16>(rec.max_ext_msg_depth);
+  };
+
+  auto unpack_v2 = [&](auto& rec) {
+    unpack_v1(rec);
+    limits.max_acc_state_bits = rec.max_acc_state_bits;
+    limits.max_acc_state_cells = rec.max_acc_state_cells;
+  };
+  gen::SizeLimitsConfig::Record_size_limits_config rec_v1;
+  gen::SizeLimitsConfig::Record_size_limits_config_v2 rec_v2;
+  if (tlb::unpack_cell(param, rec_v1)) {
+    unpack_v1(rec_v1);
+  } else if (tlb::unpack_cell(param, rec_v2)) {
+    unpack_v2(rec_v2);
+  } else {
+    return td::Status::Error("configuration parameter 43 is invalid");
+  }
+  return limits;
+}
+
+std::unique_ptr<vm::Dictionary> Config::get_suspended_addresses(ton::UnixTime now) const {
+  td::Ref<vm::Cell> param = get_config_param(44);
+  gen::SuspendedAddressList::Record rec;
+  if (param.is_null() || !tlb::unpack_cell(param, rec) || rec.suspended_until <= now) {
+    return {};
+  }
+  return std::make_unique<vm::Dictionary>(rec.addresses->prefetch_ref(), 288);
+}
+
+BurningConfig Config::get_burning_config() const {
+  td::Ref<vm::Cell> param = get_config_param(5);
+  gen::BurningConfig::Record rec;
+  if (param.is_null() || !tlb::unpack_cell(param, rec)) {
+    return {};
+  }
+  BurningConfig c;
+  c.fee_burn_num = rec.fee_burn_num;
+  c.fee_burn_denom = rec.fee_burn_denom;
+  vm::CellSlice& addr = rec.blackhole_addr.write();
+  if (addr.fetch_long(1)) {
+    td::Bits256 x;
+    addr.fetch_bits_to(x.bits(), 256);
+    c.blackhole_addr = x;
+  }
+  return c;
+}
+
 td::Result<std::pair<ton::UnixTime, ton::UnixTime>> Config::unpack_validator_set_start_stop(Ref<vm::Cell> vset_root) {
   if (vset_root.is_null()) {
     return td::Status::Error("validator set absent");
@@ -1922,31 +2003,58 @@ bool WorkchainInfo::unpack(ton::WorkchainId wc, vm::CellSlice& cs) {
   if (wc == ton::workchainInvalid) {
     return false;
   }
-  block::gen::WorkchainDescr::Record info;
-  if (!tlb::unpack(cs, info)) {
-    return false;
-  }
-  enabled_since = info.enabled_since;
-  actual_min_split = info.actual_min_split;
-  min_split = info.min_split;
-  max_split = info.max_split;
-  basic = info.basic;
-  active = info.active;
-  accept_msgs = info.accept_msgs;
-  flags = info.flags;
-  zerostate_root_hash = info.zerostate_root_hash;
-  zerostate_file_hash = info.zerostate_file_hash;
-  version = info.version;
-  if (basic) {
-    min_addr_len = max_addr_len = addr_len_step = 256;
-  } else {
-    block::gen::WorkchainFormat::Record_wfmt_ext ext;
-    if (!tlb::type_unpack(cs, block::gen::WorkchainFormat{basic}, ext)) {
+  auto unpack_v1 = [this](auto& info) {
+    enabled_since = info.enabled_since;
+    actual_min_split = info.actual_min_split;
+    min_split = info.min_split;
+    max_split = info.max_split;
+    basic = info.basic;
+    active = info.active;
+    accept_msgs = info.accept_msgs;
+    flags = info.flags;
+    zerostate_root_hash = info.zerostate_root_hash;
+    zerostate_file_hash = info.zerostate_file_hash;
+    version = info.version;
+    if (basic) {
+      min_addr_len = max_addr_len = addr_len_step = 256;
+    } else {
+      block::gen::WorkchainFormat::Record_wfmt_ext ext;
+      if (!tlb::csr_type_unpack(info.format, block::gen::WorkchainFormat{basic}, ext)) {
+        return false;
+      }
+      min_addr_len = ext.min_addr_len;
+      max_addr_len = ext.max_addr_len;
+      addr_len_step = ext.addr_len_step;
+    }
+    return true;
+  };
+  auto unpack_v2 = [&, this](auto& info) {
+    if (!unpack_v1(info)) {
       return false;
     }
-    min_addr_len = ext.min_addr_len;
-    max_addr_len = ext.max_addr_len;
-    addr_len_step = ext.addr_len_step;
+    block::gen::WcSplitMergeTimings::Record rec;
+    if (!tlb::csr_unpack(info.split_merge_timings, rec)) {
+      return false;
+    }
+    split_merge_delay = rec.split_merge_delay;
+    split_merge_interval = rec.split_merge_interval;
+    min_split_merge_interval = rec.min_split_merge_interval;
+    max_split_merge_delay = rec.max_split_merge_delay;
+    return true;
+  };
+  block::gen::WorkchainDescr::Record_workchain info_v1;
+  block::gen::WorkchainDescr::Record_workchain_v2 info_v2;
+  vm::CellSlice cs0 = cs;
+  if (tlb::unpack(cs, info_v1)) {
+    if (!unpack_v1(info_v1)) {
+      return false;
+    }
+  } else if (tlb::unpack(cs = cs0, info_v2)) {
+    if (!unpack_v2(info_v2)) {
+      return false;
+    }
+  } else {
+    return false;
   }
   workchain = wc;
   LOG(DEBUG) << "unpacked info for workchain " << wc << ": basic=" << basic << ", active=" << active
@@ -2110,6 +2218,44 @@ Ref<vm::Cell> ConfigInfo::lookup_library(td::ConstBitPtr root_hash) const {
     return {};
   }
   return lib;
+}
+
+td::Result<Ref<vm::Tuple>> ConfigInfo::get_prev_blocks_info() const {
+  // [ wc:Integer shard:Integer seqno:Integer root_hash:Integer file_hash:Integer] = BlockId;
+  // [ last_mc_blocks:[BlockId...]
+  //   prev_key_block:BlockId ] : PrevBlocksInfo
+  auto block_id_to_tuple = [](const ton::BlockIdExt& block_id) -> vm::Ref<vm::Tuple> {
+    td::RefInt256 shard = td::make_refint(block_id.id.shard);
+    if (shard->sgn() < 0) {
+      shard &= ((td::make_refint(1) << 64) - 1);
+    }
+    return vm::make_tuple_ref(
+        td::make_refint(block_id.id.workchain),
+        std::move(shard),
+        td::make_refint(block_id.id.seqno),
+        td::bits_to_refint(block_id.root_hash.bits(), 256),
+        td::bits_to_refint(block_id.file_hash.bits(), 256));
+  };
+  std::vector<vm::StackEntry> last_mc_blocks;
+
+  last_mc_blocks.push_back(block_id_to_tuple(block_id));
+  for (ton::BlockSeqno seqno = block_id.id.seqno; seqno > 0 && last_mc_blocks.size() < 16; ) {
+    --seqno;
+    ton::BlockIdExt block_id;
+    if (!get_old_mc_block_id(seqno, block_id)) {
+      return td::Status::Error("cannot fetch old mc block");
+    }
+    last_mc_blocks.push_back(block_id_to_tuple(block_id));
+  }
+
+  ton::BlockIdExt last_key_block;
+  ton::LogicalTime last_key_block_lt;
+  if (!get_last_key_block(last_key_block, last_key_block_lt)) {
+    return td::Status::Error("cannot fetch last key block");
+  }
+  return vm::make_tuple_ref(
+      td::make_cnt_ref<std::vector<vm::StackEntry>>(std::move(last_mc_blocks)),
+      block_id_to_tuple(last_key_block));
 }
 
 }  // namespace block
