@@ -9,7 +9,7 @@ using namespace std::string_literals;
 
 namespace emulator {
 td::Result<std::unique_ptr<TransactionEmulator::EmulationResult>> TransactionEmulator::emulate_transaction(
-    block::Account&& account, td::Ref<vm::Cell> msg_root, ton::UnixTime utime, ton::LogicalTime lt, int trans_type) {
+    block::Account&& account, td::Ref<vm::Cell> msg_root, ton::UnixTime utime, ton::LogicalTime lt, int trans_type, int vm_ver) {
 
     td::Ref<vm::Cell> old_mparams;
     std::vector<block::StoragePrices> storage_prices;
@@ -47,6 +47,7 @@ td::Result<std::unique_ptr<TransactionEmulator::EmulationResult>> TransactionEmu
     compute_phase_cfg.ignore_chksig = ignore_chksig_;
     compute_phase_cfg.with_vm_log = true;
     compute_phase_cfg.vm_log_verbosity = vm_log_verbosity_;
+   //  compute_phase_cfg.vm_ver = vm_ver; TODO: fix
 
     double start_time = td::Time::now();
     auto res = create_transaction(msg_root, &account, utime, lt, trans_type,

@@ -145,16 +145,16 @@ int exec_dump_string(VmState* st) {
 void register_debug_ops(OpcodeTable& cp0) {
   using namespace std::placeholders;
   if (!vm_debug_enabled) {
-    cp0.insert(OpcodeInstr::mkfixedrange(0xfe00, 0xfef0, 16, 8, instr::dump_1c_and(0xff, "DEBUG "), exec_dummy_debug))
+    cp0.insert(OpcodeInstr::mkfixedrange(0xfe00, 0xfeef, 16, 8, instr::dump_1c_and(0xff, "DEBUG "), exec_dummy_debug))
         .insert(OpcodeInstr::mkext(0xfef, 12, 4, dump_dummy_debug_str, exec_dummy_debug_str, compute_len_debug_str));
   } else {
-    // NB: all non-redefined opcodes in fe00..feff should be redirected to dummy debug definitions
+    // NB: all non-redefined opcodes in fe00..feff (except for feef) should be redirected to dummy debug definitions
     cp0.insert(OpcodeInstr::mksimple(0xfe00, 16, "DUMPSTK", exec_dump_stack))
         .insert(OpcodeInstr::mkfixedrange(0xfe01, 0xfe14, 16, 8, instr::dump_1c_and(0xff, "DEBUG "), exec_dummy_debug))
         .insert(OpcodeInstr::mksimple(0xfe14, 16,"STRDUMP", exec_dump_string))
         .insert(OpcodeInstr::mkfixedrange(0xfe15, 0xfe20, 16, 8, instr::dump_1c_and(0xff, "DEBUG "), exec_dummy_debug))
         .insert(OpcodeInstr::mkfixed(0xfe2, 12, 4, instr::dump_1sr("DUMP"), exec_dump_value))
-        .insert(OpcodeInstr::mkfixedrange(0xfe30, 0xfef0, 16, 8, instr::dump_1c_and(0xff, "DEBUG "), exec_dummy_debug))
+        .insert(OpcodeInstr::mkfixedrange(0xfe30, 0xfeef, 16, 8, instr::dump_1c_and(0xff, "DEBUG "), exec_dummy_debug))
         .insert(OpcodeInstr::mkext(0xfef, 12, 4, dump_dummy_debug_str, exec_dummy_debug_str, compute_len_debug_str));
   }
 }

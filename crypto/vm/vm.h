@@ -101,6 +101,7 @@ class VmState final : public VmStateInterface {
   td::uint16 max_data_depth = 512; // Default value
   int global_version{0};
   size_t chksgn_counter = 0;
+  int loaded_cells_count{0};
   std::unique_ptr<ParentVmState> parent = nullptr;
 
  public:
@@ -224,6 +225,7 @@ class VmState final : public VmStateInterface {
   Ref<Cell> load_library(
       td::ConstBitPtr hash) override;  // may throw a dictionary exception; returns nullptr if library is not found
   void register_cell_load(const CellHash& cell_hash) override;
+  void reset_loaded_cells();
   void register_cell_create() override;
   bool init_cp(int new_cp);
   bool set_cp(int new_cp);

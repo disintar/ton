@@ -654,6 +654,11 @@ void VmState::register_cell_load(const CellHash& cell_hash) {
   }
 }
 
+void VmState::reset_loaded_cells() {
+  loaded_cells.clear();
+  loaded_cells_count = 0;
+}
+
 void VmState::register_cell_create() {
   consume_gas(cell_create_gas_price);
 }

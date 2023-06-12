@@ -25,6 +25,7 @@
 #include "contops.h"
 #include "dictops.h"
 #include "debugops.h"
+#include "toncli-local-ops.h"
 #include "tonops.h"
 
 namespace vm {
@@ -42,6 +43,7 @@ const OpcodeTable* init_op_cp0(bool enable_debug) {
     register_ton_ops(*op_cp0);           // tonops.cpp
     register_debug_ops(*op_cp0);         // debugops.cpp
     register_codepage_ops(*op_cp0);      // contops.cpp
+    register_toncli_local_ops(*op_cp0);  // toncli-local-ops.cpp
     op_cp0->finalize()->register_table(Codepage::test_cp);
     return op_cp0;
   }();

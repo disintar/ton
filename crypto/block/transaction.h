@@ -104,6 +104,7 @@ struct ComputePhaseConfig {
   td::uint64 gas_credit;
   td::uint64 flat_gas_limit = 0;
   td::uint64 flat_gas_price = 0;
+  int vm_ver = 1;
   static constexpr td::uint64 gas_infty = (1ULL << 63) - 1;
   td::RefInt256 gas_price256;
   td::RefInt256 max_gas_threshold;

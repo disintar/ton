@@ -113,6 +113,7 @@ set(TON_CRYPTO_SOURCE
   vm/dictops.cpp
   vm/debugops.cpp
   vm/tonops.cpp
+  vm/toncli-local-ops.cpp
   vm/utils.cpp
   vm/vm.cpp
   vm/bls.cpp
