@@ -105,7 +105,38 @@
           in (host.overrideCC host.stdenv cc);
         in rec {
           packages = rec {
-            ton-normal = ton { inherit host; };
+            ton-normal = (ton { inherit host; }).overrideAttrs (previousAttrs:
+              {
+                buildInputs = previousAttrs.buildInputs ++ [
+                  host.python39
+                  host.python310
+                  host.python311
+                  # host.python3Packages.pybind11
+                ];
+
+                preConfigure = ''
+                  unset PYTHONPATH # https://github.com/NixOS/nixpkgs/issues/167695
+                '';
+
+                cmakeFlags =
+                  let
+                    pythonCmakeFlags = python: [
+                      "-DPython${python.pythonVersion}_ROOT=${python}"
+                      "-DPython${python.pythonVersion}_EXECUTABLE=${python.pythonForBuild.interpreter}"
+                      "-DPython${python.pythonVersion}_INCLUDE_DIR=${python}/include/python${python.pythonVersion}"
+                      "-DPython${python.pythonVersion}_LIBRARY=${python}/lib/python${python.pythonVersion}"
+                    ];
+                  in
+                  previousAttrs.cmakeFlags ++ [
+                    "-DTON_USE_PYTHON=1"
+                    #"-DPYTHON_SITE_PACKAGES=${host.python39}/${host.python39.sitePackages}"
+                  ] ++
+                  pythonCmakeFlags host.python39 ++
+                  pythonCmakeFlags host.python310 ++
+                  pythonCmakeFlags host.python311
+                ;
+              });
+
             ton-static = ton {
               inherit host;
               stdenv = host.makeStatic host.stdenv;
@@ -131,7 +162,13 @@
             };
           };
           devShells.default =
-            host.mkShell { inputsFrom = [ packages.ton-normal ]; };
+            host.mkShell {
+              inputsFrom = [ packages.ton-normal ];
+              shellHook = ''
+                unset PYTHONPATH # https://github.com/NixOS/nixpkgs/issues/167695
+                export cmakeFlags="${host.lib.concatStringsSep " " packages.ton-normal.cmakeFlags}"
+              '';
+              };
         })) (eachSystem (with system; [ x86_64-darwin aarch64-darwin ]) (system:
           let host = hostPkgs system;
           in rec {
@@ -148,6 +185,12 @@
               };
             };
             devShells.default =
-              host.mkShell { inputsFrom = [ packages.ton-normal ]; };
-          })));
+            host.mkShell {
+              inputsFrom = [ packages.ton-normal ];
+              shellHook = ''
+                unset PYTHONPATH # https://github.com/NixOS/nixpkgs/issues/167695
+                export cmakeFlags="${host.lib.concatStringsSep " " packages.ton-normal.cmakeFlags}"
+              '';
+            };
+        })));
 }
