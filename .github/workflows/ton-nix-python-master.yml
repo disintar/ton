@@ -3,8 +3,14 @@ name: "tvm-python master"
 on:
   push:
     branches: [ master ]
+  pull_request:
+      branches: [ master ]
   workflow_dispatch:
   workflow_call:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
