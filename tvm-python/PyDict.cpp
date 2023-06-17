@@ -2,7 +2,7 @@
 // Created by Andrey Tvorozhkov on 5/9/23.
 //
 
-#include "third-party/pybind11/include/pybind11/pybind11.h"
+#include "pybind11/pybind11.h"
 #include <string>
 #include "vm/vmstate.h"
 #include "td/utils/base64.h"

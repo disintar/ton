@@ -15,7 +15,7 @@
 #include "openssl/digest.hpp"
 #include <stack>
 #include <algorithm>
-#include "third-party/pybind11/include/pybind11/pybind11.h"
+#include "pybind11/pybind11.h"
 #include "emulator/transaction-emulator.h"
 #include "emulator/tvm-emulator.hpp"
 #include "PyCellSlice.h"
