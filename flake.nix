@@ -75,6 +75,28 @@
 
           outputs = [ "bin" "out" ];
         };
+      tonPython = ton: python: ton.overrideAttrs (previousAttrs:
+        {
+          buildInputs = previousAttrs.buildInputs ++ [ python ];
+
+          cmakeFlags = previousAttrs.cmakeFlags ++ [
+            "-DTON_USE_PYTHON=1"
+            "-DPython_ROOT_DIR=${python}"
+            "-DPython_EXECUTABLE=${python.pythonForBuild.interpreter}"
+            "-DPython_INCLUDE_DIR=${python}/include/python${python.pythonVersion}"
+            "-DPython_LIBRARY=${python}/lib/python${python.pythonVersion}"
+          ];
+
+          ninjaFlags = "python_ton";
+
+          installPhase = ''
+            runHook preInstall
+            cmake --install . --component tvm-python
+            runHook postInstall
+          '';
+
+          outputs = [ "out" ];
+        });
       hostPkgs = system:
         import nixpkgs-stable {
           inherit system;
@@ -132,6 +154,9 @@
               name = "ton";
               paths = [ ton-musl.bin ton-oldglibc.out ];
             };
+            ton-python-39 = tonPython ton-oldglibc host.python39;
+            ton-python-310 = tonPython ton-oldglibc host.python310;
+            ton-python-311 = tonPython ton-oldglibc host.python311;
           };
           devShells.default =
             host.mkShell { inputsFrom = [ packages.ton-normal ]; };
@@ -149,6 +174,9 @@
                 name = "ton";
                 paths = [ ton-static.bin ton-static.out ];
               };
+              ton-python-39 = tonPython ton-normal host.python39;
+              ton-python-310 = tonPython ton-normal host.python310;
+              ton-python-311 = tonPython ton-normal host.python311;
             };
             devShells.default =
               host.mkShell { inputsFrom = [ packages.ton-normal ]; };
