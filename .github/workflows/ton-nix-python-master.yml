@@ -38,7 +38,7 @@ jobs:
           access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
 
     - name: Compile
-      run: nix build .?submodules=1#packages.${{ matrix.arch }}-${{ matrix.os }}.ton-python-${{ matrix.python }} \
+      run: nix build .?submodules=1#packages.${{ matrix.arch }}-${{ matrix.os }}.ton-python-${{ matrix.python }}
            --print-build-logs --system ${{ matrix.arch }}-${{ matrix.os }} -o result-${{ matrix.arch }}
 
     - name: Copy binaries
@@ -48,9 +48,8 @@ jobs:
         cp $PWD/result-${{ matrix.arch }}/lib/* artifacts/
 
     - name: Simple binaries test
-      run: |
-        nix develop .#packages.${{ matrix.arch }}-${{ matrix.os }}.ton-python-${{ matrix.python }} \
-          -c bash -c "cd artifacts; python3 -c 'import python_ton'"
+      run: nix develop .#packages.${{ matrix.arch }}-${{ matrix.os }}.ton-python-${{ matrix.python }}
+           -c bash -c "cd artifacts; python3 -c 'import python_ton'"
 
     - name: Upload artifacts
       uses: actions/upload-artifact@master
