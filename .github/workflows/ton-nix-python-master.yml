@@ -19,14 +19,22 @@ jobs:
         arch: [x86_64, aarch64]
         os: [macos-12]
         python: [39, 310, 311]
-        include:
-          - os: ubuntu-22.04
-            arch: aarch64
-    runs-on: ubuntu-22.04
+        exclude:
+          - # covered by ton-x86_64-linux-python.yml
+            os: ubuntu-22.04
+            arch: x86_64
+    runs-on: ${{ matrix.os }}
 
     steps:
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v2
+    - name: Install QEMU
+      run: |
+        if [ "${{ matrix.os }}" = "ubuntu-22.04" ]; then
+          sudo apt update
+          sudo apt install -y apt-utils
+          sudo apt install -q -y qemu-system-aarch64 qemu-efi binfmt-support qemu-user-static
+        elif [ "${{ matrix.os }}" = "macos-12" ]; then
+          brew install qemu
+        fi
 
     - uses: actions/checkout@v3
       with:
@@ -36,23 +44,27 @@ jobs:
       with:
         extra_nix_config: |
           access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+          
+    - run: |
+        echo "SYSTEM=$(nix eval --raw 'nixpkgs#system')" >> $GITHUB_ENV
+        echo "ARCH=$(nix eval --raw 'nixpkgs#hostPlatform.parsed.cpu.name')" >> $GITHUB_ENV
 
     - name: Compile
-      run: nix build .?submodules=1#packages.${{ matrix.arch }}-${{ matrix.os }}.ton-python-${{ matrix.python }}
-           --print-build-logs --system ${{ matrix.arch }}-${{ matrix.os }} -o result-${{ matrix.arch }}
+      run: nix build .?submodules=1#packages."$SYSTEM".ton-python-${{ matrix.python }}
+           --print-build-logs --system "$SYSTEM" -o result-"$ARCH"
 
     - name: Copy binaries
       run: |
         ls -lart 
         mkdir artifacts
-        cp $PWD/result-${{ matrix.arch }}/lib/* artifacts/
+        cp $PWD/result-"$ARCH"/lib/* artifacts/
 
     - name: Simple binaries test
-      run: nix develop .#packages.${{ matrix.arch }}-${{ matrix.os }}.ton-python-${{ matrix.python }}
+      run: nix develop .#packages."$SYSTEM".ton-python-${{ matrix.python }}
            -c bash -c "cd artifacts; python3 -c 'import python_ton'"
 
     - name: Upload artifacts
       uses: actions/upload-artifact@master
       with:
-        name: ton-${{ matrix.arch }}-${{ matrix.os }}-python-${{ matrix.python }}
+        name: ton-${{ env.SYSTEM }}-python-${{ matrix.python }}
         path: artifacts
