@@ -122,11 +122,6 @@ if (TON_USE_ABSEIL)
   set(ABSL_FOUND 1)
 endif()
 
-if (TON_USE_PYTHON)
-    message("Add pybind11")
-    add_subdirectory(third-party/pybind11 EXCLUDE_FROM_ALL)
-endif()
-
 #add_subdirectory(third-party/libcuckoo EXCLUDE_FROM_ALL)
 #add_subdirectory(third-party/junction EXCLUDE_FROM_ALL)
 
@@ -434,7 +429,17 @@ endif()
 #END internal
 
 if (TON_USE_PYTHON)
-    add_subdirectory(tvm-python)
+  include(BundleStaticLibraryDeps)
+
+  cmake_policy(SET CMP0074 NEW) # find_package() uses <PackageName>_ROOT variables
+  cmake_policy(SET CMP0094 NEW) # set(Python_FIND_STRATEGY LOCATION)
+
+  find_package(Python COMPONENTS Interpreter Development REQUIRED)
+
+  message("Add pybind11 (${Python_SOABI})")
+  add_subdirectory(third-party/pybind11 EXCLUDE_FROM_ALL)
+
+  add_subdirectory(tvm-python)
 endif ()
 
 
