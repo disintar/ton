@@ -38,7 +38,15 @@
                 (openssl_1_1.override { static = true; }).dev
                 (zlib.override { shared = false; }).dev
             ]
-            ++ optionals (!stdenv.isDarwin) [ pkgsStatic.libmicrohttpd.dev pkgsStatic.libsodium.dev pkgsStatic.secp256k1 ]
+            ++ optionals (!stdenv.isDarwin) [
+              pkgsStatic.libmicrohttpd.dev
+              (pkgsStatic.libsodium.overrideAttrs (oldAttrs: {
+                # https://github.com/jedisct1/libsodium/issues/292#issuecomment-137135369
+                configureFlags = oldAttrs.configureFlags ++ [ " --disable-pie" ];
+                hardeningDisable = oldAttrs.hardeningDisable ++ [ "pie" ];
+              }))
+              pkgsStatic.secp256k1
+            ]
             ++ optionals stdenv.isDarwin [ (libiconv.override { enableStatic = true; enableShared = false; }) ]
             ++ optionals stdenv.isDarwin (forEach [ libmicrohttpd.dev libsodium.dev secp256k1 gmp.dev nettle.dev (gnutls.override { withP11-kit = false; }).dev libtasn1.dev libidn2.dev libunistring.dev gettext ] (x: x.overrideAttrs(oldAttrs: rec { configureFlags = (oldAttrs.configureFlags or []) ++ [ "--enable-static" "--disable-shared" ]; dontDisableStatic = true; })))
             ++ optionals staticGlibc [ glibc.static ];
