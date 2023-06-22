@@ -136,6 +136,12 @@
               bintools = host.binutils.override { libc = glibc227; };
             };
           in (host.overrideCC host.stdenv cc);
+          tonOldGlibcPython = ton: python: (tonPython ton python).overrideAttrs(previousAttrs: {
+            dontPatchELF = true;
+            preFixup = ''
+              patchelf --remove-rpath $out/*/*
+            '';
+          });
         in rec {
           packages = rec {
             ton-normal = ton { inherit host; };
@@ -162,9 +168,9 @@
               name = "ton";
               paths = [ ton-musl.bin ton-oldglibc.out ];
             };
-            ton-python-39 = tonPython ton-oldglibc host.python39;
-            ton-python-310 = tonPython ton-oldglibc host.python310;
-            ton-python-311 = tonPython ton-oldglibc host.python311;
+            ton-python-39 = tonOldGlibcPython ton-oldglibc host.python39;
+            ton-python-310 = tonOldGlibcPython ton-oldglibc host.python310;
+            ton-python-311 = tonOldGlibcPython ton-oldglibc host.python311;
           };
           devShells.default =
             host.mkShell {
