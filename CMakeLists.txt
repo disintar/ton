@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 
+# C++17 requires macOS 10.14+
+# https://bugs.chromium.org/p/chromium/issues/detail?id=1274388
+if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum OS X deployment target")
+endif()
+
 project(TON VERSION 0.5 LANGUAGES C CXX)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 #set(OPENSSL_USE_STATIC_LIBS TRUE)
