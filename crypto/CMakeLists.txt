@@ -373,6 +373,7 @@ endif()
 add_library(src_parser ${PARSER_SOURCE})
 target_include_directories(src_parser PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 target_link_libraries(src_parser PUBLIC ton_crypto_core)
+set_property(TARGET src_parser APPEND_STRING PROPERTY LINK_FLAGS " -Wl,-undefined -Wl,dynamic_lookup")
 
 add_library(ton_block STATIC ${BLOCK_SOURCE})
 target_include_directories(ton_block PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
