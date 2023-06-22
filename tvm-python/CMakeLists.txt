@@ -12,6 +12,20 @@ target_link_libraries(combined INTERFACE
         validator-hardfork fift-lib memprof)
 bundle_static_library_deps(combined combined_bundled)
 
+get_target_property(deps combined INTERFACE_LINK_LIBRARIES)
+set(include_dirs)
+
+foreach(target ${deps})
+    # Get include directories for each target
+    get_target_property(target_includes ${target} INTERFACE_INCLUDE_DIRECTORIES)
+
+    # Skip targets with NOTFOUND include directories
+    if(target_includes)
+        # Add include directories to the list
+        list(APPEND include_dirs ${target_includes})
+    endif()
+endforeach()
+
 set(PYTHON_EMULATOR_SOURCE
         PyCellSlice.cpp
         PyCellSlice.h
@@ -27,9 +41,11 @@ set(PYTHON_EMULATOR_SOURCE
 
 pybind11_add_module(python_ton ${PYTHON_EMULATOR_SOURCE})
 target_link_libraries(python_ton PRIVATE
-        combined_bundled tdutils crc32c ${BLST_LIB}
-        ${SECP256K1_LIBRARY} ${JEMALLOC_LIBRARIES} OpenSSL::Crypto
-        ${SODIUM_LIBRARY_RELEASE})
+        combined_bundled
+        ton_crypto_core rocksdb # XXX
+        ${BLST_LIB} ${SECP256K1_LIBRARY} ${JEMALLOC_LIBRARIES}
+        OpenSSL::Crypto ${SODIUM_LIBRARY_RELEASE})
+target_include_directories(python_ton PRIVATE ${include_dirs})
 
 install(TARGETS python_ton
         COMPONENT tvm-python

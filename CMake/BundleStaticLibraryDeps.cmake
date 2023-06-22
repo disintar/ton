@@ -38,7 +38,16 @@ function(bundle_static_library_deps tgt_name bundled_tgt_name)
   set(bundled_tgt_full_name 
     ${CMAKE_BINARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}${bundled_tgt_name}${CMAKE_STATIC_LIBRARY_SUFFIX})
 
-  if (CMAKE_CXX_COMPILER_ID MATCHES "^(Clang|GNU)$")
+  foreach(tgt IN LISTS static_libs)
+    list(APPEND static_libs_full_names $<TARGET_FILE:${tgt}>)
+  endforeach()
+
+  set(ar_tool ${CMAKE_AR})
+  if (CMAKE_INTERPROCEDURAL_OPTIMIZATION)
+    set(ar_tool ${CMAKE_CXX_COMPILER_AR})
+  endif()
+
+  if (CMAKE_CXX_COMPILER_ID MATCHES "^GNU$")
     file(WRITE ${CMAKE_BINARY_DIR}/${bundled_tgt_name}.ar.in
       "CREATE ${bundled_tgt_full_name}\n" )
         
@@ -54,24 +63,41 @@ function(bundle_static_library_deps tgt_name bundled_tgt_name)
       OUTPUT ${CMAKE_BINARY_DIR}/${bundled_tgt_name}.ar
       INPUT ${CMAKE_BINARY_DIR}/${bundled_tgt_name}.ar.in)
 
-    set(ar_tool ${CMAKE_AR})
-    if (CMAKE_INTERPROCEDURAL_OPTIMIZATION)
-      set(ar_tool ${CMAKE_CXX_COMPILER_AR})
-    endif()
-
     add_custom_command(
       COMMAND ${ar_tool} -M < ${CMAKE_BINARY_DIR}/${bundled_tgt_name}.ar
       OUTPUT ${bundled_tgt_full_name}
       DEPENDS ${static_libs}
       COMMENT "Bundling ${bundled_tgt_name}"
       VERBATIM)
+  elseif (CMAKE_CXX_COMPILER_ID MATCHES "^Clang$")
+    set(temp_dirs "")
+
+    foreach(lib ${static_libs})
+      get_filename_component(lib_name ${lib} NAME_WE)
+      set(temp_dir "${CMAKE_CURRENT_BINARY_DIR}/${lib_name}")
+      file(MAKE_DIRECTORY ${temp_dir})
+
+      add_custom_command(OUTPUT "${temp_dir}/done"
+        COMMAND ${CMAKE_AR} -x $<TARGET_FILE:${lib}>
+        WORKING_DIRECTORY ${temp_dir}
+        COMMAND touch "${temp_dir}/done"
+        DEPENDS ${lib}
+        COMMENT "Extracting library ${lib} to ${temp_dir}"
+        VERBATIM
+      )
+      list(APPEND temp_dirs "${temp_dir}/done")
+    endforeach()
+
+    add_custom_command(OUTPUT ${bundled_tgt_full_name}
+      COMMAND bash -c "${CMAKE_AR} -qc ${bundled_tgt_full_name} $(find -name \"*.o\")"
+      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+      DEPENDS ${temp_dirs}
+      COMMENT "Bundling into ${bundled_tgt_full_name}"
+      VERBATIM
+    )
   elseif(MSVC)
     get_filename_component(_vs_bin_path "${CMAKE_LINKER}" DIRECTORY)
     find_program(lib_tool lib HINTS ${_vs_bin_path} REQUIRED)
-
-    foreach(tgt IN LISTS static_libs)
-      list(APPEND static_libs_full_names $<TARGET_FILE:${tgt}>)
-    endforeach()
 
     add_custom_command(
       COMMAND ${lib_tool} /NOLOGO /OUT:${bundled_tgt_full_name} ${static_libs_full_names}
@@ -88,8 +114,9 @@ function(bundle_static_library_deps tgt_name bundled_tgt_name)
   
   add_library(${bundled_tgt_name} STATIC IMPORTED)
   set_target_properties(${bundled_tgt_name} 
-    PROPERTIES 
+    PROPERTIES
       IMPORTED_LOCATION ${bundled_tgt_full_name}
+      # XXX: doesn't work for INTERFACE bundling targets
       INTERFACE_INCLUDE_DIRECTORIES $<TARGET_PROPERTY:${tgt_name},INTERFACE_INCLUDE_DIRECTORIES>)
   add_dependencies(${bundled_tgt_name} bundling_target)
 
