@@ -51,3 +51,13 @@ jobs:
       with:
         name: ton-x86_64-linux-python-${{ matrix.python }}
         path: artifacts
+
+    - name: Upload artifacts
+      uses: workflow/nix-shell-action@v3.2.1
+      with:
+        flakes: nixpkgs#gh
+        script: |
+          gh release delete -y ton-x86_64-linux-python-${{ matrix.python }} || true
+          gh release create --notes "" ton-x86_64-linux-python-${{ matrix.python }} artifacts/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
