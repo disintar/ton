@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs-stable.url = "github:nixos/nixpkgs/nixos-22.05";
+    nixpkgs-stable.url = "github:nixos/nixpkgs/nixos-23.05";
     nixpkgs-trunk.url = "github:nixos/nixpkgs";
     flake-compat = {
       url = "github:edolstra/flake-compat";
@@ -118,6 +118,9 @@
       hostPkgs = system:
         import nixpkgs-stable {
           inherit system;
+          config = {
+            permittedInsecurePackages = [ "openssl-1.1.1u" ];
+          };
           overlays = [
             (self: super: {
               zchunk = nixpkgs-trunk.legacyPackages.${system}.zchunk;
