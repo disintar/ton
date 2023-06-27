@@ -18,7 +18,7 @@
           pname = "ton";
           version = "dev";
 
-          src = ./.;
+          src = host.nix-gitignore.gitignoreRecursiveSource [] ./.;
 
           nativeBuildInputs = with host;
             [ cmake ninja pkg-config git ] ++
