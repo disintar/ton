@@ -370,7 +370,7 @@ if (WINGETOPT_FOUND)
   target_link_libraries_system(fift wingetopt)
 endif()
 
-add_library(src_parser ${PARSER_SOURCE})
+add_library(src_parser OBJECT ${PARSER_SOURCE})
 target_include_directories(src_parser PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 target_link_libraries(src_parser PUBLIC ton_crypto_core)
 
