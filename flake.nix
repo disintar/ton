@@ -203,9 +203,9 @@
                 name = "ton";
                 paths = [ ton-static.bin ton-static.out ];
               };
-              ton-python-39 = tonPython ton-normal host.python39;
-              ton-python-310 = tonPython ton-normal host.python310;
-              ton-python-311 = tonPython ton-normal host.python311;
+              ton-python-39 = tonPython ton-static host.python39;
+              ton-python-310 = tonPython ton-static host.python310;
+              ton-python-311 = tonPython ton-static host.python311;
             };
             devShells.default =
               host.mkShell {
