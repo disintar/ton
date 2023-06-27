@@ -61,9 +61,8 @@
           ];
 
           LDFLAGS = optional staticExternalDeps (concatStringsSep " " [
-            (optionalString stdenv.cc.isGNU "-static-libgcc")
+            (optionalString stdenv.cc.isGNU "-static-libgcc -static-libstdc++")
             (optionalString stdenv.isDarwin "-framework CoreFoundation")
-            "-static-libstdc++"
           ]);
 
           GIT_REVISION = if self ? rev then self.rev else "dirty";
