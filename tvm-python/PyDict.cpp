@@ -44,12 +44,13 @@ PyDict* PyDict::set(const std::string& key, PyCellSlice& value, const std::strin
 
   td::BigInt256 x;
   x.enforce(x.parse_dec(key));
-  unsigned char buffer[key_len_];
-  x.export_bits(td::BitPtr{buffer}, key_len_, sgnd_);
+  td::BufferSlice s(key_len_);
+
+  auto* tmp = new unsigned char[key_len_];
+  x.export_bits(tmp, key_len_, sgnd_);
 
   const auto mdict = my_dict.get();
-
-  mdict->set(td::BitPtr{buffer}, key_len_, td::make_ref<vm::CellSlice>(value.my_cell_slice.clone()), get_mode(mode));
+  mdict->set(tmp, key_len_, td::make_ref<vm::CellSlice>(value.my_cell_slice.clone()), get_mode(mode));
   return this;
 }
 
@@ -65,12 +66,12 @@ PyDict* PyDict::set_ref(const std::string& key, PyCell& value, const std::string
 
   td::BigInt256 x;
   x.enforce(x.parse_dec(key));
-  unsigned char buffer[key_len_];
-  x.export_bits(td::BitPtr{buffer}, key_len_, sgnd_);
+  auto* tmp = new unsigned char[key_len_];
+  x.export_bits(tmp, key_len_, sgnd_);
 
   const auto mdict = my_dict.get();
 
-  mdict->set_ref(td::BitPtr{buffer}, key_len_, value.my_cell, get_mode(mode));
+  mdict->set_ref(tmp, key_len_, value.my_cell, get_mode(mode));
   return this;
 }
 
@@ -87,12 +88,12 @@ PyDict* PyDict::set_builder(const std::string& key, PyCellBuilder& value, const 
 
   td::BigInt256 x;
   x.enforce(x.parse_dec(key));
-  unsigned char buffer[key_len_];
-  x.export_bits(td::BitPtr{buffer}, key_len_, sgnd_);
+  auto* tmp = new unsigned char[key_len_];
+  x.export_bits(tmp, key_len_, sgnd_);
 
   const auto mdict = my_dict.get();
 
-  mdict->set_builder(td::BitPtr{buffer}, key_len_, value.my_builder, get_mode(mode));
+  mdict->set_builder(tmp, key_len_, value.my_builder, get_mode(mode));
   return this;
 }
 
@@ -107,11 +108,11 @@ PyCellSlice PyDict::lookup(const std::string& key, int key_len_, int sgnd_) cons
 
   td::BigInt256 x;
   x.enforce(x.parse_dec(key));
-  unsigned char buffer[key_len_];
-  x.export_bits(td::BitPtr{buffer}, key_len_, sgnd_);
+  auto* tmp = new unsigned char[key_len_];
+  x.export_bits(tmp, key_len_, sgnd_);
   const auto mdict = my_dict.get();
 
-  auto cs = mdict->lookup(td::BitPtr{buffer}, key_len_);
+  auto cs = mdict->lookup(tmp, key_len_);
   vm::CellBuilder cb;
   cb.append_cellslice(cs);
 
@@ -129,11 +130,11 @@ PyCellSlice PyDict::lookup_delete(const std::string& key, int key_len_, int sgnd
 
   td::BigInt256 x;
   x.enforce(x.parse_dec(key));
-  unsigned char buffer[key_len_];
-  x.export_bits(td::BitPtr{buffer}, key_len_, sgnd_);
+  auto* tmp = new unsigned char[key_len_];
+  x.export_bits(tmp, key_len_, sgnd_);
   const auto mdict = my_dict.get();
 
-  auto cs = mdict->lookup_delete(td::BitPtr{buffer}, key_len_);
+  auto cs = mdict->lookup_delete(tmp, key_len_);
   vm::CellBuilder cb;
   cb.append_cellslice(cs);
 
@@ -149,20 +150,20 @@ std::tuple<std::string, PyCellSlice> PyDict::get_minmax_key(bool fetch_max, bool
   if (key_len_ == 0) {
     key_len_ = key_len;
   }
-  unsigned char buffer[key_len_];
+  auto* tmp = new unsigned char[key_len_];
   const auto mdict = my_dict.get();
-  const auto cs = mdict->get_minmax_key(td::BitPtr{buffer}, key_len_, fetch_max, inver_first);
+  const auto cs = mdict->get_minmax_key(tmp, key_len_, fetch_max, inver_first);
 
   vm::CellBuilder cb;
   cb.append_cellslice(cs);
 
   td::BigInt256 x;
-  x.import_bits(td::ConstBitPtr{buffer}, key_len_, sgnd_);
+  x.import_bits(tmp, key_len_, sgnd_);
 
   return std::make_tuple(x.to_dec_string(), PyCellSlice(cb.finalize()));
 }
 
-std::tuple<std::string, PyCell> PyDict::get_minmax_key_ref(bool fetch_max, bool inver_first, int key_len_,
+std::tuple<std::string, PyCell> PyDict::get_minmax_key_ref(bool fetch_max, bool inver_first, int 1,
                                                            int sgnd_) const {
   if (sgnd_ == -1) {
     sgnd_ = sgnd;
@@ -171,16 +172,16 @@ std::tuple<std::string, PyCell> PyDict::get_minmax_key_ref(bool fetch_max, bool 
   if (key_len_ == 0) {
     key_len_ = key_len;
   }
-  unsigned char buffer[key_len_];
+  auto* tmp = new unsigned char[key_len_];
   const auto mdict = my_dict.get();
-  const auto cell = mdict->get_minmax_key_ref(td::BitPtr{buffer}, key_len_, fetch_max, inver_first);
+  const auto cell = mdict->get_minmax_key_ref(tmp, key_len_, fetch_max, inver_first);
 
   if (cell.is_null()) {
     throw vm::CellBuilder::CellCreateError();
   }
 
   td::BigInt256 x;
-  x.import_bits(td::ConstBitPtr{buffer}, key_len_, sgnd_);
+  x.import_bits(tmp, key_len_, sgnd_);
 
   return std::make_tuple(x.to_dec_string(), PyCell(cell));
 }
@@ -198,14 +199,14 @@ std::tuple<std::string, PyCellSlice> PyDict::lookup_nearest_key(const std::strin
   td::BigInt256 x;
   x.enforce(x.parse_dec(key));
 
-  unsigned char buffer[key_len_];
-  x.export_bits(td::BitPtr{buffer}, key_len_, sgnd_);
+  auto* tmp = new unsigned char[key_len_];
+  x.export_bits(tmp, key_len_, sgnd_);
 
   const auto mdict = my_dict.get();
-  const auto cs = mdict->lookup_nearest_key(td::BitPtr{buffer}, key_len_, fetch_next, allow_eq, inver_first);
+  const auto cs = mdict->lookup_nearest_key(tmp, key_len_, fetch_next, allow_eq, inver_first);
 
   td::BigInt256 x2;
-  x2.import_bits(td::ConstBitPtr{buffer}, key_len_, sgnd_);
+  x2.import_bits(tmp, key_len_, sgnd_);
 
   vm::CellBuilder cb;
   cb.append_cellslice(cs);
@@ -228,11 +229,11 @@ PyCell PyDict::lookup_ref(const std::string& key, int key_len_, int sgnd_) const
 
   td::BigInt256 x;
   x.enforce(x.parse_dec(key));
-  unsigned char buffer[key_len_];
-  x.export_bits(td::BitPtr{buffer}, key_len_, sgnd_);
+  auto* tmp = new unsigned char[key_len_];
+  x.export_bits(tmp, key_len_, sgnd_);
   const auto mdict = my_dict.get();
 
-  auto cr = mdict->lookup_ref(td::BitPtr{buffer}, key_len_);
+  auto cr = mdict->lookup_ref(tmp, key_len_);
 
   if (cr.is_null()) {
     throw vm::CellBuilder::CellCreateError();
@@ -252,11 +253,11 @@ PyCell PyDict::lookup_delete_ref(const std::string& key, int key_len_, int sgnd_
 
   td::BigInt256 x;
   x.enforce(x.parse_dec(key));
-  unsigned char buffer[key_len_];
-  x.export_bits(td::BitPtr{buffer}, key_len_, sgnd_);
+  auto* tmp = new unsigned char[key_len_];
+  x.export_bits(tmp, key_len_, sgnd_);
   const auto mdict = my_dict.get();
 
-  auto cr = mdict->lookup_delete_ref(td::BitPtr{buffer}, key_len_);
+  auto cr = mdict->lookup_delete_ref(tmp, key_len_);
 
   if (cr.is_null()) {
     throw vm::CellBuilder::CellCreateError();
