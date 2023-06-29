@@ -84,10 +84,10 @@ std::string fetch_string(vm::CellSlice &cs, unsigned int text_size, bool convert
 
     return text;
   } else {
-    unsigned char b[text_size];
-    cs.fetch_bytes(b, text_size);
-    std::string tmp(b, b + sizeof b / sizeof b[0]);
-    return tmp;
+    td::BufferSlice s(text_size);
+    cs.fetch_bytes((td::uint8 *)s.data(), text_size);
+
+    return s.as_slice().str();
   }
 }
 
@@ -266,10 +266,10 @@ std::string fetch_string(vm::CellSlice &cs, bool convert_to_utf8 = true) {
   } else {
     const unsigned int text_size = cs.size() / 8;
 
-    unsigned char b[text_size];
-    cs.fetch_bytes(b, text_size);
-    std::string tmp(b, b + sizeof b / sizeof b[0]);
-    return tmp;
+    td::BufferSlice s(text_size);
+    cs.fetch_bytes((td::uint8 *)s.data(), text_size);
+
+    return s.as_slice().str();
   }
 }
 
