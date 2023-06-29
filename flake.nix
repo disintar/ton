@@ -159,7 +159,12 @@
             ton-python-311 = tonPython ton-oldglibc host.python311;
           };
           devShells.default =
-            host.mkShell { inputsFrom = [ packages.ton-normal ]; };
+            host.mkShell {
+              inputsFrom = [ packages.ton-oldglibc ];
+              shellHook = ''
+                export cmakeFlags="${host.lib.concatStringsSep " " packages.ton-normal.cmakeFlags}"
+              '';
+            };
         })) (eachSystem (with system; [ x86_64-darwin aarch64-darwin ]) (system:
           let host = hostPkgs system;
           in rec {
@@ -179,6 +184,11 @@
               ton-python-311 = tonPython ton-normal host.python311;
             };
             devShells.default =
-              host.mkShell { inputsFrom = [ packages.ton-normal ]; };
+              host.mkShell {
+                inputsFrom = [ packages.ton-static ];
+                shellHook = ''
+                  export cmakeFlags="${host.lib.concatStringsSep " " packages.ton-normal.cmakeFlags}"
+                '';
+              };
           })));
 }
