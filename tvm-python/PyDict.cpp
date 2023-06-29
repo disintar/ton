@@ -44,7 +44,6 @@ PyDict* PyDict::set(const std::string& key, PyCellSlice& value, const std::strin
 
   td::BigInt256 x;
   x.enforce(x.parse_dec(key));
-  td::BufferSlice s(key_len_);
 
   auto* tmp = new unsigned char[key_len_];
   x.export_bits(tmp, key_len_, sgnd_);
@@ -163,7 +162,7 @@ std::tuple<std::string, PyCellSlice> PyDict::get_minmax_key(bool fetch_max, bool
   return std::make_tuple(x.to_dec_string(), PyCellSlice(cb.finalize()));
 }
 
-std::tuple<std::string, PyCell> PyDict::get_minmax_key_ref(bool fetch_max, bool inver_first, int 1,
+std::tuple<std::string, PyCell> PyDict::get_minmax_key_ref(bool fetch_max, bool inver_first, int key_len_,
                                                            int sgnd_) const {
   if (sgnd_ == -1) {
     sgnd_ = sgnd;
