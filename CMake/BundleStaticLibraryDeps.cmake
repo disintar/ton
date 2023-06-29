@@ -96,7 +96,8 @@ function(bundle_static_library_deps tgt_name bundled_tgt_name)
       VERBATIM
     )
   elseif(MSVC)
-    find_program(lib_tool lib)
+    get_filename_component(_vs_bin_path "${CMAKE_LINKER}" DIRECTORY)
+    find_program(lib_tool lib HINTS ${_vs_bin_path} REQUIRED)
 
     add_custom_command(
       COMMAND ${lib_tool} /NOLOGO /OUT:${bundled_tgt_full_name} ${static_libs_full_names}
