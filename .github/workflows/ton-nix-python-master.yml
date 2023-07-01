@@ -17,24 +17,22 @@ jobs:
     strategy:
       matrix:
         arch: [x86_64, aarch64]
-        os: [macos-12]
+        os: [Linux, macOS]
         python: [39, 310, 311]
         exclude:
           - # covered by ton-x86_64-linux-python.yml
-            os: ubuntu-22.04
+            os: Linux
             arch: x86_64
+        include:
+          - os: Linux
+            nix-extra: |
+              extra-platforms = x86_64-linux aarch64-linux
     runs-on: ${{ matrix.os }}
 
     steps:
     - name: Install QEMU
-      run: |
-        if [ "${{ matrix.os }}" = "ubuntu-22.04" ]; then
-          sudo apt update
-          sudo apt install -y apt-utils
-          sudo apt install -q -y qemu-system-aarch64 qemu-efi binfmt-support qemu-user-static
-        elif [ "${{ matrix.os }}" = "macos-12" ]; then
-          brew install qemu
-        fi
+      uses: docker/setup-qemu-action@v2
+      if: matrix.os == 'Linux' && matrix.arch == 'aarch64'
 
     - uses: actions/checkout@v3
       with:
@@ -44,34 +42,39 @@ jobs:
       with:
         extra_nix_config: |
           access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+          ${{ matrix.nix-extra }}
+      env:
+        USER: runner
           
     - uses: cachix/cachix-action@v12
       with:
         name: disintar
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+      env:
+        USER: runner
         
     - run: |
-        echo "SYSTEM=$(nix eval --raw 'nixpkgs#system')" >> $GITHUB_ENV
-        echo "ARCH=$(nix eval --raw 'nixpkgs#hostPlatform.parsed.cpu.name')" >> $GITHUB_ENV
+        export KERNEL=$(nix eval --raw 'nixpkgs#hostPlatform.parsed.kernel.name')
+        echo "TARGET_SYSTEM=${{ matrix.arch }}-$KERNEL" >> $GITHUB_ENV
 
     - name: Compile
-      run: nix build .?submodules=1#packages."$SYSTEM".ton-python-${{ matrix.python }}
-           --print-build-logs --system "$SYSTEM" -o result-"$ARCH"
+      run: nix build .?submodules=1#packages."$TARGET_SYSTEM".ton-python-${{ matrix.python }}
+           --print-build-logs
 
     - name: Copy binaries
       run: |
         ls -lart 
         mkdir artifacts
-        cp $PWD/result-"$ARCH"/lib/* artifacts/
+        cp $PWD/result/lib/* artifacts/
 
     - name: Simple binaries test
-      run: nix develop .#packages."$SYSTEM".ton-python-${{ matrix.python }}
+      run: nix develop .#packages."$TARGET_SYSTEM".ton-python-${{ matrix.python }}
            -c bash -c "cd artifacts; python3 -c 'import python_ton'"
 
     - name: Upload artifacts
       uses: actions/upload-artifact@master
       with:
-        name: ton-${{ env.SYSTEM }}-python-${{ matrix.python }}
+        name: ton-${{ env.TARGET_SYSTEM }}-python-${{ matrix.python }}
         path: artifacts
 
     - name: Upload artifacts
@@ -79,7 +82,7 @@ jobs:
       with:
         flakes: nixpkgs#gh
         script: |
-          gh release delete -y ton-"$SYSTEM"-python-${{ matrix.python }} || true
-          gh release create --notes "" ton-"$SYSTEM"-python-${{ matrix.python }} artifacts/*
+          gh release delete -y ton-"$TARGET_SYSTEM"-python-${{ matrix.python }} || true
+          gh release create --notes "" ton-"$TARGET_SYSTEM"-python-${{ matrix.python }} artifacts/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
