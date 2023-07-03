@@ -16,6 +16,8 @@ jobs:
       matrix:
         python: [39, 310, 311]
     runs-on: windows-2019
+    env:
+      RELEASE_NAME: ton-cpython-${{ matrix.python }}-x86_64-windows
 
     steps:
       - name: Get Current OS version
@@ -101,7 +103,7 @@ jobs:
           set files=
           for %%f in ("artifacts\*") do set files=!files! "%%f"
 
-          gh release delete -y ton-x86_64-windows-python-${{ matrix.python }} && (exit 0)
-          gh release create --notes "" ton-x86_64-windows-python-${{ matrix.python }} %files%
+          gh release delete -y %RELEASE_NAME% && (exit 0)
+          gh release create --notes "" %RELEASE_NAME% %files%
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

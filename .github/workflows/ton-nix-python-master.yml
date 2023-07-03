@@ -56,6 +56,7 @@ jobs:
     - run: |
         export KERNEL=$(nix eval --raw 'nixpkgs#hostPlatform.parsed.kernel.name')
         echo "TARGET_SYSTEM=${{ matrix.arch }}-$KERNEL" >> $GITHUB_ENV
+        echo "RELEASE_NAME=ton-cpython-${{ matrix.python }}-${{ matrix.arch }}-$KERNEL" >> $GITHUB_ENV
 
     - name: Compile
       run: nix build .?submodules=1#packages."$TARGET_SYSTEM".ton-python-${{ matrix.python }}
@@ -74,7 +75,7 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@master
       with:
-        name: ton-${{ env.TARGET_SYSTEM }}-python-${{ matrix.python }}
+        name: ${{ env.RELEASE_NAME }}
         path: artifacts
 
     - name: Upload artifacts
@@ -82,7 +83,7 @@ jobs:
       with:
         flakes: nixpkgs#gh
         script: |
-          gh release delete -y ton-"$TARGET_SYSTEM"-python-${{ matrix.python }} || true
-          gh release create --notes "" ton-"$TARGET_SYSTEM"-python-${{ matrix.python }} artifacts/*
+          gh release delete -y "$RELEASE_NAME" || true
+          gh release create --notes "" "$RELEASE_NAME" artifacts/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
