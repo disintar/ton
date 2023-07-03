@@ -6,10 +6,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-defaults:
-  run:
-    shell: cmd
-
 jobs:
   build:
     strategy:
@@ -21,8 +17,7 @@ jobs:
 
     steps:
       - name: Get Current OS version
-        run: |
-          systeminfo | findstr /B /C:"OS Name" /C:"OS Version"
+        run: Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion
 
       - name: Check out current repository
         uses: actions/checkout@v3
@@ -76,14 +71,37 @@ jobs:
 
       - name: Compile
         run: |
-          set root=%cd%
-          set SODIUM_DIR=%root%\libsodium
-          echo %root%
-          echo %SODIUM_DIR%
-          mkdir build
-          cd build
-          cmake -DTON_USE_PYTHON=1 -DTON_USE_ABSEIL=0 -DPython_ROOT_DIR=C:\Python${{ matrix.python }} -DSODIUM_USE_STATIC_LIBS=1 -DSECP256K1_INCLUDE_DIR=%root%\secp256k1\include -DSECP256K1_LIBRARY=%root%\secp256k1\bin\x64\Release\v142\static\secp256k1.lib -DREADLINE_INCLUDE_DIR=%root%\readline-5.0-1-lib\include\readline -DREADLINE_LIBRARY=%root%\readline-5.0-1-lib\lib\readline.lib -DPORTABLE=1 -DZLIB_FOUND=1 -DMHD_FOUND=1 -DMHD_LIBRARY=%root%\libmicrohttpd-0.9.77-w32-bin\x86_64\VS2019\Release-static\libmicrohttpd.lib -DMHD_INCLUDE_DIR=%root%\libmicrohttpd-0.9.77-w32-bin\x86_64\VS2019\Release-static -DZLIB_INCLUDE_DIR=%root%\zlib -DZLIB_LIBRARY=%root%\zlib\contrib\vstudio\vc14\x64\ZlibStatReleaseWithoutAsm\zlibstat.lib -DOPENSSL_FOUND=1 -DOPENSSL_INCLUDE_DIR=%root%/openssl-1.1.1j/include -DOPENSSL_CRYPTO_LIBRARY=%root%/openssl-1.1.1j/lib/libcrypto_static.lib -DCMAKE_CXX_FLAGS="/DTD_WINDOWS=1 /EHsc /bigobj /W0" ..
-          cmake --build . --config Release -j %NUMBER_OF_PROCESSORS% --target python_ton
+          $root = Get-Location
+          $env:SODIUM_DIR = Join-Path $root "libsodium"
+
+          $pythonver = ${{ matrix.python }} -replace '(\d)(\d+)$', '$1.$2'
+          $python = "python$pythonver.exe"
+          $pythonRoot = & $python -c "import sys; print(sys.prefix)"
+
+          $cmakeArgs = @(
+            "-DTON_USE_PYTHON=1",
+            "-DTON_USE_ABSEIL=0",
+            "-DPython_ROOT_DIR=$pythonRoot",
+            "-DPython_EXECUTABLE=$python",
+            "-DSODIUM_USE_STATIC_LIBS=1",
+            "-DSECP256K1_INCLUDE_DIR=$root\secp256k1\include",
+            "-DSECP256K1_LIBRARY=$root\secp256k1\bin\x64\Release\v142\static\secp256k1.lib",
+            "-DREADLINE_INCLUDE_DIR=$root\readline-5.0-1-lib\include\readline",
+            "-DREADLINE_LIBRARY=$root\readline-5.0-1-lib\lib\readline.lib",
+            "-DPORTABLE=1",
+            "-DZLIB_FOUND=1",
+            "-DMHD_FOUND=1",
+            "-DMHD_LIBRARY=$root\libmicrohttpd-0.9.77-w32-bin\x86_64\VS2019\Release-static\libmicrohttpd.lib",
+            "-DMHD_INCLUDE_DIR=$root\libmicrohttpd-0.9.77-w32-bin\x86_64\VS2019\Release-static",
+            "-DZLIB_INCLUDE_DIR=$root\zlib",
+            "-DZLIB_LIBRARY=$root\zlib\contrib\vstudio\vc14\x64\ZlibStatReleaseWithoutAsm\zlibstat.lib",
+            "-DOPENSSL_FOUND=1",
+            "-DOPENSSL_INCLUDE_DIR=$root/openssl-1.1.1j/include",
+            "-DOPENSSL_CRYPTO_LIBRARY=$root/openssl-1.1.1j/lib/libcrypto_static.lib",
+            "-DCMAKE_CXX_FLAGS=`"/DTD_WINDOWS=1 /EHsc /bigobj /W0`""
+          )
+          cmake -S . -B build $cmakeArgs
+          cmake --build build --config Release -j $env:NUMBER_OF_PROCESSORS --target python_ton
 
       - name: Find & copy binaries
         run: |
@@ -93,17 +111,14 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@master
         with:
-          name: ton-x86_64-windows-python-${{ matrix.python }}
+          name: ${{ env.RELEASE_NAME }}
           path: artifacts
 
       - name: Upload artifacts
         run: |
-          setlocal enableDelayedExpansion
-
-          set files=
-          for %%f in ("artifacts\*") do set files=!files! "%%f"
-
-          gh release delete -y %RELEASE_NAME% && (exit 0)
-          gh release create --notes "" %RELEASE_NAME% %files%
+          try {
+            gh release delete -y ${{ env.RELEASE_NAME }}
+          } catch {}
+          gh release create ${{ env.RELEASE_NAME }} --notes " " (Get-ChildItem -Path artifacts).FullName
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
