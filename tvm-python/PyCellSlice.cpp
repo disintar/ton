@@ -2,7 +2,7 @@
 // Created by Andrey Tvorozhkov on 5/9/23.
 //
 
-#include "pybind11/pybind11.h"
+#include "third-party/pybind11/include/pybind11/pybind11.h"
 #include <string>
 #include "vm/vmstate.h"
 #include "td/utils/base64.h"
@@ -11,6 +11,7 @@
 #include "vm/cellslice.h"
 #include "block/block.h"
 #include "block/block-parse.h"
+#include "vm/dumper.hpp"
 #include "crypto/vm/cellslice.h"
 #include <queue>
 #include "block/block-auto.h"
@@ -38,6 +39,20 @@ std::string PyCellSlice::preload_uint(unsigned n) {
 
   const auto tmp = my_cell_slice.fetch_int256(n, false);
   return tmp->to_dec_string();
+}
+
+int PyCellSlice::bit_at(unsigned int n) {
+  return my_cell_slice.bit_at(n);
+}
+
+bool PyCellSlice::begins_with_skip_bits(int bits, const std::string& value) {
+  auto n = std::stoull(value);
+  return my_cell_slice.begins_with_skip(bits, n);
+}
+
+bool PyCellSlice::begins_with_skip(const std::string& value) {
+  auto n = std::stoull(value);
+  return my_cell_slice.begins_with_skip(n);
 }
 
 std::string PyCellSlice::load_int(unsigned n) {
@@ -194,6 +209,14 @@ bool PyCellSlice::skip_bits(unsigned int bits, bool last) {
   return cs;
 }
 
+bool PyCellSlice::advance(unsigned bits) {
+  return my_cell_slice.advance(bits);
+}
+
+bool PyCellSlice::advance_ext(unsigned bits_refs) {
+  return my_cell_slice.advance_ext(bits_refs);
+}
+
 bool PyCellSlice::skip_refs(unsigned n, bool last) {
   if (!my_cell_slice.have_refs(n)) {
     throw std::invalid_argument("Not enough refs in cell slice");
@@ -229,6 +252,10 @@ PyCellSlice PyCellSlice::load_tlb(std::string tlb_type) {
 
 int PyCellSlice::bselect(unsigned bits, std::string mask) {
   return my_cell_slice.bselect(bits, std::strtoull(mask.c_str(), nullptr, 10));
+}
+
+int PyCellSlice::bselect_ext(unsigned bits, std::string mask) {
+  return my_cell_slice.bselect_ext(bits, std::strtoull(mask.c_str(), nullptr, 10));
 }
 
 std::string PyCellSlice::dump_as_tlb(std::string tlb_type) const {
