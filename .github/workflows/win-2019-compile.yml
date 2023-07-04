@@ -67,7 +67,7 @@ jobs:
           curl  -Lo readline-5.0-1-lib.zip https://github.com/neodiX42/precompiled-openssl-win64/raw/main/readline-5.0-1-lib.zip
           unzip readline-5.0-1-lib.zip
 
-      - run: choco install -y python${{ matrix.python }}
+      - run: choco install -y --no-progress python${{ matrix.python }}
 
       - name: Compile
         run: |
