@@ -22,6 +22,8 @@ class PyCellSlice {
   std::string preload_uint(unsigned int n);
   std::string load_int(unsigned n);
   std::string preload_int(unsigned n) const;
+  bool advance(unsigned int n);
+  bool advance_ext(unsigned int n);
   bool skip_bits(unsigned int n, bool last = false);
   bool skip_refs(unsigned n, bool last = false);
   std::string toString() const;
@@ -37,6 +39,10 @@ class PyCellSlice {
   PyCellSlice load_tlb(std::string tlb_type);
   std::string load_snake_string();
   int bselect(unsigned bits, std::string mask);
+  int bselect_ext(unsigned bits, std::string mask);
+  int bit_at(unsigned int n);
+  bool begins_with_skip_bits(int bits, const std::string& value);
+  bool begins_with_skip(const std::string& value);
   unsigned bits() const;
   unsigned refs() const;
 

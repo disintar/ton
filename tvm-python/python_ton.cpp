@@ -1,10 +1,47 @@
-#include "pybind11/pybind11.h"
-#include "pybind11/stl.h"
+#include "third-party/pybind11/include/pybind11/pybind11.h"
+#include "third-party/pybind11/include/pybind11/stl.h"
 #include "tvm-python/PyCellSlice.h"
 #include "tvm-python/PyCell.h"
 #include "tvm-python/PyCellBuilder.h"
 #include "tvm-python/PyDict.h"
 #include "tvm-python/PyEmulator.h"
+#include "block/block-auto.h"
+
+int get_tag_test() {
+  vm::CellBuilder data;
+  data.store_long(32, 32);
+  auto cs = data.as_cellslice();
+
+  block::gen::Test t;
+  block::gen::Test::Record tr;
+  t.unpack(cs, tr);
+
+  //  vm::CellBuilder u0;
+  //  block::gen::Unvalid(0).pack_test_unvalid_last(u0, data.as_cellslice_ref());  // test_unvalid_last#80 data:Cell = Unvalid 0;
+  //
+  //  vm::CellBuilder u1;
+  //  // test_unvalid_any$1 {a:#} dd:(Unvalid a) hack:(## 7) = Unvalid (a + 1);
+  //  block::gen::Unvalid(1).pack_test_unvalid_any(u1, 0, u0.as_cellslice_ref());
+  //
+  //  vm::CellBuilder u2;
+  //  // test_unvalid_any$1 {a:#} dd:(Unvalid a) hack:(## 7) = Unvalid (a + 1);
+  //  block::gen::Unvalid(2).pack_test_unvalid_any(u2, 0, u1.as_cellslice_ref());
+  //
+  //  vm::CellBuilder f1;
+  //  vm::CellBuilder f2;
+  //  block::gen::Faker _f;
+  //  _f.pack(f1, u1.as_cellslice_ref());
+  //  _f.pack(f2, u2.as_cellslice_ref());
+  //
+  //  std::stringstream os;
+  //  os << "\n\nUnvalid 1 dumped success as Unvalid 2 in Faker\n";
+  //  _f.print(os, f1.as_cellslice());
+  //
+  //  os << "\n\nUnvalid 2 in Faker\n";
+  //  _f.print(os, f2.as_cellslice());
+
+  return tr.c;
+}
 
 namespace py = pybind11;
 using namespace pybind11::literals;  // to bring in the `_a` literal
@@ -53,6 +90,12 @@ PYBIND11_MODULE(python_ton, m) {
       .def("load_snake_string", &PyCellSlice::load_snake_string)
       .def("load_tlb", &PyCellSlice::load_tlb, py::arg("tlb_type"))
       .def("bselect", &PyCellSlice::bselect, py::arg("bits"), py::arg("mask"))
+      .def("bselect_ext", &PyCellSlice::bselect_ext, py::arg("bits"), py::arg("mask"))
+      .def("bit_at", &PyCellSlice::bit_at, py::arg("position"))
+      .def("begins_with_skip_bits", &PyCellSlice::begins_with_skip_bits, py::arg("bits"), py::arg("value"))
+      .def("begins_with_skip", &PyCellSlice::begins_with_skip, py::arg("value"))
+      .def("advance", &PyCellSlice::advance, py::arg("n"))
+      .def("advance_ext", &PyCellSlice::advance_ext, py::arg("n"))
       .def("skip_bits", &PyCellSlice::skip_bits, py::arg("bits"), py::arg("last"))
       .def("skip_refs", &PyCellSlice::skip_refs, py::arg("n"), py::arg("last"))
       .def("load_string", &PyCellSlice::load_string, py::arg("text_size") = 0, py::arg("convert_to_utf8") = true)
@@ -95,7 +138,13 @@ PYBIND11_MODULE(python_ton, m) {
       .def("get_hash", &PyCellBuilder::get_hash)
       .def("dump_as_tlb", &PyCellBuilder::dump_as_tlb, py::arg("tlb_type"))
       .def("to_boc", &PyCellBuilder::to_boc)
-      .def("__repr__", &PyCellBuilder::toString);
+      .def("store_uint_less", &PyCellBuilder::store_uint_less, py::arg("upper_bound"), py::arg("value"))
+      .def("store_uint_leq", &PyCellBuilder::store_uint_leq, py::arg("upper_bound"), py::arg("value"))
+      .def("__repr__", &PyCellBuilder::toString)
+      .def_property("bits", &PyCellBuilder::get_bits, &PyCellBuilder::dummy_set)
+      .def_property("refs", &PyCellBuilder::get_refs, &PyCellBuilder::dummy_set)
+      .def_property("remaining_refs", &PyCellBuilder::get_remaining_refs, &PyCellBuilder::dummy_set)
+      .def_property("remaining_bits", &PyCellBuilder::get_remaining_bits, &PyCellBuilder::dummy_set);
 
   py::class_<PyDict>(m, "PyDict")
       .def(py::init<int, bool, std::optional<PyCellSlice>>(), py::arg("bit_len"), py::arg("signed") = false,
@@ -126,6 +175,7 @@ PYBIND11_MODULE(python_ton, m) {
 
   m.def("parseStringToCell", parseStringToCell, py::arg("cell_boc"));
   m.def("globalSetVerbosity", globalSetVerbosity, py::arg("verbosity"));
+  m.def("get_tag_test", get_tag_test);
 
   py::class_<PyEmulator>(m, "PyEmulator")
       .def(py::init<PyCell, int>(), py::arg("global_config_boc"), py::arg("vm_log_verbosity") = 0)

@@ -30,6 +30,12 @@ class PyCellBuilder {
   PyCellBuilder* store_ones(unsigned int bits);
   PyCellBuilder* store_builder(const PyCellBuilder& cb);
   PyCellBuilder* store_address(const std::string& addr);
+  PyCellBuilder* store_uint_less(unsigned int bits, std::string value);
+  PyCellBuilder* store_uint_leq(unsigned int bits, std::string value);
+  unsigned get_refs() const;
+  unsigned get_bits() const;
+  unsigned get_remaining_refs() const;
+  unsigned get_remaining_bits() const;
   PyCell get_cell();
   std::string toString() const;
   std::string dump() const;

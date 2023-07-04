@@ -2,7 +2,7 @@
 // Created by Andrey Tvorozhkov on 5/9/23.
 //
 
-#include "pybind11/pybind11.h"
+#include "third-party/pybind11/include/pybind11/pybind11.h"
 #include <string>
 #include "vm/vmstate.h"
 #include "td/utils/base64.h"
@@ -13,6 +13,7 @@
 #include "block-auto.h"
 #include "block/block-parse.h"
 #include "td/utils/PathView.h"
+#include "vm/dumper.hpp"
 #include "PyCellBuilder.h"
 #include "PyCellSlice.h"
 #include "PyCell.h"
@@ -26,6 +27,22 @@ PyCellBuilder* PyCellBuilder::store_uint_str(const std::string& str, unsigned in
   return this;
 }
 
+unsigned PyCellBuilder::get_refs() const {
+  return my_builder.get_refs_cnt();
+}
+
+unsigned PyCellBuilder::get_bits() const {
+  return my_builder.get_bits();
+}
+
+unsigned PyCellBuilder::get_remaining_refs() const {
+  return my_builder.remaining_refs();
+}
+
+unsigned PyCellBuilder::get_remaining_bits() const {
+  return my_builder.remaining_bits();
+}
+
 PyCellBuilder* PyCellBuilder::store_int_str(const std::string& str, unsigned int bits) {
   td::BigInt256 x;
   x.enforce(x.parse_dec(str));
@@ -36,10 +53,12 @@ PyCellBuilder* PyCellBuilder::store_int_str(const std::string& str, unsigned int
 }
 
 PyCellBuilder* PyCellBuilder::store_bitstring(const std::string& s) {
-  unsigned char buff[128];
+  td::BufferSlice buffer(s.size());
+
   const auto tmp = td::Slice{s};
-  int bits = (int)td::bitstring::parse_bitstring_binary_literal(buff, sizeof(buff), tmp.begin(), tmp.end());
-  auto cs = td::Ref<vm::CellSlice>{true, vm::CellBuilder().store_bits(td::ConstBitPtr{buff}, bits).finalize()};
+  int bits =
+      (int)td::bitstring::parse_bitstring_binary_literal((td::uint8*)buffer.data(), s.size(), tmp.begin(), tmp.end());
+  auto cs = td::Ref<vm::CellSlice>{true, vm::CellBuilder().store_bits(buffer.data(), bits).finalize()};
   my_builder = my_builder.append_cellslice(cs);
 
   return this;
@@ -67,13 +86,14 @@ PyCellBuilder* PyCellBuilder::store_grams_str(const std::string& str) {
 
 PyCellBuilder* PyCellBuilder::store_var_integer(const std::string& str, unsigned int varu, bool sgnd) {
   td::BigInt256 x;
-  x.enforce(x.parse_dec(std::move(str)));
+  x.enforce(x.parse_dec(str));
 
   const unsigned int len_bits = 32 - td::count_leading_zeroes32(varu - 1);
   unsigned len = (((unsigned)x.bit_size(sgnd) + 7) >> 3);
 
   if (len >= (1u << len_bits)) {
-    throw vm::VmError{vm::Excno::range_chk};
+    throw std::invalid_argument("Integer doesn't fit to " + std::to_string(len_bits) + "bits, got " +
+                                std::to_string(len));
   }
 
   if (!(my_builder.store_long_bool(len, len_bits) && my_builder.store_int256_bool(x, len * 8, sgnd))) {
@@ -84,7 +104,27 @@ PyCellBuilder* PyCellBuilder::store_var_integer(const std::string& str, unsigned
 }
 
 PyCellBuilder* PyCellBuilder::store_ref(const PyCell& c) {
+  if (c.my_cell.is_null()) {
+    throw std::invalid_argument("Cell is none");
+  }
+
   my_builder.store_ref(c.my_cell);
+  return this;
+}
+
+PyCellBuilder* PyCellBuilder::store_uint_less(unsigned int upper_bound, std::string value) {
+  if (!my_builder.store_uint_less(upper_bound, std::stoull(value))) {
+    throw std::invalid_argument("Invalid parameters to store_uint_less");
+  };
+
+  return this;
+}
+
+PyCellBuilder* PyCellBuilder::store_uint_leq(unsigned int upper_bound, std::string value) {
+  if (!my_builder.store_uint_leq(upper_bound, std::stoull(value))) {
+    throw std::invalid_argument("Invalid parameters to store_uint_less");
+  };
+
   return this;
 }
 
