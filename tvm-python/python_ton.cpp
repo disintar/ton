@@ -7,42 +7,6 @@
 #include "tvm-python/PyEmulator.h"
 #include "block/block-auto.h"
 
-int get_tag_test() {
-  vm::CellBuilder data;
-  data.store_long(32, 32);
-  auto cs = data.as_cellslice();
-
-  block::gen::Test t;
-  block::gen::Test::Record tr;
-  t.unpack(cs, tr);
-
-  //  vm::CellBuilder u0;
-  //  block::gen::Unvalid(0).pack_test_unvalid_last(u0, data.as_cellslice_ref());  // test_unvalid_last#80 data:Cell = Unvalid 0;
-  //
-  //  vm::CellBuilder u1;
-  //  // test_unvalid_any$1 {a:#} dd:(Unvalid a) hack:(## 7) = Unvalid (a + 1);
-  //  block::gen::Unvalid(1).pack_test_unvalid_any(u1, 0, u0.as_cellslice_ref());
-  //
-  //  vm::CellBuilder u2;
-  //  // test_unvalid_any$1 {a:#} dd:(Unvalid a) hack:(## 7) = Unvalid (a + 1);
-  //  block::gen::Unvalid(2).pack_test_unvalid_any(u2, 0, u1.as_cellslice_ref());
-  //
-  //  vm::CellBuilder f1;
-  //  vm::CellBuilder f2;
-  //  block::gen::Faker _f;
-  //  _f.pack(f1, u1.as_cellslice_ref());
-  //  _f.pack(f2, u2.as_cellslice_ref());
-  //
-  //  std::stringstream os;
-  //  os << "\n\nUnvalid 1 dumped success as Unvalid 2 in Faker\n";
-  //  _f.print(os, f1.as_cellslice());
-  //
-  //  os << "\n\nUnvalid 2 in Faker\n";
-  //  _f.print(os, f2.as_cellslice());
-
-  return tr.c;
-}
-
 namespace py = pybind11;
 using namespace pybind11::literals;  // to bring in the `_a` literal
 
@@ -175,7 +139,6 @@ PYBIND11_MODULE(python_ton, m) {
 
   m.def("parseStringToCell", parseStringToCell, py::arg("cell_boc"));
   m.def("globalSetVerbosity", globalSetVerbosity, py::arg("verbosity"));
-  m.def("get_tag_test", get_tag_test);
 
   py::class_<PyEmulator>(m, "PyEmulator")
       .def(py::init<PyCell, int>(), py::arg("global_config_boc"), py::arg("vm_log_verbosity") = 0)
