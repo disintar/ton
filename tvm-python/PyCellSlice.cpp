@@ -41,16 +41,24 @@ std::string PyCellSlice::preload_uint(unsigned n) {
   return tmp->to_dec_string();
 }
 
-int PyCellSlice::bit_at(unsigned int n) {
+int PyCellSlice::bit_at(unsigned int n) const {
   return my_cell_slice.bit_at(n);
 }
 
-bool PyCellSlice::begins_with_skip_bits(int bits, const std::string& value) {
+bool PyCellSlice::begins_with_bits(unsigned bits,const std::string& n) const {
+  return my_cell_slice.begins_with(bits, std::stoull(n));
+}
+
+bool PyCellSlice::begins_with(const std::string& n) const {
+  return my_cell_slice.begins_with(std::stoull(n));
+}
+
+bool PyCellSlice::begins_with_skip_bits(int bits, const std::string &value) {
   auto n = std::stoull(value);
   return my_cell_slice.begins_with_skip(bits, n);
 }
 
-bool PyCellSlice::begins_with_skip(const std::string& value) {
+bool PyCellSlice::begins_with_skip(const std::string &value) {
   auto n = std::stoull(value);
   return my_cell_slice.begins_with_skip(n);
 }
@@ -217,6 +225,14 @@ bool PyCellSlice::advance_ext(unsigned bits_refs) {
   return my_cell_slice.advance_ext(bits_refs);
 }
 
+bool PyCellSlice::advance_refs(unsigned refs) {
+  return my_cell_slice.advance_refs(refs);
+}
+
+bool PyCellSlice::advance_bits_refs(unsigned bits, unsigned refs) {
+  return my_cell_slice.advance_ext(bits, refs);
+}
+
 bool PyCellSlice::skip_refs(unsigned n, bool last) {
   if (!my_cell_slice.have_refs(n)) {
     throw std::invalid_argument("Not enough refs in cell slice");
@@ -227,7 +243,7 @@ bool PyCellSlice::skip_refs(unsigned n, bool last) {
   if (!last) {
     cs = my_cell_slice.skip_first(0, n);
   } else {
-    cs = my_cell_slice.skip_first(0, n);
+    cs = my_cell_slice.skip_last(0, n);
   }
 
   return cs;
@@ -319,6 +335,10 @@ std::string parse_snake_data_string(vm::CellSlice &cs, bool convert_to_utf8 = tr
 
 std::string PyCellSlice::load_snake_string() {
   return parse_snake_data_string(my_cell_slice);
+}
+
+std::string PyCellSlice::to_bitstring() const {
+  return my_cell_slice.data_bits().to_binary(my_cell_slice.size());
 }
 
 unsigned PyCellSlice::bits() const {
