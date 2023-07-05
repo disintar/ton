@@ -56,9 +56,15 @@ PYBIND11_MODULE(python_ton, m) {
       .def("bselect", &PyCellSlice::bselect, py::arg("bits"), py::arg("mask"))
       .def("bselect_ext", &PyCellSlice::bselect_ext, py::arg("bits"), py::arg("mask"))
       .def("bit_at", &PyCellSlice::bit_at, py::arg("position"))
+      .def("begins_with", &PyCellSlice::begins_with, py::arg("n"))
+      .def("begins_with_bits", &PyCellSlice::begins_with_bits, py::arg("bits"), py::arg("n"))
       .def("begins_with_skip_bits", &PyCellSlice::begins_with_skip_bits, py::arg("bits"), py::arg("value"))
       .def("begins_with_skip", &PyCellSlice::begins_with_skip, py::arg("value"))
+      .def("to_bitstring", &PyCellSlice::to_bitstring)
       .def("advance", &PyCellSlice::advance, py::arg("n"))
+      .def("advance_ext", &PyCellSlice::advance_ext, py::arg("bits_refs"))
+      .def("advance_bits_refs", &PyCellSlice::advance_bits_refs, py::arg("bits"), py::arg("refs"))
+      .def("advance_refs", &PyCellSlice::advance_refs, py::arg("refs"))
       .def("advance_ext", &PyCellSlice::advance_ext, py::arg("n"))
       .def("skip_bits", &PyCellSlice::skip_bits, py::arg("bits"), py::arg("last"))
       .def("skip_refs", &PyCellSlice::skip_refs, py::arg("n"), py::arg("last"))
@@ -139,6 +145,7 @@ PYBIND11_MODULE(python_ton, m) {
 
   m.def("parseStringToCell", parseStringToCell, py::arg("cell_boc"));
   m.def("globalSetVerbosity", globalSetVerbosity, py::arg("verbosity"));
+  m.def("get_tag_test", get_tag_test);
 
   py::class_<PyEmulator>(m, "PyEmulator")
       .def(py::init<PyCell, int>(), py::arg("global_config_boc"), py::arg("vm_log_verbosity") = 0)
