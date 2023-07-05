@@ -145,7 +145,6 @@ PYBIND11_MODULE(python_ton, m) {
 
   m.def("parseStringToCell", parseStringToCell, py::arg("cell_boc"));
   m.def("globalSetVerbosity", globalSetVerbosity, py::arg("verbosity"));
-  m.def("get_tag_test", get_tag_test);
 
   py::class_<PyEmulator>(m, "PyEmulator")
       .def(py::init<PyCell, int>(), py::arg("global_config_boc"), py::arg("vm_log_verbosity") = 0)
