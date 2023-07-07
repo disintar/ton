@@ -5,7 +5,6 @@
 #include "tvm-python/PyCellBuilder.h"
 #include "tvm-python/PyDict.h"
 #include "tvm-python/PyEmulator.h"
-#include "block/block-auto.h"
 
 namespace py = pybind11;
 using namespace pybind11::literals;  // to bring in the `_a` literal
