@@ -6,6 +6,7 @@
 #include <utility>
 #include "block/block.h"
 #include "block/block-parse.h"
+#include "vm/dumper.hpp"
 #include "crypto/vm/cellslice.h"
 #include "PyCellSlice.h"
 #include "PyCell.h"
@@ -22,7 +23,7 @@ class PyDict {
 
   explicit PyDict(int key_len_, bool sgnd_ = false, std::optional<PyCellSlice> cs_root = std::optional<PyCellSlice>()) {
     if (cs_root) {
-      vm::Dictionary my_dict_t{vm::DictNonEmpty(),cs_root.value().my_cell_slice, key_len_};
+      vm::Dictionary my_dict_t{vm::DictNonEmpty(), cs_root.value().my_cell_slice, key_len_};
       my_dict = std::make_unique<vm::Dictionary>(my_dict_t);
     } else {
       vm::Dictionary my_dict_t{key_len_};

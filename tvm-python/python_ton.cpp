@@ -77,7 +77,6 @@ PYBIND11_MODULE(python_ton, m) {
   py::class_<PyCell>(m, "PyCell")
       .def(py::init<>())
       .def("get_hash", &PyCell::get_hash)
-      .def("begin_parse", &PyCell::begin_parse)
       .def("dump", &PyCell::dump)
       .def("dump_as_tlb", &PyCell::dump_as_tlb, py::arg("tlb_type"))
       .def("to_boc", &PyCell::to_boc)
@@ -144,6 +143,7 @@ PYBIND11_MODULE(python_ton, m) {
 
   m.def("parseStringToCell", parseStringToCell, py::arg("cell_boc"));
   m.def("globalSetVerbosity", globalSetVerbosity, py::arg("verbosity"));
+  m.def("load_as_cell_slice", load_as_cell_slice, py::arg("cell"));
 
   py::class_<PyEmulator>(m, "PyEmulator")
       .def(py::init<PyCell, int>(), py::arg("global_config_boc"), py::arg("vm_log_verbosity") = 0)
