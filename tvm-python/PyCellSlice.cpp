@@ -16,6 +16,7 @@
 #include <queue>
 #include "block/block-auto.h"
 #include "PyCellSlice.h"
+#include "PyCell.h"
 #include <string>
 #include <cassert>
 #include <codecvt>
@@ -45,11 +46,11 @@ int PyCellSlice::bit_at(unsigned int n) const {
   return my_cell_slice.bit_at(n);
 }
 
-bool PyCellSlice::begins_with_bits(unsigned bits,const std::string& n) const {
+bool PyCellSlice::begins_with_bits(unsigned bits, const std::string &n) const {
   return my_cell_slice.begins_with(bits, std::stoull(n));
 }
 
-bool PyCellSlice::begins_with(const std::string& n) const {
+bool PyCellSlice::begins_with(const std::string &n) const {
   return my_cell_slice.begins_with(std::stoull(n));
 }
 
@@ -137,7 +138,7 @@ std::string PyCellSlice::load_addr() {
   return friendlyAddr.rserialize(true);
 }
 
-PyCellSlice PyCellSlice::fetch_ref() {
+PyCell PyCellSlice::fetch_ref() {
   if (!my_cell_slice.have_refs(1)) {
     throw std::invalid_argument("Not enough refs in cell slice");
   }
@@ -146,10 +147,10 @@ PyCellSlice PyCellSlice::fetch_ref() {
   if (r.is_null()) {
     throw vm::CellBuilder::CellWriteError();
   }
-  return PyCellSlice(r);
+  return PyCell(r);
 }
 
-PyCellSlice PyCellSlice::prefetch_ref(int offset) const {
+PyCell PyCellSlice::prefetch_ref(int offset) const {
   if (!my_cell_slice.have_refs(offset + 1)) {
     throw std::invalid_argument("Not enough refs in cell slice");
   }
@@ -159,7 +160,7 @@ PyCellSlice PyCellSlice::prefetch_ref(int offset) const {
     throw vm::CellBuilder::CellWriteError();
   }
 
-  return PyCellSlice(r);
+  return PyCell(r);
 }
 
 std::string PyCellSlice::dump() const {
@@ -347,4 +348,8 @@ unsigned PyCellSlice::bits() const {
 
 unsigned PyCellSlice::refs() const {
   return my_cell_slice.size_refs();
+}
+
+PyCellSlice load_as_cell_slice(PyCell cell) {
+  return PyCellSlice(cell.my_cell);
 }

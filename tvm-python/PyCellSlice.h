@@ -3,6 +3,7 @@
 //
 
 #include "vm/vm.h"
+#include "PyCell.h"
 
 #ifndef TON_PYCELLSLICE_H
 #define TON_PYCELLSLICE_H
@@ -32,8 +33,8 @@ class PyCellSlice {
   std::string load_addr();
   bool begins_with(const std::string& n) const;
   bool begins_with_bits(unsigned bits, const std::string& n) const;
-  PyCellSlice fetch_ref();
-  PyCellSlice prefetch_ref(int offset = 0) const;
+  PyCell fetch_ref();
+  PyCell prefetch_ref(int offset = 0) const;
   std::string dump() const;
   std::string load_var_integer_str(unsigned int varu, bool sgnd);
   std::string to_boc() const;
@@ -55,5 +56,7 @@ class PyCellSlice {
     throw std::invalid_argument("Not settable");
   }
 };
+
+PyCellSlice load_as_cell_slice(PyCell cell);
 
 #endif  //TON_PYCELLSLICE_H

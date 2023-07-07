@@ -3,7 +3,6 @@
 //
 
 #include "vm/vm.h"
-#include "tvm-python/PyCellSlice.h"
 
 #ifndef TON_PYCELL_H
 #define TON_PYCELL_H
@@ -19,7 +18,6 @@ class PyCell {
 
   explicit PyCell() = default;
   ~PyCell() = default;
-  PyCellSlice begin_parse() const;
   std::string get_hash() const;
   std::string toString() const;
   std::string dump() const;
