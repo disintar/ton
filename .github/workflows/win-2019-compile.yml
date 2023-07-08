@@ -67,7 +67,12 @@ jobs:
           curl  -Lo readline-5.0-1-lib.zip https://github.com/neodiX42/precompiled-openssl-win64/raw/main/readline-5.0-1-lib.zip
           unzip readline-5.0-1-lib.zip
 
-      - run: choco install -y --no-progress python${{ matrix.python }}
+      - run: |
+          echo "pythonver=$(${{ matrix.python }} -replace '(\d)(\d+)$', '$1.$2')" >> $env:GITHUB_ENV
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.pythonver }}
 
       - name: Compile
         run: |
@@ -76,15 +81,9 @@ jobs:
           $root = Get-Location
           $env:SODIUM_DIR = Join-Path $root "libsodium"
 
-          $pythonver = ${{ matrix.python }} -replace '(\d)(\d+)$', '$1.$2'
-          $python = "python$pythonver.exe"
-          $pythonRoot = & $python -c "import sys; print(sys.prefix)"
-
           $cmakeArgs = @(
             "-DTON_USE_PYTHON=1",
             "-DTON_USE_ABSEIL=0",
-            "-DPython_ROOT_DIR=$pythonRoot",
-            "-DPython_EXECUTABLE=$python",
             "-DSODIUM_USE_STATIC_LIBS=1",
             "-DSECP256K1_INCLUDE_DIR=$root\secp256k1\include",
             "-DSECP256K1_LIBRARY=$root\secp256k1\bin\x64\Release\v142\static\secp256k1.lib",
