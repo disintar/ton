@@ -71,6 +71,8 @@ jobs:
 
       - name: Compile
         run: |
+          Set-PSDebug -Trace 2 -Strict
+
           $root = Get-Location
           $env:SODIUM_DIR = Join-Path $root "libsodium"
 
