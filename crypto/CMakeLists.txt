@@ -417,6 +417,9 @@ if (WINGETOPT_FOUND)
   target_link_libraries_system(tlbc wingetopt)
 endif()
 
+add_library(tlbc-lib tl/tlbc.cpp)
+target_link_libraries(tlbc-lib PUBLIC ton_crypto_core src_parser)
+
 add_library(pow-miner-lib util/Miner.cpp util/Miner.h)
 target_include_directories(pow-miner-lib PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 target_link_libraries(pow-miner-lib PUBLIC ton_crypto ton_block)
@@ -522,7 +525,7 @@ target_include_directories(create-state PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT
 if (INTERNAL_COMPILE)
   target_link_libraries(create-state PUBLIC ton_crypto fift-lib ton_block tonlib git)
 else()
-  if (TONLIB_COMPILE) 
+  if (TONLIB_COMPILE)
     target_link_libraries(create-state PUBLIC ton_crypto fift-lib ton_block tonlib git)
   else()
     target_link_libraries(create-state PUBLIC ton_crypto fift-lib ton_block git)

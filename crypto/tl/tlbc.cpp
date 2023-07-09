@@ -53,6 +53,7 @@
 #include "tlbc-aux.h"
 #include "tlbc-data.h"
 #include "tlbc-gen-cpp.h"
+#include "tlbc-gen-py.h"
 
 int verbosity;
 
@@ -2450,6 +2451,13 @@ bool parse_source_stdin() {
   return parse_source(&std::cin, cur_source);
 }
 
+bool parse_source_string(const std::string& tlb_code) {
+  auto* cur_source = new src::FileDescr{"stdin", true};
+  source_fdescr.push_back(cur_source);
+  std::istringstream iss(tlb_code);
+  return parse_source(&iss, cur_source);
+}
+
 /*
  * 
  *   BUILT-IN TYPE DEFINITIONS
@@ -3056,9 +3064,24 @@ void register_source(std::string source) {
   source_list.push_back(source);
 }
 
+std::string codegen_python_tlb(const std::string& tlb_text) {
+  src::define_keywords();
+  tlbc::init_abstract_tables();
+  tlbc::define_builtins();
+
+  tlbc::parse_source_string(tlb_text);
+  tlbc::check_scheme();
+
+  std::stringstream ss;
+  tlbc::generate_py_output(ss, 0);
+
+  return ss.str();
+}
+
 }  // namespace tlbc
 
 #include "tlbc-gen-cpp.cpp"
+#include "tlbc-gen-py.cpp"
 
 /*
  * 

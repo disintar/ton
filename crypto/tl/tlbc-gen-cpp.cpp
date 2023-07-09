@@ -219,16 +219,17 @@ unsigned long long CppTypeCode::compute_selector_mask() const {
 struct HexConstWriter {
   unsigned long long mask;
   explicit HexConstWriter(unsigned long long _mask) : mask(_mask){};
-  void write(std::ostream& os) const;
+  void write(std::ostream& os, bool suffix = true) const;
 };
 
-void HexConstWriter::write(std::ostream& os) const {
+void HexConstWriter::write(std::ostream& os, bool suffix) const {
   if (mask < 32) {
     os << mask;
   } else {
     os << "0x" << std::hex << mask << std::dec;
   }
-  if (mask >= (1ULL << 31)) {
+
+  if (suffix & (mask >= (1ULL << 31))) {
     os << (mask >= (1ULL << 32) ? "ULL" : "U");
   }
 }

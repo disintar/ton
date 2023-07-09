@@ -20,6 +20,8 @@
 #include <string>
 #include <vector>
 #include "common/linalloc.hpp"
+#include "crypto/parser/symtable.h"
+#include "crypto/tl/tlbc-aux.h"
 
 namespace tlbc {
 
@@ -339,5 +341,7 @@ extern Type *NatWidth_type, *NatLess_type, *NatLeq_type, *Int_type, *UInt_type;
 
 extern int types_num, builtin_types_num;
 extern std::vector<Type> types;
+
+std::string codegen_python_tlb(const std::string& tlb_text);
 
 }  // namespace tlbc
