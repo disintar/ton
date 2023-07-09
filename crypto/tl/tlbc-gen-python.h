@@ -18,6 +18,7 @@
 */
 #pragma once
 #include "tlbc-gen-cpp.h"
+#include "tlbc-data.h"
 
 namespace tlbc {
 
@@ -234,12 +235,15 @@ class PyTypeCode {
   }
 };
 
-std::string codegen_python_tlb(const std::string& tlb_text);
 void generate_py_output(std::stringstream& ss, int options);
 
-
 std::string codegen_python_tlb(const std::string& tlb_text) {
+  src::define_keywords();
+  tlbc::init_abstract_tables();
+  tlbc::define_builtins();
+
   tlbc::parse_source_string(tlb_text);
+  tlbc::check_scheme();
 
   std::stringstream ss;
   tlbc::generate_py_output(ss, 0);

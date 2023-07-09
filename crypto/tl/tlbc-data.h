@@ -346,5 +346,14 @@ extern int types_num, builtin_types_num;
 extern std::vector<Type> types;
 
 bool parse_source_string(const std::string& tlb_code);
+void init_abstract_tables();
+void define_builtins();
+void check_scheme();
 
 }  // namespace tlbc
+
+namespace src {
+
+void define_keywords();
+
+}  // namespace src

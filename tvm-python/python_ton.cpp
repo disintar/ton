@@ -25,17 +25,19 @@ PYBIND11_MODULE(python_ton, m) {
       if (p)
         std::rethrow_exception(p);
     } catch (vm::CellBuilder::CellWriteError) {
-      PyErr_SetString(PyExc_RuntimeError, "Cell write overflow");
+      throw std::invalid_argument("Cell write overflow");
     } catch (vm::CellBuilder::CellCreateError) {
-      PyErr_SetString(PyExc_RuntimeError, "Cell create overflow");
+      throw std::invalid_argument("Cell create overflow");
     } catch (vm::CellSlice::CellReadError) {
-      PyErr_SetString(PyExc_RuntimeError, "Cell underflow");
+      throw std::invalid_argument("Cell underflow");
     } catch (const vm::VmError& e) {
-      exc(e.get_msg());
+      throw std::invalid_argument(e.get_msg());
     } catch (const vm::VmFatal& e) {
-      exc("VMFatal error");
+      throw std::invalid_argument("VMFatal error");
     } catch (std::exception& e) {
-      PyErr_SetString(PyExc_RuntimeError, e.what());
+      throw std::invalid_argument(e.what());
+    } catch (src::ParseError& e) {
+      throw std::invalid_argument(e.message);
     }
   });
 

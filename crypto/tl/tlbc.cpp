@@ -2429,7 +2429,7 @@ bool parse_source_stdin() {
 }
 
 bool parse_source_string(const std::string& tlb_code) {
-  src::FileDescr* cur_source = new src::FileDescr{"stdin", true};
+  auto* cur_source = new src::FileDescr{"stdin", true};
   source_fdescr.push_back(cur_source);
   std::istringstream iss(tlb_code);
   return parse_source(&iss, cur_source);
