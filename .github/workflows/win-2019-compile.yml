@@ -116,6 +116,8 @@ jobs:
           path: artifacts
 
       - name: Upload artifacts
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }} ||
+            ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           try {
             gh release delete -y ${{ env.RELEASE_NAME }}
