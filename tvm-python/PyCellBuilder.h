@@ -20,6 +20,7 @@ class PyCellBuilder {
   }
 
   PyCellBuilder* store_uint_str(const std::string& str, unsigned int bits);
+  PyCellBuilder* store_256uint_str(const std::string& str, unsigned int bits);
   PyCellBuilder* store_int_str(const std::string& str, unsigned int bits);
   PyCellBuilder* store_bitstring(const std::string& s);
   PyCellBuilder* store_slice(const PyCellSlice& cs);

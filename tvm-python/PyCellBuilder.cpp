@@ -155,7 +155,7 @@ PyCellBuilder* PyCellBuilder::store_address(const std::string& addr) {
 }
 
 PyCell PyCellBuilder::get_cell() {
-  return PyCell(my_builder.finalize());
+  return PyCell(my_builder.finalize_copy());
 }
 
 std::string PyCellBuilder::toString() const {

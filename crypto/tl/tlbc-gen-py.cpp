@@ -48,9 +48,9 @@ void init_forbidden_py_idents() {
   f.insert("continue");
   f.insert("global");
   f.insert("pass");
-  f.insert("PyCell");
-  f.insert("PyCellSlice");
-  f.insert("PyCellBuilder");
+  f.insert("Cell");
+  f.insert("CellSlice");
+  f.insert("CellBuilder");
   f.insert("PyDict");
   f.insert("PyEmulator");
 
@@ -398,25 +398,10 @@ void generate_py_output_to(std::ostream& os, int options = 0) {
     generate_py_prepared = true;
   }
 
-  os << "\"\"\"\n *\n *  AUTO-GENERATED FROM";
-  for (auto s : source_list) {
-    if (s.empty()) {
-      os << " stdin";
-    } else {
-      os << " `" << s << "`";
-    }
-  }
-  os << "\n *\n\"\"\"\n";
-  for (int i = 0; i < builtin_types_num; i++) {
-    Type& type = types[i];
-    if (type.used) {
-      os << "# Uses built-in type `" << type.get_name() << "`\n";
-    }
-  }
-
   os << "\nfrom enum import Enum\n";
   os << "import bitstring\n";
-  os << "from python_ton import *\n";
+  os << "from tonpy.types import TLB, TLBComplex, Cell, CellSlice, CellBuilder\n";
+  os << "from typing import Optional, Union\n";
 
   for (int i : type_gen_order) {
     PyTypeCode& cc = *py_type[i];
@@ -542,10 +527,10 @@ void show_pyvaltype(std::ostream& os, py_val_type x, int size = -1, bool pass_va
       os << "void";  // WTF this is needed for?
       break;
     case py_slice:
-      os << "PyCellSlice";
+      os << "CellSlice";
       break;
     case py_cell:
-      os << "PyCell";
+      os << "Cell";
       break;
     case py_typeptr:
       os << "TLB";
@@ -2000,7 +1985,7 @@ void PyTypeCode::generate_skip_method(std::ostream& os, int options) {
   bool ret_ext = ret_params;
 
   if (validate && inline_validate_skip) {
-    os << "    def validate_skip(self, ops: int, cs: PyCellSlice, weak: bool = False):\n";
+    os << "    def validate_skip(self, ops: int, cs: CellSlice, weak: bool = False):\n";
     if (sz) {
       os << "        return cs.advance(" << writed << ")\n\n";
     } else {
@@ -2008,7 +1993,7 @@ void PyTypeCode::generate_skip_method(std::ostream& os, int options) {
     }
     return;
   } else if (inline_skip) {
-    os << "    def skip(self, cs: PyCellSlice):\n";
+    os << "    def skip(self, cs: CellSlice):\n";
     if (sz) {
       os << "        return cs.advance" << (sz < 0x10000 ? "(" : "_ext(") << writed << ")\n\n";
     } else {
@@ -2018,7 +2003,7 @@ void PyTypeCode::generate_skip_method(std::ostream& os, int options) {
   }
 
   os << "    def "
-     << (validate ? "validate_skip(self, ops: int, cs: PyCellSlice, weak: bool = False" : "skip(self, cs: PyCellSlice");
+     << (validate ? "validate_skip(self, ops: int, cs: CellSlice, weak: bool = False" : "skip(self, cs: CellSlice");
   if (ret_ext) {
     os << skip_extra_args;
   }
@@ -2594,7 +2579,7 @@ void PyTypeCode::generate_store_enum_method(std::ostream& os, int options) {
 void PyTypeCode::generate_header(std::ostream& os, int options) {
   //  dump_all_types();
 
-  os << "\nclass " << py_type_class_name << "(TLB_Complex):\n";
+  os << "\nclass " << py_type_class_name << "(TLBComplex):\n";
   generate_cons_enum(os);
   generate_cons_tag_info(os, "    ", 1);
 
@@ -2603,7 +2588,7 @@ void PyTypeCode::generate_header(std::ostream& os, int options) {
     generate_type_constructor(os, options);
   }
 
-  os << "    def get_tag(self, cs: PyCellSlice) -> Optional[\"" << py_type_class_name << ".Tag\"]:\n";
+  os << "    def get_tag(self, cs: CellSlice) -> Optional[\"" << py_type_class_name << ".Tag\"]:\n";
   generate_get_tag_body(os, "        ");
   os << "\n\n";
 
@@ -2643,7 +2628,7 @@ void PyTypeCode::generate_header(std::ostream& os, int options) {
   //  sz = ((sz & 0xff) << 16) | (sz >> 8);
   //  if (simple_get_size) {
   //    os << "    @staticmethod\n";
-  //    os << "    def get_size(cs: PyCellSlice):\n";
+  //    os << "    def get_size(cs: CellSlice):\n";
   //    os << "        return " << SizeWriter{sz} << "\n\n";
   //  }
   //
@@ -2676,10 +2661,8 @@ void generate_py_output(const std::string& filename = "", int options = 0) {
   }
 }
 
-
 void generate_py_output(std::stringstream& ss, int options) {
   generate_py_output_to(ss, options);
 }
-
 
 }  // namespace tlbc

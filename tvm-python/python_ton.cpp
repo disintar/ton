@@ -88,6 +88,8 @@ PYBIND11_MODULE(python_ton, m) {
       .def(py::init<>())
       .def("store_uint_str", &PyCellBuilder::store_uint_str, py::arg("str") = "", py::arg("bits") = "",
            py::return_value_policy::reference_internal)
+      .def("store_256uint_str", &PyCellBuilder::store_uint_str, py::arg("str") = "", py::arg("bits") = "",
+           py::return_value_policy::reference_internal)
       .def("store_int_str", &PyCellBuilder::store_int_str, py::arg("str") = "", py::arg("bits") = "",
            py::return_value_policy::reference_internal)
       .def("store_builder", &PyCellBuilder::store_builder, py::arg("cb"), py::return_value_policy::reference_internal)
