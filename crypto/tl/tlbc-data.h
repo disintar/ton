@@ -340,7 +340,10 @@ struct SymValType : SymVal {
 
 extern sym_idx_t Nat_name, Eq_name, Less_name, Leq_name;
 extern Type *Nat_type, *Eq_type;
+extern Type *Less_type, *Leq_type;
 extern Type *NatWidth_type, *NatLess_type, *NatLeq_type, *Int_type, *UInt_type;
+extern Type* Bits_type;
+extern Type *Any_type, *Cell_type;
 
 extern int types_num, builtin_types_num;
 extern std::vector<Type> types;
