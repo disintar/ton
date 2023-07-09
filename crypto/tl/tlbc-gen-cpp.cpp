@@ -40,12 +40,20 @@ namespace tlbc {
  * 
  */
 
+std::vector<int> type_gen_order;
+
+sym_idx_t Nat_name, Eq_name, Less_name, Leq_name;
+Type* Nat_type;
+Type *Eq_type, *Less_type, *Leq_type;
+Type *NatWidth_type, *NatLess_type, *NatLeq_type, *Int_type, *UInt_type;
+Type* Bits_type;
+Type *Any_type, *Cell_type;
+
 CppIdentSet global_cpp_ids;
 
 std::vector<std::unique_ptr<CppTypeCode>> cpp_type;
 
 bool add_type_members;
-
 
 void init_forbidden_cpp_idents() {
   std::set<std::string>& f = forbidden_cpp_idents;
@@ -217,8 +225,6 @@ unsigned long long CppTypeCode::compute_selector_mask() const {
   }
   return z;
 }
-
-
 
 void HexConstWriter::write(std::ostream& os, bool suffix) const {
   if (mask < 32) {
@@ -1264,7 +1270,6 @@ void Action::show(std::ostream& os) const {
 bool Action::may_combine(const Action& next) const {
   return !fixed_size || !next.fixed_size || (fixed_size >= 0 && next.fixed_size >= 0);
 }
-
 
 void operator+=(std::vector<Action>& av, const Action& next) {
   if (av.empty() || !(av.back() += next)) {
@@ -3322,7 +3327,6 @@ void split_namespace_id() {
     cpp_namespace_list.emplace_back(prev_it, cpp_namespace.cend());
   }
 }
-
 
 void prepare_generate_cpp(int options = 0) {
   std::vector<std::pair<int, int>> pairs;

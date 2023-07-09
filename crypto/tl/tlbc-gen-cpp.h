@@ -324,15 +324,6 @@ extern std::vector<std::unique_ptr<CppTypeCode>> cpp_type;
 
 extern bool add_type_members;
 
-sym_idx_t Nat_name, Eq_name, Less_name, Leq_name;
-Type* Nat_type;
-Type *Eq_type, *Less_type, *Leq_type;
-Type *NatWidth_type, *NatLess_type, *NatLeq_type, *Int_type, *UInt_type;
-Type* Bits_type;
-Type *Any_type, *Cell_type;
-
-std::vector<int> type_gen_order;
-
 TypeExpr type_Type{{}, TypeExpr::te_Type};
 
 TypeExpr* const_type_expr[TypeExpr::max_const_expr];
