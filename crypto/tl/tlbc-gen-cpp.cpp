@@ -16,6 +16,18 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
+#include <vector>
+#include <string>
+#include <set>
+#include <utility>
+#include <algorithm>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <cstdio>
+#include <cassert>
+#include "tl/tlbc-aux.h"
+#include "tl/tlbc-data.h"
 #include "tlbc-gen-cpp.h"
 #include "td/utils/bits.h"
 #include "td/utils/filesystem.h"
@@ -34,9 +46,6 @@ std::vector<std::unique_ptr<CppTypeCode>> cpp_type;
 
 bool add_type_members;
 
-std::set<std::string> forbidden_cpp_idents, local_forbidden_cpp_idents;
-std::vector<std::string> const_type_expr_cpp_idents;
-std::vector<bool> const_type_expr_simple;
 
 void init_forbidden_cpp_idents() {
   std::set<std::string>& f = forbidden_cpp_idents;
@@ -183,13 +192,6 @@ std::string CppIdentSet::new_ident(std::string orig_ident, int count, std::strin
   }
 }
 
-struct SizeWriter {
-  int sz;
-  explicit SizeWriter(int _sz) : sz(_sz) {
-  }
-  void write(std::ostream& os) const;
-};
-
 void SizeWriter::write(std::ostream& os) const {
   if (sz < 0x10000) {
     os << sz;
@@ -216,19 +218,16 @@ unsigned long long CppTypeCode::compute_selector_mask() const {
   return z;
 }
 
-struct HexConstWriter {
-  unsigned long long mask;
-  explicit HexConstWriter(unsigned long long _mask) : mask(_mask){};
-  void write(std::ostream& os) const;
-};
 
-void HexConstWriter::write(std::ostream& os) const {
+
+void HexConstWriter::write(std::ostream& os, bool suffix) const {
   if (mask < 32) {
     os << mask;
   } else {
     os << "0x" << std::hex << mask << std::dec;
   }
-  if (mask >= (1ULL << 31)) {
+
+  if (suffix & (mask >= (1ULL << 31))) {
     os << (mask >= (1ULL << 32) ? "ULL" : "U");
   }
 }
@@ -453,8 +452,6 @@ void CppTypeCode::assign_cons_values() {
     cons_idx_by_enum[i++] = z.second;
   }
 }
-
-std::vector<std::string> std_field_names = {"x", "y", "z", "t", "u", "v", "w"};
 
 void CppTypeCode::assign_record_cons_names() {
   for (int i = 0; i < cons_num; i++) {
@@ -1268,21 +1265,6 @@ bool Action::may_combine(const Action& next) const {
   return !fixed_size || !next.fixed_size || (fixed_size >= 0 && next.fixed_size >= 0);
 }
 
-bool Action::operator+=(const Action& next) {
-  if (!next.fixed_size) {
-    return true;
-  }
-  if (!fixed_size) {
-    fixed_size = next.fixed_size;
-    action = next.action;
-    return true;
-  }
-  if (fixed_size >= 0 && next.fixed_size >= 0) {
-    fixed_size += next.fixed_size;
-    return true;
-  }
-  return false;
-}
 
 void operator+=(std::vector<Action>& av, const Action& next) {
   if (av.empty() || !(av.back() += next)) {
@@ -3341,7 +3323,6 @@ void split_namespace_id() {
   }
 }
 
-std::vector<int> type_gen_order;
 
 void prepare_generate_cpp(int options = 0) {
   std::vector<std::pair<int, int>> pairs;

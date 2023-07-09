@@ -20,8 +20,13 @@
 #include <string>
 #include <vector>
 #include "common/linalloc.hpp"
+#include "parser/lexer.h"
+#include "parser/symtable.h"
+#include "tl/tlbc-aux.h"
 
 namespace tlbc {
+
+std::vector<std::string> source_list;
 
 using src::Lexem;
 using src::Lexer;
@@ -339,5 +344,7 @@ extern Type *NatWidth_type, *NatLess_type, *NatLeq_type, *Int_type, *UInt_type;
 
 extern int types_num, builtin_types_num;
 extern std::vector<Type> types;
+
+bool parse_source_string(const std::string& tlb_code);
 
 }  // namespace tlbc

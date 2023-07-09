@@ -27,23 +27,16 @@
 */
 #include <vector>
 #include <string>
-#include <map>
-#include <set>
-#include <stack>
 #include <utility>
 #include <algorithm>
 #include <iostream>
-#include <fstream>
-#include <functional>
-#include <sstream>
 #include <cstdio>
 #include <cassert>
 #include <cstdlib>
+#include <fstream>
 #include <getopt.h>
 
-#include "common/refcnt.hpp"
 #include "common/bigint.hpp"
-#include "common/refint.h"
 #include "parser/srcread.h"
 #include "parser/lexer.h"
 #include "parser/symtable.h"
@@ -53,6 +46,7 @@
 #include "tlbc-aux.h"
 #include "tlbc-data.h"
 #include "tlbc-gen-cpp.h"
+#include "tlbc-gen-python.h"
 
 int verbosity;
 
@@ -866,25 +860,6 @@ std::ostream& operator<<(std::ostream& os, const Constructor& cs) {
   cs.show(os);
   return os;
 }
-
-TypeExpr type_Type{{}, TypeExpr::te_Type};
-
-TypeExpr* const_type_expr[TypeExpr::max_const_expr];
-int const_type_expr_num;
-
-TypeExpr* TypeExpr::const_htable[TypeExpr::const_htable_size];
-
-sym_idx_t Nat_name, Eq_name, Less_name, Leq_name;
-Type* Nat_type;
-Type *Eq_type, *Less_type, *Leq_type;
-Type *NatWidth_type, *NatLess_type, *NatLeq_type, *Int_type, *UInt_type;
-Type* Bits_type;
-Type *Any_type, *Cell_type;
-
-int types_num, builtin_types_num;
-std::vector<Type> types;
-
-int Type::last_declared_counter;
 
 void TypeExpr::check_mode(const src::SrcLocation& loc, int mode) {
   if (!(mode & (1 << (is_nat ? 1 : 0)))) {
@@ -2099,7 +2074,10 @@ TypeExpr* parse_term(Lexer& lex, Constructor& cs, int mode) {
       negate = true;
     }
     res->is_nat = field_type->is_nat_subtype;
-    // std::cerr << "using field " << lex.cur().str << "; is_nat_subtype = " << res->is_nat << std::endl;
+    std::stringstream os;
+    field_type->show(os);
+
+    //    LOG(WARNING) << "using field " << lex.cur().str << "; is_nat_subtype = " << res->is_nat << "; os: " << os.str();
     if (!res->is_nat && field_type->tp != TypeExpr::te_Type) {
       throw src::ParseError{lex.cur().loc,
                             "cannot use a field in an expression unless it is either an integer or a type"};
@@ -2345,8 +2323,8 @@ void parse_constructor_def(Lexer& lex) {
     assert(tag);
     lex.next();
   }
-  //std::cerr << "parsing constructor `" << sym::symbols.get_name(constr_name) << "` with tag " << std::hex << tag
-  //          << std::dec << std::endl;
+  //  std::cerr << "parsing constructor `" << sym::symbols.get_name(constr_name) << "` with tag " << std::hex << tag
+  //            << std::dec << std::endl;
   auto cs_ref = new (AR) Constructor(where, constr_name, 0, tag);
   Constructor& cs = *cs_ref;
   cs.is_special = is_special;
@@ -2426,7 +2404,7 @@ bool parse_source(std::istream* is, src::FileDescr* fdescr) {
   src::Lexer lex{reader, true, "(){}:;? #$. ^~ #", "//", "/*", "*/", ""};
   while (lex.tp() != src::_Eof) {
     parse_constructor_def(lex);
-    // std::cerr << lex.cur().str << '\t' << lex.cur().name_str() << std::endl;
+    //     std::cerr << lex.cur().str << '\t' << lex.cur().name_str() << std::endl;
   }
   return true;
 }
@@ -2448,6 +2426,13 @@ bool parse_source_stdin() {
   src::FileDescr* cur_source = new src::FileDescr{"stdin", true};
   source_fdescr.push_back(cur_source);
   return parse_source(&std::cin, cur_source);
+}
+
+bool parse_source_string(const std::string& tlb_code) {
+  src::FileDescr* cur_source = new src::FileDescr{"stdin", true};
+  source_fdescr.push_back(cur_source);
+  std::istringstream iss(tlb_code);
+  return parse_source(&iss, cur_source);
 }
 
 /*
@@ -2816,6 +2801,9 @@ void Type::compute_constructor_trie() {
     cs_trie = BinTrie::insert_paths(std::move(cs_trie), cs->begins_with, z);
     z <<= 1;
   }
+  //  std::stringstream os;
+  //  cs_trie->show(os);
+  //  LOG(WARNING) << os.str();
   if (cs_trie) {
     useful_depth = cs_trie->compute_useful_depth();
     is_pfx_determ = !cs_trie->find_conflict_path();
@@ -3050,8 +3038,6 @@ void dump_all_constexpr() {
  * 
  */
 
-std::vector<std::string> source_list;
-
 void register_source(std::string source) {
   source_list.push_back(source);
 }
@@ -3059,6 +3045,7 @@ void register_source(std::string source) {
 }  // namespace tlbc
 
 #include "tlbc-gen-cpp.cpp"
+#include "tlbc-gen-python.cpp"
 
 /*
  * 
@@ -3086,7 +3073,8 @@ int main(int argc, char* const argv[]) {
   int i;
   bool interactive = false;
   bool no_code_gen = false;
-  while ((i = getopt(argc, argv, "chin:o:qTtvz")) != -1) {
+  bool python_code_gen = false;
+  while ((i = getopt(argc, argv, "chin:o:qpTtvz")) != -1) {
     switch (i) {
       case 'i':
         interactive = true;
@@ -3096,6 +3084,9 @@ int main(int argc, char* const argv[]) {
         break;
       case 'o':
         output_filename = optarg;
+        break;
+      case 'p':
+        python_code_gen = true;
         break;
       case 'c':
         tlbc::gen_cpp = true;
@@ -3154,8 +3145,15 @@ int main(int argc, char* const argv[]) {
       tlbc::dump_all_constexpr();
     }
     if (!no_code_gen) {
-      tlbc::init_forbidden_cpp_idents();
-      tlbc::generate_cpp_output(output_filename);
+      if (python_code_gen) {
+        LOG(WARNING) << "Generate python output: file [" << output_filename << "]";
+        tlbc::init_forbidden_py_idents();
+        tlbc::generate_py_output(output_filename);
+      } else {
+        LOG(WARNING) << "Generate cpp output: file [" << output_filename << "]";
+        tlbc::init_forbidden_cpp_idents();
+        tlbc::generate_cpp_output(output_filename);
+      }
     }
   } catch (src::Fatal& fatal) {
     std::cerr << "fatal: " << fatal << std::endl;

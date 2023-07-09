@@ -10,6 +10,7 @@
 #include "crypto/vm/stack.hpp"
 #include "crypto/vm/memo.h"
 
+
 td::Result<td::Ref<vm::Cell>> boc_b64_to_cell(const char *boc) {
   TRY_RESULT_PREFIX(boc_decoded, td::base64_decode(td::Slice(boc)), "Can't decode base64 boc: ");
   return vm::std_boc_deserialize(boc_decoded);

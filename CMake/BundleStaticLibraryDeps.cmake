@@ -69,7 +69,7 @@ function(bundle_static_library_deps tgt_name bundled_tgt_name)
       DEPENDS ${static_libs}
       COMMENT "Bundling ${bundled_tgt_name}"
       VERBATIM)
-  elseif (CMAKE_CXX_COMPILER_ID MATCHES "^Clang$")
+  elseif (CMAKE_CXX_COMPILER_ID MATCHES "^Clang$" OR CMAKE_CXX_COMPILER_ID MATCHES "^AppleClang$")
     set(temp_dirs "")
 
     foreach(lib ${static_libs})
@@ -89,7 +89,7 @@ function(bundle_static_library_deps tgt_name bundled_tgt_name)
     endforeach()
 
     add_custom_command(OUTPUT ${bundled_tgt_full_name}
-      COMMAND bash -c "${CMAKE_AR} -qc ${bundled_tgt_full_name} $(find -name \"*.o\")"
+      COMMAND bash -c "${CMAKE_AR} -qc ${bundled_tgt_full_name} $(find . -name \"*.o\")"
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       DEPENDS ${temp_dirs}
       COMMENT "Bundling into ${bundled_tgt_full_name}"

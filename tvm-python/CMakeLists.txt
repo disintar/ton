@@ -1,9 +1,15 @@
 cmake_minimum_required(VERSION 3.0.2 FATAL_ERROR)
 
-find_package(Python REQUIRED Development)
+if (NOT Python_FOUND)
+    find_package(Python REQUIRED Development)
+endif()
 find_package(OpenSSL REQUIRED)
-find_package(Secp256k1 REQUIRED)
-find_package(Sodium REQUIRED)
+if (NOT SECP256K1_FOUND)
+    find_package(Secp256k1 REQUIRED)
+endif()
+if (NOT SODIUM_FOUND)
+    find_package(Sodium REQUIRED)
+endif()
 
 add_library(combined INTERFACE)
 target_link_libraries(combined INTERFACE

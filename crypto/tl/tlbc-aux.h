@@ -21,6 +21,7 @@
 #include <string>
 #include <memory>
 #include <ostream>
+#include "tdutils/td/utils/bits.h"
 
 namespace tlbc {
 

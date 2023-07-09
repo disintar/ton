@@ -17,6 +17,7 @@
     Copyright 2017-2020 Telegram Systems LLP
 */
 #pragma once
+#include "tl/tlbc-data.h"
 
 namespace tlbc {
 
@@ -61,7 +62,42 @@ struct Action {
   }
   void show(std::ostream& os) const;
   bool may_combine(const Action& next) const;
-  bool operator+=(const Action& next);
+  bool operator+=(const Action& next) {
+    if (!next.fixed_size) {
+      return true;
+    }
+    if (!fixed_size) {
+      fixed_size = next.fixed_size;
+      action = next.action;
+      return true;
+    }
+    if (fixed_size >= 0 && next.fixed_size >= 0) {
+      fixed_size += next.fixed_size;
+      return true;
+    }
+    return false;
+  }
+};
+
+std::vector<std::string> std_field_names = {"x", "y", "z", "t", "u", "v", "w"};
+
+std::set<std::string> forbidden_cpp_idents, local_forbidden_cpp_idents;
+std::vector<std::string> const_type_expr_cpp_idents;
+std::vector<bool> const_type_expr_simple;
+
+std::string compute_type_expr_class_name(const TypeExpr* expr, int& fake_arg);
+
+struct HexConstWriter {
+  unsigned long long mask;
+  explicit HexConstWriter(unsigned long long _mask) : mask(_mask){};
+  void write(std::ostream& os, bool suffix = true) const;
+};
+
+struct SizeWriter {
+  int sz;
+  explicit SizeWriter(int _sz) : sz(_sz) {
+  }
+  void write(std::ostream& os) const;
 };
 
 enum cpp_val_type {
@@ -70,6 +106,7 @@ enum cpp_val_type {
   ct_slice = 2,
   ct_cell = 3,
   ct_typeref = 4,
+
   ct_typeptr = 5,
   ct_bits = 6,
   ct_bitstring = 7,
@@ -286,5 +323,30 @@ class CppTypeCode {
 extern std::vector<std::unique_ptr<CppTypeCode>> cpp_type;
 
 extern bool add_type_members;
+
+sym_idx_t Nat_name, Eq_name, Less_name, Leq_name;
+Type* Nat_type;
+Type *Eq_type, *Less_type, *Leq_type;
+Type *NatWidth_type, *NatLess_type, *NatLeq_type, *Int_type, *UInt_type;
+Type* Bits_type;
+Type *Any_type, *Cell_type;
+
+std::vector<int> type_gen_order;
+
+TypeExpr type_Type{{}, TypeExpr::te_Type};
+
+TypeExpr* const_type_expr[TypeExpr::max_const_expr];
+int const_type_expr_num;
+
+TypeExpr* TypeExpr::const_htable[TypeExpr::const_htable_size];
+
+int types_num, builtin_types_num;
+std::vector<Type> types;
+
+int Type::last_declared_counter;
+void operator+=(std::vector<Action>& av, const Action& next);
+static std::string constr_arg_name(std::string type_field_name);
+std::ostream& operator<<(std::ostream& os, SizeWriter w);
+std::ostream& operator<<(std::ostream& os, HexConstWriter w);
 
 }  // namespace tlbc
