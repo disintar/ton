@@ -117,6 +117,9 @@ class PyTypeCode {
   std::string py_type_var_name;
   std::string py_type_class_name;
   void generate(std::ostream& os, int options = 0);
+  bool is_codegened(){
+    return type.already_codegened;
+  }
 
  private:
   std::vector<Action> actions;

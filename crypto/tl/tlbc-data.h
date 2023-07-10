@@ -250,6 +250,7 @@ struct Type {
   int useful_depth;
   int const_param_idx;
   int conflict1, conflict2;
+  bool already_codegened;
   MinMaxSize size;
   std::vector<Constructor*> constructors;
   std::vector<int> args;

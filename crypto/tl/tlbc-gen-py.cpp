@@ -72,7 +72,6 @@ void prepare_generate_py(int options = 0) {
   py_type.resize(types_num);
   for (int i : type_gen_order) {
     Type& type = types[i];
-
     py_type[i] = std::make_unique<PyTypeCode>(type);
     PyTypeCode& cc = *py_type[i];
     if (!py_type[i] || !cc.is_ok()) {
@@ -405,10 +404,14 @@ void generate_py_output_to(std::ostream& os, int options = 0) {
 
   for (int i : type_gen_order) {
     PyTypeCode& cc = *py_type[i];
-    cc.generate(os, options);
+    if (!cc.is_codegened()) {
+      cc.generate(os, options);
+    }
   }
   //  generate_type_constants(os);
   //  generate_register_function(os);
+
+  generate_py_prepared = false;
 }
 
 void PyTypeCode::generate(std::ostream& os, int options) {
@@ -422,6 +425,7 @@ void PyTypeCode::generate(std::ostream& os, int options) {
 
   //  os << "\n//\n// code for " << (type.is_auto ? "auxiliary " : "") << "type `" << type_name << "`\n//\n";
   //  generate_body(os, options);
+  type.already_codegened = true;
 }
 
 void PyTypeCode::generate_cons_enum(std::ostream& os) {

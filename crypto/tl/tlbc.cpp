@@ -2365,6 +2365,12 @@ void parse_constructor_def(Lexer& lex) {
       std::cerr << "defined new type `" << sym::symbols.get_name(type_name) << "`" << std::endl;
     }
     assert(sym_def);
+  } else {
+    for (int i = 0; i < orig_types_num; i++) {
+      if (types.at(i).type_name == type_name && types.at(i).already_codegened) {
+        throw src::ParseError{lex.cur().loc, sym::symbols.get_name(type_name) + " type already codegened and can't be extended"};
+      }
+    }
   }
   if (!sym_def || !sym_def->value || sym_def->value->type != sym::SymValBase::_Typename) {
     throw src::ParseError{lex.cur().loc, "parametrized type identifier expected"};
@@ -2427,7 +2433,7 @@ bool parse_source(std::istream* is, src::FileDescr* fdescr) {
   src::Lexer lex{reader, true, "(){}:;? #$. ^~ #", "//", "/*", "*/", ""};
   while (lex.tp() != src::_Eof) {
     parse_constructor_def(lex);
-    // std::cerr << lex.cur().str << '\t' << lex.cur().name_str() << std::endl;
+//    LOG(ERROR) << lex.cur().str << '\t' << lex.cur().name_str();
   }
   return true;
 }
@@ -2452,7 +2458,7 @@ bool parse_source_stdin() {
 }
 
 bool parse_source_string(const std::string& tlb_code) {
-  auto* cur_source = new src::FileDescr{"stdin", true};
+  src::FileDescr* cur_source = new src::FileDescr{"stdin", true};
   source_fdescr.push_back(cur_source);
   std::istringstream iss(tlb_code);
   return parse_source(&iss, cur_source);
@@ -3064,16 +3070,22 @@ void register_source(std::string source) {
   source_list.push_back(source);
 }
 
+bool inited;
+
 std::string codegen_python_tlb(const std::string& tlb_text) {
-  src::define_keywords();
-  tlbc::init_abstract_tables();
-  tlbc::define_builtins();
+  if (!inited) {
+    src::define_keywords();
+    tlbc::init_abstract_tables();
+    tlbc::define_builtins();
+    inited = true;
+  }
 
   tlbc::parse_source_string(tlb_text);
   tlbc::check_scheme();
 
   std::stringstream ss;
   tlbc::generate_py_output(ss, 0);
+  source_fdescr.pop_back();
 
   return ss.str();
 }

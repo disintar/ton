@@ -15,9 +15,17 @@ void globalSetVerbosity(int vb) {
   SET_VERBOSITY_LEVEL(v);
 }
 
+std::string codeget_python_tlb(std::string tlb_code){
+  py::print(tlb_code);
+  auto tlb = tlbc::codegen_python_tlb(tlb_code);
+  py::print(tlb);
+  return tlb;
+}
+
 PYBIND11_MODULE(python_ton, m) {
   PSLICE() << "";
   SET_VERBOSITY_LEVEL(verbosity_ERROR);
+
 
   static py::exception<vm::VmError> exc(m, "VmError");
   py::register_exception_translator([](std::exception_ptr p) {
@@ -147,7 +155,7 @@ PYBIND11_MODULE(python_ton, m) {
   m.def("parseStringToCell", parseStringToCell, py::arg("cell_boc"));
   m.def("globalSetVerbosity", globalSetVerbosity, py::arg("verbosity"));
   m.def("load_as_cell_slice", load_as_cell_slice, py::arg("cell"));
-  m.def("codegen_python_tlb", tlbc::codegen_python_tlb, py::arg("tlb_text"));
+  m.def("codegen_python_tlb", codeget_python_tlb, py::arg("tlb_text"));
 
   py::class_<PyEmulator>(m, "PyEmulator")
       .def(py::init<PyCell, int>(), py::arg("global_config_boc"), py::arg("vm_log_verbosity") = 0)
