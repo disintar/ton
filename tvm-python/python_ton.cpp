@@ -15,7 +15,7 @@ void globalSetVerbosity(int vb) {
   SET_VERBOSITY_LEVEL(v);
 }
 
-std::string codeget_python_tlb(std::string tlb_code){
+std::string codeget_python_tlb(std::string tlb_code) {
   py::print(tlb_code);
   auto tlb = tlbc::codegen_python_tlb(tlb_code);
   py::print(tlb);
@@ -23,9 +23,11 @@ std::string codeget_python_tlb(std::string tlb_code){
 }
 
 PYBIND11_MODULE(python_ton, m) {
+  codeget_python_tlb("_ = A;");
+  codeget_python_tlb("_ = A;");
+
   PSLICE() << "";
   SET_VERBOSITY_LEVEL(verbosity_ERROR);
-
 
   static py::exception<vm::VmError> exc(m, "VmError");
   py::register_exception_translator([](std::exception_ptr p) {
@@ -33,17 +35,19 @@ PYBIND11_MODULE(python_ton, m) {
       if (p)
         std::rethrow_exception(p);
     } catch (vm::CellBuilder::CellWriteError) {
-      PyErr_SetString(PyExc_RuntimeError, "Cell write overflow");
+      throw std::runtime_error("CellWriteError");
     } catch (vm::CellBuilder::CellCreateError) {
-      PyErr_SetString(PyExc_RuntimeError, "Cell create overflow");
+      throw std::runtime_error("CellCreateError");
     } catch (vm::CellSlice::CellReadError) {
-      PyErr_SetString(PyExc_RuntimeError, "Cell underflow");
+      throw std::runtime_error("CellReadError");
     } catch (const vm::VmError& e) {
       exc(e.get_msg());
     } catch (const vm::VmFatal& e) {
-      exc("VMFatal error");
+      throw std::runtime_error("VmFatal error");
+    } catch (src::ParseError e) {
+      throw std::runtime_error(e.message);
     } catch (std::exception& e) {
-      PyErr_SetString(PyExc_RuntimeError, e.what());
+      throw std::runtime_error(e.what());
     }
   });
 

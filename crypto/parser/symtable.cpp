@@ -139,6 +139,11 @@ SymDef* lookup_symbol(sym_idx_t idx, int flags) {
   return nullptr;
 }
 
+void clear_sym_def() {
+  std::memset(sym_def, 0, (symbols.hprime + 1) * sizeof(SymDef*));
+  std::memset(global_sym_def, 0, (symbols.hprime + 1) * sizeof(SymDef*));
+}
+
 SymDef* lookup_symbol(std::string name, int flags) {
   return lookup_symbol(symbols.lookup(name), flags);
 }

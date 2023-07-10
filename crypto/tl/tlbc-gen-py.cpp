@@ -1,6 +1,7 @@
 #include "tlbc-gen-py.h"
 #include "td/utils/bits.h"
 #include "td/utils/filesystem.h"
+#include "crypto/parser/symtable.h"
 
 namespace tlbc {
 
@@ -393,6 +394,10 @@ bool generate_py_prepared;
 
 void generate_py_output_to(std::ostream& os, int options = 0) {
   if (!generate_py_prepared) {
+    global_cpp_ids.clear();
+    cpp_type.clear();
+    type_gen_order.clear();
+
     prepare_generate_py(options);
     generate_py_prepared = true;
   }
@@ -421,10 +426,8 @@ void PyTypeCode::generate(std::ostream& os, int options) {
   }
 
   os << "\n\n# class for " << (type.is_auto ? "auxiliary " : "") << "type `" << type_name << "`";
-  generate_header(os, options);
 
-  //  os << "\n//\n// code for " << (type.is_auto ? "auxiliary " : "") << "type `" << type_name << "`\n//\n";
-  //  generate_body(os, options);
+  generate_class(os, options);
   type.already_codegened = true;
 }
 
@@ -2580,7 +2583,7 @@ void PyTypeCode::generate_store_enum_method(std::ostream& os, int options) {
 }
 
 // This is actually not header in Python, but just base class with static methods
-void PyTypeCode::generate_header(std::ostream& os, int options) {
+void PyTypeCode::generate_class(std::ostream& os, int options) {
   //  dump_all_types();
 
   os << "\nclass " << py_type_class_name << "(TLBComplex):\n";

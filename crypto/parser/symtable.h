@@ -102,6 +102,10 @@ class SymTableBase {
     return ((unsigned)i < (unsigned)max_kw_idx) ? sym_table[keywords[i]].get() : nullptr;
   }
 
+  void clear_keywords() {
+    std::memset(keywords, 0, sizeof(keywords));
+  }
+
  protected:
   sym_idx_t gen_lookup(std::string str, int mode = 0, sym_idx_t idx = 0);
 };
@@ -126,6 +130,11 @@ class SymTable : public SymTableBase {
   }
   SymTable& add_kw_char(char c) {
     return add_keyword(std::string{c}, c);
+  }
+
+  void clear() {
+    SymTableBase::clear_keywords();
+    std::memset(sym, 0, (pp + 1) * sizeof(std::unique_ptr<Symbol>));
   }
 };
 
@@ -170,6 +179,7 @@ void open_scope(src::Lexer& lex);
 void close_scope(src::Lexer& lex);
 SymDef* lookup_symbol(sym_idx_t idx, int flags = 3);
 SymDef* lookup_symbol(std::string name, int flags = 3);
+void clear_sym_def();
 
 SymDef* define_global_symbol(sym_idx_t name_idx, bool force_new = false, const src::SrcLocation& loc = {});
 SymDef* define_symbol(sym_idx_t name_idx, bool force_new = false, const src::SrcLocation& loc = {});

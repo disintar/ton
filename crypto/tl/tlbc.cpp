@@ -972,7 +972,7 @@ Field& Constructor::new_field(const src::SrcLocation& field_where, bool implicit
   if (name) {
     sym::SymDef* sym_def = sym::lookup_symbol(name, 1);
     if (sym_def) {
-      throw src::ParseError{field_where, "redefined field or parameter"};
+      throw src::ParseError{field_where, "redefined field or parameter " + sym::symbols.get_name(name)};
     }
   }
   fields.emplace_back(field_where, implicit, fields_num++, name);
@@ -988,11 +988,13 @@ void Field::register_sym() const {
   if (name) {
     sym::SymDef* sym_def = sym::lookup_symbol(name, 1);
     if (sym_def) {
-      throw src::ParseError{loc, "redefined field or parameter"};
+      throw src::ParseError{loc, "redefined field or parameter " + sym::symbols.get_name(name)};
     } else {
       sym_def = sym::define_symbol(name, true, loc);
       if (!sym_def) {
         throw src::ParseError{loc, "cannot register field"};
+      } else {
+        LOG(ERROR) << "Define field: " + sym::symbols.get_name(name);
       }
     }
     delete sym_def->value;
@@ -2346,8 +2348,8 @@ void parse_constructor_def(Lexer& lex) {
     assert(tag);
     lex.next();
   }
-  //std::cerr << "parsing constructor `" << sym::symbols.get_name(constr_name) << "` with tag " << std::hex << tag
-  //          << std::dec << std::endl;
+//  LOG(ERROR) << "parsing constructor `" << sym::symbols.get_name(constr_name) << "` with tag " << std::hex << tag
+//            << std::dec;
   auto cs_ref = new (AR) Constructor(where, constr_name, 0, tag);
   Constructor& cs = *cs_ref;
   cs.is_special = is_special;
@@ -2362,15 +2364,9 @@ void parse_constructor_def(Lexer& lex) {
   if (!sym_def) {
     sym_def = register_new_type(lex.cur().loc, type_name);
     if (verbosity > 2) {
-      std::cerr << "defined new type `" << sym::symbols.get_name(type_name) << "`" << std::endl;
+      LOG(ERROR) << "defined new type `" << sym::symbols.get_name(type_name) << "`";
     }
     assert(sym_def);
-  } else {
-    for (int i = 0; i < orig_types_num; i++) {
-      if (types.at(i).type_name == type_name && types.at(i).already_codegened) {
-        throw src::ParseError{lex.cur().loc, sym::symbols.get_name(type_name) + " type already codegened and can't be extended"};
-      }
-    }
   }
   if (!sym_def || !sym_def->value || sym_def->value->type != sym::SymValBase::_Typename) {
     throw src::ParseError{lex.cur().loc, "parametrized type identifier expected"};
@@ -2433,7 +2429,7 @@ bool parse_source(std::istream* is, src::FileDescr* fdescr) {
   src::Lexer lex{reader, true, "(){}:;? #$. ^~ #", "//", "/*", "*/", ""};
   while (lex.tp() != src::_Eof) {
     parse_constructor_def(lex);
-//    LOG(ERROR) << lex.cur().str << '\t' << lex.cur().name_str();
+    //    LOG(ERROR) << lex.cur().str << '\t' << lex.cur().name_str();
   }
   return true;
 }
@@ -3070,15 +3066,24 @@ void register_source(std::string source) {
   source_list.push_back(source);
 }
 
-bool inited;
+void clear() {
+  // if we generate several times tlb code in runtime need to clear stuff
+  sym::clear_sym_def();
+  sym::symbols.clear();
+  types.clear();
+  source_list.clear();
+  source_fdescr.clear();
+
+  types_num = 0;
+  builtin_types_num = 0;
+}
 
 std::string codegen_python_tlb(const std::string& tlb_text) {
-  if (!inited) {
-    src::define_keywords();
-    tlbc::init_abstract_tables();
-    tlbc::define_builtins();
-    inited = true;
-  }
+  clear();
+
+  src::define_keywords();
+  tlbc::define_builtins();
+  tlbc::init_abstract_tables();
 
   tlbc::parse_source_string(tlb_text);
   tlbc::check_scheme();

@@ -209,7 +209,7 @@ class PyTypeCode {
   bool match_param_pattern(std::ostream& os, std::string nl, const char A[4], int mask, std::string pattern,
                            std::string param_name) const;
   bool init();
-  void generate_header(std::ostream& os, int options = 0);
+  void generate_class(std::ostream& os, int options = 0);
 
  public:
   PyTypeCode(Type& _type) : type(_type), local_cpp_ids(&local_forbidden_py_idents) {
