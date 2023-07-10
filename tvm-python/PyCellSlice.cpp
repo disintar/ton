@@ -38,7 +38,7 @@ std::string PyCellSlice::preload_uint(unsigned n) {
     throw std::invalid_argument("Not enough bits in cell slice");
   }
 
-  const auto tmp = my_cell_slice.fetch_int256(n, false);
+  const auto tmp = my_cell_slice.prefetch_int256(n, false);
   return tmp->to_dec_string();
 }
 

@@ -2382,7 +2382,7 @@ void PyTypeCode::generate_get_tag_body(std::ostream& os, std::string nl) {
         for (int i = 0; i < cons_num; i++) {
           cons_tag_exact[i] = (type.constructors.at(i)->tag_bits <= d);
         }
-        os << nl << "return " << py_type_class_name << ".Tag(int(cs.preload_int(" << d << ")))";
+        os << nl << "return " << py_type_class_name << ".Tag(int(cs.preload_uint(" << d << ")))";
         return;
       }
       for (int i = 0; i < cons_num; i++) {
