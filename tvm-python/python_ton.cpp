@@ -23,9 +23,6 @@ std::string codeget_python_tlb(std::string tlb_code) {
 }
 
 PYBIND11_MODULE(python_ton, m) {
-  codeget_python_tlb("_ = A;");
-  codeget_python_tlb("_ = A;");
-
   PSLICE() << "";
   SET_VERBOSITY_LEVEL(verbosity_ERROR);
 
