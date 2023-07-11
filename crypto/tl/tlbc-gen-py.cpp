@@ -2647,11 +2647,13 @@ void PyTypeCode::generate_class(std::ostream& os, int options) {
   //  }
   //  os << "\n";
   //
-  //  if (type.is_special) {
-  //    os << "    @staticmethod\n";
-  //    os << "    def always_special():\n";
-  //    os << "        return True\n\n";
-  //  }
+  if (type.is_special) {
+    os << "    def always_special(self):\n";
+    os << "        return True\n\n";
+  } else {
+    os << "    def always_special(self):\n";
+    os << "        return False\n\n";
+  }
   //  int sz = type.size.min_size();
   //  sz = ((sz & 0xff) << 16) | (sz >> 8);
   //  if (simple_get_size) {
