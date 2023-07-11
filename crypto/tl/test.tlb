@@ -1,2 +1,14 @@
-_ b:(## 32) = BaseClassGlobalScope;
-_ a:^BaseClassGlobalScope = NewClassGlobalScope;
+
+test$_ = A; // simple Enum
+test$01 = B;
+
+a$0 = C;
+b$1 = C;
+
+a$0 = D;
+b$11 = D;
+c$101 = D;
+
+
+// a$001 a:(## 32) = A;
+// b$010 a:(## 23) = A;

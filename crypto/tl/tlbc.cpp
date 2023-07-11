@@ -993,8 +993,6 @@ void Field::register_sym() const {
       sym_def = sym::define_symbol(name, true, loc);
       if (!sym_def) {
         throw src::ParseError{loc, "cannot register field"};
-      } else {
-        LOG(ERROR) << "Define field: " + sym::symbols.get_name(name);
       }
     }
     delete sym_def->value;
@@ -2348,8 +2346,8 @@ void parse_constructor_def(Lexer& lex) {
     assert(tag);
     lex.next();
   }
-//  LOG(ERROR) << "parsing constructor `" << sym::symbols.get_name(constr_name) << "` with tag " << std::hex << tag
-//            << std::dec;
+  //  LOG(ERROR) << "parsing constructor `" << sym::symbols.get_name(constr_name) << "` with tag " << std::hex << tag
+  //            << std::dec;
   auto cs_ref = new (AR) Constructor(where, constr_name, 0, tag);
   Constructor& cs = *cs_ref;
   cs.is_special = is_special;
@@ -3108,9 +3106,10 @@ std::string codegen_python_tlb(const std::string& tlb_text) {
 
 void usage(const char* progname) {
   std::cerr << "usage: " << progname
-            << " [-v][-i][-h][-c][-z][-t][-T][-q][-n<namespace>][-o<output-filename>] {<tlb-filename> ...}\n"
+            << " [-v][-i][-h][-c][-z][-t][-T][-q][-p][-n<namespace>][-o<output-filename>] {<tlb-filename> ...}\n"
             << "-v\tIncrease verbosity level\n"
             << "-t\tShow tag mismatch warnings\n"
+            << "-p\tGenerate Python code\n"
             << "-q\tOmit code generation (TLB scheme check only)\n"
             << "-h\tGenerate C++ header file only (usually .h or .hpp)\n"
             << "-c\tGenerate C++ source file only (usually .cpp)\n"
@@ -3126,10 +3125,15 @@ int main(int argc, char* const argv[]) {
   int i;
   bool interactive = false;
   bool no_code_gen = false;
-  while ((i = getopt(argc, argv, "chin:o:qTtvz")) != -1) {
+  bool py_gen = false;
+
+  while ((i = getopt(argc, argv, "chin:o:qpTtvz")) != -1) {
     switch (i) {
       case 'i':
         interactive = true;
+        break;
+      case 'p':
+        py_gen = true;
         break;
       case 'v':
         ++verbosity;
@@ -3195,7 +3199,11 @@ int main(int argc, char* const argv[]) {
     }
     if (!no_code_gen) {
       tlbc::init_forbidden_cpp_idents();
-      tlbc::generate_cpp_output(output_filename);
+      if (py_gen) {
+        tlbc::generate_py_output(output_filename);
+      } else {
+        tlbc::generate_cpp_output(output_filename);
+      }
     }
   } catch (src::Fatal& fatal) {
     std::cerr << "fatal: " << fatal << std::endl;

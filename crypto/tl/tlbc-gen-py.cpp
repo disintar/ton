@@ -485,9 +485,9 @@ void PyTypeCode::generate_cons_tag_info(std::ostream& os, std::string nl, int op
     } else {
       os << nl << "cons_len_exact = " << common_cons_len << "\n";
     }
-    if (common_cons_len != 0 && !incremental_cons_tags) {
-      generate_cons_tag_array(os, nl, options);
-    }
+    //    if (common_cons_len != 0 && !incremental_cons_tags) {
+    generate_cons_tag_array(os, nl, options);
+    //    }
     os << "\n";
   }
 }
@@ -2521,65 +2521,86 @@ void PyTypeCode::generate_ext_fetch_to(std::ostream& os, int options) {
 void PyTypeCode::generate_fetch_enum_method(std::ostream& os, int options) {
   int minl = type.size.convert_min_size(), maxl = type.size.convert_max_size();
   bool exact = type.cons_all_exact();
-  std::string ctag = incremental_cons_tags ? "(unsigned)t" : "cons_tag[t]";
-  os << "\nbool " << py_type_class_name << "::fetch_enum_to(vm::CellSlice& cs, char& value) const {\n";
+  std::string ctag = incremental_cons_tags ? "expected_tag" : "self.cons_tag[expected_tag]";
+  os << "\n    def fetch_enum(self, cs: CellSlice) -> int:\n";
   if (!cons_num) {
-    os << "  value = -1;\n"
-          "  return false;\n";
+    os << "        return -1\n";  // When?
   } else if (!maxl) {
-    os << "  value = 0;\n"
-          "  return true;\n";
+    os << "        return 0\n";
   } else if (cons_num == 1) {
     const Constructor& constr = *type.constructors.at(0);
-    os << "  value = (cs.fetch_ulong(" << minl << ") == " << HexConstWriter{constr.tag >> (64 - constr.tag_bits)}
-       << ") ? 0 : -1;\n";
-    os << "  return !value;\n";
+    HexConstWriter w{constr.tag >> (64 - constr.tag_bits)};
+    std::stringstream x;
+    w.write(x, false);
+
+    os << "        value = cs.load_uint(" << minl << ")\n"
+       << "        assert value == " << x.str() << ", 'Not valid tag fetched'\n"
+       << "        return value\n";
   } else if (minl == maxl) {
     if (exact) {
-      os << "  value = (char)cs.fetch_ulong(" << minl << ");\n";
-      os << "  return value >= 0;\n";
+      os << "        value = cs.load_uint(" << minl << ");\n"
+         << "        assert value in self.cons_tag, f'Unexpected value {value} for tag, expected one of: "
+            "{self.cons_tag}'\n"
+         << "        return value\n";
     } else {
-      os << "  int t = get_tag(cs);\n";
-      os << "  value = (char)t;\n";
-      os << "  return t >= 0 && cs.fetch_ulong(" << minl << ") == " << ctag << ";\n";
+      os << "        expected_tag = self.get_tag(cs).value\n"
+         << "        value = cs.load_uint(" << minl << ")\n"
+         << "        assert value == " << ctag << ", f'Not valid tag fetched, got {value}, expected {" << ctag << "}'\n"
+         << "        return value\n";
     }
   } else if (exact) {
-    os << "  int t = get_tag(cs);\n";
-    os << "  value = (char)t;\n";
-    os << "  return t >= 0 && cs.advance(cons_len[t]);\n";
+    os << "        expected_tag = get_tag(cs).value;\n"
+       << "        cs.advance(self.cons_len[expected_tag])"
+       << "        return expected_tag\n";
   } else {
-    os << "  int t = get_tag(cs);\n";
-    os << "  value = (char)t;\n";
-    os << "  return t >= 0 && cs.fetch_ulong(cons_len[t]) == " << ctag << ";\n";
+    os << "        expected_tag = self.get_tag(cs).value\n"
+       << "        value = cs.load_uint(self.cons_len[expected_tag])\n"
+       << "        assert value == self.cons_tag[expected_tag], f'Not valid tag fetched, got {value}, expected "
+          "{self.cons_tag[expected_tag]}'\n"
+       << "        return value\n";
   }
-  os << "}\n";
+  os << "\n";
 }
 
 void PyTypeCode::generate_store_enum_method(std::ostream& os, int options) {
   int minl = type.size.convert_min_size(), maxl = type.size.convert_max_size();
   bool exact = type.cons_all_exact();
-  std::string ctag = incremental_cons_tags ? "value" : "cons_tag[value]";
-  os << "\nbool " << py_type_class_name << "::store_enum_from(vm::CellBuilder& cb, int value) const {\n";
+  std::string ctag = incremental_cons_tags ? "value" : "self.cons_tag[value]";
+  os << "\n    def store_enum_from(self, cb: CellBuilder, value: int = None) -> bool:\n";
   if (!cons_num) {
-    os << "  return false;\n";
+    os << "        return False\n";
   } else if (!maxl) {
-    os << "  return !value;\n";
+    os << "        return True\n";
   } else if (cons_num == 1) {
     const Constructor& constr = *type.constructors.at(0);
-    os << "  return !value && cb.store_long_bool(" << HexConstWriter{constr.tag >> (64 - constr.tag_bits)} << ", "
-       << minl << ");\n";
+    HexConstWriter w{constr.tag >> (64 - constr.tag_bits)};
+    std::ostringstream s;
+    w.write(s, false);
+
+    os << "        cb.store_uint(" << s.str() << ", " << minl << ")\n"
+       << "        return True\n";
   } else if (minl == maxl) {
     if (exact) {
-      os << "  return cb.store_long_rchk_bool(value, " << minl << ");\n";
+      os << "        assert value is not None, 'You must provide enum to store'\n"
+         << "        cb.store_uint(value, " << minl << ")\n"
+         << "        return True\n";
     } else if (incremental_cons_tags && cons_num > (1 << (minl - 1))) {
-      os << "  return cb.store_uint_less(" << cons_num << ", value);\n";
+      os << "        assert value is not None, 'You must provide enum position'\n"
+         << "        cb.store_uint_less(" << cons_num << ", value)\n"
+         << "        return True";
     } else {
-      os << "  return (unsigned)value < " << cons_num << " && cb.store_long_bool(" << ctag << ", " << minl << ");\n";
+      os << "        assert value is not None and value < " << cons_num
+         << ", f'Value {value} must be < then {cont_num}'\n"
+         << "        cb.store_uint(" << ctag << ", " << minl << ")\n"
+         << "        return True\n";
     }
   } else {
-    os << "  return (unsigned)value < " << cons_num << " && cb.store_long_bool(" << ctag << ", cons_len[value]);\n";
+    os << "        assert value is not None and value < " << cons_num
+       << ", f'Value {value} must be < then {cont_num}'\n"
+       << "        cb.store_uint(" << ctag << ", self.cons_len[value])\n"
+       << "        return True\n";
   }
-  os << "}\n";
+  os << "\n";
 }
 
 // This is actually not header in Python, but just base class with static methods
@@ -2606,10 +2627,10 @@ void PyTypeCode::generate_class(std::ostream& os, int options) {
   //    generate_skip_method(os, options + 3); // TODO
   //    generate_ext_fetch_to(os, options); // TODO
   //  }
-  //  if (type.is_simple_enum) {
-  //    generate_fetch_enum_method(os, options);
-  //    generate_store_enum_method(os, options);
-  //  }
+  if (type.is_simple_enum) {
+    generate_fetch_enum_method(os, options);
+    generate_store_enum_method(os, options);
+  }
   //
   //  for (int i = 0; i < cons_num; i++) {
   //    auto rec = records.at(i);
