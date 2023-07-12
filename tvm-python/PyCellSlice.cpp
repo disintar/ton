@@ -33,6 +33,14 @@ std::string PyCellSlice::load_uint(unsigned n) {
   return tmp->to_dec_string();
 }
 
+bool PyCellSlice::is_special() {
+  return my_cell_slice.is_special();
+}
+
+int PyCellSlice::special_type() {
+    return static_cast<int>(my_cell_slice.special_type());
+}
+
 std::string PyCellSlice::preload_uint(unsigned n) {
   if (!my_cell_slice.have(n)) {
     throw std::invalid_argument("Not enough bits in cell slice");
@@ -350,6 +358,6 @@ unsigned PyCellSlice::refs() const {
   return my_cell_slice.size_refs();
 }
 
-PyCellSlice load_as_cell_slice(PyCell cell) {
-  return PyCellSlice(cell.my_cell);
+PyCellSlice load_as_cell_slice(PyCell cell, bool allow_special) {
+  return PyCellSlice(cell.my_cell, allow_special);
 }

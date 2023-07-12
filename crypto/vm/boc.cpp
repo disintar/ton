@@ -494,14 +494,10 @@ std::string BagOfCells::extract_string() const {
 //  cell_data:(tot_cells_size * [ uint8 ])
 //  = BagOfCells;
 // Changes in this function may require corresponding changes in crypto/vm/large-boc-serializer.cpp
-template<typename WriterT>
+template <typename WriterT>
 std::size_t BagOfCells::serialize_to_impl(WriterT& writer, int mode) {
-  auto store_ref = [&](unsigned long long value) {
-    writer.store_uint(value, info.ref_byte_size);
-  };
-  auto store_offset = [&](unsigned long long value) {
-    writer.store_uint(value, info.offset_byte_size);
-  };
+  auto store_ref = [&](unsigned long long value) { writer.store_uint(value, info.ref_byte_size); };
+  auto store_offset = [&](unsigned long long value) { writer.store_uint(value, info.offset_byte_size); };
 
   writer.store_uint(info.magic, 4);
 
@@ -777,22 +773,22 @@ td::Result<td::Ref<vm::DataCell>> BagOfCells::deserialize_cell(int idx, td::Slic
 td::Result<long long> BagOfCells::deserialize(const td::Slice& data, int max_roots) {
   clear();
   long long size_est = info.parse_serialized_header(data);
-  //LOG(INFO) << "estimated size " << size_est << ", true size " << data.size();
+  //  LOG(ERROR) << "estimated size " << size_est << ", true size " << data.size();
   if (size_est == 0) {
     return td::Status::Error(PSLICE() << "cannot deserialize bag-of-cells: invalid header, error " << size_est);
   }
   if (size_est < 0) {
-    //LOG(ERROR) << "cannot deserialize bag-of-cells: not enough bytes (" << data.size() << " present, " << -size_est
-    //<< " required)";
+    //    LOG(ERROR) << "cannot deserialize bag-of-cells: not enough bytes (" << data.size() << " present, " << -size_est
+    //               << " required)";
     return size_est;
   }
 
   if (size_est > (long long)data.size()) {
-    //LOG(ERROR) << "cannot deserialize bag-of-cells: not enough bytes (" << data.size() << " present, " << size_est
-    //<< " required)";
+    //    LOG(ERROR) << "cannot deserialize bag-of-cells: not enough bytes (" << data.size() << " present, " << size_est
+    //               << " required)";
     return -size_est;
   }
-  //LOG(INFO) << "estimated size " << size_est << ", true size " << data.size();
+  LOG(INFO) << "estimated size " << size_est << ", true size " << data.size();
   if (info.root_count > max_roots) {
     return td::Status::Error("Bag-of-cells has more root cells than expected");
   }
@@ -931,6 +927,7 @@ unsigned long long BagOfCells::get_idx_entry_raw(int index) {
  */
 
 td::Result<Ref<Cell>> std_boc_deserialize(td::Slice data, bool can_be_empty) {
+  LOG(ERROR) << "This will not be deleted!";
   if (data.empty() && can_be_empty) {
     return Ref<Cell>();
   }

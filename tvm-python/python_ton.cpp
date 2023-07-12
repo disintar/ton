@@ -25,7 +25,6 @@ std::string codeget_python_tlb(std::string tlb_code) {
 PYBIND11_MODULE(python_ton, m) {
   PSLICE() << "";
   SET_VERBOSITY_LEVEL(verbosity_ERROR);
-
   static py::exception<vm::VmError> exc(m, "VmError");
   py::register_exception_translator([](std::exception_ptr p) {
     try {
@@ -38,13 +37,15 @@ PYBIND11_MODULE(python_ton, m) {
     } catch (vm::CellSlice::CellReadError) {
       throw std::runtime_error("CellReadError");
     } catch (const vm::VmError& e) {
-      exc(e.get_msg());
+      throw std::runtime_error(e.get_msg());
     } catch (const vm::VmFatal& e) {
       throw std::runtime_error("VmFatal error");
     } catch (src::ParseError e) {
       throw std::runtime_error(e.message);
     } catch (std::exception& e) {
       throw std::runtime_error(e.what());
+    } catch (...) {
+      throw std::runtime_error("Unknown error");
     }
   });
 
@@ -59,6 +60,8 @@ PYBIND11_MODULE(python_ton, m) {
       .def("preload_int", &PyCellSlice::preload_int, py::arg("bit_len"))
       .def("load_addr", &PyCellSlice::load_addr)
       .def("to_boc", &PyCellSlice::to_boc)
+      .def("is_special", &PyCellSlice::is_special)
+      .def("special_type", &PyCellSlice::special_type)
       .def("get_hash", &PyCellSlice::get_hash)
       .def("load_snake_string", &PyCellSlice::load_snake_string)
       .def("load_tlb", &PyCellSlice::load_tlb, py::arg("tlb_type"))
@@ -155,7 +158,7 @@ PYBIND11_MODULE(python_ton, m) {
 
   m.def("parseStringToCell", parseStringToCell, py::arg("cell_boc"));
   m.def("globalSetVerbosity", globalSetVerbosity, py::arg("verbosity"));
-  m.def("load_as_cell_slice", load_as_cell_slice, py::arg("cell"));
+  m.def("load_as_cell_slice", load_as_cell_slice, py::arg("cell"), py::arg("allow_special"));
   m.def("codegen_python_tlb", codeget_python_tlb, py::arg("tlb_text"));
 
   py::class_<PyEmulator>(m, "PyEmulator")

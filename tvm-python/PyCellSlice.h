@@ -4,6 +4,7 @@
 
 #include "vm/vm.h"
 #include "PyCell.h"
+#include "pybind11/pybind11.h"
 
 #ifndef TON_PYCELLSLICE_H
 #define TON_PYCELLSLICE_H
@@ -13,13 +14,19 @@ class PyCellSlice {
   vm::CellSlice my_cell_slice;
 
   // constructor
-  explicit PyCellSlice(const vm::Ref<vm::Cell>& cell_slice) {
-    my_cell_slice = vm::load_cell_slice(cell_slice);
+  explicit PyCellSlice(const vm::Ref<vm::Cell>& cell, bool allow_special = false) {
+    if (allow_special) {
+      my_cell_slice = vm::load_cell_slice_special(cell, allow_special);
+    } else {
+      my_cell_slice = vm::load_cell_slice(cell);
+    }
   }
 
   explicit PyCellSlice() = default;
 
   std::string load_uint(unsigned n);
+  bool is_special();
+  int special_type();
   std::string preload_uint(unsigned int n);
   std::string load_int(unsigned n);
   std::string preload_int(unsigned n) const;
@@ -57,6 +64,6 @@ class PyCellSlice {
   }
 };
 
-PyCellSlice load_as_cell_slice(PyCell cell);
+PyCellSlice load_as_cell_slice(PyCell cell, bool allow_special);
 
 #endif  //TON_PYCELLSLICE_H

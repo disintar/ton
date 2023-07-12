@@ -2631,22 +2631,22 @@ void PyTypeCode::generate_class(std::ostream& os, int options) {
     generate_fetch_enum_method(os, options);
     generate_store_enum_method(os, options);
   }
-  //
-  //  for (int i = 0; i < cons_num; i++) {
-  //    auto rec = records.at(i);
-  //    rec.declare_record(os, "    ", options);
-  //    generate_unpack_method(os, rec, 2);
-  //    generate_unpack_method(os, rec, 10);
-  //    generate_unpack_method(os, rec, 18);
-  //    generate_unpack_method(os, rec, 26);
-  //
-  //    generate_pack_method(os, rec, 2);
-  //    generate_pack_method(os, rec, 10);
-  //    generate_pack_method(os, rec, 18);
-  //    generate_pack_method(os, rec, 26);
-  //  }
-  //  os << "\n";
-  //
+
+  for (int i = 0; i < cons_num; i++) {
+    auto rec = records.at(i);
+    rec.declare_record(os, "    ", options);
+    //      generate_unpack_method(os, rec, 2);
+    //      generate_unpack_method(os, rec, 10);
+    //      generate_unpack_method(os, rec, 18);
+    //      generate_unpack_method(os, rec, 26);
+    //
+    //      generate_pack_method(os, rec, 2);
+    //      generate_pack_method(os, rec, 10);
+    //      generate_pack_method(os, rec, 18);
+    //      generate_pack_method(os, rec, 26);
+  }
+  os << "\n";
+
   if (type.is_special) {
     os << "    def always_special(self):\n";
     os << "        return True\n\n";
@@ -2662,10 +2662,6 @@ void PyTypeCode::generate_class(std::ostream& os, int options) {
   //    os << "        return " << SizeWriter{sz} << "\n\n";
   //  }
   //
-
-  //  } else {
-  //    generate_skip_method(os, options);
-  //  }
 }
 
 void generate_py_output_to(const std::string& filename, int options = 0) {

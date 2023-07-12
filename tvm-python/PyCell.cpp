@@ -13,7 +13,6 @@
 #include "block/block-auto.h"
 #include "PyCell.h"
 
-
 std::string PyCell::get_hash() const {
   if (my_cell.not_null()) {
     return my_cell->get_hash().to_hex();
@@ -82,16 +81,18 @@ bool PyCell::is_null() const {
 
 // type converting utils
 PyCell parseStringToCell(const std::string& base64string) {
-  auto base64decoded = td::base64_decode(td::Slice(base64string));
+  auto base64decoded = td::base64_decode(base64string);
 
   if (base64decoded.is_error()) {
     throw std::invalid_argument("Parse code error: invalid base64");
   }
 
-  auto boc_decoded = vm::std_boc_deserialize(base64decoded.move_as_ok(), true);
+  auto boc_decoded = vm::std_boc_deserialize(base64decoded.move_as_ok());
 
   if (boc_decoded.is_error()) {
-    throw std::invalid_argument("Parse code error: invalid BOC");
+    auto m = boc_decoded.move_as_error().message();
+    LOG(ERROR) << m;
+    throw std::invalid_argument(m.str());
   }
 
   return PyCell(boc_decoded.move_as_ok());
