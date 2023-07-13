@@ -6,6 +6,27 @@ namespace tlbc {
 
 extern std::set<std::string> forbidden_py_idents, local_forbidden_py_idents;
 
+struct PyAction {
+  int fixed_size;
+  bool is_pure;
+  bool is_constraint;
+  std::string action;
+  PyAction(int _size) : fixed_size(_size), is_pure(false), is_constraint(false) {
+  }
+  PyAction(std::string _action, bool _cst = false)
+      : fixed_size(-1), is_pure(false), is_constraint(_cst), action(_action) {
+  }
+  PyAction(const std::ostringstream& ss, bool _cst = false)
+      : fixed_size(-1), is_pure(false), is_constraint(_cst), action(ss.str()) {
+  }
+  PyAction(std::ostringstream&& ss, bool _cst = false)
+      : fixed_size(-1), is_pure(false), is_constraint(_cst), action(std::move(ss).str()) {
+  }
+  void show(std::ostream& os) const;
+  bool may_combine(const PyAction& next) const;
+  bool operator+=(const PyAction& next);
+};
+
 enum py_val_type {
   py_unknown,
   py_void = 1,
@@ -122,7 +143,7 @@ class PyTypeCode {
   }
 
  private:
-  std::vector<Action> actions;
+  std::vector<PyAction> actions;
 
   void clear_context();
   void init_cons_context(const Constructor& constr);

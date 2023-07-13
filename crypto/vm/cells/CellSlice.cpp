@@ -792,15 +792,23 @@ td::uint16 CellSlice::get_depth() const {
 }
 
 bool CellSlice::begins_with(unsigned bits, unsigned long long value) const {
+  std::cerr << "\nBits: " << bits;
+  std::cerr << "\nHave bits: " << have(bits);
+  std::cerr << "\nValue: " << prefetch_ulong(bits);
+  std::cerr << "\nV2: " << (prefetch_ulong(bits) ^ value);
+  std::cerr << "\nV3: " << ((1ULL << bits) - 1);
+
   return have(bits) && !((prefetch_ulong(bits) ^ value) & ((1ULL << bits) - 1));
 }
 
 bool CellSlice::begins_with(unsigned long long value) const {
+  std::cerr << "\nTHERE::::::::::" << 63 - td::count_leading_zeroes_non_zero64(value);
   return begins_with(63 - td::count_leading_zeroes_non_zero64(value), value);
 }
 
 bool CellSlice::begins_with_skip(unsigned long long value) {
-  return begins_with_skip(63 - td::count_leading_zeroes_non_zero64(value), value);
+  std::cerr << "\nHERE::::::::::" << 63 - td::count_leading_zeroes_non_zero64(value);
+  return begins_with_skip(63 - td::count_leading_zeroes_non_zero64(value) + 1, value);
 }
 
 bool CellSlice::only_first(unsigned bits, unsigned refs) {
