@@ -783,7 +783,7 @@ void PyTypeCode::identify_cons_params(const Constructor& constr, int options) {
         int i = pexpr->value;
         if (field_var_set.at(i)) {
           // field i and parameter j must be equal
-          actions += PyAction{ type_param_name.at(j) + " == " + field_vars.at(i)};
+          actions += PyAction{type_param_name.at(j) + " == " + field_vars.at(i)};
           param_constraint_used[j] = true;
         } else if (field_vars.at(i).empty()) {
           // identify field i with parameter j
@@ -1085,21 +1085,21 @@ std::string PyTypeCode::add_fetch_nat_field(const Constructor& constr, const Fie
   assert(expr->tp == TypeExpr::te_Apply &&
          (ta == Nat_type || ta == NatWidth_type || ta == NatLeq_type || ta == NatLess_type));
   std::ostringstream ss;
-
+  ss << "self." << id << " = ";
   if (ta == Nat_type) {
-    ss << "self." << id << " = cs.load_uint(32)\n";
+    ss << "cs.load_uint(32)\n";
   } else if (ta == NatWidth_type && expr->args.at(0)->tp == TypeExpr::te_IntConst && expr->args[0]->value == 1) {
-    ss << "self." << id << " = cs.load_bool()\n";
+    ss << "cs.load_bool()\n";
   } else {
     if (ta == NatWidth_type) {
-      ss << "load_uint(";
+      ss << "cs.load_uint(";
     } else if (ta == NatLeq_type) {
-      ss << "load_uint_leq(";
+      ss << "cs.load_uint_leq(";
     } else if (ta == NatLess_type) {
-      ss << "load_uint_less(";
+      ss << "cs.load_uint_less(";
     }
     output_cpp_expr(ss, expr->args[0]);
-    ss << ", " << id << ")\n";
+    ss << ")";
   }
   actions += PyAction{std::move(ss)};
   field_var_set[i] = true;
@@ -1489,7 +1489,7 @@ void PyTypeCode::generate_unpack_method(std::ostream& os, PyTypeCode::ConsRecord
       os << skip_extra_args_pass;
     }
     os << ") and cs.empty_ext()\n\n";
-    os << "            except (RuntimeError, AssertionError):\n                return False\n";
+    os << "            except (RuntimeError, AssertionError):\n                return False\n            return True\n";
     return;
   }
   init_cons_context(rec.constr);
@@ -1517,7 +1517,7 @@ void PyTypeCode::generate_unpack_method(std::ostream& os, PyTypeCode::ConsRecord
   add_remaining_param_constraints_check(rec.constr, options);
   output_actions(os, "                ", options | 4);
   clear_context();
-  os << "            except RuntimeError, AssertionError:\n                return False\n";
+  os << "            except (RuntimeError, AssertionError):\n                return False\n            return True\n";
 }
 
 void PyTypeCode::output_actions(std::ostream& os, std::string nl, int options) {
@@ -2673,9 +2673,9 @@ void PyTypeCode::generate_class(std::ostream& os, int options) {
     auto rec = records.at(i);
     rec.declare_record(os, "    ", options);
     generate_unpack_method(os, rec, 2);
-    generate_unpack_method(os, rec, 10);
+    //    generate_unpack_method(os, rec, 10); TODO: is this needed?
     generate_unpack_method(os, rec, 18);
-    generate_unpack_method(os, rec, 26);
+    //    generate_unpack_method(os, rec, 26);  TODO: is this needed?
 
     //      generate_pack_method(os, rec, 2);
     //      generate_pack_method(os, rec, 10);
