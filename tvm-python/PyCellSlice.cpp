@@ -37,8 +37,12 @@ bool PyCellSlice::is_special() {
   return my_cell_slice.is_special();
 }
 
+bool PyCellSlice::empty_ext() {
+  return my_cell_slice.empty_ext();
+}
+
 int PyCellSlice::special_type() {
-    return static_cast<int>(my_cell_slice.special_type());
+  return static_cast<int>(my_cell_slice.special_type());
 }
 
 std::string PyCellSlice::preload_uint(unsigned n) {
@@ -348,6 +352,18 @@ std::string PyCellSlice::load_snake_string() {
 
 std::string PyCellSlice::to_bitstring() const {
   return my_cell_slice.data_bits().to_binary(my_cell_slice.size());
+}
+
+int PyCellSlice::fetch_uint_less(unsigned upper_bound) {
+  int value;
+  my_cell_slice.fetch_uint_less(upper_bound, value);
+  return value;
+}
+
+int PyCellSlice::fetch_uint_leq(unsigned upper_bound) {
+  int value;
+  my_cell_slice.fetch_uint_leq(upper_bound, value);
+  return value;
 }
 
 unsigned PyCellSlice::bits() const {

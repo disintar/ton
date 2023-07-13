@@ -41,6 +41,7 @@ class PyCellSlice {
   bool begins_with(const std::string& n) const;
   bool begins_with_bits(unsigned bits, const std::string& n) const;
   PyCell fetch_ref();
+  bool empty_ext();
   PyCell prefetch_ref(int offset = 0) const;
   std::string dump() const;
   std::string load_var_integer_str(unsigned int varu, bool sgnd);
@@ -50,6 +51,8 @@ class PyCellSlice {
   std::string load_string(unsigned int text_size = 0, bool convert_to_utf8 = true);
   PyCellSlice load_tlb(std::string tlb_type);
   std::string load_snake_string();
+  int fetch_uint_less(unsigned upper_bound);
+  int fetch_uint_leq(unsigned upper_bound);
   int bselect(unsigned bits, std::string mask);
   int bselect_ext(unsigned bits, std::string mask);
   int bit_at(unsigned int n) const;
