@@ -172,6 +172,7 @@ class PyTypeCode {
   void assign_record_cons_names();
   bool compute_simple_cons_tags();
   bool check_incremental_cons_tags() const;
+  void generate_tag_to_class(std::ostream& os, int options);
   void add_postponed_equate_actions();
   bool can_compute_sizeof(const TypeExpr* expr) const;
   void generate_cons_enum(std::ostream& os);

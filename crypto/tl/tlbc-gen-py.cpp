@@ -555,7 +555,12 @@ void PyTypeCode::generate_type_fields(std::ostream& os, int options) {
 }
 
 void PyTypeCode::generate_type_constructor(std::ostream& os, int options) {
-  os << "\n    def __init__(self, ";
+  os << "\n    def __init__(self";
+
+  if (tot_params > 0) {
+    os << ", ";
+  }
+
   for (int i = 0, j = 0; i < tot_params; i++) {
     if (type_param_is_neg[i]) {
       continue;
@@ -566,12 +571,19 @@ void PyTypeCode::generate_type_constructor(std::ostream& os, int options) {
     os << constr_arg_name(type_param_name[i]) << ": " << (type_param_is_nat[i] ? "int" : "TLB");
   }
   os << "):\n";
+  os << "        super().__init__()\n";
+
   for (int i = 0, j = 0; i < tot_params; i++) {
     if (type_param_is_neg[i]) {
       continue;
     }
     os << "        self." << type_param_name[i] << " = " << constr_arg_name(type_param_name[i]) << "\n";
   }
+  if (tot_params > 0) {
+    os << "\n";
+  }
+
+  generate_tag_to_class(os, options);
   os << "\n";
 }
 
@@ -663,9 +675,24 @@ void PyTypeCode::ConsRecord::declare_record(std::ostream& os, std::string nl, in
     return;
   }
 
-  os << "\n" << nl << "class " << py_name << ":\n";
-  os << nl << "    @staticmethod\n";
-  os << nl << "    def get_type_class():\n"
+  os << "\n" << nl << "class " << py_name << "(RecordBase):\n";
+  os << nl << "    def get_tag_enum(self):\n";
+  os << nl << "        return " << cpp_type.py_type_class_name << ".Tag." << cpp_type.cons_enum_name.at(cons_idx)
+     << "\n\n";
+
+  os << nl << "    def get_tag(self):\n";
+  os << nl << "        return " << cpp_type.py_type_class_name << "."
+     << "cons_tag[self.get_tag_enum().value]"
+     << "\n\n";
+
+  os << nl << "    def get_tag_len(self):\n";
+  os << nl << "        return " << cpp_type.py_type_class_name << "."
+     << "cons_len_exact[self.get_tag_enum().value]"
+     << " if isinstance(" << cpp_type.py_type_class_name << ".cons_len_exact, list) else "
+     << cpp_type.py_type_class_name << ".cons_len_exact"
+     << "\n\n";
+
+  os << nl << "    def get_type_class(self):\n"
      << "            return " << cpp_type.py_type_class_name << "\n\n";
 
   CppIdentSet rec_cpp_ids;
@@ -825,10 +852,11 @@ void PyTypeCode::add_cons_tag_check(const Constructor& constr, int cidx, int opt
         auto w = HexConstWriter{tag};
         w.write(ss, false);
       } else {
-        ss << "cs.begins_with_skip_bits(" << l << ", ";
-        auto w = HexConstWriter{tag};
-        w.write(ss, false);
-        ss << ")";
+        //        ss << "cs.begins_with_skip_bits(" << l << ", ";
+        //        auto w = HexConstWriter{tag};
+        //        w.write(ss, false);
+        //        ss << ")";
+        throw std::logic_error("Unreachable");
       }
       actions.emplace_back(std::move(ss));
     } else {
@@ -2640,6 +2668,22 @@ void PyTypeCode::generate_store_enum_method(std::ostream& os, int options) {
   os << "\n";
 }
 
+void PyTypeCode::generate_tag_to_class(std::ostream& os, int options) {
+  os << "\n        self.tag_to_class = {";
+
+  for (int i = 0; i < cons_num; i++) {
+    auto rec = records.at(i);
+    auto tag = rec.constr.get_name();
+
+    os << py_type_class_name << ".Tag." << tag << ": " << py_type_class_name << "." << rec.py_name;
+
+    if (i < cons_num - 1) {
+      os << ", ";
+    }
+  }
+  os << "}\n";
+}
+
 // This is actually not header in Python, but just base class with static methods
 void PyTypeCode::generate_class(std::ostream& os, int options) {
   //  dump_all_types();
@@ -2650,8 +2694,9 @@ void PyTypeCode::generate_class(std::ostream& os, int options) {
 
   if (params) {
     generate_type_fields(os, options);
-    generate_type_constructor(os, options);
   }
+
+  generate_type_constructor(os, options);
 
   os << "    def get_tag(self, cs: CellSlice) -> Optional[\"" << py_type_class_name << ".Tag\"]:\n";
   generate_get_tag_body(os, "        ");
