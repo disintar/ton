@@ -79,6 +79,17 @@ bool PyCell::is_null() const {
   return my_cell.is_null();
 }
 
+PyCell PyCell::copy() const {
+  vm::CellBuilder cb;
+  bool special;
+  bool success = cb.append_cellslice_bool(vm::load_cell_slice_special(my_cell, special));
+  if (not success) {
+    throw std::invalid_argument("Can't create cell copy");
+  }
+
+  return PyCell(cb.finalize_copy());
+}
+
 // type converting utils
 PyCell parseStringToCell(const std::string& base64string) {
   auto base64decoded = td::base64_decode(base64string);

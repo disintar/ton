@@ -99,6 +99,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("dump_as_tlb", &PyCell::dump_as_tlb, py::arg("tlb_type"))
       .def("to_boc", &PyCell::to_boc)
       .def("__repr__", &PyCell::toString)
+      .def("copy", &PyCell::copy)
       .def("is_null", &PyCell::is_null);
 
   py::class_<PyCellBuilder>(m, "PyCellBuilder")
@@ -121,13 +122,15 @@ PYBIND11_MODULE(python_ton, m) {
       .def("store_var_integer", &PyCellBuilder::store_var_integer, py::arg("int"), py::arg("bit_len"), py::arg("sgnd"),
            py::return_value_policy::reference_internal)
       .def("get_cell", &PyCellBuilder::get_cell)
-      .def("store_ref", &PyCellBuilder::store_ref)
+      .def("store_ref", &PyCellBuilder::store_ref, py::return_value_policy::reference_internal)
       .def("dump", &PyCellBuilder::dump)
       .def("get_hash", &PyCellBuilder::get_hash)
       .def("dump_as_tlb", &PyCellBuilder::dump_as_tlb, py::arg("tlb_type"))
       .def("to_boc", &PyCellBuilder::to_boc)
-      .def("store_uint_less", &PyCellBuilder::store_uint_less, py::arg("upper_bound"), py::arg("value"))
-      .def("store_uint_leq", &PyCellBuilder::store_uint_leq, py::arg("upper_bound"), py::arg("value"))
+      .def("store_uint_less", &PyCellBuilder::store_uint_less, py::arg("upper_bound"), py::arg("value"),
+           py::return_value_policy::reference_internal)
+      .def("store_uint_leq", &PyCellBuilder::store_uint_leq, py::arg("upper_bound"), py::arg("value"),
+           py::return_value_policy::reference_internal)
       .def("__repr__", &PyCellBuilder::toString)
       .def_property("bits", &PyCellBuilder::get_bits, &PyCellBuilder::dummy_set)
       .def_property("refs", &PyCellBuilder::get_refs, &PyCellBuilder::dummy_set)

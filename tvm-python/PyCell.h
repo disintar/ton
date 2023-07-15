@@ -23,6 +23,7 @@ class PyCell {
   std::string dump() const;
   std::string dump_as_tlb(std::string tlb_type) const;
   std::string to_boc() const;
+  PyCell copy() const;
   bool is_null() const;
 
   static void dummy_set() {

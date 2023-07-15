@@ -16,7 +16,8 @@ class PyCellSlice {
   // constructor
   PyCellSlice(const vm::Ref<vm::Cell>& cell, bool allow_special = false) {
     if (allow_special) {
-      my_cell_slice = vm::load_cell_slice_special(cell, allow_special);
+      bool special;
+      my_cell_slice = vm::load_cell_slice_special(cell, special);
     } else {
       my_cell_slice = vm::load_cell_slice(cell);
     }
