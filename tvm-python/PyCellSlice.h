@@ -14,7 +14,7 @@ class PyCellSlice {
   vm::CellSlice my_cell_slice;
 
   // constructor
-  explicit PyCellSlice(const vm::Ref<vm::Cell>& cell, bool allow_special = false) {
+  PyCellSlice(const vm::Ref<vm::Cell>& cell, bool allow_special = false) {
     if (allow_special) {
       my_cell_slice = vm::load_cell_slice_special(cell, allow_special);
     } else {
@@ -50,6 +50,8 @@ class PyCellSlice {
   std::string dump_as_tlb(std::string tlb_type) const;
   std::string load_string(unsigned int text_size = 0, bool convert_to_utf8 = true);
   PyCellSlice load_tlb(std::string tlb_type);
+  PyCellSlice load_subslice(unsigned int bits, unsigned int refs = 0);
+  PyCellSlice preload_subslice(unsigned int bits, unsigned int refs = 0);
   std::string load_snake_string();
   int fetch_uint_less(unsigned upper_bound);
   int fetch_uint_leq(unsigned upper_bound);

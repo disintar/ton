@@ -1212,22 +1212,23 @@ void PyTypeCode::output_fetch_field(std::ostream& os, std::string field_var, con
       os << ", " << field_var << ")";
       return;
     case py_bitstring:
-      assert(!(sz.max_size() & 0xff));
-      os << "cs.fetch_bitstring_to(";
-      output_cpp_sizeof_expr(os, expr, 0);
-      os << ", " << field_var << ")";
-      return;
     case py_bits:
-      assert(l >= 0 && l < 0x10000);
-      os << "cs.fetch_bits_to(" << field_var << ".bits(), " << l << ")";
+      assert(!(sz.max_size() & 0xff));
+      os << "self." << field_var << " = cs.load_bitstring(";
+      output_cpp_sizeof_expr(os, expr, 0);
+      os << ")";
       return;
+//      assert(l >= 0 && l < 0x10000);
+//      os << "cs.fetch_bits_to(" << field_var << ".bits(), " << l << ")";
+//      return;
     case py_cell:
       assert(l == 0x10000);
-      os << "cs.fetch_ref_to(" << field_var << ")";
+      os << "self." << field_var << "= cs.load_ref()";
       return;
     case py_bool:
       assert(i > 0 && l == 1);
-      os << "cs.fetch_bool_to(" << field_var << ")";
+      os << "self." << field_var << " = "
+         << "cs.load_bool()";
       return;
     case py_int32:
     case py_uint32:

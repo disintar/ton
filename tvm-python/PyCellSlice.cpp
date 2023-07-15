@@ -71,6 +71,32 @@ bool PyCellSlice::begins_with_skip_bits(int bits, const std::string &value) {
   return my_cell_slice.begins_with_skip(bits, n);
 }
 
+PyCellSlice PyCellSlice::load_subslice(unsigned int bits, unsigned int refs) {
+  if (!my_cell_slice.have(bits, refs)) {
+    throw std::runtime_error("Not enough bits or refs");
+  } else {
+    vm::CellSlice x{my_cell_slice, bits, refs};
+    advance(bits);
+    advance_refs(refs);
+    vm::CellBuilder cb;
+    cb.append_cellslice(x);
+
+    return PyCellSlice(cb.finalize());
+  }
+}
+
+PyCellSlice PyCellSlice::preload_subslice(unsigned int bits, unsigned int refs) {
+  if (!my_cell_slice.have(bits, refs)) {
+    throw std::runtime_error("Not enough bits or refs");
+  } else {
+    vm::CellSlice x{my_cell_slice, bits, refs};
+    vm::CellBuilder cb;
+    cb.append_cellslice(x);
+
+    return PyCellSlice(cb.finalize());
+  }
+}
+
 bool PyCellSlice::begins_with_skip(const std::string &value) {
   auto n = std::stoull(value);
   return my_cell_slice.begins_with_skip(n);
@@ -275,8 +301,8 @@ PyCellSlice PyCellSlice::load_tlb(std::string tlb_type) {
   vm::CellBuilder cb;
   auto fetched_tlb = _template->fetch(my_cell_slice);
   cb.append_cellslice(fetched_tlb);
-
-  return PyCellSlice(cb.finalize());
+  vm::Ref<vm::Cell> x = cb.finalize();
+  return PyCellSlice(std::move(x));
 }
 
 int PyCellSlice::bselect(unsigned bits, std::string mask) {
