@@ -13,6 +13,42 @@ namespace tlbc {
 
 std::set<std::string> forbidden_py_idents, local_forbidden_py_idents;
 std::vector<std::unique_ptr<PyTypeCode>> py_type;
+std::vector<std::string> const_type_expr_py_idents;
+std::vector<bool> const_pytype_expr_simple;
+
+void assign_const_type_py_idents() {
+  const_type_expr_py_idents.resize(const_type_expr_num + 1, "");
+  const_pytype_expr_simple.resize(const_type_expr_num + 1, false);
+  for (int i = 1; i <= const_type_expr_num; i++) {
+    const TypeExpr* expr = const_type_expr[i];
+    if (!expr->is_nat) {
+      if (expr->tp == TypeExpr::te_Ref && expr->args[0]->tp == TypeExpr::te_Apply &&
+          (expr->args[0]->type_applied == Any_type || expr->args[0]->type_applied == Cell_type)) {
+        const_type_expr_py_idents[i] = "t_RefCell";
+        const_pytype_expr_simple[i] = true;
+        continue;
+      }
+      if (expr->tp == TypeExpr::te_Apply) {
+        const Type* typ = expr->type_applied;
+        int idx = typ->type_idx;
+        if (typ == Any_type || typ == Cell_type || typ == Nat_type) {
+          const_type_expr_py_idents[i] = (typ == Nat_type ? "t_Nat" : "t_Anything");
+          const_pytype_expr_simple[i] = true;
+          continue;
+        }
+        if (idx >= builtin_types_num && idx < types_num && !py_type[idx]->params) {
+          const_type_expr_py_idents[i] = py_type[idx]->py_type_var_name;
+          const_pytype_expr_simple[i] = true;
+          continue;
+        }
+      }
+      std::ostringstream ss;
+      ss << "t";
+      expr->const_type_name(ss);
+      const_type_expr_py_idents[i] = global_cpp_ids.new_ident(ss.str());
+    }
+  }
+}
 
 void init_forbidden_py_idents() {
   std::set<std::string>& f = forbidden_py_idents;
@@ -129,7 +165,7 @@ void prepare_generate_py(int options = 0) {
     }
   }
   //  split_namespace_id();
-  //  assign_const_type_cpp_idents();
+  assign_const_type_py_idents();
 }
 
 bool PyTypeCode::init() {
@@ -441,6 +477,44 @@ void PyTypeCode::assign_class_name() {
 
 bool generate_py_prepared;
 
+void generate_pytype_constant(std::ostream& os, int i, TypeExpr* expr, std::string py_name) {
+  std::string cls_name = "TLB";
+  int fake_arg = -1;
+  cls_name = compute_type_expr_class_name(expr, fake_arg);
+  os << py_name << " = " << cls_name;
+  int c = 0;
+  if (fake_arg >= 0) {
+    os << '(' << fake_arg;
+    c++;
+  }
+  for (const TypeExpr* arg : expr->args) {
+    if (!arg->negated) {
+      assert(arg->is_constexpr);
+      os << (c++ ? ", " : "(");
+      if (arg->is_nat) {
+        os << arg->value;
+      } else {
+        os << const_type_expr_py_idents.at(arg->is_constexpr);
+      }
+    }
+  }
+  if (c) {
+    os << ')';
+  }
+  os << "\n";
+}
+
+void generate_pytype_constants(std::ostream& os) {
+  os << "\n# "
+     << "definitions of constant types used\n\n";
+  for (int i = 1; i <= const_type_expr_num; i++) {
+    TypeExpr* expr = const_type_expr[i];
+    if (!expr->is_nat && !const_pytype_expr_simple[i]) {
+      generate_pytype_constant(os, i, expr, const_type_expr_py_idents[i]);
+    }
+  }
+}
+
 void generate_py_output_to(std::ostream& os, int options = 0) {
   tlbc::init_forbidden_py_idents();
 
@@ -464,7 +538,7 @@ void generate_py_output_to(std::ostream& os, int options = 0) {
       cc.generate(os, options);
     }
   }
-  //  generate_type_constants(os);
+  generate_pytype_constants(os);
   //  generate_register_function(os);
 
   generate_py_prepared = false;
@@ -736,6 +810,8 @@ void PyTypeCode::ConsRecord::declare_record(std::ostream& os, std::string nl, in
       }
     }
     os << "):\n";
+    os << nl << "        super().__init__()\n" << nl << "        self.field_names = []\n";
+
     i = 0;
     for (const ConsField& fi : py_fields) {
       if (i++) {
@@ -747,6 +823,7 @@ void PyTypeCode::ConsRecord::declare_record(std::ostream& os, std::string nl, in
       } else {
         os << ctor_args.at(j++);
       }
+      os << nl << "\n            self.field_names.append(\"" << fi.name << "\")";  // todo: move to field_names directly
     }
 
     os << "\n";
@@ -776,7 +853,7 @@ bool PyTypeCode::ConsRecord::declare_record_unpack(std::ostream& os, std::string
     if (options & 2) {
       os << cpp_type.skip_extra_args;
     }
-    os << ") -> bool:\n";
+    os << ", rec_unpack: bool = False) -> bool:\n";
   }
   return is_ok;
 }
@@ -879,6 +956,7 @@ void PyTypeCode::output_cpp_expr(std::ostream& os, const TypeExpr* expr, int pri
   }
   switch (expr->tp) {
     case TypeExpr::te_Param: {
+      LOG(ERROR) << "Param";
       int i = expr->value;
       assert(field_var_set.at(i));
       std::string fv = field_vars.at(i);
@@ -889,9 +967,9 @@ void PyTypeCode::output_cpp_expr(std::ostream& os, const TypeExpr* expr, int pri
     case TypeExpr::te_Apply:
       if (!pos_args && expr->type_applied->type_idx >= builtin_types_num) {
         int type_idx = expr->type_applied->type_idx;
-        const CppTypeCode& cc = *cpp_type.at(type_idx);
-        assert(!cc.cpp_type_var_name.empty());
-        os << cc.cpp_type_var_name;
+        const PyTypeCode& cc = *py_type.at(type_idx);
+        assert(!cc.py_type_var_name.empty());
+        os << cc.py_type_var_name;
         return;
       }
       // fall through
@@ -899,7 +977,8 @@ void PyTypeCode::output_cpp_expr(std::ostream& os, const TypeExpr* expr, int pri
     case TypeExpr::te_CondType:
     case TypeExpr::te_Tuple:
       if (expr->is_constexpr > 0) {
-        os << const_type_expr_cpp_idents.at(expr->is_constexpr);
+        auto n = expr->is_constexpr;
+        os << const_type_expr_py_idents.at(n);
         return;
       } else {
         int fake_arg = -1;
@@ -1207,9 +1286,9 @@ void PyTypeCode::output_fetch_field(std::ostream& os, std::string field_var, con
   int l = (sz.is_fixed() ? sz.convert_min_size() : -1);
   switch (cvt) {
     case py_slice:
-      os << "cs.fetch_subslice_" << (sz.max_size() & 0xff ? "ext_" : "") << "to(";
+      os << "self." << field_var << " = cs.fetch_subslice" << (sz.max_size() & 0xff ? "_ext(" : "(");
       output_cpp_sizeof_expr(os, expr, 0);
-      os << ", " << field_var << ")";
+      os << ")";
       return;
     case py_bitstring:
     case py_bits:
@@ -1218,9 +1297,6 @@ void PyTypeCode::output_fetch_field(std::ostream& os, std::string field_var, con
       output_cpp_sizeof_expr(os, expr, 0);
       os << ")";
       return;
-//      assert(l >= 0 && l < 0x10000);
-//      os << "cs.fetch_bits_to(" << field_var << ".bits(), " << l << ")";
-//      return;
     case py_cell:
       assert(l == 0x10000);
       os << "self." << field_var << "= cs.load_ref()";
@@ -1233,17 +1309,12 @@ void PyTypeCode::output_fetch_field(std::ostream& os, std::string field_var, con
     case py_int32:
     case py_uint32:
     case py_int64:
+    case py_integer:
     case py_uint64:
       assert(i && l <= 64);
-      os << "cs.fetch_" << (i > 0 ? "u" : "") << "int_to(";
+      os << "self." << field_var << "cs.load_" << (i > 0 ? "u" : "") << "int(";
       output_cpp_sizeof_expr(os, expr, 0);
-      os << ", " << field_var << ")";
-      return;
-    case py_integer:
-      assert(i);
-      os << "cs.fetch_" << (i > 0 ? "u" : "") << "int256_to(";
-      output_cpp_sizeof_expr(os, expr, 0);
-      os << ", " << field_var << ")";
+      os << ")";
       return;
     default:
       break;
@@ -1401,10 +1472,23 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
       assert(sz.min_size() == 1);
     }
     std::ostringstream ss;
-    if (cvt == py_subrecord && field.subrec) {
+    if ((cvt == py_subrecord || cvt == py_cell || cvt == py_slice) && field.subrec) {
       output_fetch_subrecord(ss, field_vars.at(i), fi.subrec);
     } else {
-      output_fetch_field(ss, field_vars.at(i), expr, cvt);
+      if (cvt == py_cell || cvt == py_slice) {  // Load as var first
+        std::ostringstream ss2;
+        output_fetch_field(ss2, field_vars.at(i), expr, cvt);
+        if (!is_self(expr, constr)) {
+          ss << "\n            if rec_unpack:\n"
+             << "                ";
+          output_cpp_expr(ss, expr, 100);
+          ss << ".fetch_to(self, cs)\n";
+        }
+
+        actions += PyAction{std::move(ss2)};
+      } else {
+        output_fetch_field(ss, field_vars.at(i), expr, cvt);
+      }
     }
     actions += PyAction{std::move(ss)};
     field_var_set[i] = true;
@@ -2745,6 +2829,10 @@ void PyTypeCode::generate_class(std::ostream& os, int options) {
   //    os << "        return " << SizeWriter{sz} << "\n\n";
   //  }
   //
+
+  if (!py_type_var_name.empty()) {
+    os << "\n" << py_type_var_name << " = " << py_type_class_name << "()\n";
+  }
 }
 
 void generate_py_output_to(const std::string& filename, int options = 0) {

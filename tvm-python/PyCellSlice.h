@@ -52,7 +52,9 @@ class PyCellSlice {
   std::string load_string(unsigned int text_size = 0, bool convert_to_utf8 = true);
   PyCellSlice load_tlb(std::string tlb_type);
   PyCellSlice load_subslice(unsigned int bits, unsigned int refs = 0);
+  PyCellSlice load_subslice_ext(unsigned int size);
   PyCellSlice preload_subslice(unsigned int bits, unsigned int refs = 0);
+  PyCellSlice preload_subslice_ext(unsigned int size);
   std::string load_snake_string();
   int fetch_uint_less(unsigned upper_bound);
   int fetch_uint_leq(unsigned upper_bound);

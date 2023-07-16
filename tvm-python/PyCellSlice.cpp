@@ -97,6 +97,14 @@ PyCellSlice PyCellSlice::preload_subslice(unsigned int bits, unsigned int refs) 
   }
 }
 
+PyCellSlice PyCellSlice::load_subslice_ext(unsigned int size) {
+  return load_subslice(size & 0xffff, size >> 16);
+}
+
+PyCellSlice PyCellSlice::preload_subslice_ext(unsigned int size) {
+  return preload_subslice(size & 0xffff, size >> 16);
+}
+
 bool PyCellSlice::begins_with_skip(const std::string &value) {
   auto n = std::stoull(value);
   return my_cell_slice.begins_with_skip(n);
@@ -261,7 +269,7 @@ bool PyCellSlice::advance(unsigned bits) {
 }
 
 bool PyCellSlice::advance_ext(unsigned bits_refs) {
-  return my_cell_slice.advance_ext(bits_refs);
+  return my_cell_slice.advance_ext(bits_refs & 0xffff, bits_refs >> 16);
 }
 
 bool PyCellSlice::advance_refs(unsigned refs) {
