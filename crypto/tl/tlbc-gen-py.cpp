@@ -1028,27 +1028,21 @@ void PyTypeCode::output_cpp_expr(std::ostream& os, const TypeExpr* expr, int pri
       }
       return;
     case TypeExpr::te_GetBit:
+      os << "((";
       if (expr->args[0]->tp == TypeExpr::te_Param) {
         os << "self.";
       }
-
       output_cpp_expr(os, expr->args[0], 5);
-      os << ".bit_at(";
+      os << " & (1 << ";
       if (expr->args[1]->tp == TypeExpr::te_IntConst && (unsigned)expr->args[1]->value <= 31) {
-        int v = expr->args[1]->value;
-        if (v > 1024) {
-          os << "0x" << std::hex << (1 << v) << std::dec;
-        } else {
-          os << (1 << v);
-        }
-        os << ")";
+        os << (unsigned)expr->args[1]->value;
+        os << " - 1)) != 0)";
       } else {
         if (expr->args[1]->tp == TypeExpr::te_Param) {
           os << "self.";
         }
-
         output_cpp_expr(os, expr->args[1], 5);
-        os << ")";
+        os << " - 1)) != 0)";
       }
       return;
     case TypeExpr::te_IntConst:
@@ -1552,9 +1546,14 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
       have_cond = true;
     }
     if (expr->args[0]->tp == TypeExpr::te_Param) {
-      ss << "self.";
+      ss << "(self.";
     }
     output_cpp_expr(ss, expr->args[0], 30);
+
+    if (expr->args[0]->tp == TypeExpr::te_Param) {
+      ss << " > 0)";
+    }
+
     expr = expr->args[1];
     if (expr->tp == TypeExpr::te_CondType) {
       ss << " and ";
@@ -1642,7 +1641,8 @@ void PyTypeCode::generate_unpack_method(std::ostream& os, PyTypeCode::ConsRecord
       os << skip_extra_args_pass;
     }
     os << ") and cs.empty_ext()\n\n";
-    os << "            except (RuntimeError, AssertionError):\n                return False\n            return True\n";
+    os << "            except (RuntimeError, AssertionError, IndexError):\n                return False\n            "
+          "return True\n";
     return;
   }
   init_cons_context(rec.constr);
@@ -1670,7 +1670,8 @@ void PyTypeCode::generate_unpack_method(std::ostream& os, PyTypeCode::ConsRecord
   add_remaining_param_constraints_check(rec.constr, options);
   output_actions(os, "                ", options | 4);
   clear_context();
-  os << "            except (RuntimeError, AssertionError):\n                return False\n            return True\n";
+  os << "            except (RuntimeError, AssertionError, IndexError):\n                return False\n            "
+        "return True\n";
 }
 
 void PyTypeCode::output_actions(std::ostream& os, std::string nl, int options) {
