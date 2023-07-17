@@ -650,7 +650,7 @@ void PyTypeCode::generate_type_constructor(std::ostream& os, int options) {
     if (j++ > 0) {
       os << ", ";
     }
-    os << constr_arg_name(type_param_name[i]) << ": " << (type_param_is_nat[i] ? "int" : "TLB");
+    os << type_param_name[i] << ": " << (type_param_is_nat[i] ? "int" : "TLB");
   }
   os << "):\n";
   os << "        super().__init__()\n";
@@ -659,7 +659,7 @@ void PyTypeCode::generate_type_constructor(std::ostream& os, int options) {
     if (type_param_is_neg[i]) {
       continue;
     }
-    os << "        self." << type_param_name[i] << " = " << constr_arg_name(type_param_name[i]) << "\n";
+    os << "        self." << type_param_name[i] << " = " << type_param_name[i] << "\n";
   }
   if (tot_params > 0) {
     os << "\n";
@@ -809,7 +809,7 @@ void PyTypeCode::ConsRecord::declare_record(std::ostream& os, std::string nl, in
           os << ", ";
         }
 
-        std::string arg = rec_cpp_ids.new_ident(std::string{"_"} + fi.name);
+        std::string arg = fi.name;
         ctor_args.push_back(arg);
 
         os << arg << ": ";
@@ -964,7 +964,6 @@ void PyTypeCode::output_cpp_expr(std::ostream& os, const TypeExpr* expr, int pri
   }
   switch (expr->tp) {
     case TypeExpr::te_Param: {
-      LOG(ERROR) << "Param";
       int i = expr->value;
       assert(field_var_set.at(i));
       std::string fv = field_vars.at(i);
@@ -1175,6 +1174,7 @@ bool PyTypeCode::add_constraint_check(const Constructor& constr, const Field& fi
       add_compute_actions(x, -1, ss.str());
     } else {
       std::ostringstream ss;
+      ss << "assert self.";
       output_cpp_expr(ss, x);
       ss << (expr->type_applied == Eq_type ? " == " : (expr->type_applied == Less_type ? " < " : " <= "));
       output_cpp_expr(ss, y);
@@ -1552,12 +1552,18 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
   if (expr->tp != TypeExpr::te_Ref) {
     // field type is not a reference, generate a type expression and invoke skip/validate_skip method
     assert(cvt == py_slice || cvt == py_enum);
+    ss << "self." << field_vars.at(i) << " = ";
+
     if (!is_self(expr, constr)) {
+      ss << "TLBComplex.constants[\"";
       output_cpp_expr(ss, expr, 100);
-      ss << '.';
+      ss << "\"].";
+    } else {
+      ss << "self.";
     }
-    ss << (validating ? "validate_" : "") << "fetch_" << (cvt == py_enum ? "enum_" : "")
-       << (validating ? "to(ops, cs, weak, " : "to(cs, ") << field_vars.at(i) << ")" << tail;
+
+    ss << (validating ? "validate_" : "") << "fetch" << (cvt == py_enum ? "_enum" : "")
+       << (validating ? "to(ops, cs, weak, " : "(cs) ") << tail;
     field_var_set[i] = true;
     actions += PyAction{std::move(ss)};
     return;
