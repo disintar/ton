@@ -792,9 +792,9 @@ void PyTypeCode::ConsRecord::declare_record(std::ostream& os, std::string nl, in
 
     os << "\n";
 
-    os << nl << "    " << fi.name << ": ";
+    os << nl << "    " << fi.name << ": \"";
     fi.print_type(os);
-    os << " = None";
+    os << "\" = None";
 
     os << std::endl;
   }
@@ -812,9 +812,9 @@ void PyTypeCode::ConsRecord::declare_record(std::ostream& os, std::string nl, in
         std::string arg = fi.name;
         ctor_args.push_back(arg);
 
-        os << arg << ": ";
+        os << arg << ": \"";
         fi.print_type(os, true);
-        os << " = None";
+        os << "\" = None";
       }
     }
     os << "):\n";
@@ -1228,7 +1228,8 @@ std::string PyTypeCode::add_fetch_nat_field(const Constructor& constr, const Fie
 
 void PyTypeCode::output_fetch_subrecord(std::ostream& os, std::string field_name, const ConsRecord* subrec) {
   assert(subrec);
-  os << subrec->cpp_type.py_type_var_name << ".cell_unpack(cs.fetch_ref(), " << field_name << ")";
+  os << "self." << field_name << " = TLBComplex.constants[\"" << subrec->cpp_type.py_type_var_name
+     << "\"].fetch(cs.load_ref())";
 }
 
 void PyTypeCode::output_cpp_sizeof_expr(std::ostream& os, const TypeExpr* expr, int prio) const {
