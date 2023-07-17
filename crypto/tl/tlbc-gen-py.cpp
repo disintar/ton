@@ -1028,11 +1028,12 @@ void PyTypeCode::output_cpp_expr(std::ostream& os, const TypeExpr* expr, int pri
       }
       return;
     case TypeExpr::te_GetBit:
-      if (prio > 0) {
-        os << "(";
+      if (expr->args[0]->tp == TypeExpr::te_Param) {
+        os << "self.";
       }
+
       output_cpp_expr(os, expr->args[0], 5);
-      os << " & ";
+      os << ".bit_at(";
       if (expr->args[1]->tp == TypeExpr::te_IntConst && (unsigned)expr->args[1]->value <= 31) {
         int v = expr->args[1]->value;
         if (v > 1024) {
@@ -1040,12 +1041,13 @@ void PyTypeCode::output_cpp_expr(std::ostream& os, const TypeExpr* expr, int pri
         } else {
           os << (1 << v);
         }
-      } else {
-        os << "(1 << ";
-        output_cpp_expr(os, expr->args[1], 5);
         os << ")";
-      }
-      if (prio > 0) {
+      } else {
+        if (expr->args[1]->tp == TypeExpr::te_Param) {
+          os << "self.";
+        }
+
+        output_cpp_expr(os, expr->args[1], 5);
         os << ")";
       }
       return;
@@ -1329,7 +1331,7 @@ void PyTypeCode::output_fetch_field(std::ostream& os, std::string field_var, con
     case py_integer:
     case py_uint64:
       assert(i && l <= 64);
-      os << "self." << field_var << "cs.load_" << (i > 0 ? "u" : "") << "int(";
+      os << "self." << field_var << " = cs.load_" << (i > 0 ? "u" : "") << "int(";
       output_cpp_sizeof_expr(os, expr, 0);
       os << ")";
       return;
@@ -1541,20 +1543,34 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
   // remaining case: general positive type expression
   std::ostringstream ss;
   std::string tail;
+  bool have_cond;
   while (expr->tp == TypeExpr::te_CondType) {
     // optimization for (chains of) conditional types ( x?type )
     assert(expr->args.size() == 2);
-    ss << "(!";
+    if (!have_cond) {
+      ss << "if ";
+      have_cond = true;
+    }
+    if (expr->args[0]->tp == TypeExpr::te_Param) {
+      ss << "self.";
+    }
     output_cpp_expr(ss, expr->args[0], 30);
-    ss << " || ";
     expr = expr->args[1];
-    tail = std::string{")"} + tail;
+    if (expr->tp == TypeExpr::te_CondType) {
+      ss << " and ";
+    }
   }
+
+  if (have_cond) {
+    ss << ":\n";
+  }
+
   if ((!validating || any_bits) && can_compute_sizeof(expr) && cvt != py_enum) {
+    ss << "                    ";
     // field size can be computed at run-time, and either the contents is arbitrary, or we are not validating
     output_fetch_field(ss, field_vars.at(i), expr, cvt);
     field_var_set[i] = true;
-    ss << tail;
+    ss << tail << "\n";
     actions += PyAction{std::move(ss)};
     return;
   }
