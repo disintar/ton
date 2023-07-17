@@ -481,7 +481,7 @@ void generate_pytype_constant(std::ostream& os, int i, TypeExpr* expr, std::stri
   std::string cls_name = "TLB";
   int fake_arg = -1;
   cls_name = compute_type_expr_class_name(expr, fake_arg);
-  os << py_name << " = " << cls_name;
+  os << "TLBComplex.constants[\"" << py_name << "\"] = " << cls_name;
   int c = 0;
   if (fake_arg >= 0) {
     os << '(' << fake_arg;
@@ -494,7 +494,7 @@ void generate_pytype_constant(std::ostream& os, int i, TypeExpr* expr, std::stri
       if (arg->is_nat) {
         os << arg->value;
       } else {
-        os << const_type_expr_py_idents.at(arg->is_constexpr);
+        os << "TLBComplex.constants[\"" << const_type_expr_py_idents.at(arg->is_constexpr) << "\"]";
       }
     }
   }
@@ -506,7 +506,14 @@ void generate_pytype_constant(std::ostream& os, int i, TypeExpr* expr, std::stri
 
 void generate_pytype_constants(std::ostream& os) {
   os << "\n# "
-     << "definitions of constant types used\n\n";
+     << "definitions of constants\n";
+
+  for (int i : type_gen_order) {
+    PyTypeCode& cc = *py_type[i];
+    cc.generate_constant(os);
+  }
+  os << "\n";
+
   for (int i = 1; i <= const_type_expr_num; i++) {
     TypeExpr* expr = const_type_expr[i];
     if (!expr->is_nat && !const_pytype_expr_simple[i]) {
@@ -529,8 +536,9 @@ void generate_py_output_to(std::ostream& os, int options = 0) {
 
   os << "\nfrom enum import Enum\n";
   os << "import bitstring\n";
-  os << "from tonpy.types import TLB, TLBComplex, Cell, CellSlice, CellBuilder\n";
-  os << "from typing import Optional, Union\n";
+  os << "from tonpy.types import TLB, TLBComplex, Cell, CellSlice, CellBuilder, RefT, NatWidth, RecordBase\n";
+  os << "from typing import Optional, Union\n"
+     << "tlb_classes = []\n";
 
   for (int i : type_gen_order) {
     PyTypeCode& cc = *py_type[i];
@@ -1286,7 +1294,7 @@ void PyTypeCode::output_fetch_field(std::ostream& os, std::string field_var, con
   int l = (sz.is_fixed() ? sz.convert_min_size() : -1);
   switch (cvt) {
     case py_slice:
-      os << "self." << field_var << " = cs.fetch_subslice" << (sz.max_size() & 0xff ? "_ext(" : "(");
+      os << "self." << field_var << " = cs.load_subslice" << (sz.max_size() & 0xff ? "_ext(" : "(");
       output_cpp_sizeof_expr(os, expr, 0);
       os << ")";
       return;
@@ -1299,7 +1307,7 @@ void PyTypeCode::output_fetch_field(std::ostream& os, std::string field_var, con
       return;
     case py_cell:
       assert(l == 0x10000);
-      os << "self." << field_var << "= cs.load_ref()";
+      os << "self." << field_var << " = cs.load_ref()";
       return;
     case py_bool:
       assert(i > 0 && l == 1);
@@ -1479,10 +1487,11 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
         std::ostringstream ss2;
         output_fetch_field(ss2, field_vars.at(i), expr, cvt);
         if (!is_self(expr, constr)) {
-          ss << "\n            if rec_unpack:\n"
-             << "                ";
+          ss << "\n                if rec_unpack:\n"
+             << "                    self." << field_vars.at(i) << " = TLBComplex.constants[\"";
           output_cpp_expr(ss, expr, 100);
-          ss << ".fetch_to(self, cs)\n";
+          ss << "\"].fetch(self." << field_vars.at(i) << ", True)\n";
+          ss << "                    assert self." << field_vars.at(i) << " is not None\n";
         }
 
         actions += PyAction{std::move(ss2)};
@@ -2758,7 +2767,7 @@ void PyTypeCode::generate_tag_to_class(std::ostream& os, int options) {
 
   for (int i = 0; i < cons_num; i++) {
     auto rec = records.at(i);
-    auto tag = rec.constr.get_name();
+    auto tag = cons_enum_name.at(i);
 
     os << py_type_class_name << ".Tag." << tag << ": " << py_type_class_name << "." << rec.py_name;
 
@@ -2771,7 +2780,7 @@ void PyTypeCode::generate_tag_to_class(std::ostream& os, int options) {
 
 // This is actually not header in Python, but just base class with static methods
 void PyTypeCode::generate_class(std::ostream& os, int options) {
-  //  dump_all_types();
+  //  dump_all_types()
 
   os << "\nclass " << py_type_class_name << "(TLBComplex):\n";
   generate_cons_enum(os);
@@ -2830,8 +2839,12 @@ void PyTypeCode::generate_class(std::ostream& os, int options) {
   //  }
   //
 
+  os << "\ntlb_classes.append(\"" << py_type_class_name << "\")\n";
+}
+
+void PyTypeCode::generate_constant(std::ostream& os) {
   if (!py_type_var_name.empty()) {
-    os << "\n" << py_type_var_name << " = " << py_type_class_name << "()\n";
+    os << "TLBComplex.constants[\"" << py_type_var_name << "\"] = " << py_type_class_name << "()\n";
   }
 }
 

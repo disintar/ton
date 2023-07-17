@@ -237,6 +237,7 @@ class PyTypeCode {
   PyTypeCode(Type& _type) : type(_type), local_cpp_ids(&local_forbidden_py_idents) {
     ok = init();
   }
+  void generate_constant(std::ostream& os);
   bool is_ok() const {
     return ok;
   }
