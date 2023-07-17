@@ -1174,9 +1174,18 @@ bool PyTypeCode::add_constraint_check(const Constructor& constr, const Field& fi
       add_compute_actions(x, -1, ss.str());
     } else {
       std::ostringstream ss;
-      ss << "assert self.";
+      ss << "assert ";
+      if (x->tp == TypeExpr::te_Param) {
+        ss << "self.";
+      }
+
       output_cpp_expr(ss, x);
       ss << (expr->type_applied == Eq_type ? " == " : (expr->type_applied == Less_type ? " < " : " <= "));
+
+      if (y->tp == TypeExpr::te_Param) {
+        ss << "self.";
+      }
+
       output_cpp_expr(ss, y);
       actions += PyAction{std::move(ss), true};
     }
