@@ -1057,8 +1057,14 @@ void PyTypeCode::output_cpp_expr(std::ostream& os, const TypeExpr* expr, int pri
       if (prio > 10) {
         os << "(";
       }
+      if (expr->args[0]->tp == TypeExpr::te_Param){
+        os << "self.";
+      }
       output_cpp_expr(os, expr->args[0], 10);
       os << " + ";
+      if (expr->args[1]->tp == TypeExpr::te_Param){
+        os << "self.";
+      }
       output_cpp_expr(os, expr->args[1], 10);
       if (prio > 10) {
         os << ")";
@@ -1070,6 +1076,9 @@ void PyTypeCode::output_cpp_expr(std::ostream& os, const TypeExpr* expr, int pri
       }
       os << expr->value;
       os << " * ";
+      if (expr->args[0]->tp == TypeExpr::te_Param){
+        os << "self.";
+      }
       output_cpp_expr(os, expr->args[0], 20);
       if (prio > 20) {
         os << ")";
@@ -1148,7 +1157,7 @@ void PyTypeCode::add_compute_actions(const TypeExpr* expr, int i, std::string bi
         x = nullptr;
       }
       std::ostringstream ss;
-      ss << "mul_r1(" << tmp << ", " << expr->value << ", " << bind_to << ")";
+      ss << "assert self.mul_r1(\"" << tmp << "\", " << expr->value << ", " << bind_to << ")";
       actions += PyAction{std::move(ss), true};
       if (x) {
         add_compute_actions(x, i, tmp);
@@ -1174,7 +1183,7 @@ void PyTypeCode::add_compute_actions(const TypeExpr* expr, int i, std::string bi
         x = nullptr;
       }
       std::ostringstream ss;
-      ss << "add_r1(" << tmp << ", ";
+      ss << "assert self.add_r1(\"" << tmp << "\", ";
       output_cpp_expr(ss, y);
       ss << ", " << bind_to << ")";
       actions += PyAction{std::move(ss), true};
@@ -1188,7 +1197,14 @@ void PyTypeCode::add_compute_actions(const TypeExpr* expr, int i, std::string bi
       i = expr->value;
       assert(!field_vars.at(i).empty());
       if (!field_var_set.at(i)) {
-        actions += PyAction{std::string{"("} + field_vars.at(i) + " = " + bind_to + ") >= 0"};
+        std::ostringstream ss;
+        ss << "self." << field_vars.at(i) << " = " << bind_to;
+        actions += PyAction{ss};
+
+        std::ostringstream ss2;
+        ss2 << "assert self." << field_vars.at(i) << " >= 0";
+        actions += PyAction{ss2};
+
         field_var_set[i] = true;
       } else {
         actions += PyAction{field_vars.at(i) + " == " + bind_to};
@@ -1214,6 +1230,10 @@ bool PyTypeCode::add_constraint_check(const Constructor& constr, const Field& fi
         std::swap(x, y);
       }
       std::ostringstream ss;
+      if (y->tp == TypeExpr::te_Param) {
+        ss << "self.";
+      }
+
       output_cpp_expr(ss, y);
       add_compute_actions(x, -1, ss.str());
     } else {
@@ -1734,7 +1754,8 @@ void PyTypeCode::generate_unpack_method(std::ostream& os, PyTypeCode::ConsRecord
   output_actions(os, "                ", options | 4);
   clear_context();
 
-  os << "                if strict:\n                    for i in self.field_names:\n                        assert getattr(self, i) "
+  os << "                if strict:\n                    for i in self.field_names:\n                        assert "
+        "getattr(self, i) "
         "is not None\n";
   os << "            except (RuntimeError, AssertionError, IndexError):\n                return False\n            "
         "return True\n";
@@ -1743,18 +1764,12 @@ void PyTypeCode::generate_unpack_method(std::ostream& os, PyTypeCode::ConsRecord
 void PyTypeCode::output_actions(std::ostream& os, std::string nl, int options) {
   if (tmp_vars.size() || needs_tmp_cell) {
     if (tmp_vars.size()) {
-      os << nl << "int";
-      int c = 0;
       for (auto t : tmp_vars) {
-        if (c++) {
-          os << ",";
-        }
-        os << " " << t;
+        os << nl << "self." << t << " = None\n";
       }
-      os << ";";
     }
     if (needs_tmp_cell) {
-      os << nl << "Ref<vm::Cell> tmp_cell;";
+      os << nl << "tmp_cell = None\n";
     }
   }
   if (!actions.size()) {

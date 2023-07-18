@@ -1,4 +1,4 @@
 
-_ {x:#} {y:#} {z:#} a:(## x) { a = y }
-        b:(## z) { b = z } = A x y z;
-_ b:(A 10 5 8) = B;
+
+_ {a:#} {ap:#} b:# c:# { ~a + 10 = b } { ~ap * 20 = c } = NegateDeduct;
+
