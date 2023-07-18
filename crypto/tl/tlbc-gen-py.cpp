@@ -909,7 +909,7 @@ bool PyTypeCode::ConsRecord::declare_record_unpack(std::ostream& os, std::string
     if (options & 2) {
       os << cpp_type.skip_extra_args;
     }
-    os << ", rec_unpack: bool = False) -> bool:\n";
+    os << ", rec_unpack: bool = False, strict: bool = True) -> bool:\n";
   }
   return is_ok;
 }
@@ -1733,6 +1733,9 @@ void PyTypeCode::generate_unpack_method(std::ostream& os, PyTypeCode::ConsRecord
   add_remaining_param_constraints_check(rec.constr, options);
   output_actions(os, "                ", options | 4);
   clear_context();
+
+  os << "                if strict:\n                    for i in self.field_names:\n                        assert getattr(self, i) "
+        "is not None\n";
   os << "            except (RuntimeError, AssertionError, IndexError):\n                return False\n            "
         "return True\n";
 }
