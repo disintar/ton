@@ -477,10 +477,56 @@ void PyTypeCode::assign_class_name() {
 
 bool generate_py_prepared;
 
+std::string compute_py_type_class_name(const Type* typ, int& fake_arg) {
+  fake_arg = -1;
+  int idx = typ->type_idx;
+  if (idx >= builtin_types_num) {
+    return py_type[idx]->py_type_class_name;
+  } else if (typ->produces_nat) {
+    if (typ == Nat_type) {
+      return "Nat";
+    } else if (typ == NatWidth_type) {
+      return "NatWidth";
+    } else if (typ == NatLeq_type) {
+      return "NatLeq";
+    } else if (typ == NatLess_type) {
+      return "NatLess";
+    }
+    // ...
+  } else if (typ == Any_type) {
+    return "Anything";
+  } else if (typ->has_fixed_size) {
+    fake_arg = (typ->size.min_size() >> 8);
+    int c = typ->get_name()[0];
+    return (c == 'b') ? "Bits" : ((c == 'u') ? "UInt" : "Int");
+  } else if (typ == Int_type) {
+    return "Int";
+  } else if (typ == UInt_type) {
+    return "UInt";
+  } else if (typ == Bits_type) {
+    return "Bits";
+  }
+  return "<Unknown_Builtin_Type>";
+}
+
+std::string compute_py_type_expr_class_name(const TypeExpr* expr, int& fake_arg) {
+  switch (expr->tp) {
+    case TypeExpr::te_Apply:
+      return compute_py_type_class_name(expr->type_applied, fake_arg);
+    case TypeExpr::te_Ref:
+      return "RefT";
+    case TypeExpr::te_Tuple:
+      return "TupleT";
+    case TypeExpr::te_CondType:
+      return "CondT";
+  }
+  return "<Unknown-Type-Class>";
+}
+
 void generate_pytype_constant(std::ostream& os, int i, TypeExpr* expr, std::string py_name) {
   std::string cls_name = "TLB";
   int fake_arg = -1;
-  cls_name = compute_type_expr_class_name(expr, fake_arg);
+  cls_name = compute_py_type_expr_class_name(expr, fake_arg);
   os << "TLBComplex.constants[\"" << py_name << "\"] = " << cls_name;
   int c = 0;
   if (fake_arg >= 0) {
@@ -660,9 +706,11 @@ void PyTypeCode::generate_type_constructor(std::ostream& os, int options) {
       continue;
     }
     os << "        self." << type_param_name[i] << " = " << type_param_name[i] << "\n";
+    os << "        self.params_attrs.append(\"" << type_param_name[i] << "\")\n";
   }
   if (tot_params > 0) {
     os << "\n";
+    os << "        self.has_params = True\n";
   }
 
   generate_tag_to_class(os, options);
@@ -1218,6 +1266,9 @@ std::string PyTypeCode::add_fetch_nat_field(const Constructor& constr, const Fie
     } else if (ta == NatLess_type) {
       ss << "cs.load_uint_less(";
     }
+    if (expr->args[0]->tp == TypeExpr::te_Param) {
+      ss << "self.";
+    }
     output_cpp_expr(ss, expr->args[0]);
     ss << ")";
   }
@@ -1327,6 +1378,10 @@ void PyTypeCode::output_fetch_field(std::ostream& os, std::string field_var, con
     case py_uint64:
       assert(i && l <= 64);
       os << "self." << field_var << " = cs.load_" << (i > 0 ? "u" : "") << "int(";
+      if (expr->tp == TypeExpr::te_Param) {
+        os << "self.";
+      }
+
       output_cpp_sizeof_expr(os, expr, 0);
       os << ")";
       return;
@@ -1381,12 +1436,19 @@ void PyTypeCode::compute_implicit_field(const Constructor& constr, const Field& 
       // std::cerr << "can_use_to_compute(" << pexpr << ", " << i << ") = " << can_use_to_compute(pexpr, i) << std::endl;
       if (!field_var_set.at(i) && pexpr->tp == TypeExpr::te_Param && pexpr->value == i) {
         std::ostringstream ss;
-        if (field.type->is_nat_subtype) {
-          ss << "(" << field_vars[i] << " = " << type_param_name.at(j) << ") >= 0";
-        } else {
-          ss << "(" << field_vars[i] << " = &" << type_param_name.at(j) << ")";
-        }
+        //        if (field.type->is_nat_subtype) {
+        ss << "self." << field_vars[i] << " = self." << type_param_name.at(j) << "\n";
+        //        } else {
+        //          ss << "self." << field_vars[i] << " = self." << type_param_name.at(j) << ")";
+        //        }
         actions += PyAction{std::move(ss)};
+        std::ostringstream ss2;
+
+        if (field.type->is_nat_subtype) {
+          ss2 << "assert self." << field_vars[i] << " >= 0";
+          actions += PyAction{std::move(ss2)};
+        }
+
         field_vars[i] = type_param_name[j];
         field_var_set[i] = true;
         param_constraint_used[j] = true;
@@ -2802,7 +2864,15 @@ void PyTypeCode::generate_tag_to_class(std::ostream& os, int options) {
     auto rec = records.at(i);
     auto tag = cons_enum_name.at(i);
 
-    os << py_type_class_name << ".Tag." << tag << ": " << py_type_class_name << "." << rec.py_name;
+    std::string rec_name;
+
+    if (tot_params > 0) {
+      rec_name = "self.get_param_record(\"" + rec.py_name + "\")";
+    } else {
+      rec_name = py_type_class_name + "." + rec.py_name;
+    }
+
+    os << py_type_class_name << ".Tag." << tag << ": " << rec_name;
 
     if (i < cons_num - 1) {
       os << ", ";
