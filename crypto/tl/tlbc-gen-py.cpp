@@ -906,9 +906,9 @@ bool PyTypeCode::ConsRecord::declare_record_unpack(std::ostream& os, std::string
     is_ok = true;
   }
   if (is_ok) {
-    if (options & 2) {
-      os << cpp_type.skip_extra_args;
-    }
+//    if (options & 2) {
+//      os << cpp_type.skip_extra_args;
+//    }
     os << ", rec_unpack: bool = False, strict: bool = True) -> bool:\n";
   }
   return is_ok;
@@ -1037,8 +1037,8 @@ void PyTypeCode::output_cpp_expr(std::ostream& os, const TypeExpr* expr, int pri
         return;
       } else {
         int fake_arg = -1;
-        os << compute_type_expr_class_name(expr, fake_arg);
-        os << "{";
+        os << compute_py_type_expr_class_name(expr, fake_arg);
+        os << "(";
         int c = 0;
         if (fake_arg >= 0) {
           os << fake_arg;
@@ -1050,19 +1050,19 @@ void PyTypeCode::output_cpp_expr(std::ostream& os, const TypeExpr* expr, int pri
             output_cpp_expr(os, arg);
           }
         }
-        os << '}';
+        os << ')';
         return;
       }
     case TypeExpr::te_Add:
       if (prio > 10) {
         os << "(";
       }
-      if (expr->args[0]->tp == TypeExpr::te_Param){
+      if (expr->args[0]->tp == TypeExpr::te_Param) {
         os << "self.";
       }
       output_cpp_expr(os, expr->args[0], 10);
       os << " + ";
-      if (expr->args[1]->tp == TypeExpr::te_Param){
+      if (expr->args[1]->tp == TypeExpr::te_Param) {
         os << "self.";
       }
       output_cpp_expr(os, expr->args[1], 10);
@@ -1076,7 +1076,7 @@ void PyTypeCode::output_cpp_expr(std::ostream& os, const TypeExpr* expr, int pri
       }
       os << expr->value;
       os << " * ";
-      if (expr->args[0]->tp == TypeExpr::te_Param){
+      if (expr->args[0]->tp == TypeExpr::te_Param) {
         os << "self.";
       }
       output_cpp_expr(os, expr->args[0], 20);
@@ -1503,20 +1503,26 @@ bool PyTypeCode::is_self(const TypeExpr* expr, const Constructor& constr) const 
 
 void PyTypeCode::output_negative_type_arguments(std::ostream& os, const TypeExpr* expr) {
   assert(expr->tp == TypeExpr::te_Apply);
+  os << "[";
+  int a = 0;
   for (const TypeExpr* arg : expr->args) {
     if (arg->negated) {
       int j = arg->value;
+      if (a++) {
+        os << ", ";
+      }
       if (arg->tp == TypeExpr::te_Param && !field_var_set.at(j)) {
         assert(!field_vars.at(j).empty());
-        os << ", " << field_vars.at(j);
+        os << "\"" << field_vars.at(j) << "\"";
         field_var_set[j] = true;
       } else {
         std::string tmp = new_tmp_var();
-        os << ", " << tmp;
+        os << "\"" << tmp << "\"";
         postponed_equate.emplace_back(tmp, arg);
       }
     }
   }
+  os << "]";
 }
 
 void PyTypeCode::add_postponed_equate_actions() {
@@ -1596,13 +1602,16 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
     // must invoke the correct validate_skip or skip method for the type in question
     std::ostringstream ss;
     assert(cvt == py_slice);
+
+    ss << "self." << field_vars.at(i) << " = ";
+
     if (!is_self(expr, constr)) {
       output_cpp_expr(ss, expr, 100, true);
       ss << '.';
     }
-    ss << (validating ? "validate_fetch_to(ops, cs, weak, " : "fetch_to(cs, ") << field_vars.at(i);
+    ss << (validating ? "validate_fetch_to(ops, cs, weak, " : "fetch_to(self, cs, ");
     output_negative_type_arguments(ss, expr);
-    ss << ")";
+    ss << ", rec_unpack, strict)";
     actions += PyAction{std::move(ss)};
     add_postponed_equate_actions();
     field_var_set[i] = true;
@@ -1797,10 +1806,25 @@ void PyTypeCode::add_remaining_param_constraints_check(const Constructor& constr
         output_cpp_expr(ss, pexpr);
         actions += PyAction{std::move(ss)};
       } else if (options & 2) {
-        ss << "(" << type_param_name.at(j) << " = ";
+        ss << "self." << type_param_name.at(j) << " = ";
+        if (pexpr->tp == TypeExpr::te_Param) {
+          ss << "self.";
+        }
         output_cpp_expr(ss, pexpr);
-        ss << ") >= 0";
         actions += PyAction{std::move(ss), true};
+
+        std::ostringstream ss3;
+        ss3 << "self.negate_params.append(\"" << type_param_name.at(j) << "\")";
+        actions += PyAction{std::move(ss3), true};
+
+        std::ostringstream ss2;
+        ss2 << "assert ";
+        if (pexpr->tp == TypeExpr::te_Param) {
+          ss2 << "self.";
+        }
+        output_cpp_expr(ss2, pexpr);
+        ss2 << " >= 0";
+        actions += PyAction{std::move(ss2), true};
       }
     }
     ++j;
