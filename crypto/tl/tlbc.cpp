@@ -873,7 +873,7 @@ TypeExpr type_Type{{}, TypeExpr::te_Type};
 TypeExpr* const_type_expr[TypeExpr::max_const_expr];
 int const_type_expr_num;
 
-TypeExpr* TypeExpr::const_htable[TypeExpr::const_htable_size];
+TypeExpr* const_htable[TypeExpr::const_htable_size];
 
 sym_idx_t Nat_name, Eq_name, Less_name, Leq_name;
 Type* Nat_type;
@@ -3074,7 +3074,7 @@ void clear_for_redefine() {
   source_fdescr.clear();
   global_cpp_ids.clear();
 
-  std::memset(TypeExpr::const_htable, 0, sizeof(TypeExpr::const_htable));
+  std::memset(const_htable, 0, sizeof(const_htable));
   std::memset(const_type_expr, 0, sizeof(const_type_expr));
 
   types_num = 0;
