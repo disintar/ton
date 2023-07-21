@@ -1116,13 +1116,16 @@ void PyTypeCode::output_cpp_expr(std::ostream& os, const TypeExpr* expr, int pri
       os << " & (1 << ";
       if (expr->args[1]->tp == TypeExpr::te_IntConst && (unsigned)expr->args[1]->value <= 31) {
         os << (unsigned)expr->args[1]->value;
-        os << " - 1)) != 0)";
+        os << ")) != 0)";
       } else {
         if (expr->args[1]->tp == TypeExpr::te_Param) {
           os << "self.";
         }
         output_cpp_expr(os, expr->args[1], 5);
-        os << " - 1)) != 0)";
+        if (expr->args[1]->tp == TypeExpr::te_Param) {
+          os << " - 1";
+        }
+        os << ")) != 0)";
       }
       return;
     case TypeExpr::te_IntConst:
@@ -1331,7 +1334,7 @@ std::string PyTypeCode::add_fetch_nat_field(const Constructor& constr, const Fie
 void PyTypeCode::output_fetch_subrecord(std::ostream& os, std::string field_name, const ConsRecord* subrec) {
   assert(subrec);
   os << "self." << field_name << " = TLBComplex.constants[\"" << subrec->cpp_type.py_type_var_name
-     << "\"].fetch(cs.load_ref())";
+     << "\"].fetch(cs.load_ref(), rec_unpack, strict)";
 }
 
 void PyTypeCode::output_cpp_sizeof_expr(std::ostream& os, const TypeExpr* expr, int prio) const {
@@ -1421,7 +1424,6 @@ void PyTypeCode::output_fetch_field(std::ostream& os, std::string field_var, con
   int i = expr->is_integer();
   MinMaxSize sz = expr->compute_size();
   int l = (sz.is_fixed() ? sz.convert_min_size() : -1);
-  std::ostringstream sss2;
 
   switch (cvt) {
     case py_slice:
@@ -1654,7 +1656,7 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
             ss << "\"]";
           }
 
-          ss << ".fetch(self." << field_vars.at(i) << ", True) # at 1\n";
+          ss << ".fetch(self." << field_vars.at(i) << ", True, strict) # at 1\n";
           ss << "                    assert self." << field_vars.at(i) << " is not None\n";
         }
 
@@ -1713,9 +1715,9 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
     if (!is_self(expr, constr)) {
       std::ostringstream ss2;
       ss2 << "\n                if rec_unpack:\n"
-          << "                    self." << field_vars.at(i) << " = TLBComplex.constants[\"";
+          << "                    self." << field_vars.at(i) << " = TLBComplex.constants[\"t";
       expr->const_type_name(ss2);
-      ss2 << "\"].fetch(self." << field_vars.at(i) << ", True) # at 2\n";
+      ss2 << "\"].fetch(self." << field_vars.at(i) << ", True, strict) # at 2\n";
       ss2 << "                    assert self." << field_vars.at(i) << " is not None\n";
       actions += PyAction{ss2};
     }
@@ -1725,7 +1727,7 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
   // remaining case: general positive type expression
   std::ostringstream ss;
   std::string tail;
-  bool have_cond;
+  bool have_cond = false;
   while (expr->tp == TypeExpr::te_CondType) {
     // optimization for (chains of) conditional types ( x?type )
     assert(expr->args.size() == 2);
@@ -1759,6 +1761,20 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
     field_var_set[i] = true;
     ss << tail << "\n";
     actions += PyAction{std::move(ss)};
+
+    if (!is_self(expr, constr)) {
+      std::ostringstream ss2;
+      if (have_cond) {
+        ss2 << "    ";
+      }
+      ss2 << "\n                if rec_unpack and self." << field_vars.at(i) << " is not None:\n"
+          << "                    self." << field_vars.at(i) << " = TLBComplex.constants[\"t";
+      expr->const_type_name(ss2);
+      ss2 << "\"].fetch(self." << field_vars.at(i) << ", True, strict) # at 3\n";
+      ss2 << "                    assert self." << field_vars.at(i) << " is not None\n";
+      actions += PyAction{ss2};
+    }
+
     return;
   }
   if (expr->tp != TypeExpr::te_Ref) {
@@ -1767,9 +1783,16 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
     ss << "self." << field_vars.at(i) << " = ";
 
     if (!is_self(expr, constr)) {
-      ss << "TLBComplex.constants[\"";
+      if (expr->is_constexpr > 0) {
+        ss << "TLBComplex.constants[\"";
+      } else if (expr->tp == TypeExpr::te_Param) {
+        ss << "self.";
+      }
       output_cpp_expr(ss, expr, 100);
-      ss << "\"].";
+      if (expr->is_constexpr > 0) {
+        ss << "\"]";
+      }
+      ss << ".";
     } else {
       ss << "self.";
     }
@@ -1780,6 +1803,11 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
     actions += PyAction{std::move(ss)};
     return;
   }
+
+  if (have_cond) {
+    actions += PyAction{std::move(ss)};
+  }
+
   // the (remaining) field type is a reference
   if (!validating || (expr->args[0]->tp == TypeExpr::te_Apply &&
                       (expr->args[0]->type_applied == Cell_type || expr->args[0]->type_applied == Any_type))) {
@@ -1787,16 +1815,22 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
     // or it is a reference, and we are not validating, so we simply skip the reference
     assert(cvt == py_cell);
     std::ostringstream ss1;
+    if (have_cond) {
+      ss1 << "    ";
+    }
     ss1 << "self." << field_vars.at(i) << " = "
         << "cs.load_ref()";
     actions += PyAction{std::move(ss1)};
 
     if (!is_self(expr, constr)) {
       std::ostringstream ss2;
-      ss2 << "\n                if rec_unpack:\n"
-          << "                    self." << field_vars.at(i) << " = TLBComplex.constants[\"";
+      if (have_cond) {
+        ss2 << "    ";
+      }
+      ss2 << "\n                if rec_unpack and self." << field_vars.at(i) << " is not None:\n"
+          << "                    self." << field_vars.at(i) << " = TLBComplex.constants[\"t";
       expr->const_type_name(ss2);
-      ss2 << "\"].fetch(self." << field_vars.at(i) << ", True) # at 3\n";
+      ss2 << "\"].fetch(self." << field_vars.at(i) << ", True, strict) # at 3\n";
       ss2 << "                    assert self." << field_vars.at(i) << " is not None\n";
       actions += PyAction{ss2};
     }
@@ -1811,16 +1845,22 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
   expr = expr->args[0];
   assert(cvt == py_cell);
   std::ostringstream ss1;
+  if (have_cond) {
+    ss1 << "    ";
+  }
   ss1 << "self." << field_vars.at(i) << " = "
       << "cs.load_ref()";
   actions += PyAction{std::move(ss1)};
 
   if (!is_self(expr, constr)) {
     std::ostringstream ss2;
+    if (have_cond) {
+      ss2 << "    ";
+    }
     ss2 << "\n                if rec_unpack:\n"
-        << "                    self." << field_vars.at(i) << " = TLBComplex.constants[\"";
+        << "                    self." << field_vars.at(i) << " = TLBComplex.constants[\"t";
     expr->const_type_name(ss2);
-    ss2 << "\"].fetch(self." << field_vars.at(i) << ", True) # at 4\n";
+    ss2 << "\"].fetch(self." << field_vars.at(i) << ", True, strict) # at 4\n";
     ss2 << "                    assert self." << field_vars.at(i) << " is not None\n";
     actions += PyAction{ss2};
   }
