@@ -1,3 +1,1 @@
-
-_ {m:#} {x:#} n:(## m) d:(## x) = Define ~n m x ~d;
-_ {n_from_define:#} {d:#} defined_val:(Define ~n_from_define 8 1 ~d) real_value:(## n_from_define) = Example;
+a#6_ = A;

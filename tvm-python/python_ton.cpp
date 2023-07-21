@@ -16,10 +16,7 @@ void globalSetVerbosity(int vb) {
 }
 
 std::string codeget_python_tlb(std::string tlb_code) {
-  py::print(tlb_code);
-  auto tlb = tlbc::codegen_python_tlb(tlb_code);
-  py::print(tlb);
-  return tlb;
+  return tlbc::codegen_python_tlb(tlb_code);
 }
 
 PYBIND11_MODULE(python_ton, m) {

@@ -1567,11 +1567,12 @@ bool TypeExpr::bind_value(bool value_negated, Constructor& cs, bool checking_typ
   //   negated = true, value_negated = false: assign the value to the expression to compute some of the variables present in the expression
   // if checking_type == true:
   //   value_negated must be false
-  /* (debug output)
-  std::cerr << "binding " << (value_negated ? "negative" : "positive") << " value to expression " << (checking_type ? "of type " : ""); 
-  show(std::cerr, &cs); 
-  std::cerr << std::endl;
-  */
+  //(debug output)
+  //  std::cerr << "binding " << (value_negated ? "negative" : "positive") << " value to expression "
+  //            << (checking_type ? "of type " : "");
+  //  show(std::cerr, &cs);
+  //  std::cerr << std::endl;
+  //
   if (!checking_type) {
     no_tchk();
   } else {
@@ -2347,7 +2348,7 @@ void parse_constructor_def(Lexer& lex) {
     lex.next();
   }
   //  LOG(ERROR) << "parsing constructor `" << sym::symbols.get_name(constr_name) << "` with tag " << std::hex << tag
-  //            << std::dec;
+  //             << std::dec;
   auto cs_ref = new (AR) Constructor(where, constr_name, 0, tag);
   Constructor& cs = *cs_ref;
   cs.is_special = is_special;
@@ -3064,20 +3065,28 @@ void register_source(std::string source) {
   source_list.push_back(source);
 }
 
-void clear() {
+void clear_for_redefine() {
   // if we generate several times tlb code in runtime need to clear stuff
   sym::clear_sym_def();
   sym::symbols.clear();
   types.clear();
   source_list.clear();
   source_fdescr.clear();
+  global_cpp_ids.clear();
+
+  std::memset(TypeExpr::const_htable, 0, sizeof(TypeExpr::const_htable));
+  std::memset(const_type_expr, 0, sizeof(const_type_expr));
 
   types_num = 0;
   builtin_types_num = 0;
+  const_type_expr_num = 0;
 }
 
+int a;
+
 std::string codegen_python_tlb(const std::string& tlb_text) {
-  clear();
+  a++;
+  clear_for_redefine();
 
   src::define_keywords();
   tlbc::define_builtins();
@@ -3122,94 +3131,192 @@ void usage(const char* progname) {
 std::string output_filename;
 
 int main(int argc, char* const argv[]) {
-  int i;
-  bool interactive = false;
-  bool no_code_gen = false;
-  bool py_gen = false;
+  tlbc::codegen_python_tlb(
+      "_ a:^(uint256) b:^(int256) c:^(## 32)  = C;\n"
+      "_ a:^Cell b:^Any c:^(bits256) d:^C = B;\n"
+      "_ a:^# b:^(#< 5) c:^(#<= 10) d:^B = A;");
 
-  while ((i = getopt(argc, argv, "chin:o:qpTtvz")) != -1) {
-    switch (i) {
-      case 'i':
-        interactive = true;
-        break;
-      case 'p':
-        py_gen = true;
-        break;
-      case 'v':
-        ++verbosity;
-        break;
-      case 'o':
-        output_filename = optarg;
-        break;
-      case 'c':
-        tlbc::gen_cpp = true;
-        break;
-      case 'h':
-        tlbc::gen_hpp = true;
-        break;
-      case 'q':
-        no_code_gen = true;
-        break;
-      case 'n':
-        tlbc::cpp_namespace = optarg;
-        break;
-      case 'T':
-        tlbc::add_type_members = true;
-        break;
-      case 't':
-        tlbc::show_tag_warnings = true;
-        break;
-      case 'z':
-        tlbc::append_suffix = true;
-        break;
-      default:
-        usage(argv[0]);
-    }
-  }
-  if (verbosity >= 3) {
-    tlbc::show_tag_warnings = true;
-  }
+  tlbc::codegen_python_tlb(
+      "a$00 = AMultiTagBits;\n"
+      "b$10 = AMultiTagBits;\n"
+      "c$01 = AMultiTagBits;");
 
-  src::define_keywords();
-  tlbc::init_abstract_tables();
-  tlbc::define_builtins();
+  tlbc::codegen_python_tlb(
+      "a#32 = AMultiTagInt;\n"
+      "b#1111 = AMultiTagInt;\n"
+      "c#5FE = AMultiTagInt;");
+  tlbc::codegen_python_tlb(
+      "test$001 {x:#} a:(## x) = A x;\n"
+      "test1$000 a:# = A 1;\n"
+      "test2$010 a:# = A 2;\n"
+      "test3$110 a:# = A 3;\n"
+      "test4$111 a:# = A 4;\n"
+      "test5$100 a:# = A 5;\n"
+      "\n"
+      "test$001 {x:#} {y:#} a:(## x) b:(## y) = B x y;\n"
+      "test1$000 {y:#} a:# b:(## y) = B 1 y;\n"
+      "test2$010 {x:#} a:# b:(## x) = B x 2;\n"
+      "test3$110 a:# = B 1 1;\n"
+      "test4$111 a:# = B 2 2;\n"
+      "test5$100 a:# = B 3 3;\n"
+      "\n"
+      "test$001 {x:#} {y:#} {z:#} a:(## x) b:(## y) c:(## z) = C x y z;\n"
+      "test1$000 {y:#} {z:#} a:# b:(## y) c:(## z) = C 1 y z;\n"
+      "test2$010 {x:#} {z:#} a:# b:(## x) c:(## z)= C x 2 z;\n"
+      "test3$110 {z:#} a:# b:# c:(## z) = C 1 1 z;\n"
+      "test4$111 a:# = C 2 2 2;\n"
+      "test5$100 a:# = C 3 3 3;\n"
+      "\n"
+      "\n"
+      "test$001 {x:#} {y:#} {z:#} {h:#} a:(## x) b:(## y) c:(## z) d:(## h) = D x y z h;\n"
+      "test$001 {x:#} {y:#} {z:#} {h:#} {i:#} a:(## x) b:(## y) c:(## z) d:(## h) e:(## i) = E x y z h i;\n");
+  tlbc::codegen_python_tlb(
+      "test$_ = A; // simple Enum\n"
+      "test$01 = B;\n"
+      "\n"
+      "a$0 = C;\n"
+      "b$1 = C;\n"
+      "\n"
+      "a$0 = D;\n"
+      "c$101 = D;\n"
+      "b$11 = D;");
+  tlbc::codegen_python_tlb(
+      "_ {x:Type} k:# = T x;\n"
+      "a$0 {x:Type} a:# b:(## 32) c:bits512 e:^(T uint32) f:(T x) = A x;\n"
+      "b$1 {x:Type} e:# d:(## 32) c:bits512 b:^(T uint32) a:(T x) = A x;");
+  tlbc::codegen_python_tlb(
+      "a$10001 a:# b:(#< 10) c:(#<= 64) d:(## 64) = A;\n"
+      "b$10000 test_bool:(## 1) = A;");
+  tlbc::codegen_python_tlb(
+      "a$10001 a:# b:(#< 10) c:(#<= 64) d:(## 64) = A;\n"
+      "b$10000 test_bool:(## 1) = A;");
+  tlbc::codegen_python_tlb(
+      "_ a:(## 64) = A;\n"
+      "_ a:# b:^A = B;\n"
+      "_ a:B = C;");
+  tlbc::codegen_python_tlb(
+      "_ a:^(uint256) b:^(int256) c:^(## 32)  = C;\n"
+      "_ a:^Cell b:^Any c:^(bits256) d:^C = B;\n"
+      "_ a:^# b:^(#< 5) c:^(#<= 10) d:^B = A;");
+  tlbc::codegen_python_tlb(
+      "bool_false$0 = Bool;\n"
+      "bool_true$1 = Bool;\n"
+      "_ test_b:Bool = A;");
+  tlbc::codegen_python_tlb(
+      "bool_false#00000032 = MyTag;\n"
+      "bool_true#00000064 = MyTag;\n"
+      "_ test_b:MyTag = A;");
+  tlbc::codegen_python_tlb(
+      "_ a:# { a >= 10 } { a <= 100 } = A;\n"
+      "_ b:(#< 100) { b = 99 } = B;");
+  tlbc::codegen_python_tlb(
+      "_ a:# { 100 >= a } { 10 <= a } = A;\n"
+      "_ b:(#< 100) { 99 = b } = B;");
+  tlbc::codegen_python_tlb("_ a:(## 1) b:(a?(## 64)) = A;");
+  tlbc::codegen_python_tlb("_ a:(## 32) b:(## 8) c:(## 1) d:(## 1) e:((a . b)?(c?(d?((## 64))))) = A;");
+  tlbc::codegen_python_tlb("_ a:# ^[ b:# c:# d:# ] = A;");
+  tlbc::codegen_python_tlb("_ a:# ^[ b:# ^[ c:# ^[ d:# ] ] ] = A;");
+  tlbc::codegen_python_tlb(
+      "_ {x:#} a:(## x) = A x;\n"
+      "_ b:(A 10) = B;");
+  tlbc::codegen_python_tlb(
+      "_ {x:#} {y:#} {z:#} a:(## x) { a = y } \n"
+      "b:(## z) { b = z } = A x y z;\n"
+      "_ b:(A 10 5 8) = B;");
+  tlbc::codegen_python_tlb("_ {a:#} b:# { ~a = 10 } = NegateSimple;");
+  tlbc::codegen_python_tlb("_ {a:#} b:# { ~a = b } = NegateSimplePlus;");
+  tlbc::codegen_python_tlb("_ {a:#} {ap:#} b:# c:# { ~a = (10 * b) } { ~ap = (10 + c) } = NegateSimplePlus;");
+  tlbc::codegen_python_tlb("_ {a:#} {ap:#} b:# c:# { ~a + 10 = b } { ~ap * 20 = c } = NegateDeduct;");
 
-  int ok = 0, proc = 0;
-  try {
-    while (optind < argc) {
-      tlbc::register_source(argv[optind]);
-      ok += tlbc::parse_source_file(argv[optind++]);
-      proc++;
-    }
-    if (interactive) {
-      tlbc::register_source("");
-      ok += tlbc::parse_source_stdin();
-      proc++;
-    }
-    if (ok < proc) {
-      throw src::Fatal{"output code generation omitted because of errors"};
-    }
-    if (!proc) {
-      throw src::Fatal{"no source files, no output"};
-    }
-    tlbc::check_scheme();
-    if (verbosity > 0) {
-      tlbc::dump_all_types();
-      tlbc::dump_all_constexpr();
-    }
-    if (!no_code_gen) {
-      tlbc::init_forbidden_cpp_idents();
-      if (py_gen) {
-        tlbc::generate_py_output(output_filename);
-      } else {
-        tlbc::generate_cpp_output(output_filename);
-      }
-    }
-  } catch (src::Fatal& fatal) {
-    std::cerr << "fatal: " << fatal << std::endl;
-    std::exit(1);
-  } catch (src::Error& error) {
-    std::cerr << error << std::endl;
-    std::exit(1);
-  }
+  //  int i;
+  //  bool interactive = false;
+  //  bool no_code_gen = false;
+  //  bool py_gen = false;
+  //
+  //  while ((i = getopt(argc, argv, "chin:o:qpTtvz")) != -1) {
+  //    switch (i) {
+  //      case 'i':
+  //        interactive = true;
+  //        break;
+  //      case 'p':
+  //        py_gen = true;
+  //        break;
+  //      case 'v':
+  //        ++verbosity;
+  //        break;
+  //      case 'o':
+  //        output_filename = optarg;
+  //        break;
+  //      case 'c':
+  //        tlbc::gen_cpp = true;
+  //        break;
+  //      case 'h':
+  //        tlbc::gen_hpp = true;
+  //        break;
+  //      case 'q':
+  //        no_code_gen = true;
+  //        break;
+  //      case 'n':
+  //        tlbc::cpp_namespace = optarg;
+  //        break;
+  //      case 'T':
+  //        tlbc::add_type_members = true;
+  //        break;
+  //      case 't':
+  //        tlbc::show_tag_warnings = true;
+  //        break;
+  //      case 'z':
+  //        tlbc::append_suffix = true;
+  //        break;
+  //      default:
+  //        usage(argv[0]);
+  //    }
+  //  }
+  //  if (verbosity >= 3) {
+  //    tlbc::show_tag_warnings = true;
+  //  }
+  //
+  //  src::define_keywords();
+  //  tlbc::init_abstract_tables();
+  //  tlbc::define_builtins();
+  //
+  //  int ok = 0, proc = 0;
+  //  try {
+  //    while (optind < argc) {
+  //      tlbc::register_source(argv[optind]);
+  //      ok += tlbc::parse_source_file(argv[optind++]);
+  //      proc++;
+  //    }
+  //    if (interactive) {
+  //      tlbc::register_source("");
+  //      ok += tlbc::parse_source_stdin();
+  //      proc++;
+  //    }
+  //    if (ok < proc) {
+  //      throw src::Fatal{"output code generation omitted because of errors"};
+  //    }
+  //    if (!proc) {
+  //      throw src::Fatal{"no source files, no output"};
+  //    }
+  //    tlbc::check_scheme();
+  //    if (verbosity > 0) {
+  //      tlbc::dump_all_types();
+  //      tlbc::dump_all_constexpr();
+  //    }
+  //    if (!no_code_gen) {
+  //      if (py_gen) {
+  //        tlbc::init_forbidden_py_idents();
+  //        tlbc::generate_py_output(output_filename);
+  //      } else {
+  //        tlbc::init_forbidden_cpp_idents();
+  //        tlbc::generate_cpp_output(output_filename);
+  //      }
+  //    }
+  //  } catch (src::Fatal& fatal) {
+  //    std::cerr << "fatal: " << fatal << std::endl;
+  //    std::exit(1);
+  //  } catch (src::Error& error) {
+  //    std::cerr << error << std::endl;
+  //    std::exit(1);
+  //  }
 }

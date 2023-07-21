@@ -116,13 +116,13 @@ struct TypeExpr {
   static TypeExpr* mk_apply(const src::SrcLocation& loc, int tp, TypeExpr* expr1, TypeExpr* expr2);
   static TypeExpr* mk_apply_empty(const src::SrcLocation& loc, sym_idx_t name, Type* type_applied);
   void show(std::ostream& os, const Constructor* cs = nullptr, int prio = 0, int mode = 0) const;
+  static TypeExpr* const_htable[const_htable_size];
 
  private:
   void init_is_nat() {
     is_nat = (tp >= te_Add && tp <= te_IntConst);
   }
   unsigned long long compute_hash() const;
-  static TypeExpr* const_htable[const_htable_size];
 };
 
 // extern TypeExpr* TypeExpr::const_htable[TypeExpr::const_htable_size];

@@ -575,16 +575,22 @@ void generate_py_output_to(std::ostream& os, int options = 0) {
     global_cpp_ids.clear();
     cpp_type.clear();
     type_gen_order.clear();
+    py_type.clear();
+
+    const_pytype_expr_simple.clear();
+    const_type_expr_py_idents.clear();
 
     prepare_generate_py(options);
     generate_py_prepared = true;
   }
 
-  os << "\nfrom enum import Enum\n";
-  os << "import bitstring\n";
-  os << "from tonpy.types import TLB, TLBComplex, Cell, CellSlice, CellBuilder, RefT, NatWidth, RecordBase\n";
-  os << "from typing import Optional, Union\n"
-     << "tlb_classes = []\n";
+  //  os << "\nfrom enum import Enum\n";
+  //  os << "import bitstring\n";
+  //  os << "from tonpy.types import TLB, TLBComplex, Cell, CellSlice, CellBuilder, RefT, NatWidth, RecordBase\n";
+  //  os << "from typing import Optional, Union\n"
+  // todo: add imports
+
+  os << "tlb_classes = []\n";
 
   for (int i : type_gen_order) {
     PyTypeCode& cc = *py_type[i];
@@ -879,10 +885,19 @@ void PyTypeCode::ConsRecord::declare_record(std::ostream& os, std::string nl, in
       } else {
         os << ctor_args.at(j++);
       }
+      if (fi.field.type->tp == TypeExpr::te_CondType) {
+        os << nl << "\n            self.conditional_fields.append(\"" << fi.name << "\")";
+      }
       os << nl << "\n            self.field_names.append(\"" << fi.name << "\")";  // todo: move to field_names directly
     }
 
     os << "\n";
+  } else {
+    os << "\n"
+       << nl
+       << "    def __init__(self):"
+          "\n"
+       << nl << "        super().__init__()";
   }
   declared = true;
 }
@@ -906,9 +921,9 @@ bool PyTypeCode::ConsRecord::declare_record_unpack(std::ostream& os, std::string
     is_ok = true;
   }
   if (is_ok) {
-//    if (options & 2) {
-//      os << cpp_type.skip_extra_args;
-//    }
+    //    if (options & 2) {
+    //      os << cpp_type.skip_extra_args;
+    //    }
     os << ", rec_unpack: bool = False, strict: bool = True) -> bool:\n";
   }
   return is_ok;
@@ -943,7 +958,7 @@ void PyTypeCode::identify_cons_params(const Constructor& constr, int options) {
         int i = pexpr->value;
         if (field_var_set.at(i)) {
           // field i and parameter j must be equal
-          actions += PyAction{type_param_name.at(j) + " == " + field_vars.at(i)};
+          actions += PyAction{"self." + type_param_name.at(j) + " == " + field_vars.at(i)};
           param_constraint_used[j] = true;
         } else if (field_vars.at(i).empty()) {
           // identify field i with parameter j
@@ -984,6 +999,7 @@ void PyTypeCode::add_cons_tag_check(const Constructor& constr, int cidx, int opt
         ss << "assert cs.load_uint(" << l << ") == ";
         auto w = HexConstWriter{tag};
         w.write(ss, false);
+        ss << ", 'Cons tag check failed'\n";
       } else {
         //        ss << "cs.begins_with_skip_bits(" << l << ", ";
         //        auto w = HexConstWriter{tag};
@@ -1047,6 +1063,10 @@ void PyTypeCode::output_cpp_expr(std::ostream& os, const TypeExpr* expr, int pri
         for (const TypeExpr* arg : expr->args) {
           if (!arg->negated) {
             os << (c++ ? ", " : "");
+            if (arg->tp == TypeExpr::te_Param) {
+              os << "self.";
+            }
+
             output_cpp_expr(os, arg);
           }
         }
@@ -1157,7 +1177,7 @@ void PyTypeCode::add_compute_actions(const TypeExpr* expr, int i, std::string bi
         x = nullptr;
       }
       std::ostringstream ss;
-      ss << "assert self.mul_r1(\"" << tmp << "\", " << expr->value << ", " << bind_to << ")";
+      ss << "assert self.mul_r1(\"" << tmp << "\", " << expr->value << ", " << bind_to << "), 'Mul_r1 failed'\n";
       actions += PyAction{std::move(ss), true};
       if (x) {
         add_compute_actions(x, i, tmp);
@@ -1184,8 +1204,11 @@ void PyTypeCode::add_compute_actions(const TypeExpr* expr, int i, std::string bi
       }
       std::ostringstream ss;
       ss << "assert self.add_r1(\"" << tmp << "\", ";
+      if (y->tp == TypeExpr::te_Param) {
+        ss << "self.";
+      }
       output_cpp_expr(ss, y);
-      ss << ", " << bind_to << ")";
+      ss << ", " << bind_to << "), 'Add_r1 failed'\n";
       actions += PyAction{std::move(ss), true};
       if (x) {
         add_compute_actions(x, i, tmp);
@@ -1202,7 +1225,7 @@ void PyTypeCode::add_compute_actions(const TypeExpr* expr, int i, std::string bi
         actions += PyAction{ss};
 
         std::ostringstream ss2;
-        ss2 << "assert self." << field_vars.at(i) << " >= 0";
+        ss2 << "assert self." << field_vars.at(i) << " >= 0, 'Param is leq then zero'\n";
         actions += PyAction{ss2};
 
         field_var_set[i] = true;
@@ -1243,14 +1266,19 @@ bool PyTypeCode::add_constraint_check(const Constructor& constr, const Field& fi
         ss << "self.";
       }
 
-      output_cpp_expr(ss, x);
+      std::ostringstream name1;
+      output_cpp_expr(name1, x);
+      ss << name1.str();
       ss << (expr->type_applied == Eq_type ? " == " : (expr->type_applied == Less_type ? " < " : " <= "));
 
       if (y->tp == TypeExpr::te_Param) {
         ss << "self.";
       }
 
-      output_cpp_expr(ss, y);
+      std::ostringstream name2;
+      output_cpp_expr(name2, y);
+      ss << name2.str();
+      ss << ", 'Params not equal: " << name1.str() << " and " << name2.str() << "'\n";
       actions += PyAction{std::move(ss), true};
     }
     return true;
@@ -1372,6 +1400,9 @@ void PyTypeCode::output_fetch_field(std::ostream& os, std::string field_var, con
   switch (cvt) {
     case py_slice:
       os << "self." << field_var << " = cs.load_subslice" << (sz.max_size() & 0xff ? "_ext(" : "(");
+      if (expr->tp == TypeExpr::te_Param) {
+        os << "self.";
+      }
       output_cpp_sizeof_expr(os, expr, 0);
       os << ")";
       return;
@@ -1379,6 +1410,9 @@ void PyTypeCode::output_fetch_field(std::ostream& os, std::string field_var, con
     case py_bits:
       assert(!(sz.max_size() & 0xff));
       os << "self." << field_var << " = cs.load_bitstring(";
+      if (expr->tp == TypeExpr::te_Param) {
+        os << "self.";
+      }
       output_cpp_sizeof_expr(os, expr, 0);
       os << ")";
       return;
@@ -1396,7 +1430,6 @@ void PyTypeCode::output_fetch_field(std::ostream& os, std::string field_var, con
     case py_int64:
     case py_integer:
     case py_uint64:
-      assert(i && l <= 64);
       os << "self." << field_var << " = cs.load_" << (i > 0 ? "u" : "") << "int(";
       if (expr->tp == TypeExpr::te_Param) {
         os << "self.";
@@ -1465,7 +1498,7 @@ void PyTypeCode::compute_implicit_field(const Constructor& constr, const Field& 
         std::ostringstream ss2;
 
         if (field.type->is_nat_subtype) {
-          ss2 << "assert self." << field_vars[i] << " >= 0";
+          ss2 << "assert self." << field_vars[i] << " >= 0, 'Field is leq than zero'\n";
           actions += PyAction{std::move(ss2)};
         }
 
@@ -1474,7 +1507,7 @@ void PyTypeCode::compute_implicit_field(const Constructor& constr, const Field& 
         param_constraint_used[j] = true;
       } else if (can_compute(pexpr)) {
         std::ostringstream ss;
-        ss << type_param_name.at(j) << " == ";
+        ss << "self." << type_param_name.at(j) << " == ";
         output_cpp_expr(ss, pexpr);
         actions += PyAction{std::move(ss), true};
         param_constraint_used[j] = true;
@@ -1580,6 +1613,8 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
       if (cvt == py_cell || cvt == py_slice) {  // Load as var first
         std::ostringstream ss2;
         output_fetch_field(ss2, field_vars.at(i), expr, cvt);
+        actions += PyAction{std::move(ss2)};
+
         if (!is_self(expr, constr)) {
           ss << "\n                if rec_unpack:\n"
              << "                    self." << field_vars.at(i) << " = TLBComplex.constants[\"";
@@ -1588,7 +1623,6 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
           ss << "                    assert self." << field_vars.at(i) << " is not None\n";
         }
 
-        actions += PyAction{std::move(ss2)};
       } else {
         output_fetch_field(ss, field_vars.at(i), expr, cvt);
       }
@@ -1733,7 +1767,8 @@ void PyTypeCode::generate_unpack_method(std::ostream& os, PyTypeCode::ConsRecord
       os << skip_extra_args_pass;
     }
     os << ") and cs.empty_ext()\n\n";
-    os << "            except (RuntimeError, AssertionError, IndexError):\n                return False\n            "
+    os << "            except (RuntimeError, KeyError, ValueError, AssertionError, IndexError):\n                "
+          "return False\n            "
           "return True\n";
     return;
   }
@@ -1763,11 +1798,13 @@ void PyTypeCode::generate_unpack_method(std::ostream& os, PyTypeCode::ConsRecord
   output_actions(os, "                ", options | 4);
   clear_context();
 
-  os << "                if strict:\n                    for i in self.field_names:\n                        assert "
-        "getattr(self, i) "
-        "is not None\n";
-  os << "            except (RuntimeError, AssertionError, IndexError):\n                return False\n            "
-        "return True\n";
+  os << "                if strict:"
+        "\n                    for i in self.field_names:"
+        "\n                        if i not in self.conditional_fields:"
+        "\n                            assert getattr(self, i) is not None, f'Field {i} is None'\n";
+  os << "            except (RuntimeError, KeyError, ValueError, AssertionError, IndexError):"
+        "\n                return False"
+        "\n            return True\n";
 }
 
 void PyTypeCode::output_actions(std::ostream& os, std::string nl, int options) {
@@ -1802,7 +1839,7 @@ void PyTypeCode::add_remaining_param_constraints_check(const Constructor& constr
     if (!param_constraint_used.at(j)) {
       std::ostringstream ss;
       if (!type_param_is_neg.at(j)) {
-        ss << type_param_name.at(j) << " == ";
+        ss << "self." << type_param_name.at(j) << " == ";
         output_cpp_expr(ss, pexpr);
         actions += PyAction{std::move(ss)};
       } else if (options & 2) {
@@ -1823,7 +1860,7 @@ void PyTypeCode::add_remaining_param_constraints_check(const Constructor& constr
           ss2 << "self.";
         }
         output_cpp_expr(ss2, pexpr);
-        ss2 << " >= 0";
+        ss2 << " >= 0, 'Constraint check failed'\n";
         actions += PyAction{std::move(ss2), true};
       }
     }
@@ -2834,7 +2871,7 @@ void PyTypeCode::generate_fetch_enum_method(std::ostream& os, int options) {
        << "        return value\n";
   } else if (minl == maxl) {
     if (exact) {
-      os << "        value = cs.load_uint(" << minl << ");\n"
+      os << "        value = cs.load_uint(" << minl << ")\n"
          << "        assert value in self.cons_tag, f'Unexpected value {value} for tag, expected one of: "
             "{self.cons_tag}'\n"
          << "        return value\n";
@@ -2845,7 +2882,7 @@ void PyTypeCode::generate_fetch_enum_method(std::ostream& os, int options) {
          << "        return value\n";
     }
   } else if (exact) {
-    os << "        expected_tag = get_tag(cs).value;\n"
+    os << "        expected_tag = get_tag(cs).value\n"
        << "        cs.advance(self.cons_len[expected_tag])"
        << "        return expected_tag\n";
   } else {
@@ -2960,7 +2997,6 @@ void PyTypeCode::generate_class(std::ostream& os, int options) {
     //    generate_unpack_method(os, rec, 10); TODO: is this needed?
     generate_unpack_method(os, rec, 18);
     //    generate_unpack_method(os, rec, 26);  TODO: is this needed?
-
     //      generate_pack_method(os, rec, 2);
     //      generate_pack_method(os, rec, 10);
     //      generate_pack_method(os, rec, 18);

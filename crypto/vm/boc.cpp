@@ -788,7 +788,7 @@ td::Result<long long> BagOfCells::deserialize(const td::Slice& data, int max_roo
     //               << " required)";
     return -size_est;
   }
-  LOG(INFO) << "estimated size " << size_est << ", true size " << data.size();
+  //  LOG(INFO) << "estimated size " << size_est << ", true size " << data.size();
   if (info.root_count > max_roots) {
     return td::Status::Error("Bag-of-cells has more root cells than expected");
   }
@@ -927,7 +927,6 @@ unsigned long long BagOfCells::get_idx_entry_raw(int index) {
  */
 
 td::Result<Ref<Cell>> std_boc_deserialize(td::Slice data, bool can_be_empty) {
-  LOG(ERROR) << "This will not be deleted!";
   if (data.empty() && can_be_empty) {
     return Ref<Cell>();
   }
