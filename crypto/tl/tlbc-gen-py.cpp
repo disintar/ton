@@ -1068,9 +1068,13 @@ void PyTypeCode::output_cpp_expr(std::ostream& os, const TypeExpr* expr, int pri
             os << (c++ ? ", " : "");
             if (arg->tp == TypeExpr::te_Param) {
               os << "self.";
+            } else if (arg->tp == TypeExpr::te_Apply && arg->is_constexpr > 0) {
+              os << "TLBComplex.constants[\"";
             }
-
             output_cpp_expr(os, arg);
+            if (arg->tp == TypeExpr::te_Apply && arg->is_constexpr > 0) {
+              os << "\"]";
+            }
           }
         }
         os << ')';
@@ -1657,7 +1661,9 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
           }
 
           ss << ".fetch(self." << field_vars.at(i) << ", True, strict) # at 1\n";
-          ss << "                    assert self." << field_vars.at(i) << " is not None\n";
+
+          ss << "                    if strict:\n";
+          ss << "                        assert self." << field_vars.at(i) << " is not None\n";
         }
 
       } else {
@@ -1691,7 +1697,9 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
       }
       ss << '.';
     } else {
-      ss << "self.";
+      ss << "TLBComplex.constants[\"";
+      ss << py_type_var_name;
+      ss << "\"].";
     }
     ss << (validating ? "validate_fetch_to(ops, cs, weak, " : "fetch_to(self, cs, ");
     output_negative_type_arguments(ss, expr);
@@ -1718,7 +1726,8 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
           << "                    self." << field_vars.at(i) << " = TLBComplex.constants[\"t";
       expr->const_type_name(ss2);
       ss2 << "\"].fetch(self." << field_vars.at(i) << ", True, strict) # at 2\n";
-      ss2 << "                    assert self." << field_vars.at(i) << " is not None\n";
+      ss2 << "                    if strict:\n";
+      ss2 << "                        assert self." << field_vars.at(i) << " is not None\n";
       actions += PyAction{ss2};
     }
     field_var_set[i] = true;
@@ -1762,7 +1771,7 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
     ss << tail << "\n";
     actions += PyAction{std::move(ss)};
 
-    if (!is_self(expr, constr)) {
+    if (!is_self(expr, constr) && expr->is_constexpr > 0) {
       std::ostringstream ss2;
       if (have_cond) {
         ss2 << "    ";
@@ -1771,7 +1780,9 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
           << "                    self." << field_vars.at(i) << " = TLBComplex.constants[\"t";
       expr->const_type_name(ss2);
       ss2 << "\"].fetch(self." << field_vars.at(i) << ", True, strict) # at 3\n";
-      ss2 << "                    assert self." << field_vars.at(i) << " is not None\n";
+
+      ss2 << "                    if strict:\n";
+      ss2 << "                        assert self." << field_vars.at(i) << " is not None\n";
       actions += PyAction{ss2};
     }
 
@@ -1789,6 +1800,7 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
         ss << "self.";
       }
       output_cpp_expr(ss, expr, 100);
+
       if (expr->is_constexpr > 0) {
         ss << "\"]";
       }
@@ -1798,7 +1810,9 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
     }
 
     ss << (validating ? "validate_" : "") << "fetch" << (cvt == py_enum ? "_enum" : "")
-       << (validating ? "to(ops, cs, weak, " : "(cs) ") << tail;
+       << (validating ? "to(ops, cs, weak, " : "(cs, rec_unpack=rec_unpack, strict=strict")
+       << (cvt == py_enum ? ")" : ", load_ref=True)") << tail;
+
     field_var_set[i] = true;
     actions += PyAction{std::move(ss)};
     return;
@@ -1822,7 +1836,7 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
         << "cs.load_ref()";
     actions += PyAction{std::move(ss1)};
 
-    if (!is_self(expr, constr)) {
+    if (!is_self(expr, constr) && expr->is_constexpr > 0) {
       std::ostringstream ss2;
       if (have_cond) {
         ss2 << "    ";
@@ -1830,8 +1844,9 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
       ss2 << "\n                if rec_unpack and self." << field_vars.at(i) << " is not None:\n"
           << "                    self." << field_vars.at(i) << " = TLBComplex.constants[\"t";
       expr->const_type_name(ss2);
-      ss2 << "\"].fetch(self." << field_vars.at(i) << ", True, strict) # at 3\n";
-      ss2 << "                    assert self." << field_vars.at(i) << " is not None\n";
+      ss2 << "\"].fetch(self." << field_vars.at(i) << ", True, strict) # at 333\n";
+      ss2 << "                    if strict:\n";
+      ss2 << "                        assert self." << field_vars.at(i) << " is not None\n";
       actions += PyAction{ss2};
     }
 
@@ -1852,7 +1867,7 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
       << "cs.load_ref()";
   actions += PyAction{std::move(ss1)};
 
-  if (!is_self(expr, constr)) {
+  if (!is_self(expr, constr) && expr->is_constexpr > 0) {
     std::ostringstream ss2;
     if (have_cond) {
       ss2 << "    ";
@@ -1861,7 +1876,9 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
         << "                    self." << field_vars.at(i) << " = TLBComplex.constants[\"t";
     expr->const_type_name(ss2);
     ss2 << "\"].fetch(self." << field_vars.at(i) << ", True, strict) # at 4\n";
-    ss2 << "                    assert self." << field_vars.at(i) << " is not None\n";
+
+    ss2 << "                    if strict:\n";
+    ss2 << "                        assert self." << field_vars.at(i) << " is not None\n";
     actions += PyAction{ss2};
   }
 
@@ -2986,7 +3003,7 @@ void PyTypeCode::generate_fetch_enum_method(std::ostream& os, int options) {
   int minl = type.size.convert_min_size(), maxl = type.size.convert_max_size();
   bool exact = type.cons_all_exact();
   std::string ctag = incremental_cons_tags ? "expected_tag" : "self.cons_tag[expected_tag]";
-  os << "\n    def fetch_enum(self, cs: CellSlice) -> int:\n";
+  os << "\n    def fetch_enum(self, cs: CellSlice, rec_unpack: bool = False, strict: bool = True) -> int:\n";
   if (!cons_num) {
     os << "        return -1\n";  // When?
   } else if (!maxl) {
