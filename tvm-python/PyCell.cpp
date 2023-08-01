@@ -83,7 +83,7 @@ PyCell PyCell::copy() const {
   vm::CellBuilder cb;
   bool special;
   bool success = cb.append_cellslice_bool(vm::load_cell_slice_special(my_cell, special));
-  if (not success) {
+  if (!success) {
     throw std::invalid_argument("Can't create cell copy");
   }
 
