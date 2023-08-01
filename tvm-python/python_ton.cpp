@@ -5,6 +5,7 @@
 #include "tvm-python/PyCellBuilder.h"
 #include "tvm-python/PyDict.h"
 #include "tvm-python/PyEmulator.h"
+#include "tvm-python/PyTools.h"
 #include "crypto/tl/tlbc-data.h"
 
 namespace py = pybind11;
@@ -166,6 +167,9 @@ PYBIND11_MODULE(python_ton, m) {
   m.def("globalSetVerbosity", globalSetVerbosity, py::arg("verbosity"));
   m.def("load_as_cell_slice", load_as_cell_slice, py::arg("cell"), py::arg("allow_special"));
   m.def("codegen_python_tlb", codeget_python_tlb, py::arg("tlb_text"));
+
+  m.def("code_dissemble_str", code_dissemble_str, py::arg("code_boc"), py::arg("base_path"));
+  m.def("code_dissemble_cell", code_dissemble_cell, py::arg("code_cell"), py::arg("base_path"));
 
   py::class_<PyEmulator>(m, "PyEmulator")
       .def(py::init<PyCell, int>(), py::arg("global_config_boc"), py::arg("vm_log_verbosity") = 0)

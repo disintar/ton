@@ -41,6 +41,8 @@ set(PYTHON_EMULATOR_SOURCE
         PyCellBuilder.h
         PyDict.cpp
         PyDict.h
+        PyTools.h
+        PyTools.cpp
         PyEmulator.cpp
         PyEmulator.h
         python_ton.cpp)
