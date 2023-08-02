@@ -3,6 +3,7 @@
 //
 
 #include <string>
+#include <optional>
 #include <utility>
 #include "block/block.h"
 #include "block/block-parse.h"

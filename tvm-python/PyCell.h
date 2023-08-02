@@ -31,6 +31,6 @@ class PyCell {
   }
 };
 
-PyCell parseStringToCell(const std::string& base64string);
+PyCell parse_string_to_cell(const std::string& base64string);
 
 #endif  //TON_PYCELL_H

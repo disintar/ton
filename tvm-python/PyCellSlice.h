@@ -73,5 +73,6 @@ class PyCellSlice {
 };
 
 PyCellSlice load_as_cell_slice(PyCell cell, bool allow_special);
+std::string parse_snake_data_string(vm::CellSlice &cs, bool convert_to_utf8 = true);
 
 #endif  //TON_PYCELLSLICE_H

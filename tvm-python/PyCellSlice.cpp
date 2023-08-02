@@ -143,7 +143,7 @@ std::string map_to_utf8(const long long val) {
   return converter.to_bytes(static_cast<char32_t>(val));
 }
 
-std::string fetch_string(vm::CellSlice &cs, unsigned int text_size, bool convert_to_utf8 = true) {
+std::string fetch_string(vm::CellSlice &cs, unsigned int text_size, bool convert_to_utf8) {
   if (convert_to_utf8) {
     std::string text;
 
@@ -363,7 +363,7 @@ std::string fetch_string(vm::CellSlice &cs, bool convert_to_utf8 = true) {
   }
 }
 
-std::string parse_snake_data_string(vm::CellSlice &cs, bool convert_to_utf8 = true) {
+std::string parse_snake_data_string(vm::CellSlice &cs, bool convert_to_utf8) {
   bool has_next_ref = cs.have_refs();
   std::string text = fetch_string(cs, convert_to_utf8);
   vm::CellSlice rcf = cs;

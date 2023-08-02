@@ -91,7 +91,7 @@ PyCell PyCell::copy() const {
 }
 
 // type converting utils
-PyCell parseStringToCell(const std::string& base64string) {
+PyCell parse_string_to_cell(const std::string& base64string) {
   auto base64decoded = td::base64_decode(base64string);
 
   if (base64decoded.is_error()) {

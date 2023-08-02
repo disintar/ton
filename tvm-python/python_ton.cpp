@@ -1,4 +1,5 @@
 #include "third-party/pybind11/include/pybind11/pybind11.h"
+#include <optional>
 #include "third-party/pybind11/include/pybind11/stl.h"
 #include "tvm-python/PyCellSlice.h"
 #include "tvm-python/PyCell.h"
@@ -6,6 +7,9 @@
 #include "tvm-python/PyDict.h"
 #include "tvm-python/PyEmulator.h"
 #include "tvm-python/PyTools.h"
+#include "tvm-python/PyTVM.h"
+#include "tvm-python/PyFift.h"
+#include "tvm-python/PyStack.h"
 #include "crypto/tl/tlbc-data.h"
 
 namespace py = pybind11;
@@ -163,13 +167,64 @@ PYBIND11_MODULE(python_ton, m) {
       .def("to_boc", &PyDict::to_boc)
       .def("__repr__", &PyDict::toString);
 
-  m.def("parseStringToCell", parseStringToCell, py::arg("cell_boc"));
+  m.def("parse_string_to_cell", parse_string_to_cell, py::arg("cell_boc"));
   m.def("globalSetVerbosity", globalSetVerbosity, py::arg("verbosity"));
   m.def("load_as_cell_slice", load_as_cell_slice, py::arg("cell"), py::arg("allow_special"));
   m.def("codegen_python_tlb", codeget_python_tlb, py::arg("tlb_text"));
+  m.def("parse_token_data", parse_token_data, py::arg("cell"));
 
   m.def("code_dissemble_str", code_dissemble_str, py::arg("code_boc"), py::arg("base_path"));
   m.def("code_dissemble_cell", code_dissemble_cell, py::arg("code_cell"), py::arg("base_path"));
+
+  py::class_<PyTVM>(m, "PyTVM")
+      .def(py::init<int, std::optional<PyCell>, std::optional<PyCell>, bool, bool, bool>(), py::arg("log_level_") = 0,
+           py::arg("code_") = std::optional<PyCell>(), py::arg("data_") = std::optional<PyCell>(),
+           py::arg("allowDebug_") = false, py::arg("sameC3_") = true, py::arg("skip_c7_") = false)
+      .def_property("code", &PyTVM::get_code, &PyTVM::set_code)
+      .def_property("data", &PyTVM::set_data, &PyTVM::get_data)
+      //      .def("set_stack", &PyTVM::set_stack)
+      //      .def("set_libs", &PyTVM::set_libs)
+      .def("get_ops", &PyTVM::get_ops)
+      .def("set_state_init", &PyTVM::set_state_init)
+      //      .def("get_stacks", &PyTVM::get_stacks)
+      .def("clear_stack", &PyTVM::clear_stack)
+      .def("set_gasLimit", &PyTVM::set_gasLimit, py::arg("gas_limit") = "0", py::arg("gas_max") = "-1")
+      .def("run_vm", &PyTVM::run_vm)
+      .def("set_c7", &PyTVM::set_c7, py::arg("unixtime") = 0, py::arg("blocklt") = "0", py::arg("translt") = "0",
+           py::arg("randseed") = "", py::arg("balanceGrams") = "", py::arg("address") = "",
+           py::arg("globalConfig") = "")
+      .def_property("exit_code", &PyTVM::get_exit_code, &PyTVM::dummy_set)
+      .def_property("vm_steps", &PyTVM::get_vm_steps, &PyTVM::dummy_set)
+      .def_property("gas_used", &PyTVM::get_gas_used, &PyTVM::dummy_set)
+      .def_property("gas_credit", &PyTVM::get_gas_credit, &PyTVM::dummy_set)
+      .def_property("success", &PyTVM::get_success, &PyTVM::dummy_set)
+      .def_property("vm_final_state_hash", &PyTVM::get_vm_final_state_hash, &PyTVM::dummy_set)
+      .def_property("vm_init_state_hash", &PyTVM::get_vm_init_state_hash, &PyTVM::dummy_set)
+      .def_property("new_data", &PyTVM::get_new_data, &PyTVM::dummy_set)
+      .def_property("actions", &PyTVM::get_actions, &PyTVM::dummy_set);
+
+  py::class_<PyFift>(m, "PyFift")
+      .def(py::init<std::string, bool>(), py::arg("base_path"), py::arg("silent"))
+      .def("run", &PyFift::run, py::arg("code_text"))
+      .def("add_lib", &PyFift::add_lib, py::arg("lib"))
+      .def("get_stack", &PyFift::get_stack)
+      .def("clear_libs", &PyFift::clear_libs);
+
+  py::class_<PyStackEntry>(m, "PyStackEntry")
+      .def(py::init<std::optional<PyCell>, std::optional<PyCellSlice>, std::string>(),
+           py::arg("cell") = std::optional<PyCell>(), py::arg("cell_slice") = std::optional<PyCellSlice>(),
+           py::arg("big_int") = "")
+      .def("as_int", &PyStackEntry::as_int)
+      .def("as_cell_slice", &PyStackEntry::as_cell_slice)
+      .def("as_cell", &PyStackEntry::as_cell)
+      .def("type", &PyStackEntry::type);
+
+  py::class_<PyStack>(m, "PyStack")
+      .def(py::init<>())
+      .def("at", &PyStack::at)
+      .def("pop", &PyStack::pop)
+      .def("is_empty", &PyStack::is_empty)
+      .def("depth", &PyStack::depth);
 
   py::class_<PyEmulator>(m, "PyEmulator")
       .def(py::init<PyCell, int>(), py::arg("global_config_boc"), py::arg("vm_log_verbosity") = 0)
