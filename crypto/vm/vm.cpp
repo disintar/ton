@@ -74,8 +74,8 @@ VmState::VmState(Ref<CellSlice> _code, Ref<Stack> _stack, const GasLimits& gas, 
   init_cregs(flags & 1, flags & 2);
 }
 
-VmState::VmState(Ref<CellSlice> _code, Ref<Stack> _stack, VmDumper *vm_dumper_, const GasLimits& gas, int flags, Ref<Cell> _data, VmLog log,
-                 std::vector<Ref<Cell>> _libraries, Ref<Tuple> init_c7)
+VmState::VmState(Ref<CellSlice> _code, Ref<Stack> _stack, VmDumper* vm_dumper_, const GasLimits& gas, int flags,
+                 Ref<Cell> _data, VmLog log, std::vector<Ref<Cell>> _libraries, Ref<Tuple> init_c7)
     : code(std::move(_code))
     , stack(std::move(_stack))
     , cp(-1)
@@ -86,7 +86,7 @@ VmState::VmState(Ref<CellSlice> _code, Ref<Stack> _stack, VmDumper *vm_dumper_, 
     , gas(gas)
     , libraries(std::move(_libraries))
     , stack_trace((flags >> 2) & 1)
-    , vm_dumper(vm_dumper_){
+    , vm_dumper(vm_dumper_) {
   ensure_throw(init_cp(0));
   set_c4(std::move(_data));
   if (init_c7.not_null()) {
@@ -463,12 +463,18 @@ int VmState::step() {
     stack->dump(ss, mode);
     VM_LOG(this) << "stack:" << ss.str();
   }
+
+  if (vm_dumper.enable) {
+    vm_dumper.dump_stack(stack, gas_consumed(), gas.gas_remaining);
+  }
+
   if (stack_trace) {
     stack->dump(std::cerr, 3);
   }
   ++steps;
   if (code->size()) {
-    VM_LOG_MASK(this, vm::VmLog::ExecLocation) << "code cell hash: " << code->get_base_cell()->get_hash().to_hex() << " offset: " << code->cur_pos();
+    VM_LOG_MASK(this, vm::VmLog::ExecLocation)
+        << "code cell hash: " << code->get_base_cell()->get_hash().to_hex() << " offset: " << code->cur_pos();
     return dispatch->dispatch(this, code.write());
   } else if (code->size_refs()) {
     VM_LOG(this) << "execute implicit JMPREF";
@@ -533,7 +539,7 @@ int VmState::run() {
         restore_parent_vm(~res);
       }
       res = run_inner();
-    } catch (VmNoGas &vmoog) {
+    } catch (VmNoGas& vmoog) {
       ++steps;
       VM_LOG(this) << "unhandled out-of-gas exception: gas consumed=" << gas.gas_consumed()
                    << ", limit=" << gas.gas_limit;

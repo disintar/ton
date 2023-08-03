@@ -25,6 +25,12 @@ using namespace pybind11::literals;  // to bring in the `_a` literal
 const int LOG_DEBUG = 2;
 const int LOG_INFO = 1;
 
+struct PyStackInfo {
+  PyStack stack;
+  long long gas_consumed;
+  long long gas_remaining;
+};
+
 class PyTVM {
  public:
   PyCell code;
@@ -37,6 +43,7 @@ class PyTVM {
   bool sameC3;
   int log_level;
   bool skip_c7 = false;
+  bool enable_vm_dumper = true;
 
   std::optional<PyStackEntry> c7;
 
@@ -50,16 +57,18 @@ class PyTVM {
   PyCell new_data_out;
   PyCell actions_out;
 
-  std::vector<std::vector<vm::StackEntry>> stacks;
+  std::vector<vm::StackInfo> stacks;
   std::vector<std::string> vm_ops;
+  std::vector<std::tuple<long long, long long>> gas_info;
 
   // constructor
   explicit PyTVM(int log_level_ = 0, std::optional<PyCell> code_ = std::optional<PyCell>(),
                  std::optional<PyCell> data_ = std::optional<PyCell>(), bool allowDebug_ = false, bool sameC3_ = true,
-                 bool skip_c7_ = false) {
+                 bool skip_c7_ = false, bool enable_vm_dumper_ = true) {
     allowDebug = allowDebug_;
     sameC3 = sameC3_;
     skip_c7 = skip_c7_;
+    enable_vm_dumper = enable_vm_dumper_;
 
     this->log_level = log_level_;
 
@@ -90,7 +99,7 @@ class PyTVM {
   void set_stack(PyStack pystack);
   void set_libs(PyDict dict_);
   PyStack run_vm();
-  //    std::vector<std::vector<py::object>> get_stacks();
+  std::vector<PyStackInfo> get_stacks();
 
   std::vector<std::string> get_ops() {
     return vm_ops;

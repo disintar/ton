@@ -179,20 +179,26 @@ PYBIND11_MODULE(python_ton, m) {
   m.def("deserialize_stack_entry", deserialize_stack_entry, py::arg("cell_slice"));
   m.def("deserialize_stack", deserialize_stack, py::arg("cell_slice"));
 
+  py::class_<PyStackInfo>(m, "PyStackInfo")
+      .def_readwrite("stack", &PyStackInfo::stack)
+      .def_readwrite("gas_consumed", &PyStackInfo::gas_consumed)
+      .def_readwrite("gas_remaining", &PyStackInfo::gas_remaining);
+
   py::class_<PyTVM>(m, "PyTVM")
-      .def(py::init<int, std::optional<PyCell>, std::optional<PyCell>, bool, bool, bool>(), py::arg("log_level_") = 0,
-           py::arg("code_") = std::optional<PyCell>(), py::arg("data_") = std::optional<PyCell>(),
-           py::arg("allowDebug_") = false, py::arg("sameC3_") = true, py::arg("skip_c7_") = false)
+      .def(py::init<int, std::optional<PyCell>, std::optional<PyCell>, bool, bool, bool, bool>(),
+           py::arg("log_level_") = 0, py::arg("code_") = std::optional<PyCell>(),
+           py::arg("data_") = std::optional<PyCell>(), py::arg("allowDebug_") = false, py::arg("sameC3_") = true,
+           py::arg("skip_c7_") = false, py::arg("enable_vm_dump") = false)
       .def_property("code", &PyTVM::get_code, &PyTVM::set_code)
       .def_property("data", &PyTVM::set_data, &PyTVM::get_data)
       .def("set_stack", &PyTVM::set_stack)
       //      .def("set_libs", &PyTVM::set_libs)
       .def("get_ops", &PyTVM::get_ops)
       .def("set_state_init", &PyTVM::set_state_init)
-      //      .def("get_stacks", &PyTVM::get_stacks)
       .def("clear_stack", &PyTVM::clear_stack)
       .def("set_gasLimit", &PyTVM::set_gasLimit, py::arg("gas_limit") = "0", py::arg("gas_max") = "-1")
       .def("run_vm", &PyTVM::run_vm)
+      .def("get_stacks", &PyTVM::get_stacks)
       .def("set_c7", &PyTVM::set_c7, py::arg("stack"))
       .def_property("exit_code", &PyTVM::get_exit_code, &PyTVM::dummy_set)
       .def_property("vm_steps", &PyTVM::get_vm_steps, &PyTVM::dummy_set)

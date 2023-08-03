@@ -86,6 +86,37 @@ void PyTVM::set_libs(PyDict dict_) {
   lib_set.push_back(dict_.my_dict->get_root_cell());
 }
 
+// Vm logger
+class PythonLogger : public td::LogInterface {
+ public:
+  bool muted = false;
+  vm::VmDumper* vm_dumper{0};
+
+  void set_vm_dumper(vm::VmDumper* vm_dumper_) {
+    vm_dumper = vm_dumper_;
+  }
+
+  void mute() {
+    muted = true;
+  }
+
+  void append(td::CSlice slice) override {
+    if (vm_dumper->enable) {
+      if (slice.str().find("execute") != std::string::npos) {
+        vm_dumper->dump_op(slice.str());
+      }
+    }
+
+    if (!muted) {
+      py::print(slice.str());
+    }
+  }
+
+  void append(td::CSlice slice, int mode) override {
+    append(std::move(slice));
+  }
+};
+
 PyStack PyTVM::run_vm() {
   pybind11::gil_scoped_acquire gil;
 
@@ -96,33 +127,24 @@ PyStack PyTVM::run_vm() {
   auto stack_ = td::make_ref<vm::Stack>();
 
   vm::VmLog vm_log;
-  vm::VmDumper vm_dumper{true, &stacks, &vm_ops};
+  vm::VmDumper vm_dumper{enable_vm_dumper, &stacks, &vm_ops};
 
   vm_log = vm::VmLog();
 
-  //  auto pyLogger = new PythonLogger();
-  //  pyLogger->set_vm_dumper(&vm_dumper);
-  //
-  //  if (log_level < LOG_DEBUG) {
-  //    pyLogger->mute();
-  //  }
-  //
-  //  vm_log.log_interface = pyLogger;
+  auto pyLogger = new PythonLogger();
+  pyLogger->set_vm_dumper(&vm_dumper);
+
+  if (log_level < LOG_DEBUG) {
+    pyLogger->mute();
+  }
+
+  vm_log.log_interface = pyLogger;
+  vm_log.log_options = td::LogOptions(VERBOSITY_NAME(DEBUG), true, false);
 
   td::Ref<vm::Tuple> init_c7;
 
   if (!skip_c7) {
     init_c7 = c7->entry.as_tuple();
-    //        vm::make_tuple_ref(td::make_refint(0x076ef1ea),              // [ magic:0x076ef1ea
-    //                           td::make_refint(0),                       //   actions:Integer
-    //                           td::make_refint(0),                       //   msgs_sent:Integer
-    //                           td::make_refint(c7_unixtime),             //   unixtime:Integer
-    //                           td::make_refint(c7_blocklt->to_long()),   //   block_lt:Integer
-    //                           td::make_refint(c7_translt->to_long()),   //   trans_lt:Integer
-    //                           td::make_refint(c7_randseed->to_long()),  //   rand_seed:Integer
-    //                           balance.as_vm_tuple(),                    //   balance_remaining:[Integer (Maybe Cell)]
-    //                           std::move(my_addr),                       //  myself:MsgAddressInt
-    //                           vm::StackEntry::maybe(global_config));  //  global_config:(Maybe Cell) ] = SmartContractInfo;
   } else {
     init_c7 = vm::make_tuple_ref();
   }
@@ -142,11 +164,9 @@ PyStack PyTVM::run_vm() {
   }
 
   vm::VmState vm_local{
-      code.my_cell,
-      td::make_ref<vm::Stack>(stackVm),
-          &vm_dumper, gas_limits, flags, data.my_cell, vm_log,
+      code.my_cell,       td::make_ref<vm::Stack>(stackVm),      &vm_dumper, gas_limits, flags, data.my_cell, vm_log,
       std::move(lib_set), vm::make_tuple_ref(std::move(init_c7))};
-  
+
   vm_init_state_hash_out = vm_local.get_state_hash().to_hex();
   exit_code_out = vm_local.run();
 
@@ -167,18 +187,13 @@ PyStack PyTVM::run_vm() {
 
   return PyStack(vm_local.get_stack());
 }
-//
-//std::vector<std::vector<py::object>> PyTVM::get_stacks() {
-//  std::vector<std::vector<py::object>> AllPyStack;
-//
-//  for (const auto& stack : stacks) {
-//    std::vector<py::object> pyStack;
-//    for (const auto& stackEntry : stack) {
-//      pyStack.push_back(cast_stack_item_to_python_object(stackEntry));
-//    }
-//
-//    AllPyStack.push_back(pyStack);
-//  }
-//
-//  return AllPyStack;
-//}
+
+std::vector<PyStackInfo> PyTVM::get_stacks() {
+  std::vector<PyStackInfo> all_stacks;
+
+  for (const auto& stack : stacks) {
+    all_stacks.push_back(PyStackInfo{PyStack(std::move(stack.stack)), stack.gas_consumed, stack.gas_remaining});
+  }
+
+  return all_stacks;
+}
