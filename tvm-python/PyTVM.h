@@ -38,13 +38,7 @@ class PyTVM {
   int log_level;
   bool skip_c7 = false;
 
-  long long c7_unixtime = 0;
-  td::RefInt256 c7_blocklt = td::make_refint(0);
-  td::RefInt256 c7_translt = td::make_refint(0);
-  td::RefInt256 c7_randseed = td::make_refint(0);
-  td::RefInt256 c7_balanceRemainingGrams = td::make_refint(101000000000);
-  block::StdAddress c7_myaddress;
-  std::optional<PyCell> c7_globalConfig;
+  std::optional<PyStackEntry> c7;
 
   int exit_code_out{};
   long long vm_steps_out{};
@@ -78,9 +72,7 @@ class PyTVM {
     }
   }
 
-  void set_c7(int c7_unixtime_, const std::string& c7_blocklt_, const std::string& c7_translt_,
-              const std::string& c7_randseed_, const std::string& c7_balanceRemainingGrams_,
-              const std::string& c7_myaddress_, std::optional<PyCell> c7_globalConfig_);
+  void set_c7(PyStackEntry x);
 
   void log(const std::string& log_string, int level = LOG_INFO);
 

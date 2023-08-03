@@ -18,3 +18,15 @@ PyStackEntry make_tuple(std::vector<PyStackEntry> e) {
   }
   return PyStackEntry(vm::StackEntry(make_tuple_ref_from_vector(tmp)));
 }
+
+PyStackEntry deserialize_stack_entry(PyCellSlice cs) {
+  vm::StackEntry x;
+  x.deserialize(cs.my_cell_slice);
+  return PyStackEntry(x);
+}
+
+PyStack deserialize_stack(PyCellSlice cs) {
+  vm::Stack x;
+  x.deserialize(cs.my_cell_slice);
+  return PyStack(x);
+}

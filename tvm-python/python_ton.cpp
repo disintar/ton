@@ -176,6 +176,8 @@ PYBIND11_MODULE(python_ton, m) {
   m.def("code_dissemble_str", code_dissemble_str, py::arg("code_boc"), py::arg("base_path"));
   m.def("code_dissemble_cell", code_dissemble_cell, py::arg("code_cell"), py::arg("base_path"));
   m.def("make_tuple", make_tuple, py::arg("items"));
+  m.def("deserialize_stack_entry", deserialize_stack_entry, py::arg("cell_slice"));
+  m.def("deserialize_stack", deserialize_stack, py::arg("cell_slice"));
 
   py::class_<PyTVM>(m, "PyTVM")
       .def(py::init<int, std::optional<PyCell>, std::optional<PyCell>, bool, bool, bool>(), py::arg("log_level_") = 0,
@@ -191,9 +193,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("clear_stack", &PyTVM::clear_stack)
       .def("set_gasLimit", &PyTVM::set_gasLimit, py::arg("gas_limit") = "0", py::arg("gas_max") = "-1")
       .def("run_vm", &PyTVM::run_vm)
-      .def("set_c7", &PyTVM::set_c7, py::arg("unixtime") = 0, py::arg("blocklt") = "0", py::arg("translt") = "0",
-           py::arg("randseed") = "", py::arg("balanceGrams") = "", py::arg("address") = "",
-           py::arg("globalConfig") = "")
+      .def("set_c7", &PyTVM::set_c7, py::arg("stack"))
       .def_property("exit_code", &PyTVM::get_exit_code, &PyTVM::dummy_set)
       .def_property("vm_steps", &PyTVM::get_vm_steps, &PyTVM::dummy_set)
       .def_property("gas_used", &PyTVM::get_gas_used, &PyTVM::dummy_set)
@@ -203,6 +203,11 @@ PYBIND11_MODULE(python_ton, m) {
       .def_property("vm_init_state_hash", &PyTVM::get_vm_init_state_hash, &PyTVM::dummy_set)
       .def_property("new_data", &PyTVM::get_new_data, &PyTVM::dummy_set)
       .def_property("actions", &PyTVM::get_actions, &PyTVM::dummy_set);
+
+  py::class_<PyContinuation>(m, "PyContinuation")
+      .def(py::init<PyCellSlice>(), py::arg("cell_slice"))
+      .def("serialize", &PyContinuation::serialize)
+      .def("type", &PyContinuation::type);
 
   py::class_<PyFift>(m, "PyFift")
       .def(py::init<std::string, bool>(), py::arg("base_path"), py::arg("silent"))
@@ -221,12 +226,15 @@ PYBIND11_MODULE(python_ton, m) {
       .def("serialize", &PyStack::serialize, py::arg("mode"));
 
   py::class_<PyStackEntry>(m, "PyStackEntry")
-      .def(py::init<std::optional<PyCell>, std::optional<PyCellSlice>, std::optional<PyCellSlice>, std::string>(),
+      .def(py::init<std::optional<PyCell>, std::optional<PyCellSlice>, std::optional<PyCellSlice>,
+                    std::optional<PyContinuation>, std::string>(),
            py::arg("cell") = std::optional<PyCell>(), py::arg("cell_slice") = std::optional<PyCellSlice>(),
-           py::arg("cell_builder") = std::optional<PyCellSlice>(), py::arg("big_int") = "")
+           py::arg("cell_builder") = std::optional<PyCellSlice>(),
+           py::arg("continuation") = std::optional<PyContinuation>(), py::arg("big_int") = "")
       .def("as_int", &PyStackEntry::as_int)
       .def("as_cell_slice", &PyStackEntry::as_cell_slice)
       .def("as_cell_builder", &PyStackEntry::as_cell_builder)
+      .def("as_cont", &PyStackEntry::as_cont)
       .def("as_cell", &PyStackEntry::as_cell)
       .def("as_tuple", &PyStackEntry::as_tuple)
       .def("serialize", &PyStackEntry::serialize, py::arg("mode"))

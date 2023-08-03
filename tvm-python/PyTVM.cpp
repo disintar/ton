@@ -23,22 +23,9 @@
 
 namespace py = pybind11;
 
-void PyTVM::set_c7(int c7_unixtime_, const std::string& c7_blocklt_, const std::string& c7_translt_,
-                   const std::string& c7_randseed_, const std::string& c7_balanceRemainingGrams_,
-                   const std::string& c7_myaddress_, std::optional<PyCell> c7_globalConfig_) {
+void PyTVM::set_c7(PyStackEntry x) {
   if (!skip_c7) {
-    c7_unixtime = c7_unixtime_;
-    c7_blocklt = td::dec_string_to_int256(c7_blocklt_);
-    c7_translt = td::dec_string_to_int256(c7_translt_);
-    c7_randseed = td::dec_string_to_int256(c7_randseed_);
-    c7_balanceRemainingGrams = td::dec_string_to_int256(c7_balanceRemainingGrams_);
-    if (!c7_myaddress_.empty()) {
-      CHECK(c7_myaddress.parse_addr(c7_myaddress_));
-    } else {
-      c7_myaddress.parse_addr("Ef9Tj6fMJP+OqhAdhKXxq36DL+HYSzCc3+9O6UNzqsgPfYFX");
-    }
-
-    c7_globalConfig = c7_globalConfig_;
+    c7 = x.entry;
   } else {
     throw std::invalid_argument("C7 will be skipped, because skip_c7=true");
   }
@@ -122,29 +109,20 @@ PyStack PyTVM::run_vm() {
   //
   //  vm_log.log_interface = pyLogger;
 
-  auto balance = block::CurrencyCollection{c7_balanceRemainingGrams};
-
-  td::Ref<vm::CellSlice> my_addr = block::tlb::MsgAddressInt().pack_std_address(c7_myaddress);
-
-  td::Ref<vm::Cell> global_config;
-  if (c7_globalConfig) {
-    global_config = c7_globalConfig.value().my_cell;
-  }
-
   td::Ref<vm::Tuple> init_c7;
 
   if (!skip_c7) {
-    init_c7 =
-        vm::make_tuple_ref(td::make_refint(0x076ef1ea),              // [ magic:0x076ef1ea
-                           td::make_refint(0),                       //   actions:Integer
-                           td::make_refint(0),                       //   msgs_sent:Integer
-                           td::make_refint(c7_unixtime),             //   unixtime:Integer
-                           td::make_refint(c7_blocklt->to_long()),   //   block_lt:Integer
-                           td::make_refint(c7_translt->to_long()),   //   trans_lt:Integer
-                           td::make_refint(c7_randseed->to_long()),  //   rand_seed:Integer
-                           balance.as_vm_tuple(),                    //   balance_remaining:[Integer (Maybe Cell)]
-                           std::move(my_addr),                       //  myself:MsgAddressInt
-                           vm::StackEntry::maybe(global_config));  //  global_config:(Maybe Cell) ] = SmartContractInfo;
+    init_c7 = c7->entry.as_tuple();
+    //        vm::make_tuple_ref(td::make_refint(0x076ef1ea),              // [ magic:0x076ef1ea
+    //                           td::make_refint(0),                       //   actions:Integer
+    //                           td::make_refint(0),                       //   msgs_sent:Integer
+    //                           td::make_refint(c7_unixtime),             //   unixtime:Integer
+    //                           td::make_refint(c7_blocklt->to_long()),   //   block_lt:Integer
+    //                           td::make_refint(c7_translt->to_long()),   //   trans_lt:Integer
+    //                           td::make_refint(c7_randseed->to_long()),  //   rand_seed:Integer
+    //                           balance.as_vm_tuple(),                    //   balance_remaining:[Integer (Maybe Cell)]
+    //                           std::move(my_addr),                       //  myself:MsgAddressInt
+    //                           vm::StackEntry::maybe(global_config));  //  global_config:(Maybe Cell) ] = SmartContractInfo;
   } else {
     init_c7 = vm::make_tuple_ref();
   }
@@ -164,9 +142,11 @@ PyStack PyTVM::run_vm() {
   }
 
   vm::VmState vm_local{
-      code.my_cell,       td::make_ref<vm::Stack>(stackVm),      &vm_dumper, gas_limits, flags, data.my_cell, vm_log,
+      code.my_cell,
+      td::make_ref<vm::Stack>(stackVm),
+          &vm_dumper, gas_limits, flags, data.my_cell, vm_log,
       std::move(lib_set), vm::make_tuple_ref(std::move(init_c7))};
-
+  
   vm_init_state_hash_out = vm_local.get_state_hash().to_hex();
   exit_code_out = vm_local.run();
 

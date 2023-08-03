@@ -23,13 +23,38 @@
 #ifndef TON_STACK_H
 #define TON_STACK_H
 
+class PyContinuation {
+ public:
+  td::Ref<vm::Continuation> cnt;
+
+  PyContinuation(PyCellSlice cs) {
+    cnt = td::Ref<vm::Continuation>();
+    cnt->deserialize(cs.my_cell_slice);
+  }
+
+  PyContinuation(td::Ref<vm::Continuation> cnt_) {
+    cnt = std::move(cnt_);
+  }
+
+  std::string type() {
+    return cnt->type();
+  }
+
+  PyCell serialize() {
+    vm::CellBuilder cb;
+    cnt->serialize(cb);
+    return PyCell(cb.finalize());
+  }
+};
+
 class PyStack;
 
 class PyStackEntry {
  public:
   PyStackEntry(std::optional<PyCell> cell = std::optional<PyCell>(),
                std::optional<PyCellSlice> cell_slice = std::optional<PyCellSlice>(),
-               std::optional<PyCellSlice> cell_builder = std::optional<PyCellSlice>(), std::string big_int = "") {
+               std::optional<PyCellSlice> cell_builder = std::optional<PyCellSlice>(),
+               std::optional<PyContinuation> continuation = std::optional<PyContinuation>(), std::string big_int = "") {
     if (cell) {
       entry = vm::StackEntry(cell.value().my_cell);
     } else if (cell_slice) {
@@ -41,6 +66,8 @@ class PyStackEntry {
     } else if (!big_int.empty()) {
       td::RefInt256 x = td::string_to_int256(big_int);
       entry = vm::StackEntry(x);
+    } else if (continuation) {
+      entry = vm::StackEntry(continuation.value().cnt);
     } else {
       entry = vm::StackEntry();
     }
@@ -72,6 +99,11 @@ class PyStackEntry {
     }
 
     return tmp;
+  }
+
+  PyContinuation as_cont() {
+    auto x = entry.as_cont();
+    return PyContinuation(x);
   }
 
   PyCellSlice as_cell_slice() {
@@ -144,5 +176,8 @@ class PyStack {
 
   vm::Stack stack;
 };
+
+PyStackEntry deserialize_stack_entry(PyCellSlice cs);
+PyStack deserialize_stack(PyCellSlice cs);
 
 #endif  //TON_STACK_H
