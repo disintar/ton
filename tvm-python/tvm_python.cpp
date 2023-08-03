@@ -500,6 +500,8 @@ struct PyTVM {
     }
 
     vm_log.log_interface = pyLogger;
+    vm_log.log_options = td::LogOptions(VERBOSITY_NAME(DEBUG), true, false);
+
 
     auto balance = block::CurrencyCollection{c7_balanceRemainingGrams};
 
