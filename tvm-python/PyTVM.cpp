@@ -81,9 +81,9 @@ void PyTVM::set_stack(PyStack pystack) {
   stackVm = pystack.stack;
 }
 
-void PyTVM::set_libs(PyDict dict_) {
+void PyTVM::set_libs(PyCell libs) {
   lib_set.clear();  // remove old libs
-  lib_set.push_back(dict_.my_dict->get_root_cell());
+  lib_set.push_back(libs.my_cell);
 }
 
 // Vm logger

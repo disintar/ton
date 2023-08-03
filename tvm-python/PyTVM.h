@@ -97,7 +97,7 @@ class PyTVM {
   void set_code(PyCell code_);
   void set_state_init(PyCell state_init_);
   void set_stack(PyStack pystack);
-  void set_libs(PyDict dict_);
+  void set_libs(PyCell libs);
   PyStack run_vm();
   std::vector<PyStackInfo> get_stacks();
 

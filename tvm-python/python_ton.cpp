@@ -192,7 +192,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def_property("code", &PyTVM::get_code, &PyTVM::set_code)
       .def_property("data", &PyTVM::set_data, &PyTVM::get_data)
       .def("set_stack", &PyTVM::set_stack)
-      //      .def("set_libs", &PyTVM::set_libs)
+      .def("set_libs", &PyTVM::set_libs)
       .def("get_ops", &PyTVM::get_ops)
       .def("set_state_init", &PyTVM::set_state_init)
       .def("clear_stack", &PyTVM::clear_stack)
