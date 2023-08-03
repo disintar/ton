@@ -19,6 +19,17 @@ class PyCellBuilder {
     my_builder = vm::CellBuilder();
   }
 
+  explicit PyCellBuilder(vm::CellSlice old_builder) {
+    // Todo: fix
+    my_builder = vm::CellBuilder();
+    my_builder.append_cellslice(old_builder);
+  }
+
+  PyCellBuilder(const PyCellBuilder& other){
+    // todo: fix
+    my_builder = other.my_builder;
+  }
+
   PyCellBuilder* store_uint_str(const std::string& str, unsigned int bits);
   PyCellBuilder* store_256uint_str(const std::string& str, unsigned int bits);
   PyCellBuilder* store_int_str(const std::string& str, unsigned int bits);

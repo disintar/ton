@@ -175,6 +175,7 @@ PYBIND11_MODULE(python_ton, m) {
 
   m.def("code_dissemble_str", code_dissemble_str, py::arg("code_boc"), py::arg("base_path"));
   m.def("code_dissemble_cell", code_dissemble_cell, py::arg("code_cell"), py::arg("base_path"));
+  m.def("make_tuple", make_tuple, py::arg("items"));
 
   py::class_<PyTVM>(m, "PyTVM")
       .def(py::init<int, std::optional<PyCell>, std::optional<PyCell>, bool, bool, bool>(), py::arg("log_level_") = 0,
@@ -182,7 +183,7 @@ PYBIND11_MODULE(python_ton, m) {
            py::arg("allowDebug_") = false, py::arg("sameC3_") = true, py::arg("skip_c7_") = false)
       .def_property("code", &PyTVM::get_code, &PyTVM::set_code)
       .def_property("data", &PyTVM::set_data, &PyTVM::get_data)
-      //      .def("set_stack", &PyTVM::set_stack)
+      .def("set_stack", &PyTVM::set_stack)
       //      .def("set_libs", &PyTVM::set_libs)
       .def("get_ops", &PyTVM::get_ops)
       .def("set_state_init", &PyTVM::set_state_init)
@@ -210,21 +211,26 @@ PYBIND11_MODULE(python_ton, m) {
       .def("get_stack", &PyFift::get_stack)
       .def("clear_libs", &PyFift::clear_libs);
 
-  py::class_<PyStackEntry>(m, "PyStackEntry")
-      .def(py::init<std::optional<PyCell>, std::optional<PyCellSlice>, std::string>(),
-           py::arg("cell") = std::optional<PyCell>(), py::arg("cell_slice") = std::optional<PyCellSlice>(),
-           py::arg("big_int") = "")
-      .def("as_int", &PyStackEntry::as_int)
-      .def("as_cell_slice", &PyStackEntry::as_cell_slice)
-      .def("as_cell", &PyStackEntry::as_cell)
-      .def("type", &PyStackEntry::type);
-
   py::class_<PyStack>(m, "PyStack")
       .def(py::init<>())
       .def("at", &PyStack::at)
       .def("pop", &PyStack::pop)
+      .def("push", &PyStack::push)
       .def("is_empty", &PyStack::is_empty)
-      .def("depth", &PyStack::depth);
+      .def("depth", &PyStack::depth)
+      .def("serialize", &PyStack::serialize, py::arg("mode"));
+
+  py::class_<PyStackEntry>(m, "PyStackEntry")
+      .def(py::init<std::optional<PyCell>, std::optional<PyCellSlice>, std::optional<PyCellSlice>, std::string>(),
+           py::arg("cell") = std::optional<PyCell>(), py::arg("cell_slice") = std::optional<PyCellSlice>(),
+           py::arg("cell_builder") = std::optional<PyCellSlice>(), py::arg("big_int") = "")
+      .def("as_int", &PyStackEntry::as_int)
+      .def("as_cell_slice", &PyStackEntry::as_cell_slice)
+      .def("as_cell_builder", &PyStackEntry::as_cell_builder)
+      .def("as_cell", &PyStackEntry::as_cell)
+      .def("as_tuple", &PyStackEntry::as_tuple)
+      .def("serialize", &PyStackEntry::serialize, py::arg("mode"))
+      .def("type", &PyStackEntry::type);
 
   py::class_<PyEmulator>(m, "PyEmulator")
       .def(py::init<PyCell, int>(), py::arg("global_config_boc"), py::arg("vm_log_verbosity") = 0)

@@ -12,6 +12,7 @@
 #include "PyCellSlice.h"
 #include "PyCell.h"
 #include "PyCellBuilder.h"
+#include "PyStack.h"
 #include "PyDict.h"
 #include "third-party/pybind11/include/pybind11/pybind11.h"
 
@@ -60,8 +61,8 @@ class PyTVM {
 
   // constructor
   explicit PyTVM(int log_level_ = 0, std::optional<PyCell> code_ = std::optional<PyCell>(),
-                 std::optional<PyCell> data_ = std::optional<PyCell>(), bool allowDebug_ = false,
-                 bool sameC3_ = true, bool skip_c7_ = false) {
+                 std::optional<PyCell> data_ = std::optional<PyCell>(), bool allowDebug_ = false, bool sameC3_ = true,
+                 bool skip_c7_ = false) {
     allowDebug = allowDebug_;
     sameC3 = sameC3_;
     skip_c7 = skip_c7_;
@@ -94,10 +95,10 @@ class PyTVM {
   void set_data(PyCell data_);
   void set_code(PyCell code_);
   void set_state_init(PyCell state_init_);
-  //  void set_stack(py::object stack);
+  void set_stack(PyStack pystack);
   void set_libs(PyDict dict_);
-  std::vector<py::object> run_vm();
-  //  std::vector<std::vector<py::object>> get_stacks();
+  PyStack run_vm();
+  //    std::vector<std::vector<py::object>> get_stacks();
 
   std::vector<std::string> get_ops() {
     return vm_ops;

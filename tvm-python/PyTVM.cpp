@@ -18,6 +18,7 @@
 #include "PyCell.h"
 #include "PyCellBuilder.h"
 #include "PyDict.h"
+#include "PyStack.h"
 #include "PyTVM.h"
 
 namespace py = pybind11;
@@ -88,24 +89,17 @@ void PyTVM::set_state_init(PyCell state_init_) {
   data = PyCell(state_init.fetch_ref());
 }
 
-//void PyTVM::set_stack(py::object stack) {
-//  stackVm.clear();
-//
-//  auto iter = py::iter(std::move(stack));
-//  while (iter != py::iterator::sentinel()) {
-//    auto value = *iter;
-//    auto parsedStackItem = cast_python_item_to_stack_entry(value);
-//    stackVm.push(parsedStackItem);
-//    ++iter;
-//  }
-//}
+void PyTVM::set_stack(PyStack pystack) {
+  stackVm.clear();
+  stackVm = pystack.stack;
+}
 
 void PyTVM::set_libs(PyDict dict_) {
   lib_set.clear();  // remove old libs
   lib_set.push_back(dict_.my_dict->get_root_cell());
 }
 
-std::vector<py::object> PyTVM::run_vm() {
+PyStack PyTVM::run_vm() {
   pybind11::gil_scoped_acquire gil;
 
   if (code.is_null()) {
@@ -169,15 +163,9 @@ std::vector<py::object> PyTVM::run_vm() {
     flags += 4;  // dump stack
   }
 
-  vm::VmState vm_local{code.my_cell,
-                       td::make_ref<vm::Stack>(stackVm),
-                       &vm_dumper,
-                       gas_limits,
-                       flags,
-                       data.my_cell,
-                       vm_log,
-                       std::move(lib_set),
-                       vm::make_tuple_ref(std::move(init_c7))};
+  vm::VmState vm_local{
+      code.my_cell,       td::make_ref<vm::Stack>(stackVm),      &vm_dumper, gas_limits, flags, data.my_cell, vm_log,
+      std::move(lib_set), vm::make_tuple_ref(std::move(init_c7))};
 
   vm_init_state_hash_out = vm_local.get_state_hash().to_hex();
   exit_code_out = vm_local.run();
@@ -197,15 +185,7 @@ std::vector<py::object> PyTVM::run_vm() {
 
   log_debug("VM terminated with exit code " + std::to_string(exit_code_out));
 
-  std::vector<py::object> pyStack;
-
-  //  auto stack = vm_local.get_stack();
-  //  for (auto idx = stack.depth() - 1; idx >= 0; idx--) {
-  //    log_debug("Parse stack item #" + std::to_string(idx));
-  //    pyStack.push_back(cast_stack_item_to_python_object(stack.at(idx)));
-  //  }
-
-  return pyStack;
+  return PyStack(vm_local.get_stack());
 }
 //
 //std::vector<std::vector<py::object>> PyTVM::get_stacks() {

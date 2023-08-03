@@ -23,14 +23,21 @@
 #ifndef TON_STACK_H
 #define TON_STACK_H
 
+class PyStack;
+
 class PyStackEntry {
  public:
   PyStackEntry(std::optional<PyCell> cell = std::optional<PyCell>(),
-               std::optional<PyCellSlice> cell_slice = std::optional<PyCellSlice>(), std::string big_int = "") {
+               std::optional<PyCellSlice> cell_slice = std::optional<PyCellSlice>(),
+               std::optional<PyCellSlice> cell_builder = std::optional<PyCellSlice>(), std::string big_int = "") {
     if (cell) {
       entry = vm::StackEntry(cell.value().my_cell);
     } else if (cell_slice) {
       entry = vm::StackEntry(vm::Ref<vm::CellSlice>{false, cell_slice.value().my_cell_slice});
+    } else if (cell_builder) {
+      auto cb = td::Ref<vm::CellBuilder>{true};
+      cb.write().append_cellslice(cell_builder.value().my_cell_slice);
+      entry = vm::StackEntry(cb);
     } else if (!big_int.empty()) {
       td::RefInt256 x = td::string_to_int256(big_int);
       entry = vm::StackEntry(x);
@@ -38,6 +45,10 @@ class PyStackEntry {
       entry = vm::StackEntry();
     }
   };
+
+  PyStackEntry(td::Ref<vm::Stack> stk) {
+    entry = vm::StackEntry(stk);
+  }
 
   PyStackEntry(vm::StackEntry stk) {
     entry = std::move(stk);
@@ -53,16 +64,44 @@ class PyStackEntry {
     return PyCell(entry.as_cell());
   }
 
+  std::vector<PyStackEntry> as_tuple() {
+    auto x = entry.as_tuple();
+    std::vector<PyStackEntry> tmp;
+    for (const auto& e : *x) {
+      tmp.push_back(PyStackEntry(e));
+    }
+
+    return tmp;
+  }
+
   PyCellSlice as_cell_slice() {
     auto x = entry.as_slice();
     return PyCellSlice(x->get_base_cell());
+  }
+
+  PyCellBuilder as_cell_builder() {
+    auto x = entry.as_builder();
+    bool special;
+    auto cs = vm::load_cell_slice_special(x->finalize_copy(), special);
+    return PyCellBuilder(cs);
   }
 
   std::string as_int() {
     auto x = entry.as_int();
     return x->to_dec_string();
   }
+
+  PyCell serialize(int mode = 0) {
+    vm::CellBuilder cb;
+    auto x = entry.serialize(cb, mode);
+    if (!x) {
+      throw std::invalid_argument("Can't serialize object");
+    }
+    return PyCell(cb.finalize());
+  }
 };
+
+PyStackEntry make_tuple(std::vector<PyStackEntry> e);
 
 class PyStack {
  public:
@@ -78,8 +117,21 @@ class PyStack {
     return PyStackEntry(stack.at(idx));
   }
 
+  void push(PyStackEntry value) {
+    stack.push(value.entry);
+  }
+
   PyStackEntry pop() {
     return PyStackEntry(stack.pop());
+  }
+
+  PyCell serialize(int mode = 0) {
+    vm::CellBuilder cb;
+    auto x = stack.serialize(cb, mode);
+    if (!x) {
+      throw std::invalid_argument("Can't serialize object");
+    }
+    return PyCell(cb.finalize());
   }
 
   bool is_empty() {
