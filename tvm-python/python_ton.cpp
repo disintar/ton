@@ -124,7 +124,7 @@ PYBIND11_MODULE(python_ton, m) {
            py::return_value_policy::reference_internal)
       .def("store_var_integer", &PyCellBuilder::store_var_integer, py::arg("int"), py::arg("bit_len"), py::arg("sgnd"),
            py::return_value_policy::reference_internal)
-      .def("get_cell", &PyCellBuilder::get_cell)
+      .def("get_cell", &PyCellBuilder::get_cell, py::arg("special"))
       .def("store_ref", &PyCellBuilder::store_ref, py::return_value_policy::reference_internal)
       .def("dump", &PyCellBuilder::dump)
       .def("get_hash", &PyCellBuilder::get_hash)

@@ -48,7 +48,7 @@ class PyCellBuilder {
   unsigned get_bits() const;
   unsigned get_remaining_refs() const;
   unsigned get_remaining_bits() const;
-  PyCell get_cell();
+  PyCell get_cell(bool special);
   std::string toString() const;
   std::string dump() const;
   std::string get_hash() const;
