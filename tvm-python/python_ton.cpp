@@ -68,6 +68,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("is_special", &PyCellSlice::is_special)
       .def("special_type", &PyCellSlice::special_type)
       .def("get_hash", &PyCellSlice::get_hash)
+      .def("size_ext", &PyCellSlice::size_ext)
       .def("load_snake_string", &PyCellSlice::load_snake_string)
       .def("load_tlb", &PyCellSlice::load_tlb, py::arg("tlb_type"))
       .def("bselect", &PyCellSlice::bselect, py::arg("bits"), py::arg("mask"))

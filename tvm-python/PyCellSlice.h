@@ -66,6 +66,7 @@ class PyCellSlice {
   std::string to_bitstring() const;
   unsigned bits() const;
   unsigned refs() const;
+  unsigned size_ext() const;
 
   static void dummy_set() {
     throw std::invalid_argument("Not settable");

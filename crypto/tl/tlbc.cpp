@@ -3131,95 +3131,99 @@ void usage(const char* progname) {
 std::string output_filename;
 
 int main(int argc, char* const argv[]) {
-    int i;
-    bool interactive = false;
-    bool no_code_gen = false;
-    bool py_gen = false;
+  //  LOG(INFO) << tlbc::codegen_python_tlb(
+  //      "_ a:^(uint256) b:^(int256) c:^(## 32)  = C;\n"
+  //      "    _ a:^Cell b:^Any c:^(bits256) d:^C = B;\n"
+  //      "    _ a:^# b:^(#< 5) c:^(#<= 10) d:^B = A;");
+  int i;
+  bool interactive = false;
+  bool no_code_gen = false;
+  bool py_gen = false;
 
-    while ((i = getopt(argc, argv, "chin:o:qpTtvz")) != -1) {
-      switch (i) {
-        case 'i':
-          interactive = true;
-          break;
-        case 'p':
-          py_gen = true;
-          break;
-        case 'v':
-          ++verbosity;
-          break;
-        case 'o':
-          output_filename = optarg;
-          break;
-        case 'c':
-          tlbc::gen_cpp = true;
-          break;
-        case 'h':
-          tlbc::gen_hpp = true;
-          break;
-        case 'q':
-          no_code_gen = true;
-          break;
-        case 'n':
-          tlbc::cpp_namespace = optarg;
-          break;
-        case 'T':
-          tlbc::add_type_members = true;
-          break;
-        case 't':
-          tlbc::show_tag_warnings = true;
-          break;
-        case 'z':
-          tlbc::append_suffix = true;
-          break;
-        default:
-          usage(argv[0]);
+  while ((i = getopt(argc, argv, "chin:o:qpTtvz")) != -1) {
+    switch (i) {
+      case 'i':
+        interactive = true;
+        break;
+      case 'p':
+        py_gen = true;
+        break;
+      case 'v':
+        ++verbosity;
+        break;
+      case 'o':
+        output_filename = optarg;
+        break;
+      case 'c':
+        tlbc::gen_cpp = true;
+        break;
+      case 'h':
+        tlbc::gen_hpp = true;
+        break;
+      case 'q':
+        no_code_gen = true;
+        break;
+      case 'n':
+        tlbc::cpp_namespace = optarg;
+        break;
+      case 'T':
+        tlbc::add_type_members = true;
+        break;
+      case 't':
+        tlbc::show_tag_warnings = true;
+        break;
+      case 'z':
+        tlbc::append_suffix = true;
+        break;
+      default:
+        usage(argv[0]);
+    }
+  }
+  if (verbosity >= 3) {
+    tlbc::show_tag_warnings = true;
+  }
+
+  src::define_keywords();
+  tlbc::init_abstract_tables();
+  tlbc::define_builtins();
+
+  int ok = 0, proc = 0;
+  try {
+    while (optind < argc) {
+      tlbc::register_source(argv[optind]);
+      ok += tlbc::parse_source_file(argv[optind++]);
+      proc++;
+    }
+    if (interactive) {
+      tlbc::register_source("");
+      ok += tlbc::parse_source_stdin();
+      proc++;
+    }
+    if (ok < proc) {
+      throw src::Fatal{"output code generation omitted because of errors"};
+    }
+    if (!proc) {
+      throw src::Fatal{"no source files, no output"};
+    }
+    tlbc::check_scheme();
+    if (verbosity > 0) {
+      tlbc::dump_all_types();
+      tlbc::dump_all_constexpr();
+    }
+    if (!no_code_gen) {
+      if (py_gen) {
+        tlbc::init_forbidden_py_idents();
+        tlbc::generate_py_output(output_filename);
+      } else {
+        tlbc::init_forbidden_cpp_idents();
+        tlbc::generate_cpp_output(output_filename);
       }
     }
-    if (verbosity >= 3) {
-      tlbc::show_tag_warnings = true;
-    }
-
-    src::define_keywords();
-    tlbc::init_abstract_tables();
-    tlbc::define_builtins();
-
-    int ok = 0, proc = 0;
-    try {
-      while (optind < argc) {
-        tlbc::register_source(argv[optind]);
-        ok += tlbc::parse_source_file(argv[optind++]);
-        proc++;
-      }
-      if (interactive) {
-        tlbc::register_source("");
-        ok += tlbc::parse_source_stdin();
-        proc++;
-      }
-      if (ok < proc) {
-        throw src::Fatal{"output code generation omitted because of errors"};
-      }
-      if (!proc) {
-        throw src::Fatal{"no source files, no output"};
-      }
-      tlbc::check_scheme();
-      if (verbosity > 0) {
-        tlbc::dump_all_types();
-        tlbc::dump_all_constexpr();
-      }
-      if (!no_code_gen) {
-        if (py_gen) {
-          tlbc::init_forbidden_py_idents();
-          tlbc::generate_py_output(output_filename);
-        } else {
-          tlbc::init_forbidden_cpp_idents();
-          tlbc::generate_cpp_output(output_filename);
-        }
-      }
-    } catch (src::Fatal& fatal) {
-      std::cerr << "fatal: " << fatal << std::endl;
-      std::exit(1);
-    } catch (src::Error& error) {
-      std::cerr << error << std::endl;
-      std::exit(1);
-    }
+  } catch (src::Fatal& fatal) {
+    std::cerr << "fatal: " << fatal << std::endl;
+    std::exit(1);
+  } catch (src::Error& error) {
+    std::cerr << error << std::endl;
+    std::exit(1);
+  }
 }

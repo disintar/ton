@@ -264,6 +264,10 @@ bool PyCellSlice::skip_bits(unsigned int bits, bool last) {
   return cs;
 }
 
+unsigned PyCellSlice::size_ext() const {
+  return my_cell_slice.size_ext();
+}
+
 bool PyCellSlice::advance(unsigned bits) {
   return my_cell_slice.advance(bits);
 }
