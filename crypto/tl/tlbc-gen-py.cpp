@@ -2155,7 +2155,6 @@ void PyTypeCode::output_store_field(std::ostream& os, std::string field_var, con
     case py_int64:
     case py_integer:
     case py_uint64:
-      assert(i && l <= 64);
       os << "cb.store_" << (i > 0 ? "u" : "") << "int(self." << field_var << ", ";
       output_cpp_sizeof_expr(os, expr, 0);
       os << ")";
@@ -2268,12 +2267,16 @@ void PyTypeCode::generate_pack_field(const PyTypeCode::ConsField& fi, const Cons
     if (!is_self(expr, constr)) {
       if (expr->is_constexpr > 0) {
         ss << "TLBComplex.constants[\"";
+      } else {
+        ss << "self.";
       }
       output_cpp_expr(ss, expr, 100);
       if (expr->is_constexpr > 0) {
         ss << "\"]";
       }
       ss << '.';
+    } else {
+      ss << "self.";
     }
     ss << (validating ? "validate_" : "") << "store_" << (cvt == py_enum ? "enum_" : "") << "from(cb, self."
        << field_vars.at(i) << ")" << tail;

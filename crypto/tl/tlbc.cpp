@@ -3131,10 +3131,6 @@ void usage(const char* progname) {
 std::string output_filename;
 
 int main(int argc, char* const argv[]) {
-  //  LOG(INFO) << tlbc::codegen_python_tlb(
-  //      "_ a:^(uint256) b:^(int256) c:^(## 32)  = C;\n"
-  //      "    _ a:^Cell b:^Any c:^(bits256) d:^C = B;\n"
-  //      "    _ a:^# b:^(#< 5) c:^(#<= 10) d:^B = A;");
   int i;
   bool interactive = false;
   bool no_code_gen = false;
