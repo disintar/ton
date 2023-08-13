@@ -2,6 +2,8 @@
 // Created by Andrey Tvorozhkov on 5/9/23.
 //
 
+#include "third-party/pybind11/include/pybind11/pybind11.h"
+#include "third-party/pybind11/include/pybind11/cast.h"
 #include <string>
 #include <optional>
 #include <utility>
@@ -16,11 +18,36 @@
 #ifndef TON_PYDICT_H
 #define TON_PYDICT_H
 
+namespace py = pybind11;
+
+struct PyAugmentationCheckData : vm::dict::AugmentationData {
+  py::function py_eval_leaf;
+  py::function py_skip_extra;
+  py::function py_eval_fork;
+  py::function py_eval_empty;
+
+  PyAugmentationCheckData(py::function& py_eval_leaf_, py::function& py_skip_extra_, py::function& py_eval_fork_,
+                          py::function& py_eval_empty_)
+      : py_eval_leaf(py_eval_leaf_)
+      , py_skip_extra(py_skip_extra_)
+      , py_eval_fork(py_eval_fork_)
+      , py_eval_empty(py_eval_empty_) {
+  }
+
+  PyAugmentationCheckData() {}
+
+  bool eval_leaf(vm::CellBuilder& cb, vm::CellSlice& cs) const override;
+  bool skip_extra(vm::CellSlice& cs) const override;
+  bool eval_fork(vm::CellBuilder& cb, vm::CellSlice& left_cs, vm::CellSlice& right_cs) const override;
+  bool eval_empty(vm::CellBuilder& cb) const override;
+};
+
 class PyDict {
  public:
-  std::unique_ptr<vm::Dictionary> my_dict;
+  std::unique_ptr<vm::DictionaryFixed> my_dict;
+  PyAugmentationCheckData aug;
   unsigned int key_len;
-  bool sgnd;
+  bool sgnd, is_augmented;
 
   explicit PyDict(int key_len_, bool sgnd_ = false, std::optional<PyCellSlice> cs_root = std::optional<PyCellSlice>()) {
     if (cs_root) {
@@ -30,9 +57,27 @@ class PyDict {
       vm::Dictionary my_dict_t{key_len_};
       my_dict = std::make_unique<vm::Dictionary>(my_dict_t);
     }
-
     key_len = key_len_;
     sgnd = sgnd_;
+    aug = PyAugmentationCheckData();
+    is_augmented = false;
+  }
+
+  explicit PyDict(int key_len_, PyAugmentationCheckData aug_, bool sgnd_ = false,
+                  std::optional<PyCellSlice> cs_root = std::optional<PyCellSlice>()) {
+    aug = std::move(aug_);
+
+    if (cs_root) {
+      td::Ref<vm::CellSlice> csr = td::make_ref<vm::CellSlice>(cs_root.value().my_cell_slice.clone());
+      vm::AugmentedDictionary my_dict_t{vm::DictNonEmpty(), csr, key_len_, aug};
+      my_dict = std::make_unique<vm::AugmentedDictionary>(my_dict_t);
+    } else {
+      vm::AugmentedDictionary my_dict_t{key_len_, aug};
+      my_dict = std::make_unique<vm::AugmentedDictionary>(my_dict_t);
+    }
+    key_len = key_len_;
+    sgnd = sgnd_;
+    is_augmented = true;
   }
 
   PyCell get_pycell() const;

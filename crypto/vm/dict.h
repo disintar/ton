@@ -138,7 +138,7 @@ class DictionaryBase {
     return std::move(root_cell);
   }
   bool append_dict_to_bool(CellBuilder& cb) &&;
-  bool append_dict_to_bool(CellBuilder& cb) const &;
+  bool append_dict_to_bool(CellBuilder& cb) const&;
   int get_key_bits() const {
     return key_bits;
   }
@@ -212,7 +212,7 @@ class DictionaryFixed : public DictionaryBase {
   bool key_exists(td::ConstBitPtr key, int key_len);
   bool int_key_exists(long long key);
   bool uint_key_exists(unsigned long long key);
-  Ref<CellSlice> lookup(td::ConstBitPtr key, int key_len);
+  virtual Ref<CellSlice> lookup(td::ConstBitPtr key, int key_len);
   Ref<CellSlice> lookup_delete(td::ConstBitPtr key, int key_len);
   Ref<CellSlice> get_minmax_key(td::BitPtr key_buffer, int key_len, bool fetch_max = false, bool invert_first = false);
   Ref<CellSlice> extract_minmax_key(td::BitPtr key_buffer, int key_len, bool fetch_max = false,
@@ -230,6 +230,13 @@ class DictionaryFixed : public DictionaryBase {
   bool combine_with(DictionaryFixed& dict2);
   bool scan_diff(DictionaryFixed& dict2, const scan_diff_func_t& diff_func, int check_augm = 0);
   bool validate_check(const foreach_func_t& foreach_func, bool invert_first = false);
+  virtual bool set(td::ConstBitPtr key, int key_len, Ref<CellSlice> value, SetMode mode = SetMode::Set) = 0;
+  virtual bool set_ref(td::ConstBitPtr key, int key_len, Ref<Cell> val_ref, SetMode mode = SetMode::Set) = 0;
+  virtual bool set_builder(td::ConstBitPtr key, int key_len, const CellBuilder& value, SetMode mode = SetMode::Set) = 0;
+  virtual Ref<Cell> lookup_ref(td::ConstBitPtr key, int key_len) = 0;
+  virtual Ref<Cell> lookup_delete_ref(td::ConstBitPtr key, int key_len) = 0;
+  Ref<Cell> get_minmax_key_ref(td::BitPtr key_buffer, int key_len, bool fetch_max = false,
+                                       bool invert_first = false);
   bool validate_all();
   DictIterator null_iterator();
   DictIterator init_iterator(bool backw = false, bool invert_first = false);
@@ -466,12 +473,12 @@ class Dictionary final : public DictionaryFixed {
   Dictionary(DictNonEmpty, const CellSlice& root_cs, int _n, bool validate = true)
       : DictionaryFixed(DictNonEmpty(), root_cs, _n, validate) {
   }
-  Ref<Cell> lookup_ref(td::ConstBitPtr key, int key_len);
-  Ref<Cell> lookup_delete_ref(td::ConstBitPtr key, int key_len);
-  bool set(td::ConstBitPtr key, int key_len, Ref<CellSlice> value, SetMode mode = SetMode::Set);
-  bool set_ref(td::ConstBitPtr key, int key_len, Ref<Cell> val_ref, SetMode mode = SetMode::Set);
+  Ref<Cell> lookup_ref(td::ConstBitPtr key, int key_len) override;
+  Ref<Cell> lookup_delete_ref(td::ConstBitPtr key, int key_len) override;
+  bool set(td::ConstBitPtr key, int key_len, Ref<CellSlice> value, SetMode mode = SetMode::Set) override;
+  bool set_ref(td::ConstBitPtr key, int key_len, Ref<Cell> val_ref, SetMode mode = SetMode::Set) override;
   bool set_builder(td::ConstBitPtr key, int key_len, Ref<CellBuilder> val_b, SetMode mode = SetMode::Set);
-  bool set_builder(td::ConstBitPtr key, int key_len, const CellBuilder& val_b, SetMode mode = SetMode::Set);
+  bool set_builder(td::ConstBitPtr key, int key_len, const CellBuilder& val_b, SetMode mode = SetMode::Set) override;
   bool set_gen(td::ConstBitPtr key, int key_len, const store_value_func_t& store_val, SetMode mode = SetMode::Set);
   Ref<CellSlice> lookup_set(td::ConstBitPtr key, int key_len, Ref<CellSlice> value, SetMode mode = SetMode::Set);
   Ref<Cell> lookup_set_ref(td::ConstBitPtr key, int key_len, Ref<Cell> val_ref, SetMode mode = SetMode::Set);
@@ -479,7 +486,6 @@ class Dictionary final : public DictionaryFixed {
                                     SetMode mode = SetMode::Set);
   Ref<CellSlice> lookup_set_gen(td::ConstBitPtr key, int key_len, const store_value_func_t& store_val,
                                 SetMode mode = SetMode::Set);
-  Ref<Cell> get_minmax_key_ref(td::BitPtr key_buffer, int key_len, bool fetch_max = false, bool invert_first = false);
   Ref<Cell> extract_minmax_key_ref(td::BitPtr key_buffer, int key_len, bool fetch_max = false,
                                    bool invert_first = false);
   void map(const map_func_t& map_func);
@@ -572,22 +578,22 @@ class AugmentedDictionary final : public DictionaryFixed {
   Ref<CellSlice> get_root() const;
   Ref<CellSlice> extract_root() &&;
   bool append_dict_to_bool(CellBuilder& cb) &&;
-  bool append_dict_to_bool(CellBuilder& cb) const &;
+  bool append_dict_to_bool(CellBuilder& cb) const&;
   Ref<CellSlice> get_root_extra() const;
-  Ref<CellSlice> lookup(td::ConstBitPtr key, int key_len);
-  Ref<Cell> lookup_ref(td::ConstBitPtr key, int key_len);
+  Ref<CellSlice> lookup(td::ConstBitPtr key, int key_len) override;
+  Ref<Cell> lookup_ref(td::ConstBitPtr key, int key_len) override;
   Ref<CellSlice> lookup_with_extra(td::ConstBitPtr key, int key_len);
   std::pair<Ref<CellSlice>, Ref<CellSlice>> lookup_extra(td::ConstBitPtr key, int key_len);
   std::pair<Ref<Cell>, Ref<CellSlice>> lookup_ref_extra(td::ConstBitPtr key, int key_len);
   Ref<CellSlice> lookup_delete(td::ConstBitPtr key, int key_len);
-  Ref<Cell> lookup_delete_ref(td::ConstBitPtr key, int key_len);
+  Ref<Cell> lookup_delete_ref(td::ConstBitPtr key, int key_len) override;
   Ref<CellSlice> lookup_delete_with_extra(td::ConstBitPtr key, int key_len);
   std::pair<Ref<CellSlice>, Ref<CellSlice>> lookup_delete_extra(td::ConstBitPtr key, int key_len);
   std::pair<Ref<Cell>, Ref<CellSlice>> lookup_delete_ref_extra(td::ConstBitPtr key, int key_len);
   bool set(td::ConstBitPtr key, int key_len, const CellSlice& value, SetMode mode = SetMode::Set);
-  bool set(td::ConstBitPtr key, int key_len, Ref<CellSlice> value, SetMode mode = SetMode::Set);
-  bool set_ref(td::ConstBitPtr key, int key_len, Ref<Cell> val_ref, SetMode mode = SetMode::Set);
-  bool set_builder(td::ConstBitPtr key, int key_len, const CellBuilder& value, SetMode mode = SetMode::Set);
+  bool set(td::ConstBitPtr key, int key_len, Ref<CellSlice> value, SetMode mode = SetMode::Set) override;
+  bool set_ref(td::ConstBitPtr key, int key_len, Ref<Cell> val_ref, SetMode mode = SetMode::Set) override;
+  bool set_builder(td::ConstBitPtr key, int key_len, const CellBuilder& value, SetMode mode = SetMode::Set) override;
   bool check_for_each_extra(const foreach_extra_func_t& foreach_extra_func, bool invert_first = false);
   std::pair<Ref<CellSlice>, Ref<CellSlice>> traverse_extra(td::BitPtr key_buffer, int key_len,
                                                            const traverse_func_t& traverse_node);

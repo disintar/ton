@@ -144,6 +144,8 @@ PYBIND11_MODULE(python_ton, m) {
   py::class_<PyDict>(m, "PyDict")
       .def(py::init<int, bool, std::optional<PyCellSlice>>(), py::arg("bit_len"), py::arg("signed") = false,
            py::arg("cs_root") = py::none())
+      .def(py::init<int, PyAugmentationCheckData, bool, std::optional<PyCellSlice>>(), py::arg("bit_len"),
+           py::arg("aug"), py::arg("signed") = false, py::arg("cs_root") = py::none())
       .def("get_pycell", &PyDict::get_pycell)
       .def("is_empty", &PyDict::is_empty)
       .def("set_str", &PyDict::set, py::arg("key"), py::arg("value"), py::arg("mode") = "set", py::arg("key_len") = 0,
@@ -266,4 +268,8 @@ PYBIND11_MODULE(python_ton, m) {
       .def_property("transaction_cell", &PyEmulator::get_transaction_cell, &PyEmulator::dummy_set)
       .def_property("account_cell", &PyEmulator::get_account_cell, &PyEmulator::dummy_set)
       .def_property("actions_cell", &PyEmulator::get_actions_cell, &PyEmulator::dummy_set);
+
+  py::class_<PyAugmentationCheckData>(m, "PyAugmentationCheckData")
+      .def(py::init<py::function&, py::function&, py::function&, py::function&>(), py::arg("py_eval_leaf"),
+           py::arg("py_skip_extra"), py::arg("py_eval_fork"), py::arg("py_eval_empty"));
 }

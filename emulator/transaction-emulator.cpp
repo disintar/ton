@@ -56,7 +56,8 @@ td::Result<std::unique_ptr<TransactionEmulator::EmulationResult>> TransactionEmu
     double elapsed = td::Time::now() - start_time;
 
     if(res.is_error()) {
-      return res.move_as_error_prefix("cannot run message on account ");
+      auto tmp = res.move_as_error();
+      return res.move_as_error_prefix("cannot run message on account: " + tmp.message().str());
     }
     std::unique_ptr<block::transaction::Transaction> trans = res.move_as_ok();
 

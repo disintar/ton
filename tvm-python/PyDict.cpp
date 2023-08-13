@@ -26,9 +26,65 @@ auto get_mode(const std::string& s) {
   }
 }
 
+bool PyAugmentationCheckData::eval_leaf(vm::CellBuilder& cb, vm::CellSlice& cs) const {
+  auto tmp_cs = PyCellSlice(std::move(cs.clone().get_base_cell()));
+  py::object result_py = py_eval_leaf(tmp_cs);
+  py::tuple t = reinterpret_borrow<py::tuple>(result_py);
+  bool is_ok = t[0].cast<bool>();
+  if (is_ok) {
+    PyCellSlice& result = t[1].cast<PyCellSlice&>();
+    cb.append_cellslice(result.my_cell_slice);
+    return true;
+  } else {
+    return is_ok;
+  }
+}
+
+bool PyAugmentationCheckData::skip_extra(vm::CellSlice& cs) const {
+  auto tmp_cs = PyCellSlice(std::move(cs.clone().get_base_cell()));
+  py::object result_py = py_skip_extra(tmp_cs);
+  py::tuple t = reinterpret_borrow<py::tuple>(result_py);
+  bool is_ok = t[0].cast<bool>();
+  if (is_ok) {
+    PyCellSlice& result = t[1].cast<PyCellSlice&>();
+    // TODO: find better way
+    cs = result.my_cell_slice;
+    return true;
+  } else {
+    return is_ok;
+  }
+}
+
+bool PyAugmentationCheckData::eval_fork(vm::CellBuilder& cb, vm::CellSlice& left_cs, vm::CellSlice& right_cs) const {
+  auto tmp_cs_left = PyCellSlice(std::move(left_cs.clone().get_base_cell()));
+  auto tmp_cs_right = PyCellSlice(std::move(right_cs.clone().get_base_cell()));
+  py::object result_py = py_eval_fork(tmp_cs_left, tmp_cs_right);
+  py::tuple t = reinterpret_borrow<py::tuple>(result_py);
+  bool is_ok = t[0].cast<bool>();
+  if (is_ok) {
+    PyCellSlice& result = t[1].cast<PyCellSlice&>();
+    cb.append_cellslice(result.my_cell_slice);
+    return true;
+  } else {
+    return is_ok;
+  }
+}
+
+bool PyAugmentationCheckData::eval_empty(vm::CellBuilder& cb) const {
+  py::object result_py = py_eval_empty();
+  py::tuple t = reinterpret_borrow<py::tuple>(result_py);
+  bool is_ok = t[0].cast<bool>();
+  if (is_ok) {
+    PyCellSlice& result = t[1].cast<PyCellSlice&>();
+    cb.append_cellslice(result.my_cell_slice);
+    return true;
+  } else {
+    return is_ok;
+  }
+}
+
 PyCell PyDict::get_pycell() const {
-  const auto d = *my_dict;
-  td::Ref<vm::Cell> root = d.get_root_cell();
+  td::Ref<vm::Cell> root = my_dict->get_root_cell();
   return PyCell(root);
 }
 
@@ -110,7 +166,6 @@ PyCellSlice PyDict::lookup(const std::string& key, int key_len_, int sgnd_) cons
   auto* tmp = new unsigned char[key_len_];
   x.export_bits(td::BitPtr{tmp}, key_len_, sgnd_);
   const auto mdict = my_dict.get();
-
   auto cs = mdict->lookup(td::BitPtr{tmp}, key_len_);
   vm::CellBuilder cb;
   cb.append_cellslice(cs);
@@ -266,16 +321,14 @@ PyCell PyDict::lookup_delete_ref(const std::string& key, int key_len_, int sgnd_
 }
 
 std::string PyDict::to_boc() const {
-  const auto d = *my_dict;
-  td::Ref<vm::Cell> root = d.get_root_cell();
+  td::Ref<vm::Cell> root = my_dict->get_root_cell();
 
   return td::base64_encode(std_boc_serialize(root, 31).move_as_ok());
 }
 
 std::string PyDict::toString() const {
   std::stringstream os;
-  const auto d = *my_dict;
-  td::Ref<vm::Cell> root = d.get_root_cell();
+  td::Ref<vm::Cell> root = my_dict->get_root_cell();
   if (root.is_null()) {
     return "<VmDict null>";
   }
@@ -290,8 +343,7 @@ std::string PyDict::toString() const {
 
 std::string PyDict::dump() const {
   std::stringstream os;
-  const auto d = *my_dict;
-  td::Ref<vm::Cell> root = d.get_root_cell();
+  td::Ref<vm::Cell> root = my_dict->get_root_cell();
   vm::load_cell_slice(root).print_rec(os);
 
   return os.str();

@@ -179,7 +179,7 @@ bool DictionaryBase::append_dict_to_bool(CellBuilder& cb) && {
   return cb.store_maybe_ref(std::move(root_cell));
 }
 
-bool DictionaryBase::append_dict_to_bool(CellBuilder& cb) const & {
+bool DictionaryBase::append_dict_to_bool(CellBuilder& cb) const& {
   return is_valid() && cb.store_maybe_ref(root_cell);
 }
 
@@ -1072,19 +1072,23 @@ bool Dictionary::set_gen(td::ConstBitPtr key, int key_len, const std::function<b
 }
 
 bool Dictionary::set(td::ConstBitPtr key, int key_len, Ref<CellSlice> value, SetMode mode) {
-  return set_gen(key, key_len, [value](CellBuilder& cb) { return cell_builder_add_slice_bool(cb, *value); }, mode);
+  return set_gen(
+      key, key_len, [value](CellBuilder& cb) { return cell_builder_add_slice_bool(cb, *value); }, mode);
 }
 
 bool Dictionary::set_ref(td::ConstBitPtr key, int key_len, Ref<Cell> val_ref, SetMode mode) {
-  return set_gen(key, key_len, [val_ref](CellBuilder& cb) { return cb.store_ref_bool(val_ref); }, mode);
+  return set_gen(
+      key, key_len, [val_ref](CellBuilder& cb) { return cb.store_ref_bool(val_ref); }, mode);
 }
 
 bool Dictionary::set_builder(td::ConstBitPtr key, int key_len, Ref<CellBuilder> val_b, SetMode mode) {
-  return set_gen(key, key_len, [val_b](CellBuilder& cb) { return cb.append_builder_bool(val_b); }, mode);
+  return set_gen(
+      key, key_len, [val_b](CellBuilder& cb) { return cb.append_builder_bool(val_b); }, mode);
 }
 
 bool Dictionary::set_builder(td::ConstBitPtr key, int key_len, const CellBuilder& val_b, SetMode mode) {
-  return set_gen(key, key_len, [&val_b](CellBuilder& cb) { return cb.append_builder_bool(val_b); }, mode);
+  return set_gen(
+      key, key_len, [&val_b](CellBuilder& cb) { return cb.append_builder_bool(val_b); }, mode);
 }
 
 Ref<CellSlice> Dictionary::lookup_set_gen(td::ConstBitPtr key, int key_len, const store_value_func_t& store_val,
@@ -1101,17 +1105,18 @@ Ref<CellSlice> Dictionary::lookup_set_gen(td::ConstBitPtr key, int key_len, cons
 }
 
 Ref<CellSlice> Dictionary::lookup_set(td::ConstBitPtr key, int key_len, Ref<CellSlice> value, SetMode mode) {
-  return lookup_set_gen(key, key_len, [value](CellBuilder& cb) { return cell_builder_add_slice_bool(cb, *value); },
-                        mode);
+  return lookup_set_gen(
+      key, key_len, [value](CellBuilder& cb) { return cell_builder_add_slice_bool(cb, *value); }, mode);
 }
 
 Ref<Cell> Dictionary::lookup_set_ref(td::ConstBitPtr key, int key_len, Ref<Cell> val_ref, SetMode mode) {
-  return extract_value_ref(
-      lookup_set_gen(key, key_len, [val_ref](CellBuilder& cb) { return cb.store_ref_bool(val_ref); }, mode));
+  return extract_value_ref(lookup_set_gen(
+      key, key_len, [val_ref](CellBuilder& cb) { return cb.store_ref_bool(val_ref); }, mode));
 }
 
 Ref<CellSlice> Dictionary::lookup_set_builder(td::ConstBitPtr key, int key_len, Ref<CellBuilder> val_b, SetMode mode) {
-  return lookup_set_gen(key, key_len, [val_b](CellBuilder& cb) { return cb.append_builder_bool(val_b); }, mode);
+  return lookup_set_gen(
+      key, key_len, [val_b](CellBuilder& cb) { return cb.append_builder_bool(val_b); }, mode);
 }
 
 std::pair<Ref<CellSlice>, Ref<Cell>> DictionaryFixed::dict_lookup_delete(Ref<Cell> dict, td::ConstBitPtr key,
@@ -1284,8 +1289,16 @@ Ref<CellSlice> DictionaryFixed::get_minmax_key(td::BitPtr key_buffer, int key_le
                             (-static_cast<int>(fetch_max)) ^ static_cast<int>(invert_first));
 }
 
-Ref<Cell> Dictionary::get_minmax_key_ref(td::BitPtr key_buffer, int key_len, bool fetch_max, bool invert_first) {
-  return extract_value_ref(get_minmax_key(key_buffer, key_len, fetch_max, invert_first));
+Ref<Cell> DictionaryFixed::get_minmax_key_ref(td::BitPtr key_buffer, int key_len, bool fetch_max, bool invert_first) {
+  auto cs = get_minmax_key(key_buffer, key_len, fetch_max, invert_first);
+
+  if (cs.is_null()) {
+    return {};
+  } else if (!cs->size() && cs->size_refs() == 1) {
+    return cs->prefetch_ref();
+  } else {
+    throw VmError{Excno::dict_err, "dictionary value does not consist of exactly one reference"};
+  }
 }
 
 Ref<CellSlice> DictionaryFixed::extract_minmax_key(td::BitPtr key_buffer, int key_len, bool fetch_max,
@@ -2391,11 +2404,13 @@ bool PrefixDictionary::set_gen(td::ConstBitPtr key, int key_len, const std::func
 }
 
 bool PrefixDictionary::set(td::ConstBitPtr key, int key_len, Ref<CellSlice> value, SetMode mode) {
-  return set_gen(key, key_len, [value](CellBuilder& cb) { return cell_builder_add_slice_bool(cb, *value); }, mode);
+  return set_gen(
+      key, key_len, [value](CellBuilder& cb) { return cell_builder_add_slice_bool(cb, *value); }, mode);
 }
 
 bool PrefixDictionary::set_builder(td::ConstBitPtr key, int key_len, Ref<CellBuilder> val_b, SetMode mode) {
-  return set_gen(key, key_len, [val_b](CellBuilder& cb) { return cb.append_builder_bool(val_b); }, mode);
+  return set_gen(
+      key, key_len, [val_b](CellBuilder& cb) { return cb.append_builder_bool(val_b); }, mode);
 }
 
 Ref<CellSlice> PrefixDictionary::lookup_delete(td::ConstBitPtr key, int key_len) {
@@ -2540,7 +2555,7 @@ Ref<CellSlice> AugmentedDictionary::extract_root() && {
   return std::move(root);
 }
 
-bool AugmentedDictionary::append_dict_to_bool(CellBuilder& cb) const & {
+bool AugmentedDictionary::append_dict_to_bool(CellBuilder& cb) const& {
   if (!is_valid()) {
     return false;
   }
