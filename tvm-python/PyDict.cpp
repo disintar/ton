@@ -27,6 +27,8 @@ auto get_mode(const std::string& s) {
 }
 
 bool PyAugmentationCheckData::eval_leaf(vm::CellBuilder& cb, vm::CellSlice& cs) const {
+  LOG(ERROR) << "11111111";
+
   auto tmp_cs = PyCellSlice(std::move(cs.clone().get_base_cell()));
   py::object result_py = py_eval_leaf(tmp_cs);
   py::tuple t = reinterpret_borrow<py::tuple>(result_py);
@@ -41,6 +43,8 @@ bool PyAugmentationCheckData::eval_leaf(vm::CellBuilder& cb, vm::CellSlice& cs) 
 }
 
 bool PyAugmentationCheckData::skip_extra(vm::CellSlice& cs) const {
+  LOG(ERROR) << "222222222222";
+
   auto tmp_cs = PyCellSlice(std::move(cs.clone().get_base_cell()));
   py::object result_py = py_skip_extra(tmp_cs);
   py::tuple t = reinterpret_borrow<py::tuple>(result_py);
@@ -56,6 +60,8 @@ bool PyAugmentationCheckData::skip_extra(vm::CellSlice& cs) const {
 }
 
 bool PyAugmentationCheckData::eval_fork(vm::CellBuilder& cb, vm::CellSlice& left_cs, vm::CellSlice& right_cs) const {
+  LOG(ERROR) << "33333333333333";
+
   auto tmp_cs_left = PyCellSlice(std::move(left_cs.clone().get_base_cell()));
   auto tmp_cs_right = PyCellSlice(std::move(right_cs.clone().get_base_cell()));
   py::object result_py = py_eval_fork(tmp_cs_left, tmp_cs_right);
@@ -71,6 +77,8 @@ bool PyAugmentationCheckData::eval_fork(vm::CellBuilder& cb, vm::CellSlice& left
 }
 
 bool PyAugmentationCheckData::eval_empty(vm::CellBuilder& cb) const {
+  LOG(ERROR) << "444444444444444";
+
   py::object result_py = py_eval_empty();
   py::tuple t = reinterpret_borrow<py::tuple>(result_py);
   bool is_ok = t[0].cast<bool>();
@@ -170,7 +178,7 @@ PyCellSlice PyDict::lookup(const std::string& key, int key_len_, int sgnd_) cons
   vm::CellBuilder cb;
   cb.append_cellslice(cs);
 
-  return PyCellSlice(cb.finalize());
+  return PyCellSlice(cb.finalize(), true);
 }
 
 PyCellSlice PyDict::lookup_delete(const std::string& key, int key_len_, int sgnd_) const {
@@ -192,7 +200,7 @@ PyCellSlice PyDict::lookup_delete(const std::string& key, int key_len_, int sgnd
   vm::CellBuilder cb;
   cb.append_cellslice(cs);
 
-  return PyCellSlice(cb.finalize());
+  return PyCellSlice(cb.finalize(), true);
 }
 
 std::tuple<std::string, PyCellSlice> PyDict::get_minmax_key(bool fetch_max, bool inver_first, int key_len_,
@@ -214,7 +222,7 @@ std::tuple<std::string, PyCellSlice> PyDict::get_minmax_key(bool fetch_max, bool
   td::BigInt256 x;
   x.import_bits(td::BitPtr{tmp}, key_len_, sgnd_);
 
-  return std::make_tuple(x.to_dec_string(), PyCellSlice(cb.finalize()));
+  return std::make_tuple(x.to_dec_string(), PyCellSlice(cb.finalize(), true));
 }
 
 std::tuple<std::string, PyCell> PyDict::get_minmax_key_ref(bool fetch_max, bool inver_first, int key_len_,
@@ -265,7 +273,7 @@ std::tuple<std::string, PyCellSlice> PyDict::lookup_nearest_key(const std::strin
   vm::CellBuilder cb;
   cb.append_cellslice(cs);
 
-  return std::make_tuple(x2.to_dec_string(), PyCellSlice(cb.finalize()));
+  return std::make_tuple(x2.to_dec_string(), PyCellSlice(cb.finalize(), true));
 }
 
 bool PyDict::is_empty() {

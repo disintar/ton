@@ -61,6 +61,8 @@ PYBIND11_MODULE(python_ton, m) {
       .def("load_int", &PyCellSlice::load_int, py::arg("bit_len"))
       .def("preload_int", &PyCellSlice::preload_int, py::arg("bit_len"))
       .def("load_addr", &PyCellSlice::load_addr)
+      .def("copy", &PyCellSlice::copy)
+      .def("cut_tail", &PyCellSlice::cut_tail, py::arg("cs"))
       .def("empty_ext", &PyCellSlice::empty_ext)
       .def("fetch_uint_less", &PyCellSlice::fetch_uint_less)
       .def("fetch_uint_leq", &PyCellSlice::fetch_uint_leq)

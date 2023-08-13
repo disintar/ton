@@ -212,7 +212,7 @@ class DictionaryFixed : public DictionaryBase {
   bool key_exists(td::ConstBitPtr key, int key_len);
   bool int_key_exists(long long key);
   bool uint_key_exists(unsigned long long key);
-  virtual Ref<CellSlice> lookup(td::ConstBitPtr key, int key_len);
+  Ref<CellSlice> lookup(td::ConstBitPtr key, int key_len);
   Ref<CellSlice> lookup_delete(td::ConstBitPtr key, int key_len);
   Ref<CellSlice> get_minmax_key(td::BitPtr key_buffer, int key_len, bool fetch_max = false, bool invert_first = false);
   Ref<CellSlice> extract_minmax_key(td::BitPtr key_buffer, int key_len, bool fetch_max = false,
@@ -580,7 +580,7 @@ class AugmentedDictionary final : public DictionaryFixed {
   bool append_dict_to_bool(CellBuilder& cb) &&;
   bool append_dict_to_bool(CellBuilder& cb) const&;
   Ref<CellSlice> get_root_extra() const;
-  Ref<CellSlice> lookup(td::ConstBitPtr key, int key_len) override;
+  Ref<CellSlice> lookup(td::ConstBitPtr key, int key_len);
   Ref<Cell> lookup_ref(td::ConstBitPtr key, int key_len) override;
   Ref<CellSlice> lookup_with_extra(td::ConstBitPtr key, int key_len);
   std::pair<Ref<CellSlice>, Ref<CellSlice>> lookup_extra(td::ConstBitPtr key, int key_len);

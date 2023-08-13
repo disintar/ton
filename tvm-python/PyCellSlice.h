@@ -23,6 +23,10 @@ class PyCellSlice {
     }
   }
 
+  PyCellSlice(vm::CellSlice cs) {
+    my_cell_slice = cs;
+  }
+
   explicit PyCellSlice() = default;
 
   std::string load_uint(unsigned n);
@@ -41,6 +45,7 @@ class PyCellSlice {
   std::string load_addr();
   bool begins_with(const std::string& n) const;
   bool begins_with_bits(unsigned bits, const std::string& n) const;
+  bool cut_tail(const PyCellSlice& cs);
   PyCell fetch_ref();
   bool empty_ext();
   PyCell prefetch_ref(int offset = 0) const;
@@ -67,6 +72,7 @@ class PyCellSlice {
   unsigned bits() const;
   unsigned refs() const;
   unsigned size_ext() const;
+  PyCellSlice copy() const;
 
   static void dummy_set() {
     throw std::invalid_argument("Not settable");
@@ -74,6 +80,6 @@ class PyCellSlice {
 };
 
 PyCellSlice load_as_cell_slice(PyCell cell, bool allow_special);
-std::string parse_snake_data_string(vm::CellSlice &cs, bool convert_to_utf8 = true);
+std::string parse_snake_data_string(vm::CellSlice& cs, bool convert_to_utf8 = true);
 
 #endif  //TON_PYCELLSLICE_H

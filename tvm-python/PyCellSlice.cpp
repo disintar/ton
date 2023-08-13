@@ -81,20 +81,18 @@ PyCellSlice PyCellSlice::load_subslice(unsigned int bits, unsigned int refs) {
     vm::CellBuilder cb;
     cb.append_cellslice(x);
 
-    return PyCellSlice(cb.finalize());
+    return PyCellSlice(cb.finalize(), true);
   }
 }
 
-PyCellSlice PyCellSlice::preload_subslice(unsigned int bits, unsigned int refs) {
-  if (!my_cell_slice.have(bits, refs)) {
-    throw std::runtime_error("Not enough bits or refs");
-  } else {
-    vm::CellSlice x{my_cell_slice, bits, refs};
-    vm::CellBuilder cb;
-    cb.append_cellslice(x);
+bool PyCellSlice::cut_tail(const PyCellSlice &cs) {
+  my_cell_slice.cut_tail(cs.my_cell_slice);
+}
 
-    return PyCellSlice(cb.finalize());
-  }
+PyCellSlice PyCellSlice::copy() const {
+  vm::CellSlice cs{my_cell_slice};
+  auto tmp = PyCellSlice(std::move(cs));
+  return tmp;
 }
 
 PyCellSlice PyCellSlice::load_subslice_ext(unsigned int size) {
@@ -117,6 +115,18 @@ std::string PyCellSlice::load_int(unsigned n) {
 
   const auto tmp = my_cell_slice.fetch_int256(n, true);
   return tmp->to_dec_string();
+}
+
+PyCellSlice PyCellSlice::preload_subslice(unsigned int bits, unsigned int refs) {
+  if (!my_cell_slice.have(bits, refs)) {
+    throw std::runtime_error("Not enough bits or refs");
+  } else {
+    vm::CellSlice x{my_cell_slice, bits, refs};
+    vm::CellBuilder cb;
+    cb.append_cellslice(x);
+
+    return PyCellSlice(cb.finalize(), false);
+  }
 }
 
 std::string PyCellSlice::preload_int(unsigned n) const {
