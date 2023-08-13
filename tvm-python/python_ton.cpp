@@ -252,12 +252,9 @@ PYBIND11_MODULE(python_ton, m) {
       .def("type", &PyStackEntry::type);
 
   py::class_<PyEmulator>(m, "PyEmulator")
-      .def(py::init<PyCell, int>(), py::arg("global_config_boc"), py::arg("vm_log_verbosity") = 0)
-      .def("set_unixtime", &PyEmulator::set_unixtime, py::arg("unixtime"))
-      .def("set_lt", &PyEmulator::set_lt, py::arg("lt"))
+      .def(py::init<PyCell>(), py::arg("global_config_boc"))
       .def("set_rand_seed", &PyEmulator::set_rand_seed, py::arg("rand_seed_hex"))
       .def("set_ignore_chksig", &PyEmulator::set_ignore_chksig, py::arg("ignore_chksig"))
-      .def("set_config", &PyEmulator::set_config, py::arg("global_config_boc"))
       .def("set_libs", &PyEmulator::set_libs, py::arg("shardchain_libs_boc"))
       .def("set_debug_enabled", &PyEmulator::set_debug_enabled, py::arg("debug_enabled"))
       .def("emulate_transaction", &PyEmulator::emulate_transaction, py::arg("shard_account_cell"),
@@ -265,7 +262,6 @@ PYBIND11_MODULE(python_ton, m) {
       .def("emulate_tick_tock_transaction", &PyEmulator::emulate_tick_tock_transaction, py::arg("shard_account_boc"),
            py::arg("is_tock"), py::arg("unixtime") = "0", py::arg("lt") = "0", py::arg("vm_ver") = 1)
       .def_property("vm_log", &PyEmulator::get_vm_log, &PyEmulator::dummy_set)
-      .def_property("vm_exit_code", &PyEmulator::get_vm_exit_code, &PyEmulator::dummy_set)
       .def_property("elapsed_time", &PyEmulator::get_elapsed_time, &PyEmulator::dummy_set)
       .def_property("transaction_cell", &PyEmulator::get_transaction_cell, &PyEmulator::dummy_set)
       .def_property("account_cell", &PyEmulator::get_account_cell, &PyEmulator::dummy_set)

@@ -86,7 +86,7 @@ PyCellSlice PyCellSlice::load_subslice(unsigned int bits, unsigned int refs) {
 }
 
 bool PyCellSlice::cut_tail(const PyCellSlice &cs) {
-  my_cell_slice.cut_tail(cs.my_cell_slice);
+  return my_cell_slice.cut_tail(cs.my_cell_slice);
 }
 
 PyCellSlice PyCellSlice::copy() const {

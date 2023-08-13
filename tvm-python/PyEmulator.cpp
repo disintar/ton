@@ -22,16 +22,6 @@
 #include "PyCell.h"
 #include "PyEmulator.h"
 
-bool PyEmulator::set_unixtime(const std::string& unixtime) {
-  emulator->set_unixtime(static_cast<td::uint32>(std::stoul(unixtime)));
-  return true;
-}
-
-bool PyEmulator::set_lt(const std::string& lt) {
-  emulator->set_lt(static_cast<td::uint64>(std::stoul(lt)));
-  return true;
-}
-
 bool PyEmulator::set_rand_seed(const std::string& rand_seed_hex) {
   auto rand_seed_hex_slice = td::Slice(rand_seed_hex);
   if (rand_seed_hex_slice.size() != 64) {
@@ -52,23 +42,6 @@ bool PyEmulator::set_rand_seed(const std::string& rand_seed_hex) {
 
 bool PyEmulator::set_ignore_chksig(bool ignore_chksig) {
   emulator->set_ignore_chksig(ignore_chksig);
-  return true;
-}
-
-bool PyEmulator::set_config(const PyCell& config_params_cell) {
-  // todo: pass ConfigParams as root cell
-  const block::StdAddress res =
-      block::StdAddress::parse("-1:5555555555555555555555555555555555555555555555555555555555555555").move_as_ok();
-
-  auto global_config =
-      block::Config(config_params_cell.my_cell, res.addr,
-                    block::Config::needWorkchainInfo | block::Config::needSpecialSmc | block::Config::needCapabilities);
-
-  if (global_config.unpack().is_error()) {
-    throw std::invalid_argument("Can't unpack config params");
-  }
-
-  emulator->set_config(std::move(global_config));
   return true;
 }
 
@@ -250,12 +223,8 @@ std::string PyEmulator::get_vm_log() {
   return vm_log;
 }
 
-int PyEmulator::get_vm_exit_code() {
-  return vm_exit_code;
-}
-
 double PyEmulator::get_elapsed_time() {
-  return vm_exit_code;
+  return elapsed_time;
 }
 
 PyCell PyEmulator::get_transaction_cell() {

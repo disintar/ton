@@ -41,7 +41,7 @@ class PyEmulator {
   double elapsed_time;
   int vm_exit_code;
 
-  PyEmulator(const PyCell& config_params_cell, int vm_log_verbosity) {
+  PyEmulator(const PyCell& config_params_cell) {
     // todo: pass ConfigParams as root cell
     const block::StdAddress res =
         block::StdAddress::parse("-1:5555555555555555555555555555555555555555555555555555555555555555").move_as_ok();
@@ -54,16 +54,13 @@ class PyEmulator {
       throw std::invalid_argument("Can't unpack config params");
     }
 
-    emulator = td::make_unique<emulator::TransactionEmulator>(std::move(global_config), vm_log_verbosity);
+    emulator = td::make_unique<emulator::TransactionEmulator>(std::move(global_config), 0);
   };
 
   ~PyEmulator() = default;
 
-  bool set_unixtime(const std::string& unixtime);
-  bool set_lt(const std::string& lt);
   bool set_rand_seed(const std::string& rand_seed_hex);
   bool set_ignore_chksig(bool ignore_chksig);
-  bool set_config(const PyCell& global_config);
   bool set_libs(const PyCell& shardchain_libs_cell);
   bool set_debug_enabled(bool debug_enabled);
   bool emulate_transaction(const PyCell& shard_account_cell, const PyCell& message_cell,
@@ -71,7 +68,6 @@ class PyEmulator {
   bool emulate_tick_tock_transaction(const PyCell& shard_account_boc, bool is_tock, const std::string& unixtime,
                                      const std::string& lt_str, int vm_ver);
   std::string get_vm_log();
-  int get_vm_exit_code();
   double get_elapsed_time();
   PyCell get_transaction_cell();
   PyCell get_account_cell();
