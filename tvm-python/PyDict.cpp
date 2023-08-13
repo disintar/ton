@@ -2,7 +2,8 @@
 // Created by Andrey Tvorozhkov on 5/9/23.
 //
 
-#include "pybind11/pybind11.h"
+#include "third-party/pybind11/include/pybind11/pybind11.h"
+#include "third-party/pybind11/include/pybind11/cast.h"
 #include <string>
 #include "vm/vmstate.h"
 #include "td/utils/base64.h"
@@ -27,11 +28,9 @@ auto get_mode(const std::string& s) {
 }
 
 bool PyAugmentationCheckData::eval_leaf(vm::CellBuilder& cb, vm::CellSlice& cs) const {
-  LOG(ERROR) << "11111111";
-
   auto tmp_cs = PyCellSlice(std::move(cs.clone().get_base_cell()));
   py::object result_py = py_eval_leaf(tmp_cs);
-  py::tuple t = reinterpret_borrow<py::tuple>(result_py);
+  py::tuple t = py::reinterpret_borrow<py::tuple>(result_py);
   bool is_ok = t[0].cast<bool>();
   if (is_ok) {
     PyCellSlice& result = t[1].cast<PyCellSlice&>();
@@ -43,11 +42,9 @@ bool PyAugmentationCheckData::eval_leaf(vm::CellBuilder& cb, vm::CellSlice& cs) 
 }
 
 bool PyAugmentationCheckData::skip_extra(vm::CellSlice& cs) const {
-  LOG(ERROR) << "222222222222";
-
   auto tmp_cs = PyCellSlice(std::move(cs.clone().get_base_cell()));
   py::object result_py = py_skip_extra(tmp_cs);
-  py::tuple t = reinterpret_borrow<py::tuple>(result_py);
+  py::tuple t = py::reinterpret_borrow<py::tuple>(result_py);
   bool is_ok = t[0].cast<bool>();
   if (is_ok) {
     PyCellSlice& result = t[1].cast<PyCellSlice&>();
@@ -60,12 +57,10 @@ bool PyAugmentationCheckData::skip_extra(vm::CellSlice& cs) const {
 }
 
 bool PyAugmentationCheckData::eval_fork(vm::CellBuilder& cb, vm::CellSlice& left_cs, vm::CellSlice& right_cs) const {
-  LOG(ERROR) << "33333333333333";
-
   auto tmp_cs_left = PyCellSlice(std::move(left_cs.clone().get_base_cell()));
   auto tmp_cs_right = PyCellSlice(std::move(right_cs.clone().get_base_cell()));
   py::object result_py = py_eval_fork(tmp_cs_left, tmp_cs_right);
-  py::tuple t = reinterpret_borrow<py::tuple>(result_py);
+  py::tuple t = py::reinterpret_borrow<py::tuple>(result_py);
   bool is_ok = t[0].cast<bool>();
   if (is_ok) {
     PyCellSlice& result = t[1].cast<PyCellSlice&>();
@@ -77,10 +72,8 @@ bool PyAugmentationCheckData::eval_fork(vm::CellBuilder& cb, vm::CellSlice& left
 }
 
 bool PyAugmentationCheckData::eval_empty(vm::CellBuilder& cb) const {
-  LOG(ERROR) << "444444444444444";
-
   py::object result_py = py_eval_empty();
-  py::tuple t = reinterpret_borrow<py::tuple>(result_py);
+  py::tuple t = py::reinterpret_borrow<py::tuple>(result_py);
   bool is_ok = t[0].cast<bool>();
   if (is_ok) {
     PyCellSlice& result = t[1].cast<PyCellSlice&>();
