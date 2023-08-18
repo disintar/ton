@@ -1731,10 +1731,10 @@ void ValidatorManagerImpl::completed_prestart_sync() {
   LOG(WARNING) << "initial read complete: " << last_masterchain_block_handle_->id() << " "
                << last_masterchain_block_id_;
 
-//  if (publisher_ != nullptr) {
-//    //new_masterchain_block();
-//
-//    LOG(WARNING) << "Start getting last blocks for sending them to kafka";
+  if (publisher_ != nullptr) {
+    //new_masterchain_block();
+
+    LOG(WARNING) << "Start getting last blocks for sending them to kafka";
 //    auto P = td::PromiseCreator::lambda(
 //        [publisher = &publisher_](td::Result<std::tuple<std::vector<ConstBlockHandle>, std::vector<td::Ref<BlockData>>,
 //                                                        std::vector<td::Ref<vm::Cell>>, std::vector<td::Ref<vm::Cell>>>>
@@ -1829,10 +1829,10 @@ void ValidatorManagerImpl::completed_prestart_sync() {
 //        });
 //
 //    BlockHandle tmp(last_masterchain_block_handle_);
-////    LOG(DEBUG) << "Start StartupBlockParser worker";
-////    td::actor::create_actor<StartupBlockParser>("StartupBlockParser", actor_id(this), std::move(tmp), std::move(P))
-////        .release();
-//  } else {
+//    LOG(DEBUG) << "Start StartupBlockParser worker";
+//    td::actor::create_actor<StartupBlockParser>("StartupBlockParser", actor_id(this), std::move(tmp), std::move(P))
+//        .release();
+  } else {
     LOG(WARNING) << "Skip read old blocks, publisher not set";
   }
   callback_->initial_read_complete(last_masterchain_block_handle_);
