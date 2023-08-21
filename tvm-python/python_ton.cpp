@@ -38,7 +38,7 @@ PYBIND11_MODULE(python_ton, m) {
     }
   });
 
-  py::class_<PyCellSlice>(m, "PyCellSlice")
+  py::class_<PyCellSlice>(m, "PyCellSlice", py::module_local())
       .def(py::init<>())
       .def("load_uint", &PyCellSlice::load_uint, py::arg("bit_len"))
       .def("preload_uint", &PyCellSlice::preload_uint, py::arg("bit_len"))
@@ -62,7 +62,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def_property("bits", &PyCellSlice::bits, &PyCellSlice::dummy_set)
       .def_property("refs", &PyCellSlice::refs, &PyCellSlice::dummy_set);
 
-  py::class_<PyCell>(m, "PyCell")
+  py::class_<PyCell>(m, "PyCell", py::module_local())
       .def(py::init<>())
       .def("get_hash", &PyCell::get_hash)
       .def("begin_parse", &PyCell::begin_parse)
@@ -72,7 +72,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("__repr__", &PyCell::toString)
       .def("is_null", &PyCell::is_null);
 
-  py::class_<PyCellBuilder>(m, "PyCellBuilder")
+  py::class_<PyCellBuilder>(m, "PyCellBuilder", py::module_local())
       .def(py::init<>())
       .def("store_uint_str", &PyCellBuilder::store_uint_str, py::arg("str") = "", py::arg("bits") = "",
            py::return_value_policy::reference_internal)
@@ -97,7 +97,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("to_boc", &PyCellBuilder::to_boc)
       .def("__repr__", &PyCellBuilder::toString);
 
-  py::class_<PyDict>(m, "PyDict")
+  py::class_<PyDict>(m, "PyDict", py::module_local())
       .def(py::init<int, bool, std::optional<PyCellSlice>>(), py::arg("bit_len"), py::arg("signed") = false,
            py::arg("cs_root") = py::none())
       .def("get_pycell", &PyDict::get_pycell)
@@ -127,7 +127,7 @@ PYBIND11_MODULE(python_ton, m) {
   m.def("parseStringToCell", parseStringToCell, py::arg("cell_boc"));
   m.def("globalSetVerbosity", globalSetVerbosity, py::arg("verbosity"));
 
-  py::class_<PyEmulator>(m, "PyEmulator")
+  py::class_<PyEmulator>(m, "PyEmulator", py::module_local())
       .def(py::init<PyCell, int>(), py::arg("global_config_boc"), py::arg("vm_log_verbosity") = 0)
       .def("set_unixtime", &PyEmulator::set_unixtime, py::arg("unixtime"))
       .def("set_lt", &PyEmulator::set_lt, py::arg("lt"))
