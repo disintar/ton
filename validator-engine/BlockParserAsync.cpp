@@ -1049,7 +1049,7 @@ void StartupBlockParser::ipad() {
     if (next_download != 0) {
       const auto next_block = last_masterchain_block_handle->id().seqno() + 1;
       LOG(INFO) << "Initial read of last " << k << " blocks end, start wait for " << next_block;
-      td::actor::send_closure(actor_id(this), &StartupBlockParser::start_wait_next, next_block, false);
+       td::actor::send_closure(actor_id(this), &StartupBlockParser::start_wait_next, next_block, false);
     } else {
       if (block_handles.size() != blocks.size() && blocks.size() != states.size() &&
           states.size() != prev_states.size()) {
