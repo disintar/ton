@@ -51,7 +51,7 @@ PYBIND11_MODULE(python_ton, m) {
     }
   });
 
-  py::class_<PyCellSlice>(m, "PyCellSlice")
+  py::class_<PyCellSlice>(m, "PyCellSlice", py::module_local())
       .def(py::init<>())
       .def("load_uint", &PyCellSlice::load_uint, py::arg("bit_len"))
       .def("preload_uint", &PyCellSlice::preload_uint, py::arg("bit_len"))
@@ -98,7 +98,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def_property("bits", &PyCellSlice::bits, &PyCellSlice::dummy_set)
       .def_property("refs", &PyCellSlice::refs, &PyCellSlice::dummy_set);
 
-  py::class_<PyCell>(m, "PyCell")
+  py::class_<PyCell>(m, "PyCell", py::module_local())
       .def(py::init<>())
       .def("get_hash", &PyCell::get_hash)
       .def("dump", &PyCell::dump)
@@ -108,7 +108,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("copy", &PyCell::copy)
       .def("is_null", &PyCell::is_null);
 
-  py::class_<PyCellBuilder>(m, "PyCellBuilder")
+  py::class_<PyCellBuilder>(m, "PyCellBuilder", py::module_local())
       .def(py::init<>())
       .def("store_uint_str", &PyCellBuilder::store_uint_str, py::arg("str") = "", py::arg("bits") = "",
            py::return_value_policy::reference_internal)
@@ -143,7 +143,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def_property("remaining_refs", &PyCellBuilder::get_remaining_refs, &PyCellBuilder::dummy_set)
       .def_property("remaining_bits", &PyCellBuilder::get_remaining_bits, &PyCellBuilder::dummy_set);
 
-  py::class_<PyDict>(m, "PyDict")
+  py::class_<PyDict>(m, "PyDict", py::module_local())
       .def(py::init<int, bool, std::optional<PyCellSlice>>(), py::arg("bit_len"), py::arg("signed") = false,
            py::arg("cs_root") = py::none())
       .def(py::init<int, PyAugmentationCheckData, bool, std::optional<PyCellSlice>>(), py::arg("bit_len"),
@@ -184,12 +184,12 @@ PYBIND11_MODULE(python_ton, m) {
   m.def("deserialize_stack_entry", deserialize_stack_entry, py::arg("cell_slice"));
   m.def("deserialize_stack", deserialize_stack, py::arg("cell_slice"));
 
-  py::class_<PyStackInfo>(m, "PyStackInfo")
+  py::class_<PyStackInfo>(m, "PyStackInfo", py::module_local())
       .def_readwrite("stack", &PyStackInfo::stack)
       .def_readwrite("gas_consumed", &PyStackInfo::gas_consumed)
       .def_readwrite("gas_remaining", &PyStackInfo::gas_remaining);
 
-  py::class_<PyTVM>(m, "PyTVM")
+  py::class_<PyTVM>(m, "PyTVM", py::module_local())
       .def(py::init<int, std::optional<PyCell>, std::optional<PyCell>, bool, bool, bool, bool>(),
            py::arg("log_level_") = 0, py::arg("code_") = std::optional<PyCell>(),
            py::arg("data_") = std::optional<PyCell>(), py::arg("allowDebug_") = false, py::arg("sameC3_") = true,
@@ -215,19 +215,19 @@ PYBIND11_MODULE(python_ton, m) {
       .def_property("new_data", &PyTVM::get_new_data, &PyTVM::dummy_set)
       .def_property("actions", &PyTVM::get_actions, &PyTVM::dummy_set);
 
-  py::class_<PyContinuation>(m, "PyContinuation")
+  py::class_<PyContinuation>(m, "PyContinuation", py::module_local())
       .def(py::init<PyCellSlice>(), py::arg("cell_slice"))
       .def("serialize", &PyContinuation::serialize)
       .def("type", &PyContinuation::type);
 
-  py::class_<PyFift>(m, "PyFift")
+  py::class_<PyFift>(m, "PyFift", py::module_local())
       .def(py::init<std::string, bool>(), py::arg("base_path"), py::arg("silent"))
       .def("run", &PyFift::run, py::arg("code_text"))
       .def("add_lib", &PyFift::add_lib, py::arg("lib"))
       .def("get_stack", &PyFift::get_stack)
       .def("clear_libs", &PyFift::clear_libs);
 
-  py::class_<PyStack>(m, "PyStack")
+  py::class_<PyStack>(m, "PyStack", py::module_local())
       .def(py::init<>())
       .def("at", &PyStack::at)
       .def("pop", &PyStack::pop)
@@ -236,7 +236,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("depth", &PyStack::depth)
       .def("serialize", &PyStack::serialize, py::arg("mode"));
 
-  py::class_<PyStackEntry>(m, "PyStackEntry")
+  py::class_<PyStackEntry>(m, "PyStackEntry", py::module_local())
       .def(py::init<std::optional<PyCell>, std::optional<PyCellSlice>, std::optional<PyCellSlice>,
                     std::optional<PyContinuation>, std::string>(),
            py::arg("cell") = std::optional<PyCell>(), py::arg("cell_slice") = std::optional<PyCellSlice>(),
@@ -251,7 +251,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("serialize", &PyStackEntry::serialize, py::arg("mode"))
       .def("type", &PyStackEntry::type);
 
-  py::class_<PyEmulator>(m, "PyEmulator")
+  py::class_<PyEmulator>(m, "PyEmulator", py::module_local())
       .def(py::init<PyCell>(), py::arg("global_config_boc"))
       .def("set_rand_seed", &PyEmulator::set_rand_seed, py::arg("rand_seed_hex"))
       .def("set_ignore_chksig", &PyEmulator::set_ignore_chksig, py::arg("ignore_chksig"))
@@ -267,7 +267,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def_property("account_cell", &PyEmulator::get_account_cell, &PyEmulator::dummy_set)
       .def_property("actions_cell", &PyEmulator::get_actions_cell, &PyEmulator::dummy_set);
 
-  py::class_<PyAugmentationCheckData>(m, "PyAugmentationCheckData")
+  py::class_<PyAugmentationCheckData>(m, "PyAugmentationCheckData", py::module_local())
       .def(py::init<py::function&, py::function&, py::function&, py::function&>(), py::arg("py_eval_leaf"),
            py::arg("py_skip_extra"), py::arg("py_eval_fork"), py::arg("py_eval_empty"));
 }
