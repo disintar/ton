@@ -14,6 +14,13 @@ void globalSetVerbosity(int vb) {
   SET_VERBOSITY_LEVEL(v);
 }
 
+unsigned method_name_to_id(const std::string& method_name) {
+  unsigned crc = td::crc16(method_name);
+  const unsigned method_id = (crc & 0xffff) | 0x10000;
+  return method_id;
+}
+
+
 PYBIND11_MODULE(python_ton, m) {
   PSLICE() << "";
   SET_VERBOSITY_LEVEL(verbosity_ERROR);
@@ -126,6 +133,8 @@ PYBIND11_MODULE(python_ton, m) {
 
   m.def("parseStringToCell", parseStringToCell, py::arg("cell_boc"));
   m.def("globalSetVerbosity", globalSetVerbosity, py::arg("verbosity"));
+  m.def("method_name_to_id", method_name_to_id, py::arg("method_name"));
+
 
   py::class_<PyEmulator>(m, "PyEmulator", py::module_local())
       .def(py::init<PyCell, int>(), py::arg("global_config_boc"), py::arg("vm_log_verbosity") = 0)
