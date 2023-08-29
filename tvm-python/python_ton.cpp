@@ -20,6 +20,12 @@ void globalSetVerbosity(int vb) {
   SET_VERBOSITY_LEVEL(v);
 }
 
+unsigned method_name_to_id(const std::string& method_name) {
+  unsigned crc = td::crc16(method_name);
+  const unsigned method_id = (crc & 0xffff) | 0x10000;
+  return method_id;
+}
+
 std::string codeget_python_tlb(std::string tlb_code) {
   return tlbc::codegen_python_tlb(tlb_code);
 }
@@ -177,6 +183,7 @@ PYBIND11_MODULE(python_ton, m) {
   m.def("load_as_cell_slice", load_as_cell_slice, py::arg("cell"), py::arg("allow_special"));
   m.def("codegen_python_tlb", codeget_python_tlb, py::arg("tlb_text"));
   m.def("parse_token_data", parse_token_data, py::arg("cell"));
+  m.def("method_name_to_id", method_name_to_id, py::arg("cell"));
 
   m.def("code_dissemble_str", code_dissemble_str, py::arg("code_boc"), py::arg("base_path"));
   m.def("code_dissemble_cell", code_dissemble_cell, py::arg("code_cell"), py::arg("base_path"));
