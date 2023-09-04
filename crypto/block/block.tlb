@@ -141,6 +141,10 @@ ext_out_msg_info$11 src:MsgAddress dest:MsgAddressExt
 
 tick_tock$_ tick:Bool tock:Bool = TickTock;
 
+_ split_depth:(Maybe (## 5)) = SplitDepth;
+_ special:(Maybe TickTock) = Special;
+_ library:(HashmapE 256 SimpleLib) = DictWithSimpleLibs;
+
 _ split_depth:(Maybe (## 5)) special:(Maybe TickTock)
   code:(Maybe ^Cell) data:(Maybe ^Cell)
   library:(Maybe ^Cell) = StateInit;
@@ -151,6 +155,9 @@ _ split_depth:(Maybe (## 5)) special:(Maybe TickTock)
   library:(HashmapE 256 SimpleLib) = StateInitWithLibs;
 
 simple_lib$_ public:Bool root:^Cell = SimpleLib;
+
+_ init:(Maybe (Either StateInit ^StateInit)) = MessageInit;
+_ body:(Either Any ^Any) = MessageAnyBody;
 
 message$_ {X:Type} info:CommonMsgInfo
   init:(Maybe (Either StateInit ^StateInit))
