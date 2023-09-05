@@ -850,7 +850,6 @@ void PyTypeCode::ConsRecord::declare_record(std::ostream& os, std::string nl, in
   os << nl << "    def get_tag_enum(self):\n";
   os << nl << "        return " << cpp_type.py_type_class_name << ".Tag." << cpp_type.cons_enum_name.at(cons_idx)
      << "\n\n";
-
   os << nl << "    def get_tag(self):\n";
   os << nl << "        return " << cpp_type.py_type_class_name << "."
      << "cons_tag[self.get_tag_enum().value]"
@@ -1838,7 +1837,8 @@ void PyTypeCode::generate_unpack_field(const PyTypeCode::ConsField& fi, const Co
       }
       ss << ".";
     } else {
-      ss << "self.";
+      // Todo: it'll not work for paramed types, need to copy from record and pass to init
+      ss << "self.get_type_class()().";
     }
 
     ss << (validating ? "validate_" : "") << "fetch" << (cvt == py_enum ? "_enum" : "")
