@@ -609,7 +609,7 @@ validators_ext#12 utime_since:uint32 utime_until:uint32
   total:(## 16) main:(## 16) { main <= total } { main >= 1 } 
   total_weight:uint64 list:(HashmapE 16 ValidatorDescr) = ValidatorSet;
 
-_ pubkey:bits256 = ConfigParam 4294966297; // dictator (-999)
+// _ pubkey:bits256 = ConfigParam 4294966297;
 _ config_addr:bits256 = ConfigParam 0;
 _ elector_addr:bits256 = ConfigParam 1;
 _ minter_addr:bits256 = ConfigParam 2;  // ConfigParam 0 is used if absent
