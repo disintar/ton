@@ -4,14 +4,12 @@
 namespace ton::validator {
 
 BlockPublisherKafka::BlockPublisherKafka(const std::string& endpoint)
-    : producer(cppkafka::Configuration{{"metadata.broker.list", endpoint},
-                                       {"message.max.bytes", "1000000000"},  // max
-                                       {"retry.backoff.ms", 500},
-                                       {"retries", 2147483647},
-                                       {"acks", "1"},
-                                       {"queue.buffering.max.ms", 5},
-                                       {"queue.buffering.max.messages", 10000000},
-                                       {"queue.buffering.max.kbytes", 100048576},
+    : producer(cppkafka::Configuration{
+          {"metadata.broker.list", endpoint},
+          {"message.max.bytes", "1000000000"},  // max
+          {"retry.backoff.ms", 5},
+          {"retries", 2147483647},
+          {"acks", "1"},
       }) {
 }
 
@@ -29,6 +27,7 @@ void BlockPublisherKafka::publishBlockApplied(unsigned long long shard, std::str
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-applied-mainnet")
                          .partition(shard_to_partition[shard])
                          .payload(json));
+    deliver();
   } catch (std::exception& e) {
     const auto id = to_string(json::parse(json)["id"]);
     LOG(ERROR) << "Error while sending block applied (" << id << ") to kafka: " << e.what();
@@ -38,9 +37,10 @@ void BlockPublisherKafka::publishBlockApplied(unsigned long long shard, std::str
 
 void BlockPublisherKafka::deliver() {
   try {
-    producer.flush(std::chrono::milliseconds(100000));
+    producer.flush(std::chrono::milliseconds(1000000));
   } catch (std::exception& e) {
     LOG(ERROR) << "Error while deliver to kafka: " << e.what();
+    std::exit(7);
   }
 }
 
@@ -58,6 +58,7 @@ void BlockPublisherKafka::publishBlockData(unsigned long long shard, std::string
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-data-mainnet")
                          .partition(shard_to_partition[shard])
                          .payload(json));
+    deliver();
   } catch (std::exception& e) {
     const auto id = to_string(json::parse(json)["id"]);
     LOG(ERROR) << "Error while sending block data (" << id << ") to kafka: " << e.what();
@@ -79,6 +80,7 @@ void BlockPublisherKafka::publishBlockState(unsigned long long shard, std::strin
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-state-mainnet")
                          .partition(shard_to_partition[shard])
                          .payload(json));
+    deliver();
   } catch (std::exception& e) {
     const auto id = to_string(json::parse(json)["id"]);
     LOG(ERROR) << "Error while sending block state (" << id << ") to kafka: " << e.what();
@@ -94,7 +96,7 @@ void BlockPublisherKafka::publishBlockError(const std::string& id, const std::st
     const char* value = getenv("KAFKA_ERROR_TOPIC");
     LOG(WARNING) << "[block-error] Sending " << json.size() << " bytes to Kafka";
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-error-mainnet").partition(0).payload(dump));
-    producer.flush(std::chrono::milliseconds(10000));
+    producer.flush(std::chrono::milliseconds(1000000));
   } catch (std::exception& e) {
     LOG(ERROR) << "Error while sending block (" << id << ") error (" << error << ") to kafka: " << e.what();
   }
