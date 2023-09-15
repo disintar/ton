@@ -100,6 +100,7 @@ class PyDict {
   std::string to_boc() const;
   std::string toString() const;
   std::string dump() const;
+  void map(py::function& f);
 
   static void dummy_set() {
     throw std::invalid_argument("Not settable");

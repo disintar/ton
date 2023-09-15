@@ -321,6 +321,21 @@ PyCell PyDict::lookup_delete_ref(const std::string& key, int key_len_, int sgnd_
   return PyCell(cr);
 }
 
+void PyDict::map(py::function& f) {
+  auto clear_f = std::move(f);
+
+  my_dict->check_for_each([&clear_f](td::Ref<vm::CellSlice> cs, td::ConstBitPtr ptr, int ptr_bits) {
+    vm::CellBuilder cb;
+    cb.store_bits(ptr, ptr_bits);
+
+    auto key_cs = PyCellSlice(cb.finalize(), false);
+    auto value_cs = PyCellSlice(std::move(cs->get_base_cell()));
+    bool result_py = clear_f(key_cs, value_cs).cast<bool>();
+
+    return result_py;
+  });
+}
+
 std::string PyDict::to_boc() const {
   td::Ref<vm::Cell> root = my_dict->get_root_cell();
 

@@ -176,6 +176,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("lookup_delete_ref_str", &PyDict::lookup_delete_ref, py::arg("key"), py::arg("key_len") = 0,
            py::arg("signed") = false)
       .def("to_boc", &PyDict::to_boc)
+      .def("map", &PyDict::map)
       .def("__repr__", &PyDict::toString);
 
   m.def("parse_string_to_cell", parse_string_to_cell, py::arg("cell_boc"));
