@@ -98,6 +98,7 @@ jobs:
             "-DZLIB_LIBRARY=$root\zlib\contrib\vstudio\vc14\x64\ZlibStatReleaseWithoutAsm\zlibstat.lib",
             "-DOPENSSL_FOUND=1",
             "-DOPENSSL_INCLUDE_DIR=$root/openssl-1.1.1j/include",
+            "-DOPENSSL_ROOT_DIR=$root/openssl-1.1.1j/",
             "-DOPENSSL_CRYPTO_LIBRARY=$root/openssl-1.1.1j/lib/libcrypto_static.lib",
             "-DCMAKE_CXX_FLAGS=`"/DTD_WINDOWS=1 /EHsc /bigobj /W0`""
           )
