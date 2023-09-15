@@ -55,7 +55,7 @@ jobs:
       - name: Install pre-compiled OpenSSL Win64
         run: |
           curl  -Lo openssl-1.1.1j.zip https://github.com/neodiX42/precompiled-openssl-win64/raw/main/openssl-1.1.1j.zip
-          jar xf openssl-1.1.1j.zip
+          unzip openssl-1.1.1j.zip
 
       - name: Install pre-compiled libmicrohttpd Win64
         run: |
