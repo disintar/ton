@@ -409,13 +409,13 @@ json parse_message(Ref<vm::Cell> message_any) {
         try {
           answer["comment"] = parse_snake_data_string(cs);
         } catch (...) {
-          LOG(DEBUG) << "Can't parse message";
+          //          LOG(DEBUG) << "Can't parse message";
         }
       }
     }
 
   } else {
-    body.skip_first(1); // Either
+    body.skip_first(1);  // Either
 
     vm::CellBuilder cb;
     cb.append_cellslice(body);
