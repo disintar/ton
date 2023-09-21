@@ -393,6 +393,7 @@ class AccountIndexer : public td::actor::Actor {
           LOG(DEBUG) << "Parse accounts states account finally parsed " << account.to_hex() << " " << block_id_string << " "
                      << timer;
           stop();
+          return;
         }
       }
 
