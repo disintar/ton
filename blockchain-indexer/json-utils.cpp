@@ -430,7 +430,7 @@ json parse_message(Ref<vm::Cell> message_any) {
         try {
           answer["comment"] = parse_snake_data_string(body);
         } catch (...) {
-          LOG(ERROR) << "Can't parse message";
+          //          LOG(ERROR) << "Can't parse message";
         }
       }
     }
