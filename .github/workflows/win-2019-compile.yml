@@ -1,6 +1,6 @@
 name: Windows Server 2019 x64 Compile
 
-on: [push,workflow_dispatch,workflow_call]
+on: [ push,workflow_dispatch,workflow_call ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -10,7 +10,7 @@ jobs:
   build:
     strategy:
       matrix:
-        python: [39, 310, 311]
+        python: [ 39, 310, 311 ]
     runs-on: windows-2019
     env:
       RELEASE_NAME: ton-cpython-${{ matrix.python }}-x86_64-windows
@@ -110,6 +110,11 @@ jobs:
           mkdir artifacts
           xcopy /i "build\tvm-python\Release\*.pyd" "artifacts\"
 
+      - name: Simple binary test
+        run: |
+          cd artifacts
+          python -c 'import python_ton'
+
       - name: Upload artifacts
         uses: actions/upload-artifact@master
         with:
@@ -118,7 +123,7 @@ jobs:
 
       - name: Upload artifacts
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }} ||
-            ${{ github.event_name == 'workflow_dispatch' }}
+          ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           try {
             gh release delete -y ${{ env.RELEASE_NAME }}
