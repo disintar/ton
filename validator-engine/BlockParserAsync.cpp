@@ -195,6 +195,7 @@ class AsyncStateIndexer : public td::actor::Actor {
   }
 
   void processAccount(td::Bits256 account, int tx_count) {
+    // todo: move to separate actor
     try {
       std::vector<std::tuple<int, std::string>> dummy;
 

@@ -286,19 +286,24 @@ class Dumper {
 
 class AccountIndexer : public td::actor::Actor {
   std::shared_ptr<vm::AugmentedDictionary> accounts;
+  std::shared_ptr<vm::AugmentedDictionary> prev_accounts;
   td::Bits256 account;
   std::string block_id_string;
   WorkchainId wc;
   td::Promise<json> promise;
+  int tx_count;
 
  public:
-  AccountIndexer(std::shared_ptr<vm::AugmentedDictionary> accounts_, td::Bits256 account_, std::string block_id_string_,
-                 WorkchainId wc_, td::Promise<json> promise_) {
+  AccountIndexer(std::shared_ptr<vm::AugmentedDictionary> accounts_,
+                 std::shared_ptr<vm::AugmentedDictionary> prev_accounts_, td::Bits256 account_, int tx_count_,
+                 std::string block_id_string_, WorkchainId wc_, td::Promise<json> promise_) {
     accounts = std::move(accounts_);
     account = account_;
     block_id_string = std::move(block_id_string_);
     wc = wc_;
     promise = std::move(promise_);
+    prev_accounts = std::move(prev_accounts_);
+    tx_count = tx_count_;
   }
 
   void start_up() override {
@@ -321,6 +326,21 @@ class AccountIndexer : public td::actor::Actor {
         json data;
 
         data["account_address"] = {{"workchain", wc}, {"address", account.to_hex()}};
+
+        if (tx_count > 1) {
+          auto prev_acc = prev_accounts->lookup(account.cbits(), 256);
+
+          if (prev_acc.not_null() && (prev_acc->have_refs() || !prev_acc->empty())) {
+            vm::CellBuilder b;
+            b.append_cellslice(prev_acc);
+            const auto prev_state_acc = td::base64_encode(std_boc_serialize(b.finalize(), 31).move_as_ok());
+            data["prev_state"] = prev_state_acc;
+
+            LOG(DEBUG) << "In account " << account.to_hex()
+                       << " several transactions in one block save prev state for emulation";
+          }
+        }
+
         data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()}, {"last_trans_lt", sa.last_trans_lt}};
 
         auto account_cell = load_cell_slice(sa.account);
@@ -390,8 +410,8 @@ class AccountIndexer : public td::actor::Actor {
 
           // SUCCESS SEND ACCOUNT
           promise.set_value(std::move(data));
-          LOG(DEBUG) << "Parse accounts states account finally parsed " << account.to_hex() << " " << block_id_string << " "
-                     << timer;
+          LOG(DEBUG) << "Parse accounts states account finally parsed " << account.to_hex() << " " << block_id_string
+                     << " " << timer;
           stop();
           return;
         }
@@ -413,6 +433,7 @@ class AccountIndexer : public td::actor::Actor {
 class StateIndexer : public td::actor::Actor {
   Dumper *dumper_;
   std::shared_ptr<vm::AugmentedDictionary> accounts;
+  std::shared_ptr<vm::AugmentedDictionary> prev_accounts;
   std::vector<json> json_accounts;
   std::string block_id_string;
   td::Timer timer;
@@ -423,11 +444,13 @@ class StateIndexer : public td::actor::Actor {
   json answer;
   td::Promise<td::int32> dec_promise;
   vm::Ref<vm::Cell> root_cell;
-  std::vector<td::Bits256> accounts_keys;
+  std::vector<std::tuple<td::Bits256, int>> accounts_keys;
+  bool prev_state_received;
 
  public:
-  StateIndexer(std::string block_id_string_, vm::Ref<vm::Cell> root_cell_, std::vector<td::Bits256> accounts_keys_,
-               BlockIdExt block_id_, Dumper *dumper, td::Promise<td::int32> dec_promise_) {
+  StateIndexer(std::string block_id_string_, vm::Ref<vm::Cell> root_cell_,
+               std::vector<std::tuple<td::Bits256, int>> accounts_keys_, BlockIdExt block_id_, Dumper *dumper,
+               td::Promise<td::int32> dec_promise_) {
     dumper_ = dumper;
     block_id = block_id_;
     block_id_string = std::move(block_id_string_);
@@ -435,6 +458,7 @@ class StateIndexer : public td::actor::Actor {
     dec_promise = std::move(dec_promise_);
     root_cell = std::move(root_cell_);
     accounts_keys = std::move(accounts_keys_);
+    prev_state_received = false;
   }
 
   void start_up() override {
@@ -528,21 +552,13 @@ class StateIndexer : public td::actor::Actor {
 
       accounts = std::make_shared<vm::AugmentedDictionary>(vm::load_cell_slice_ref(shard_state.accounts), 256,
                                                            block::tlb::aug_ShardAccounts);
-
-      if (accounts_keys.empty()) {
-        td::actor::send_closure(actor_id(this), &StateIndexer::finalize);
-      } else {
-        LOG(DEBUG) << "Parse accounts states one by one " << block_id_string << " " << timer;
-
-        for (const auto &account : accounts_keys) {
-          td::actor::send_closure(actor_id(this), &StateIndexer::processAccount, account);
-        }
-      }
     } catch (std::exception &e) {
       LOG(ERROR) << e.what() << " state error: " << block_id_string;
       dumper_->addError(block_id_string, "state");
+      td::actor::send_closure(actor_id(this), &StateIndexer::finalize);
     } catch (...) {
       dumper_->addError(block_id_string, "state");
+      td::actor::send_closure(actor_id(this), &StateIndexer::finalize);
     }
   }
 
@@ -561,7 +577,26 @@ class StateIndexer : public td::actor::Actor {
     }
   }
 
-  void processAccount(td::Bits256 account) {
+  void got_prev_state(vm::Ref<vm::Cell> prev_root_cell) {
+    block::gen::ShardStateUnsplit::Record prev_shard_state;
+    CHECK(tlb::unpack_cell(std::move(prev_root_cell), prev_shard_state));
+
+    prev_accounts = std::make_shared<vm::AugmentedDictionary>(vm::load_cell_slice_ref(prev_shard_state.accounts), 256,
+                                                              block::tlb::aug_ShardAccounts);
+
+    if (accounts_keys.empty()) {
+      td::actor::send_closure(actor_id(this), &StateIndexer::finalize);
+    } else {
+      LOG(DEBUG) << "Parse accounts states one by one " << block_id_string << " " << timer;
+
+      for (const auto &account : accounts_keys) {
+        td::actor::send_closure(actor_id(this), &StateIndexer::processAccount, std::get<0>(account),
+                                std::get<1>(account));
+      }
+    }
+  }
+
+  void processAccount(td::Bits256 account, int tx_count) {
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<json> R) {
       if (R.is_ok()) {
         auto data = R.move_as_ok();
@@ -571,7 +606,8 @@ class StateIndexer : public td::actor::Actor {
       }
     });
 
-    td::actor::create_actor<AccountIndexer>("AccountIndexer", accounts, account, block_id_string, block_id.id.workchain, std::move(P))
+    td::actor::create_actor<AccountIndexer>("AccountIndexer", accounts, prev_accounts, account, tx_count,
+                                            block_id_string, block_id.id.workchain, std::move(P))
         .release();
   }
 
@@ -1068,7 +1104,7 @@ class IndexerWorker : public td::actor::Actor {
        */
 
         std::vector<json> accounts;
-        std::vector<td::Bits256> accounts_keys;
+        std::vector<std::tuple<td::Bits256, int>> accounts_keys;
 
         auto f = [this, &blkid, &timer, &accounts, &accounts_keys, workchain](
                      Ref<vm::CellSlice> data, Ref<vm::CellSlice> extra, td::ConstBitPtr key, int key_len) {
@@ -1079,9 +1115,6 @@ class IndexerWorker : public td::actor::Actor {
           LOG(DEBUG) << "Parse block start parse account: " << last_key.to_hex() << " " << blkid.to_str() << " "
                      << timer;
           auto hex_addr = last_key.to_hex();
-          if (std::find(accounts_keys.begin(), accounts_keys.end(), last_key) == accounts_keys.end()) {
-            accounts_keys.emplace_back(last_key);
-          }
 
           json account_block_parsed;
           account_block_parsed["account_addr"] = {{"address", hex_addr}, {"workchain", workchain}};
@@ -1116,6 +1149,7 @@ class IndexerWorker : public td::actor::Actor {
           account_block_parsed["transactions"] = transactions;
           account_block_parsed["transactions_count"] = count;
           accounts.emplace_back(account_block_parsed);
+          accounts_keys.emplace_back(last_key, count);
 
           LOG(DEBUG) << "Parse block end parse account: " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
 
@@ -1509,7 +1543,48 @@ class IndexerWorker : public td::actor::Actor {
     LOG(WARNING) << "Ready to die";
     shutdown_promise.set_value(0);
   }
-  void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle, std::vector<td::Bits256> accounts_keys) {
+
+  void got_prev_block_handle(std::shared_ptr<const BlockHandleInterface> handle,
+                             td::actor::ActorId<StateIndexer> state_indexer) {
+    auto P =
+        td::PromiseCreator::lambda([state_indexer = std::move(state_indexer)](td::Result<td::Ref<vm::DataCell>> R) {
+          if (R.is_error()) {
+            // todo: process normally
+            LOG(ERROR) << R.move_as_error().to_string() << " state error fatal";
+            std::exit(2);
+          } else {
+            auto root_cell = R.move_as_ok();
+            td::actor::send_closure(state_indexer, &StateIndexer::got_prev_state, std::move(root_cell));
+          }
+        });
+
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle,
+                            std::move(P));
+  }
+
+  void get_prev_state_handle(const std::shared_ptr<const BlockHandleInterface> &handle,
+                             td::actor::ActorId<StateIndexer> state_indexer) {
+    auto prev_id = handle->one_prev(true);
+
+    auto P = td::PromiseCreator::lambda(
+        [SelfId = actor_id(this), state_indexer = std::move(state_indexer)](td::Result<ConstBlockHandle> R) {
+          if (R.is_error()) {
+            // todo: process normally
+            LOG(ERROR) << R.move_as_error().to_string() << " state handle error fatal";
+            std::exit(2);
+          } else {
+            td::actor::send_closure(SelfId, &IndexerWorker::got_prev_block_handle, R.move_as_ok(), state_indexer);
+          }
+        });
+
+    ton::AccountIdPrefixFull pfx{prev_id.id.workchain, prev_id.id.shard};
+
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
+                            prev_id.id.seqno, std::move(P));
+  }
+
+  void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle,
+                          std::vector<std::tuple<td::Bits256, int>> accounts_keys) {
     const auto block_id = handle->id().id;
     const auto id = std::to_string(block_id.workchain) + ":" + std::to_string(block_id.shard) + ":" +
                     std::to_string(block_id.seqno);
@@ -1527,15 +1602,18 @@ class IndexerWorker : public td::actor::Actor {
               td::actor::send_closure(SelfId, &IndexerWorker::decrease_state_padding);
             });
 
-            td::actor::create_actor<StateIndexer>("StateIndexer", block_id_string, root_cell, accounts_keys, block_id,
-                                                  dumper_, std::move(Pfinal))
-                .release();
+            auto state_indexer =
+                td::actor::create_actor<StateIndexer>("StateIndexer", block_id_string, root_cell, accounts_keys,
+                                                      block_id, dumper_, std::move(Pfinal))
+                    .release();
+
+            td::actor::send_closure(SelfId, &IndexerWorker::get_prev_state_handle, handle, std::move(state_indexer));
           }
         });
 
     LOG(DEBUG) << "getting state from db " << handle->id().to_str() << " "
                << td::base64_encode(handle->id().root_hash.as_slice());
-    // todo: load from state_update of block
+
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_shard_state_root_cell_from_db, handle,
                             std::move(P));
   }
