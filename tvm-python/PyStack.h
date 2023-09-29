@@ -108,7 +108,11 @@ class PyStackEntry {
 
   PyCellSlice as_cell_slice() {
     auto x = entry.as_slice();
-    return PyCellSlice(x->get_base_cell());
+    vm::CellBuilder cb;
+    cb.append_cellslice(x);
+    td::Ref<vm::Cell> cell = cb.finalize(x->is_special());
+
+    return PyCellSlice(std::move(cell));
   }
 
   PyCellBuilder as_cell_builder() {

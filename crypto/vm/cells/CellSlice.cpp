@@ -219,7 +219,7 @@ unsigned CellSlice::get_level() const {
   return l;
 }
 
-Ref<Cell> CellSlice::get_base_cell() const {
+Ref<Cell> CellSlice::get_base_cell() const {  // THIS IS TRICKY, IT'S NOT COPY OFFSET
   if (cell.is_null()) {
     return {};
   }

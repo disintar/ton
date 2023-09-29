@@ -465,7 +465,9 @@ int VmState::step() {
   }
 
   if (vm_dumper.enable) {
-    vm_dumper.dump_stack(stack, gas_consumed(), gas.gas_remaining);
+    vm_dumper.dump_stack(stack.write(),
+                         gas_consumed(),
+                         gas.gas_remaining);
   }
 
   if (stack_trace) {

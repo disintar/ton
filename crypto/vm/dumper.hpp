@@ -33,13 +33,13 @@ class VmDumper {
     enable = false;
   }
 
-  void dump_stack(const Ref<vm::Stack>& stack, long long gas_consumed, long long gas_remaining) const {
+  void dump_stack(const vm::Stack& stack, long long gas_consumed, long long gas_remaining) const {
     if (!enable) {
       throw std::invalid_argument("Must be enabled to dump");
     }
 
     vm::Stack current_stack;
-    stack->for_each_scalar([&current_stack](const StackEntry& stackPointer) { current_stack.push(stackPointer); });
+    stack.for_each_scalar([&current_stack](const StackEntry& stackPointer) { current_stack.push(stackPointer); });
     StackInfo x{current_stack, gas_consumed, gas_remaining};
     stacks->push_back(std::move(x));
     //    gas_info->push_back(std::make_tuple(gas_consumed, gas_remaining));

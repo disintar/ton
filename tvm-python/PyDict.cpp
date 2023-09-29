@@ -28,7 +28,11 @@ auto get_mode(const std::string& s) {
 }
 
 bool PyAugmentationCheckData::eval_leaf(vm::CellBuilder& cb, vm::CellSlice& cs) const {
-  auto tmp_cs = PyCellSlice(std::move(cs.clone().get_base_cell()));
+  vm::CellBuilder tmp_cb;
+  tmp_cb.append_cellslice(cs.clone());
+  td::Ref<vm::Cell> cell = tmp_cb.finalize(cs.is_special());
+  auto tmp_cs = PyCellSlice(std::move(cell));
+
   py::object result_py = py_eval_leaf(tmp_cs);
   py::tuple t = py::reinterpret_borrow<py::tuple>(result_py);
   bool is_ok = t[0].cast<bool>();
@@ -42,7 +46,11 @@ bool PyAugmentationCheckData::eval_leaf(vm::CellBuilder& cb, vm::CellSlice& cs) 
 }
 
 bool PyAugmentationCheckData::skip_extra(vm::CellSlice& cs) const {
-  auto tmp_cs = PyCellSlice(std::move(cs.clone().get_base_cell()));
+  vm::CellBuilder tmp_cb;
+  tmp_cb.append_cellslice(cs.clone());
+  td::Ref<vm::Cell> cell = tmp_cb.finalize(cs.is_special());
+  auto tmp_cs = PyCellSlice(std::move(cell));
+
   py::object result_py = py_skip_extra(tmp_cs);
   py::tuple t = py::reinterpret_borrow<py::tuple>(result_py);
   bool is_ok = t[0].cast<bool>();
@@ -57,8 +65,16 @@ bool PyAugmentationCheckData::skip_extra(vm::CellSlice& cs) const {
 }
 
 bool PyAugmentationCheckData::eval_fork(vm::CellBuilder& cb, vm::CellSlice& left_cs, vm::CellSlice& right_cs) const {
-  auto tmp_cs_left = PyCellSlice(std::move(left_cs.clone().get_base_cell()));
-  auto tmp_cs_right = PyCellSlice(std::move(right_cs.clone().get_base_cell()));
+  vm::CellBuilder ltmp_cb;
+  ltmp_cb.append_cellslice(left_cs.clone());
+  td::Ref<vm::Cell> lcell = ltmp_cb.finalize(left_cs.is_special());
+  auto tmp_cs_left = PyCellSlice(std::move(lcell));
+
+  vm::CellBuilder tmp_cb;
+  tmp_cb.append_cellslice(right_cs.clone());
+  td::Ref<vm::Cell> rcell = tmp_cb.finalize(right_cs.is_special());
+  auto tmp_cs_right = PyCellSlice(std::move(rcell));
+
   py::object result_py = py_eval_fork(tmp_cs_left, tmp_cs_right);
   py::tuple t = py::reinterpret_borrow<py::tuple>(result_py);
   bool is_ok = t[0].cast<bool>();
@@ -329,7 +345,13 @@ void PyDict::map(py::function& f) {
     cb.store_bits(ptr, ptr_bits);
 
     auto key_cs = PyCellSlice(cb.finalize(), false);
-    auto value_cs = PyCellSlice(std::move(cs->get_base_cell()));
+
+    vm::CellBuilder tmp_cb;
+    tmp_cb.append_cellslice(cs->clone());
+    td::Ref<vm::Cell> cell = tmp_cb.finalize(cs->is_special());
+
+    auto value_cs = PyCellSlice(std::move(cell));
+    value_cs.advance_bits_refs(cs->cur_pos(), cs->cur_ref());
     bool result_py = clear_f(key_cs, value_cs).cast<bool>();
 
     return result_py;
