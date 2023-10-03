@@ -99,8 +99,8 @@ bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyC
   }
 
   auto account = block::Account(wc, addr.bits());
-  ton::UnixTime now = static_cast<td::uint32>(std::stoul(unixtime));
-  auto lt = static_cast<td::uint64>(std::stoul(lt_str));
+  ton::UnixTime now = static_cast<td::uint32>(std::stoull(unixtime));
+  auto lt = static_cast<td::uint64>(std::stoull(lt_str));
 
   account.now_ = now;
   account.block_lt = lt - lt % block::ConfigInfo::get_lt_align();
@@ -175,8 +175,8 @@ bool PyEmulator::emulate_tick_tock_transaction(const PyCell& shard_account_boc, 
   }
 
   auto account = block::Account(wc, addr.bits());
-  ton::UnixTime now = static_cast<td::uint32>(std::stoul(unixtime));
-  auto lt = static_cast<td::uint64>(std::stoul(lt_str));
+  ton::UnixTime now = static_cast<td::uint32>(std::stoull(unixtime));
+  auto lt = static_cast<td::uint64>(std::stoull(lt_str));
   account.now_ = now;
   account.block_lt = lt - lt % block::ConfigInfo::get_lt_align();
 
