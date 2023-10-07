@@ -14,6 +14,10 @@ class PyCell {
   // constructor
   explicit PyCell(const vm::Ref<vm::Cell>& cell) {
     my_cell = cell;
+
+    if (my_cell.is_null()){
+      throw std::invalid_argument("Create null cell");
+    }
   }
 
   explicit PyCell() = default;
