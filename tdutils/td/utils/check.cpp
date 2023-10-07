@@ -20,6 +20,7 @@
 
 #include "td/utils/logging.h"
 #include "td/utils/Slice.h"
+#include <pybind11/pybind11.h>
 
 namespace td {
 namespace detail {
@@ -27,7 +28,12 @@ namespace detail {
 void process_check_error(const char *message, const char *file, int line) {
   ::td::Logger(*log_interface, log_options, VERBOSITY_NAME(FATAL), Slice(file), line, Slice())
       << "Check `" << message << "` failed";
-  ::td::process_fatal_error(PSLICE() << "Check `" << message << "` failed in " << file << " at " << line);
+  auto tmp = PSLICE() << "Check `" << message << "` failed in " << file << " at " << line;
+
+  // TODO: check if pybind inited, if not - do not log
+  // Or separate python log as flag
+  pybind11::print("FATAL ERROR: " + tmp.str());
+  ::td::process_fatal_error(tmp);
 }
 
 }  // namespace detail
