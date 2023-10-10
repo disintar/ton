@@ -210,3 +210,19 @@ py::dict parse_token_data(const PyCell& codeCell) {
     throw std::invalid_argument("Not valid prefix, must be 0x00 / 0x01");
   }
 }
+
+PyCellSlice pack_address(const std::string& address) {
+  auto paddr_parse = block::StdAddress::parse(address);
+
+  if (paddr_parse.is_ok()) {
+    auto paddr = paddr_parse.move_as_ok();
+    td::BigInt256 dest_addr;
+    vm::CellBuilder cb;
+
+    dest_addr.import_bits(paddr.addr.as_bitslice());
+    cb.store_ones(1).store_zeroes(2).store_long(paddr.workchain, 8).store_int256(dest_addr, 256);
+    return PyCellSlice(cb.finalize(), false);
+  } else {
+    throw std::invalid_argument("Parse address error: not valid address");
+  }
+}

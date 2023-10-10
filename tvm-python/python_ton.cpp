@@ -185,6 +185,7 @@ PYBIND11_MODULE(python_ton, m) {
   m.def("codegen_python_tlb", codeget_python_tlb, py::arg("tlb_text"));
   m.def("parse_token_data", parse_token_data, py::arg("cell"));
   m.def("method_name_to_id", method_name_to_id, py::arg("cell"));
+  m.def("pack_address", pack_address, py::arg("address"));
 
   m.def("code_dissemble_str", code_dissemble_str, py::arg("code_boc"), py::arg("base_path"));
   m.def("code_dissemble_cell", code_dissemble_cell, py::arg("code_cell"), py::arg("base_path"));
