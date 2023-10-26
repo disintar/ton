@@ -1,3 +1,5 @@
+// Copyright 2023 Disintar LLP / andrey@head-labs.com
+
 #include "third-party/pybind11/include/pybind11/pybind11.h"
 #include <optional>
 #include "third-party/pybind11/include/pybind11/stl.h"
@@ -10,6 +12,7 @@
 #include "tvm-python/PyTVM.h"
 #include "tvm-python/PyFift.h"
 #include "tvm-python/PyStack.h"
+#include "tvm-python/PySmcAddress.h"
 #include "crypto/tl/tlbc-data.h"
 
 namespace py = pybind11;
@@ -279,4 +282,16 @@ PYBIND11_MODULE(python_ton, m) {
   py::class_<PyAugmentationCheckData>(m, "PyAugmentationCheckData", py::module_local())
       .def(py::init<py::function&, py::function&, py::function&, py::function&>(), py::arg("py_eval_leaf"),
            py::arg("py_skip_extra"), py::arg("py_eval_fork"), py::arg("py_eval_empty"));
+
+  py::class_<PySmcAddress>(m, "PySmcAddress", py::module_local())
+      .def(py::init<>())
+      .def_property("wc", &PySmcAddress::wc, &PySmcAddress::set_workchain)
+      .def_property("bounceable", &PySmcAddress::bounceable, &PySmcAddress::set_bounceable)
+      .def_property("testnet", &PySmcAddress::testnet, &PySmcAddress::set_testnet)
+      .def("rserialize", &PySmcAddress::rserialize, py::arg("base64_url"))
+      .def("append_to_builder", &PySmcAddress::append_to_builder, py::arg("builder"))
+      .def("pack", &PySmcAddress::pack)
+      .def("address", &PySmcAddress::address);
+  m.def("address_from_string", address_from_string, py::arg("address"));
+  m.def("address_from_cell_slice", address_from_cell_slice, py::arg("cell_slice"));
 }

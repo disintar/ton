@@ -1,6 +1,4 @@
-//
-// Created by Andrey Tvorozhkov on 5/9/23.
-//
+// Copyright 2023 Disintar LLP / andrey@head-labs.com
 
 #include "vm/vm.h"
 #include "PyCell.h"
@@ -19,6 +17,8 @@ class PyCellSlice {
       bool special;
       my_cell_slice = vm::load_cell_slice_special(cell, special);
     } else {
+      // According to new bug here can be libs & pruned special cells as I understand
+      // need to double-checked
       my_cell_slice = vm::load_cell_slice(cell);
     }
   }

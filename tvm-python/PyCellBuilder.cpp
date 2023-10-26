@@ -1,6 +1,5 @@
-//
-// Created by Andrey Tvorozhkov on 5/9/23.
-//
+// Copyright 2023 Disintar LLP / andrey@head-labs.com
+
 
 #include "third-party/pybind11/include/pybind11/pybind11.h"
 #include <string>
