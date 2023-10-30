@@ -25,7 +25,7 @@ int PyFift::run(std::string code_text) {
   }
   ss << code_text;
 
-  std::stringstream output;
+  std::ostringstream output;
   fift::Fift::Config config;
   config.source_lookup = fift::SourceLookup(std::make_unique<fift::OsFileLoader>());
   config.source_lookup.add_include_path(base_path);
@@ -53,7 +53,8 @@ int PyFift::run(std::string code_text) {
   } else {
     std::ostringstream os;
     ctx.print_error_backtrace(os);
-    throw std::invalid_argument(os.str());
+    std::cerr << "Backtrace:" << os.str();
+    throw std::invalid_argument(res.move_as_error().message().str());
   }
 }
 
