@@ -48,22 +48,7 @@
 namespace py = pybind11;
 using namespace pybind11::literals;  // to bring in the `_a` literal'
 
-std::string code_disassemble(const std::string& base64string, const std::string& basePath) {
-  auto base64decoded = td::base64_decode(base64string);
-
-  if (base64decoded.is_error()) {
-    throw std::invalid_argument("Parse code error: invalid base64");
-  }
-
-  auto boc_decoded = vm::std_boc_deserialize(base64decoded.move_as_ok());
-
-  if (boc_decoded.is_error()) {
-    auto m = boc_decoded.move_as_error().message();
-    LOG(ERROR) << m;
-    throw std::invalid_argument(m.str());
-  }
-  auto codeCell = boc_decoded.move_as_ok();
-
+std::string code_disassemble(const td::Ref<vm::Cell>& codeCell, const std::string& basePath) {
   fift::Fift::Config config;
 
   config.source_lookup = fift::SourceLookup(std::make_unique<fift::OsFileLoader>());
@@ -101,6 +86,10 @@ std::string code_disassemble(const std::string& base64string, const std::string&
     auto res = ctx.run(td::make_ref<fift::InterpretCont>());
     if (res.is_error()) {
       std::cerr << "Disasm error: " << res.move_as_error().to_string();
+      std::cerr << "Backtrace:";
+      std::ostringstream os;
+      ctx.print_error_backtrace(os);
+      std::cerr << os.str();
       throw std::invalid_argument("Error in disassembler");
     } else {
       auto disasm_out = output.str();
@@ -120,7 +109,12 @@ std::string code_disassemble(const std::string& base64string, const std::string&
 }
 
 std::string code_dissemble_str(const std::string& code, const std::string& basePath) {
-  return code_disassemble(std::move(code), basePath);
+  auto codeCell = parse_string_to_cell(code);
+  return code_disassemble(std::move(codeCell.my_cell), basePath);
+}
+
+std::string code_dissemble_cell(const PyCell& codeCell, const std::string& basePath) {
+  return code_disassemble(codeCell.my_cell, basePath);
 }
 
 std::string parse_chunked_data(vm::CellSlice& cs) {

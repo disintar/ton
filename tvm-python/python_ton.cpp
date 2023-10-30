@@ -192,6 +192,7 @@ PYBIND11_MODULE(python_ton, m) {
   m.def("pack_address", pack_address, py::arg("address"));
 
   m.def("code_dissemble_str", code_dissemble_str, py::arg("code_boc"), py::arg("base_path"));
+  m.def("code_dissemble_cell", code_dissemble_cell, py::arg("code_cell"), py::arg("base_path"));
   m.def("make_tuple", make_tuple, py::arg("items"));
   m.def("deserialize_stack_entry", deserialize_stack_entry, py::arg("cell_slice"));
   m.def("deserialize_stack", deserialize_stack, py::arg("cell_slice"));
