@@ -375,7 +375,7 @@ TEST(Tonlib, KeysApi) {
                         nullptr, make_object<tonlib_api::keyStoreTypeDirectory>("testdir"))))
       .ensure();
   auto local_password = td::SecureString("local password");
-  auto mnemonic_password = td::SecureString("mnemonic password");
+  auto mnemonic_password =  td::SecureString("mnemonic password");
   {
     auto key = sync_send(client, make_object<tonlib_api::createNewKey>(local_password.copy(), td::SecureString{},
                                                                        td::SecureString{}))
