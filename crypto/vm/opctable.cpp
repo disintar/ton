@@ -24,6 +24,7 @@
 #include "vm/vm.h"
 #include <iostream>
 #include <iomanip>
+#include <locale>
 #include <sstream>
 #include <functional>
 
@@ -426,6 +427,8 @@ dump_arg_instr_func_t dump_1c_l_add(int adj, std::string prefix, std::string suf
 dump_arg_instr_func_t dump_1c_and(unsigned mask, std::string prefix, std::string suffix) {
   return [mask, prefix, suffix](CellSlice&, unsigned args) -> std::string {
     std::ostringstream os;
+    os.imbue(std::locale("C"));
+
     os << prefix << (args & mask) << suffix;
     std::cout << os.str() << std::endl;
     std::cout.flush();
