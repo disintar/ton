@@ -24,7 +24,6 @@
 #include "vm/vm.h"
 #include <iostream>
 #include <iomanip>
-#include <locale>
 #include <sstream>
 #include <functional>
 
@@ -359,7 +358,7 @@ using namespace std::placeholders;
 dump_arg_instr_func_t dump_1sr(std::string prefix, std::string suffix) {
   return [prefix, suffix](CellSlice&, unsigned args) -> std::string {
     std::ostringstream os;
-    os << prefix << 's' << std::to_string(args & 15) << suffix;
+    os << prefix << 's' << (args & 15) << suffix;
     return os.str();
   };
 }
@@ -367,7 +366,7 @@ dump_arg_instr_func_t dump_1sr(std::string prefix, std::string suffix) {
 dump_arg_instr_func_t dump_1sr_l(std::string prefix, std::string suffix) {
   return [prefix, suffix](CellSlice&, unsigned args) -> std::string {
     std::ostringstream os;
-    os << prefix << 's' << std::to_string(args & 255) << suffix;
+    os << prefix << 's' << (args & 255) << suffix;
     return os.str();
   };
 }
@@ -375,7 +374,7 @@ dump_arg_instr_func_t dump_1sr_l(std::string prefix, std::string suffix) {
 dump_arg_instr_func_t dump_2sr(std::string prefix, std::string suffix) {
   return [prefix, suffix](CellSlice&, unsigned args) -> std::string {
     std::ostringstream os;
-    os << prefix << 's' << std::to_string((args >> 4) & 15) << ",s" << std::to_string(args & 15) << suffix;
+    os << prefix << 's' << ((args >> 4) & 15) << ",s" << (args & 15) << suffix;
     return os.str();
   };
 }
@@ -383,8 +382,8 @@ dump_arg_instr_func_t dump_2sr(std::string prefix, std::string suffix) {
 dump_arg_instr_func_t dump_2sr_adj(unsigned adj, std::string prefix, std::string suffix) {
   return [adj, prefix, suffix](CellSlice&, unsigned args) -> std::string {
     std::ostringstream os;
-    os << prefix << 's' << std::to_string((int)((args >> 4) & 15) - (int)((adj >> 4) & 15)) << ",s"
-       << std::to_string((int)(args & 15) - (int)(adj & 15)) << suffix;
+    os << prefix << 's' << ((int)((args >> 4) & 15) - (int)((adj >> 4) & 15)) << ",s"
+       << ((int)(args & 15) - (int)(adj & 15)) << suffix;
     return os.str();
   };
 }
@@ -392,8 +391,8 @@ dump_arg_instr_func_t dump_2sr_adj(unsigned adj, std::string prefix, std::string
 dump_arg_instr_func_t dump_3sr(std::string prefix, std::string suffix) {
   return [prefix, suffix](CellSlice&, unsigned args) -> std::string {
     std::ostringstream os;
-    os << prefix << 's' << std::to_string((args >> 8) & 15) << ",s" << std::to_string((args >> 4) & 15) << ",s"
-       << std::to_string(args & 15) << suffix;
+    os << prefix << 's' << ((args >> 8) & 15) << ",s" << ((args >> 4) & 15) << ",s"
+       << (args & 15) << suffix;
     return os.str();
   };
 }
@@ -401,9 +400,9 @@ dump_arg_instr_func_t dump_3sr(std::string prefix, std::string suffix) {
 dump_arg_instr_func_t dump_3sr_adj(unsigned adj, std::string prefix, std::string suffix) {
   return [adj, prefix, suffix](CellSlice&, unsigned args) -> std::string {
     std::ostringstream os;
-    os << prefix << 's' << std::to_string((int)((args >> 8) & 15) - (int)((adj >> 8) & 15)) << ",s"
-       << std::to_string((int)((args >> 4) & 15) - (int)((adj >> 4) & 15)) << ",s"
-       << std::to_string((int)(args & 15) - (int)(adj & 15)) << suffix;
+    os << prefix << 's' << ((int)((args >> 8) & 15) - (int)((adj >> 8) & 15)) << ",s"
+       << ((int)((args >> 4) & 15) - (int)((adj >> 4) & 15)) << ",s"
+       << ((int)(args & 15) - (int)(adj & 15)) << suffix;
     return os.str();
   };
 }
@@ -411,7 +410,7 @@ dump_arg_instr_func_t dump_3sr_adj(unsigned adj, std::string prefix, std::string
 dump_arg_instr_func_t dump_1c(std::string prefix, std::string suffix) {
   return [prefix, suffix](CellSlice&, unsigned args) -> std::string {
     std::ostringstream os;
-    os << prefix << std::to_string((args & 15)) << suffix;
+    os << prefix << ((args & 15)) << suffix;
     return os.str();
   };
 }
@@ -419,7 +418,7 @@ dump_arg_instr_func_t dump_1c(std::string prefix, std::string suffix) {
 dump_arg_instr_func_t dump_1c_l_add(int adj, std::string prefix, std::string suffix) {
   return [adj, prefix, suffix](CellSlice&, unsigned args) -> std::string {
     std::ostringstream os;
-    os << prefix << std::to_string((int)(args & 255) + adj) << suffix;
+    os << prefix << ((int)(args & 255) + adj) << suffix;
     return os.str();
   };
 }
@@ -427,11 +426,7 @@ dump_arg_instr_func_t dump_1c_l_add(int adj, std::string prefix, std::string suf
 dump_arg_instr_func_t dump_1c_and(unsigned mask, std::string prefix, std::string suffix) {
   return [mask, prefix, suffix](CellSlice&, unsigned args) -> std::string {
     std::ostringstream os;
-    os.imbue(std::locale("C"));
-
     os << prefix << (args & mask) << suffix;
-    std::cout << os.str() << std::endl;
-    std::cout.flush();
     return os.str();
   };
 }
@@ -439,7 +434,7 @@ dump_arg_instr_func_t dump_1c_and(unsigned mask, std::string prefix, std::string
 dump_arg_instr_func_t dump_2c(std::string prefix, std::string interfix, std::string suffix) {
   return [prefix, interfix, suffix](CellSlice&, unsigned args) -> std::string {
     std::ostringstream os;
-    os << prefix << std::to_string((args >> 4) & 15) << interfix << std::to_string(args & 15) << suffix;
+    os << prefix << ((args >> 4) & 15) << interfix << (args & 15) << suffix;
     return os.str();
   };
 }
@@ -447,8 +442,8 @@ dump_arg_instr_func_t dump_2c(std::string prefix, std::string interfix, std::str
 dump_arg_instr_func_t dump_2c_add(unsigned add, std::string prefix, std::string interfix, std::string suffix) {
   return [add, prefix, interfix, suffix](CellSlice&, unsigned args) -> std::string {
     std::ostringstream os;
-    os << prefix << std::to_string(((args >> 4) & 15) + ((add >> 4) & 15)) << interfix
-       << std::to_string((args & 15) + (add & 15)) << suffix;
+    os << prefix << (((args >> 4) & 15) + ((add >> 4) & 15)) << interfix
+       << ((args & 15) + (add & 15)) << suffix;
     return os.str();
   };
 }
