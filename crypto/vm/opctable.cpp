@@ -427,7 +427,12 @@ dump_arg_instr_func_t dump_1c_and(unsigned mask, std::string prefix, std::string
   return [mask, prefix, suffix](CellSlice&, unsigned args) -> std::string {
     std::ostringstream os;
     os << prefix << std::to_string(args & mask) << suffix;
-    return os.str();
+    std::cerr << prefix << std::to_string(args & mask) << suffix << std::endl;
+
+    auto x = os.str();
+    std::cerr << x.size() << std::endl;
+    std::cerr << x << std::endl;
+    return x;
   };
 }
 
