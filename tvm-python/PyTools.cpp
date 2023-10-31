@@ -94,7 +94,7 @@ std::string code_disassemble(const td::Ref<vm::Cell>& codeCell, const std::strin
     } else {
       auto disasm_out = output.str();
       // cheap no-brainer
-      std::string_view pattern = " ok\n";
+      std::string pattern = " ok\n";
       std::string::size_type n = pattern.length();
       for (std::string::size_type i = disasm_out.find(pattern); i != std::string::npos; i = disasm_out.find(pattern)) {
         disasm_out.erase(i, n);
