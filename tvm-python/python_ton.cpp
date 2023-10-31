@@ -25,13 +25,6 @@ void globalSetVerbosity(int vb) {
   SET_VERBOSITY_LEVEL(v);
 }
 
-std::string test() {
-  std::ostringstream os;
-  os << "SETCP " << 1;
-  std::cerr << os.str() << std::endl;
-  return os.str();
-}
-
 unsigned method_name_to_id(const std::string& method_name) {
   unsigned crc = td::crc16(method_name);
   const unsigned method_id = (crc & 0xffff) | 0x10000;
@@ -327,5 +320,4 @@ PYBIND11_MODULE(python_ton, m) {
       .def("address", &PySmcAddress::address);
   m.def("address_from_string", address_from_string, py::arg("address"));
   m.def("address_from_cell_slice", address_from_cell_slice, py::arg("cell_slice"));
-  m.def("text_test", test);
 }
