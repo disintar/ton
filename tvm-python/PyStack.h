@@ -125,6 +125,10 @@ class PyStackEntry {
     return x->to_dec_string();
   }
 
+  std::string as_string() {
+    return entry.as_string();
+  }
+
   PyCell serialize(int mode = 0) {
     vm::CellBuilder cb;
     auto x = entry.serialize(cb, mode);

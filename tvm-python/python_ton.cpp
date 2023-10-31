@@ -256,6 +256,7 @@ PYBIND11_MODULE(python_ton, m) {
            py::arg("cell_builder") = std::optional<PyCellSlice>(),
            py::arg("continuation") = std::optional<PyContinuation>(), py::arg("big_int") = "")
       .def("as_int", &PyStackEntry::as_int)
+      .def("as_string", &PyStackEntry::as_string)
       .def("as_cell_slice", &PyStackEntry::as_cell_slice)
       .def("as_cell_builder", &PyStackEntry::as_cell_builder)
       .def("as_cont", &PyStackEntry::as_cont)
