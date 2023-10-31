@@ -327,5 +327,5 @@ PYBIND11_MODULE(python_ton, m) {
       .def("address", &PySmcAddress::address);
   m.def("address_from_string", address_from_string, py::arg("address"));
   m.def("address_from_cell_slice", address_from_cell_slice, py::arg("cell_slice"));
-  m.def("test", test);
+  m.def("text_test", test);
 }
