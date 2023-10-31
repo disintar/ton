@@ -429,9 +429,9 @@ dump_arg_instr_func_t dump_1c_and(unsigned mask, std::string prefix, std::string
     os << prefix << (args & mask) << suffix;
 
     auto x = os.str();
-    LOG(ERROR) << std::to_string(x.size());
-    LOG(ERROR) << x;
-    LOG(ERROR) << prefix << (args & mask) << suffix;
+    std::cerr << std::to_string(x.size()) << std::endl;
+    std::cerr << x << std::endl;
+    std::cerr << prefix << (args & mask) << suffix << std::endl;
     return x;
   };
 }
