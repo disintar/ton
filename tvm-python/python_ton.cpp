@@ -15,6 +15,7 @@
 #include "tvm-python/PySmcAddress.h"
 //#include "tvm-python/PyKeys.h"
 #include "crypto/tl/tlbc-data.h"
+#include "td/utils/optional.h"
 
 namespace py = pybind11;
 using namespace pybind11::literals;  // to bring in the `_a` literal
@@ -33,6 +34,30 @@ unsigned method_name_to_id(const std::string& method_name) {
 std::string codeget_python_tlb(std::string tlb_code) {
   return tlbc::codegen_python_tlb(tlb_code);
 }
+
+template <typename T>
+struct py::detail::type_caster<td::optional<T>> {
+ public:
+  PYBIND11_TYPE_CASTER(td::optional<T>, _("td::optional"));
+
+  bool load(handle src, bool) {
+    if (!src || src.is(py::none())) {
+      value = td::optional<T>();
+      return true;
+    }
+
+    value = td::optional<T>(py::cast<T>(src));
+    return true;
+  }
+
+  static handle cast(const td::optional<T>& src, return_value_policy, handle) {
+    if (src) {
+      return py::cast(src.value());
+    } else {
+      return py::none();
+    }
+  }
+};
 
 PYBIND11_MODULE(python_ton, m) {
   PSLICE() << "";
@@ -60,7 +85,6 @@ PYBIND11_MODULE(python_ton, m) {
       throw std::runtime_error("Unknown error");
     }
   });
-
   py::class_<PyCellSlice>(m, "PyCellSlice", py::module_local())
       .def(py::init<>())
       .def("load_uint", &PyCellSlice::load_uint, py::arg("bit_len"))
@@ -154,9 +178,9 @@ PYBIND11_MODULE(python_ton, m) {
       .def_property("remaining_bits", &PyCellBuilder::get_remaining_bits, &PyCellBuilder::dummy_set);
 
   py::class_<PyDict>(m, "PyDict", py::module_local())
-      .def(py::init<int, bool, std::optional<PyCellSlice>>(), py::arg("bit_len"), py::arg("signed") = false,
+      .def(py::init<int, bool, td::optional<PyCellSlice>>(), py::arg("bit_len"), py::arg("signed") = false,
            py::arg("cs_root") = py::none())
-      .def(py::init<int, PyAugmentationCheckData, bool, std::optional<PyCellSlice>>(), py::arg("bit_len"),
+      .def(py::init<int, PyAugmentationCheckData, bool, td::optional<PyCellSlice>>(), py::arg("bit_len"),
            py::arg("aug"), py::arg("signed") = false, py::arg("cs_root") = py::none())
       .def("get_pycell", &PyDict::get_pycell)
       .def("is_empty", &PyDict::is_empty)
@@ -203,9 +227,9 @@ PYBIND11_MODULE(python_ton, m) {
       .def_readwrite("gas_remaining", &PyStackInfo::gas_remaining);
 
   py::class_<PyTVM>(m, "PyTVM", py::module_local())
-      .def(py::init<int, std::optional<PyCell>, std::optional<PyCell>, bool, bool, bool, bool>(),
-           py::arg("log_level_") = 0, py::arg("code_") = std::optional<PyCell>(),
-           py::arg("data_") = std::optional<PyCell>(), py::arg("allowDebug_") = false, py::arg("sameC3_") = true,
+      .def(py::init<int, td::optional<PyCell>, td::optional<PyCell>, bool, bool, bool, bool>(),
+           py::arg("log_level_") = 0, py::arg("code_") = td::optional<PyCell>(),
+           py::arg("data_") = td::optional<PyCell>(), py::arg("allowDebug_") = false, py::arg("sameC3_") = true,
            py::arg("skip_c7_") = false, py::arg("enable_vm_dump") = false)
       .def_property("code", &PyTVM::get_code, &PyTVM::set_code)
       .def_property("data", &PyTVM::set_data, &PyTVM::get_data)
@@ -250,11 +274,11 @@ PYBIND11_MODULE(python_ton, m) {
       .def("serialize", &PyStack::serialize, py::arg("mode"));
 
   py::class_<PyStackEntry>(m, "PyStackEntry", py::module_local())
-      .def(py::init<std::optional<PyCell>, std::optional<PyCellSlice>, std::optional<PyCellSlice>,
-                    std::optional<PyContinuation>, std::string>(),
-           py::arg("cell") = std::optional<PyCell>(), py::arg("cell_slice") = std::optional<PyCellSlice>(),
-           py::arg("cell_builder") = std::optional<PyCellSlice>(),
-           py::arg("continuation") = std::optional<PyContinuation>(), py::arg("big_int") = "")
+      .def(py::init<td::optional<PyCell>, td::optional<PyCellSlice>, td::optional<PyCellSlice>,
+                    td::optional<PyContinuation>, std::string>(),
+           py::arg("cell") = td::optional<PyCell>(), py::arg("cell_slice") = td::optional<PyCellSlice>(),
+           py::arg("cell_builder") = td::optional<PyCellSlice>(),
+           py::arg("continuation") = td::optional<PyContinuation>(), py::arg("big_int") = "")
       .def("as_int", &PyStackEntry::as_int)
       .def("as_string", &PyStackEntry::as_string)
       .def("as_cell_slice", &PyStackEntry::as_cell_slice)

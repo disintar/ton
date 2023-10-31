@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2 FATAL_ERROR)
+set(OPENSSL_USE_STATIC_LIBS TRUE)
 
 if (NOT Python_FOUND)
     find_package(Python REQUIRED Development)
@@ -58,13 +59,13 @@ set(PYTHON_EMULATOR_SOURCE
         python_ton.cpp)
 
 pybind11_add_module(python_ton ${PYTHON_EMULATOR_SOURCE})
-set(OPENSSL_USE_STATIC_LIBS TRUE)
 
-target_link_libraries(python_ton PRIVATE
+
+target_link_libraries(python_ton PRIVATE -static-libstdc++
         combined_bundled fift-lib
         tlbc-lib ton_crypto_core rocksdb # XXX
         ${BLST_LIB} ${SECP256K1_LIBRARY} ${JEMALLOC_LIBRARIES}
-        OpenSSL::Crypto ${SODIUM_LIBRARY_RELEASE} -static-libstdc++)
+        OpenSSL::Crypto ${SODIUM_LIBRARY_RELEASE})
 
 target_include_directories(python_ton PRIVATE ${include_dirs})
 

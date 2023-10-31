@@ -76,7 +76,7 @@ std::string dump_xchg(CellSlice&, unsigned args) {
     return "";
   }
   std::ostringstream os;
-  os << "XCHG s" << x << ",s" << y;
+  os << "XCHG s" << std::to_string(x) << ",s" << std::to_string(y);
   return os.str();
 }
 

@@ -13,6 +13,7 @@
 #include "PyStack.h"
 #include "PyDict.h"
 #include "third-party/pybind11/include/pybind11/pybind11.h"
+#include "td/utils/optional.h"
 
 #ifndef TON_TVM_H
 #define TON_TVM_H
@@ -43,7 +44,7 @@ class PyTVM {
   bool skip_c7 = false;
   bool enable_vm_dumper = true;
 
-  std::optional<PyStackEntry> c7;
+  td::optional<PyStackEntry> c7;
 
   int exit_code_out{};
   long long vm_steps_out{};
@@ -60,8 +61,8 @@ class PyTVM {
   std::vector<std::tuple<long long, long long>> gas_info;
 
   // constructor
-  explicit PyTVM(int log_level_ = 0, std::optional<PyCell> code_ = std::optional<PyCell>(),
-                 std::optional<PyCell> data_ = std::optional<PyCell>(), bool allowDebug_ = false, bool sameC3_ = true,
+  explicit PyTVM(int log_level_ = 0, td::optional<PyCell> code_ = td::optional<PyCell>(),
+                 td::optional<PyCell> data_ = td::optional<PyCell>(), bool allowDebug_ = false, bool sameC3_ = true,
                  bool skip_c7_ = false, bool enable_vm_dumper_ = true) {
     allowDebug = allowDebug_;
     sameC3 = sameC3_;

@@ -12,6 +12,7 @@
 #include "PyCellSlice.h"
 #include "PyCell.h"
 #include "PyCellBuilder.h"
+#include "td/utils/optional.h"
 
 #ifndef TON_PYDICT_H
 #define TON_PYDICT_H
@@ -47,7 +48,7 @@ class PyDict {
   unsigned int key_len;
   bool sgnd, is_augmented;
 
-  explicit PyDict(int key_len_, bool sgnd_ = false, std::optional<PyCellSlice> cs_root = std::optional<PyCellSlice>()) {
+  explicit PyDict(int key_len_, bool sgnd_ = false, td::optional<PyCellSlice> cs_root = td::optional<PyCellSlice>()) {
     if (cs_root) {
       vm::Dictionary my_dict_t{vm::DictNonEmpty(), cs_root.value().my_cell_slice, key_len_};
       my_dict = std::make_unique<vm::Dictionary>(my_dict_t);
@@ -62,7 +63,7 @@ class PyDict {
   }
 
   explicit PyDict(int key_len_, PyAugmentationCheckData aug_, bool sgnd_ = false,
-                  std::optional<PyCellSlice> cs_root = std::optional<PyCellSlice>()) {
+                  td::optional<PyCellSlice> cs_root = td::optional<PyCellSlice>()) {
     aug = std::move(aug_);
 
     if (cs_root) {

@@ -116,8 +116,6 @@ class PythonLogger : public td::LogInterface {
 };
 
 PyStack PyTVM::run_vm() {
-  pybind11::gil_scoped_acquire gil;
-
   if (code.is_null()) {
     throw std::invalid_argument("To run VM, please pass code");
   }
@@ -141,8 +139,8 @@ PyStack PyTVM::run_vm() {
 
   td::Ref<vm::Tuple> init_c7;
 
-  if (!skip_c7) {
-    init_c7 = c7->entry.as_tuple();
+  if (!skip_c7 && c7) {
+    init_c7 = c7.value().entry.as_tuple();
   } else {
     init_c7 = vm::make_tuple_ref();
   }

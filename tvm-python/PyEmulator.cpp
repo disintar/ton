@@ -55,7 +55,6 @@ bool PyEmulator::set_debug_enabled(bool debug_enabled) {
 
 bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyCell& message_cell,
                                      const std::string& unixtime, const std::string& lt_str, int vm_ver) {
-  pybind11::gil_scoped_acquire gil;
   auto message_cs = vm::load_cell_slice(message_cell.my_cell);
   int msg_tag = block::gen::t_CommonMsgInfo.get_tag(message_cs);
 

@@ -69,7 +69,7 @@ int exec_push_smallint(VmState* st, unsigned args) {
 std::string dump_push_smallint(CellSlice&, unsigned args) {
   int x = (short)args;
   std::ostringstream os;
-  os << "PUSHINT " << x;
+  os << "PUSHINT " << std::to_string(x);
   return os.str();
 }
 

@@ -17,6 +17,7 @@
 #include "crypto/fift/words.h"
 #include "td/utils/filesystem.h"
 #include "crypto/vm/stack.hpp"
+#include "td/utils/optional.h"
 
 #ifndef TON_STACK_H
 #define TON_STACK_H
@@ -49,10 +50,10 @@ class PyStack;
 
 class PyStackEntry {
  public:
-  PyStackEntry(std::optional<PyCell> cell = std::optional<PyCell>(),
-               std::optional<PyCellSlice> cell_slice = std::optional<PyCellSlice>(),
-               std::optional<PyCellSlice> cell_builder = std::optional<PyCellSlice>(),
-               std::optional<PyContinuation> continuation = std::optional<PyContinuation>(), std::string big_int = "") {
+  PyStackEntry(td::optional<PyCell> cell = td::optional<PyCell>(),
+               td::optional<PyCellSlice> cell_slice = td::optional<PyCellSlice>(),
+               td::optional<PyCellSlice> cell_builder = td::optional<PyCellSlice>(),
+               td::optional<PyContinuation> continuation = td::optional<PyContinuation>(), std::string big_int = "") {
     if (cell) {
       entry = vm::StackEntry(cell.value().my_cell);
     } else if (cell_slice) {
