@@ -13,7 +13,7 @@
 #include "tvm-python/PyFift.h"
 #include "tvm-python/PyStack.h"
 #include "tvm-python/PySmcAddress.h"
-//#include "tvm-python/PyKeys.h"
+#include "tvm-python/PyKeys.h"
 #include "crypto/tl/tlbc-data.h"
 #include "td/utils/optional.h"
 
@@ -318,6 +318,15 @@ PYBIND11_MODULE(python_ton, m) {
       .def("append_to_builder", &PySmcAddress::append_to_builder, py::arg("builder"))
       .def("pack", &PySmcAddress::pack)
       .def("address", &PySmcAddress::address);
+
+  py::class_<PyMnemonic>(m, "PyMnemonic", py::module_local())
+      .def(py::init<std::vector<std::string>, std::string>(), py::arg("mnemonic"), py::arg("mnemonic_password"))
+      .def("get_words", &PyMnemonic::get_words)
+      .def("get_private_key_hex", &PyMnemonic::get_private_key_hex);
+
+  m.def("create_new_mnemo", create_new_mnemo);
+  m.def("get_bip39_words", get_bip39_words);
+
   m.def("address_from_string", address_from_string, py::arg("address"));
   m.def("address_from_cell_slice", address_from_cell_slice, py::arg("cell_slice"));
 }

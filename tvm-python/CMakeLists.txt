@@ -54,8 +54,8 @@ set(PYTHON_EMULATOR_SOURCE
         PyEmulator.h
         PySmcAddress.cpp
         PySmcAddress.h
-        #        PyKeys.cpp
-        #        PyKeys.h
+        PyKeys.cpp
+        PyKeys.h
         python_ton.cpp)
 
 pybind11_add_module(python_ton ${PYTHON_EMULATOR_SOURCE})
