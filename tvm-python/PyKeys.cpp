@@ -3,6 +3,72 @@
 #include "PyKeys.h"
 #include "tonlib/tonlib/keys/bip39.h"
 #include "td/utils/misc.h"
+#include "crypto/Ed25519.h"
+#include "crypto/common/bigint.hpp"
+
+PyPrivateKey::PyPrivateKey() : key(td::Ed25519::generate_private_key().move_as_ok()) {
+}
+
+std::string hex_to_bytes(std::string str) {
+  std::string t;
+
+  if (str.size() & 1) {
+    throw std::invalid_argument("not a hex string");
+  }
+  t.reserve(str.size() >> 1);
+
+  std::size_t i;
+  unsigned f = 0;
+  for (i = 0; i < str.size(); i++) {
+    int c = str[i];
+    if (c >= '0' && c <= '9') {
+      c -= '0';
+    } else {
+      c |= 0x20;
+      if (c >= 'a' && c <= 'f') {
+        c -= 'a' - 10;
+      } else {
+        break;
+      }
+    }
+    f = (f << 4) + c;
+    if (i & 1) {
+      t += (char)(f & 0xff);
+    }
+  }
+
+  return t;
+}
+
+std::string to_hex(td::Slice buffer) {
+  const char *hex = "0123456789ABCDEF";
+  std::string res(2 * buffer.size(), '\0');
+  for (std::size_t i = 0; i < buffer.size(); i++) {
+    auto c = buffer.ubegin()[buffer.size() - 1 - i];  // Iterate in reverse order
+    res[2 * i] = hex[c >> 4];
+    res[2 * i + 1] = hex[c & 15];
+  }
+  return res;
+}
+
+PyPublicKey::PyPublicKey(std::string key_int) : key(td::Ed25519::PublicKey{td::SecureString{hex_to_bytes(key_int)}}) {
+}
+
+std::string PyPublicKey::get_public_key_hex() {
+  return to_hex(key.as_octet_string());
+}
+
+PyPrivateKey::PyPrivateKey(std::string key_int)
+    : key(td::Ed25519::PrivateKey{td::SecureString{hex_to_bytes(key_int)}}) {
+}
+
+std::string PyPrivateKey::get_private_key_hex() {
+  return to_hex(key.as_octet_string());
+}
+
+PyPublicKey PyPrivateKey::get_public_key() {
+  return PyPublicKey(key.get_public_key().move_as_ok());
+}
 
 PyMnemonic::PyMnemonic(std::vector<std::string> mnemo, std::string mnemonic_password)
     : my_mnemo(tonlib::Mnemonic::create(std::vector<td::SecureString>(mnemo.begin(), mnemo.end()),
@@ -23,7 +89,11 @@ std::vector<std::string> PyMnemonic::get_words() {
 }
 
 std::string PyMnemonic::get_private_key_hex() {
-  return td::buffer_to_hex(my_mnemo.to_private_key().as_octet_string());
+  return to_hex(my_mnemo.to_private_key().as_octet_string());
+}
+
+PyPrivateKey PyMnemonic::get_private_key() {
+  return PyPrivateKey(my_mnemo.to_private_key());
 }
 
 PyMnemonic create_new_mnemo(std::string entropy, std::string password, int words_count) {

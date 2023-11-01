@@ -319,10 +319,21 @@ PYBIND11_MODULE(python_ton, m) {
       .def("pack", &PySmcAddress::pack)
       .def("address", &PySmcAddress::address);
 
+  py::class_<PyPublicKey>(m, "PyPublicKey", py::module_local())
+      .def(py::init<std::string>(), py::arg("key_hex"))
+      .def("get_public_key_hex", &PyPublicKey::get_public_key_hex);
+
+  py::class_<PyPrivateKey>(m, "PyPrivateKey", py::module_local())
+      .def(py::init<>())
+      .def(py::init<std::string>(), py::arg("key_hex"))
+      .def("get_private_key_hex", &PyPrivateKey::get_private_key_hex)
+      .def("get_public_key", &PyPrivateKey::get_public_key);
+
   py::class_<PyMnemonic>(m, "PyMnemonic", py::module_local())
       .def(py::init<std::vector<std::string>, std::string>(), py::arg("mnemonic"), py::arg("mnemonic_password"))
       .def("get_words", &PyMnemonic::get_words)
-      .def("get_private_key_hex", &PyMnemonic::get_private_key_hex);
+      .def("get_private_key_hex", &PyMnemonic::get_private_key_hex)
+      .def("get_private_key", &PyMnemonic::get_private_key);
 
   m.def("create_new_mnemo", create_new_mnemo);
   m.def("get_bip39_words", get_bip39_words);

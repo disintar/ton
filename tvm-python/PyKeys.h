@@ -7,6 +7,24 @@
 #ifndef TON_PYKEYS_H
 #define TON_PYKEYS_H
 
+class PyPublicKey {
+ public:
+  td::Ed25519::PublicKey key;
+  PyPublicKey(std::string key_int);
+  PyPublicKey(td::Ed25519::PublicKey key_) : key(std::move(key_)){};
+  std::string get_public_key_hex();
+};
+
+class PyPrivateKey {
+ public:
+  td::Ed25519::PrivateKey key;
+  PyPrivateKey();
+  PyPrivateKey(std::string key_int);
+  PyPrivateKey(td::Ed25519::PrivateKey key_) : key(std::move(key_)){};
+  std::string get_private_key_hex();
+  PyPublicKey get_public_key();
+};
+
 class PyMnemonic {
  public:
   tonlib::Mnemonic my_mnemo;
@@ -14,6 +32,7 @@ class PyMnemonic {
   PyMnemonic(tonlib::Mnemonic mnemo) : my_mnemo(std::move(mnemo)){};
   std::vector<std::string> get_words();
   std::string get_private_key_hex();
+  PyPrivateKey get_private_key();
 };
 
 PyMnemonic create_new_mnemo(std::string entropy, std::string password, int words_count);
