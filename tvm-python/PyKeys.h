@@ -13,6 +13,8 @@ class PyPublicKey {
   PyPublicKey(std::string key_int);
   PyPublicKey(td::Ed25519::PublicKey key_) : key(std::move(key_)){};
   std::string get_public_key_hex();
+
+  PyPublicKey(const PyPublicKey& other) : key(td::Ed25519::PublicKey(other.key.as_octet_string())){};
 };
 
 class PyPrivateKey {
@@ -20,7 +22,7 @@ class PyPrivateKey {
   td::Ed25519::PrivateKey key;
   PyPrivateKey();
   PyPrivateKey(std::string key_int);
-  PyPrivateKey(td::Ed25519::PrivateKey key_) : key(std::move(key_)){};
+  PyPrivateKey(td::Ed25519::PrivateKey key_) : key(td::Ed25519::PrivateKey(key_.as_octet_string())){};
   std::string get_private_key_hex();
   PyPublicKey get_public_key();
 };

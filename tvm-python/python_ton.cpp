@@ -14,6 +14,7 @@
 #include "tvm-python/PyStack.h"
 #include "tvm-python/PySmcAddress.h"
 #include "tvm-python/PyKeys.h"
+#include "tvm-python/PyLiteClient.h"
 #include "crypto/tl/tlbc-data.h"
 #include "td/utils/optional.h"
 
@@ -33,6 +34,10 @@ unsigned method_name_to_id(const std::string& method_name) {
 
 std::string codeget_python_tlb(std::string tlb_code) {
   return tlbc::codegen_python_tlb(tlb_code);
+}
+
+const ton::lite_api::tonNode_blockIdExt& getLast(const ton::lite_api::liteServer_masterchainInfoExt& obj) {
+  return *(obj.last_);
 }
 
 template <typename T>
@@ -335,8 +340,39 @@ PYBIND11_MODULE(python_ton, m) {
       .def("get_private_key_hex", &PyMnemonic::get_private_key_hex)
       .def("get_private_key", &PyMnemonic::get_private_key);
 
+  py::class_<td::Bits256>(m, "Bits256", py::module_local()).def(py::init<>()).def("to_hex", &td::Bits256::to_hex);
+
+  py::class_<ton::lite_api::tonNode_blockIdExt>(m, "tonNode_blockIdExt", py::module_local())
+      .def(py::init<>())
+      .def_readonly("workchain", &ton::lite_api::tonNode_blockIdExt::workchain_)
+      .def_readonly("shard", &ton::lite_api::tonNode_blockIdExt::shard_)
+      .def_readonly("seqno", &ton::lite_api::tonNode_blockIdExt::seqno_)
+      .def_readonly("root_hash", &ton::lite_api::tonNode_blockIdExt::root_hash_)
+      .def_readonly("file_hash", &ton::lite_api::tonNode_blockIdExt::file_hash_);
+
+  py::class_<ton::lite_api::liteServer_masterchainInfoExt>(m, "liteServer_masterchainInfoExt", py::module_local())
+      .def(py::init<>())
+      .def_readonly("mode", &ton::lite_api::liteServer_masterchainInfoExt::mode_)
+      .def_readonly("version", &ton::lite_api::liteServer_masterchainInfoExt::version_)
+      .def_readonly("capabilities", &ton::lite_api::liteServer_masterchainInfoExt::capabilities_)
+      .def_readonly("last_utime", &ton::lite_api::liteServer_masterchainInfoExt::last_utime_)
+      .def_readonly("now", &ton::lite_api::liteServer_masterchainInfoExt::now_)
+      .def_readonly("state_root_hash", &ton::lite_api::liteServer_masterchainInfoExt::state_root_hash_)
+      .def_property_readonly(
+          "last",
+          [](const ton::lite_api::liteServer_masterchainInfoExt& obj)
+              -> std::reference_wrapper<const ton::lite_api::tonNode_blockIdExt> { return std::ref(*(obj.last_)); });
+
+  py::class_<pylite::PyLiteClient>(m, "PyLiteClient", py::module_local())
+      .def(py::init<std::string, int, PyPublicKey, double>(), py::arg("host"), py::arg("port"), py::arg("public_key"),
+           py::arg("timeout"))
+      .def("get_connected", &pylite::PyLiteClient::get_connected)
+      .def("get_time", &pylite::PyLiteClient::get_time)
+      .def("get_MasterchainInfoExt", &pylite::PyLiteClient::get_MasterchainInfoExt);
+
   m.def("create_new_mnemo", create_new_mnemo);
   m.def("get_bip39_words", get_bip39_words);
+  m.def("ipv4_int_to_str", pylite::ipv4_int_to_str);
 
   m.def("address_from_string", address_from_string, py::arg("address"));
   m.def("address_from_cell_slice", address_from_cell_slice, py::arg("cell_slice"));

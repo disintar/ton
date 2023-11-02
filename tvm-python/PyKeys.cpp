@@ -44,9 +44,9 @@ std::string to_hex(td::Slice buffer) {
   const char *hex = "0123456789ABCDEF";
   std::string res(2 * buffer.size(), '\0');
   for (std::size_t i = 0; i < buffer.size(); i++) {
-    auto c = buffer.ubegin()[buffer.size() - 1 - i];  // Iterate in reverse order
-    res[2 * i] = hex[c >> 4];
-    res[2 * i + 1] = hex[c & 15];
+    auto c = buffer.ubegin()[i];  // Iterate in the original order
+    res[2 * (buffer.size() - 1 - i)] = hex[c >> 4];
+    res[2 * (buffer.size() - 1 - i) + 1] = hex[c & 15];
   }
   return res;
 }
