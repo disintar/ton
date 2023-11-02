@@ -360,8 +360,10 @@ PYBIND11_MODULE(python_ton, m) {
       .def_readonly("state_root_hash", &ton::lite_api::liteServer_masterchainInfoExt::state_root_hash_)
       .def_property_readonly(
           "last",
-          [](const ton::lite_api::liteServer_masterchainInfoExt& obj)
-              -> std::reference_wrapper<const ton::lite_api::tonNode_blockIdExt> { return std::ref(*(obj.last_)); });
+          [](const ton::lite_api::liteServer_masterchainInfoExt& obj) -> const ton::lite_api::tonNode_blockIdExt& {
+            return *(obj.last_);
+          });
+  ;
 
   py::class_<pylite::PyLiteClient>(m, "PyLiteClient", py::module_local())
       .def(py::init<std::string, int, PyPublicKey, double>(), py::arg("host"), py::arg("port"), py::arg("public_key"),
