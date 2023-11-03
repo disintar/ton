@@ -64,6 +64,10 @@ struct py::detail::type_caster<td::optional<T>> {
   }
 };
 
+std::string py_parse_chunked_data(PyCellSlice cs) {
+  return parse_chunked_data(cs.my_cell_slice);
+}
+
 PYBIND11_MODULE(python_ton, m) {
   PSLICE() << "";
   SET_VERBOSITY_LEVEL(verbosity_ERROR);
@@ -377,5 +381,6 @@ PYBIND11_MODULE(python_ton, m) {
   m.def("ipv4_int_to_str", pylite::ipv4_int_to_str);
 
   m.def("address_from_string", address_from_string, py::arg("address"));
+  m.def("parse_chunked_data", py_parse_chunked_data, py::arg("cs"));
   m.def("address_from_cell_slice", address_from_cell_slice, py::arg("cell_slice"));
 }
