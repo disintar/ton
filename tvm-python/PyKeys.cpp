@@ -51,11 +51,22 @@ std::string to_hex(td::Slice buffer) {
   return res;
 }
 
+std::string public_buffer_to_hex(td::Slice buffer) {
+  const char *hex = "0123456789ABCDEF";
+  std::string res(2 * buffer.size(), '\0');
+  for (std::size_t i = 0; i < buffer.size(); i++) {
+    auto c = buffer.ubegin()[i];
+    res[2 * i] = hex[(c >> 4) & 0xF];
+    res[2 * i + 1] = hex[c & 0xF];
+  }
+  return res;
+}
+
 PyPublicKey::PyPublicKey(std::string key_int) : key(td::Ed25519::PublicKey{td::SecureString{hex_to_bytes(key_int)}}) {
 }
 
 std::string PyPublicKey::get_public_key_hex() {
-  return to_hex(key.as_octet_string());
+  return public_buffer_to_hex(key.as_octet_string());
 }
 
 PyPrivateKey::PyPrivateKey(std::string key_int)
