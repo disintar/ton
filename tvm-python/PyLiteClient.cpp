@@ -35,7 +35,6 @@ LiteClientActorEngine::LiteClientActorEngine(std::string host, int port, td::Ed2
 
 void LiteClientActorEngine::run() {
   client = ton::adnl::AdnlExtClient::create(std::move(adnl_id), remote_addr, make_callback());
-  LOG(ERROR) << "GOOD";
 }
 
 ResponseWrapper PyLiteClient::receive_unlocked() {
