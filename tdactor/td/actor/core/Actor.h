@@ -74,6 +74,7 @@ class Actor {
     ActorExecuteContext::get()->set_yield();
   }
   void stop() {  // send Kill signal to itself
+                 //    LOG(ERROR) << "Kill actor: " << get_name();
     ActorExecuteContext::get()->set_stop();
   }
   Timestamp &alarm_timestamp() {
