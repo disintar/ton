@@ -152,12 +152,12 @@ class PyLiteClient {
       GetMasterchainInfoExt* data = dynamic_cast<GetMasterchainInfoExt*>(response.get());
       auto x =
           ton::fetch_tl_object<ton::lite_api::liteServer_masterchainInfoExt>(data->obj->clone(), true).move_as_ok();
+      return std::move(x);
     } catch (std::exception& e) {
       throw std::runtime_error(e.what());
     } catch (...) {
       throw std::runtime_error("Unknown error");
     }
-    return std::move(x);
   }
 
  private:
