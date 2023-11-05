@@ -56,7 +56,7 @@ class GetTimeResponse : public ResponseObj {
 class GetMasterchainInfoExt : public ResponseObj {
  public:
   GetMasterchainInfoExt(std::unique_ptr<td::BufferSlice> obj_)
-      : ResponseObj(false, std::move("")), obj(std::move(obj_)) {
+      : ResponseObj(true, std::move("")), obj(std::move(obj_)) {
   }
   std::unique_ptr<td::BufferSlice> obj;
 };
