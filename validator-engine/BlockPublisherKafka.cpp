@@ -10,6 +10,7 @@ BlockPublisherKafka::BlockPublisherKafka(const std::string& endpoint)
           {"retry.backoff.ms", 5},
           {"retries", 2147483647},
           {"acks", "1"},
+          {"debug", "broker,topic,msg"}
       }) {
 }
 
