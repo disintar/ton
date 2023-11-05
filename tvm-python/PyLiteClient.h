@@ -71,12 +71,10 @@ class LiteClientActorEngine : public td::actor::Actor {
                         std::shared_ptr<OutputQueue> output_queue_);
 
   void conn_ready() {
-    std::cerr << "Connected" << std::endl;
     connected = true;
   }
 
   void conn_closed() {
-    std::cerr << "Fucked" << std::endl;
     connected = false;
   }
 
