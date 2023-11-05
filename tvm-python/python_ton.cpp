@@ -367,7 +367,6 @@ PYBIND11_MODULE(python_ton, m) {
           [](const ton::lite_api::liteServer_masterchainInfoExt& obj) -> const ton::lite_api::tonNode_blockIdExt& {
             return *(obj.last_);
           });
-  ;
 
   py::class_<pylite::PyLiteClient>(m, "PyLiteClient", py::module_local())
       .def(py::init<std::string, int, PyPublicKey, double>(), py::arg("host"), py::arg("port"), py::arg("public_key"),

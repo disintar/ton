@@ -144,13 +144,19 @@ class PyLiteClient {
   }
 
   std::unique_ptr<ton::lite_api::liteServer_masterchainInfoExt> get_MasterchainInfoExt() {
-    scheduler_.run_in_context_external(
-        [&] { send_closure(engine, &LiteClientActorEngine::get_MasterchainInfoExt, 0); });
+    try {
+      scheduler_.run_in_context_external(
+          [&] { send_closure(engine, &LiteClientActorEngine::get_MasterchainInfoExt, 0); });
 
-    auto response = wait_response();
-    GetMasterchainInfoExt* data = dynamic_cast<GetMasterchainInfoExt*>(response.get());
-    auto x = ton::fetch_tl_object<ton::lite_api::liteServer_masterchainInfoExt>(data->obj->clone(), true).move_as_ok();
-
+      auto response = wait_response();
+      GetMasterchainInfoExt* data = dynamic_cast<GetMasterchainInfoExt*>(response.get());
+      auto x =
+          ton::fetch_tl_object<ton::lite_api::liteServer_masterchainInfoExt>(data->obj->clone(), true).move_as_ok();
+    } catch (std::exception& e) {
+      throw std::runtime_error(e.what());
+    } catch (...) {
+      throw std::runtime_error("Unknown error");
+    }
     return std::move(x);
   }
 
