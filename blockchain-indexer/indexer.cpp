@@ -2075,9 +2075,8 @@ int main(int argc, char **argv) {
   td::actor::Scheduler scheduler({threads});
   scheduler.run_in_context([&] {
     TRY_RESULT(size, td::to_integer_safe<ton::BlockSeqno>(chunk_size));
-
-    int batchSize = seqno_s.size() / numActors;
     int numActors = 100;
+    int batchSize = seqno_s.size() / numActors;
 
     for (int i = 0; i < numActors; i++) {
       int startIndex = i * batchSize;
