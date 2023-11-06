@@ -2017,7 +2017,7 @@ int main(int argc, char **argv) {
     std::ifstream file("input.txt");
     if (!file.is_open()) {
       std::cerr << "Failed to open the file." << std::endl;
-      return td::Status::Error(ton::ErrorCode::error, "Error");
+      return -1;
     }
 
     std::string seqno_arg;
@@ -2047,7 +2047,7 @@ int main(int argc, char **argv) {
       }
     }
     file.close();
-    return td::Status::OK();
+    return 0;
   });
 
   p.add_checked_option('S', "speed", "display speed true/false", [&](td::Slice arg) {
