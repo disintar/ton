@@ -2076,34 +2076,27 @@ int main(int argc, char **argv) {
   scheduler.run_in_context([&] {
     TRY_RESULT(size, td::to_integer_safe<ton::BlockSeqno>(chunk_size));
 
-    void createCoolBlockIndexers(const std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> &seqno_s,
-                                 int numActors) {
-      int batchSize = seqno_s.size() / numActors;
+    int batchSize = seqno_s.size() / numActors;
+    int numActors = 100;
 
-      for (int i = 0; i < numActors; i++) {
-        int startIndex = i * batchSize;
-        int endIndex = (i + 1) * batchSize;
+    for (int i = 0; i < numActors; i++) {
+      int startIndex = i * batchSize;
+      int endIndex = (i + 1) * batchSize;
 
-        // Handle the last batch where the size might be smaller
-        if (i == numActors - 1) {
-          endIndex = seqno_s.size();
-        }
-
-        std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> subSeqno_s(seqno_s.begin() + startIndex,
-                                                                             seqno_s.begin() + endIndex);
-
-        // Create a CoolBlockIndexer actor for the subvector
-        td::actor::create_actor<ton::validator::Indexer>("CoolBlockIndexer_" + std::to_string(i), threads, db_root,
-                                                         config_path, size, subSeqno_s, speed)
-            .release();
+      if (i == numActors - 1) {
+        endIndex = seqno_s.size();
       }
+
+      std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> subSeqno_s(seqno_s.begin() + startIndex,
+                                                                           seqno_s.begin() + endIndex);
+
+      td::actor::create_actor<ton::validator::Indexer>("CoolBlockIndexer_" + std::to_string(i), threads, db_root,
+                                                       config_path, size, subSeqno_s, speed)
+          .release();
     }
 
-    createCoolBlockIndexers(seqno_s, 100);
-
     //    td::actor::create_actor<ton::validator::Indexer>("CoolBlockIndexer", threads, db_root, config_path, size, seqno_s,
-    //                                                     speed)
-    //        .release();
+    //                                                     speed).release();
 
     return td::Status::OK();
   });
