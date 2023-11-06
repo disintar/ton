@@ -2012,6 +2012,44 @@ int main(int argc, char **argv) {
 
     return td::Status::OK();
   });
+
+  p.add_checked_option('s', "seqnoFile", "seqno_first[:seqno_last]\tseqno file", [&](td::Slice arg) {
+    std::ifstream file("input.txt");
+    if (!file.is_open()) {
+      std::cerr << "Failed to open the file." << std::endl;
+      return 1;
+    }
+
+    std::string line;
+    while (std::getline(file, seqno_arg)) {
+      auto parse_seqno = [](const std::string &seqno_str) {
+        size_t d_pos = seqno_str.find(':');
+        if (d_pos == std::string::npos) {
+          // Handle invalid input here
+          return std::pair<ton::BlockSeqno, ton::BlockSeqno>();
+        }
+        auto seqno_first = td::to_integer_safe<ton::BlockSeqno>(seqno_str.substr(0, d_pos)).move_as_ok();
+        auto seqno_last = td::to_integer_safe<ton::BlockSeqno>(seqno_str.substr(d_pos + 1)).move_as_ok();
+        return std::make_pair(seqno_first, seqno_last);
+      };
+
+      size_t pos = 0;
+      auto delimiter = ",";
+
+      while ((pos = seqno_arg.find(delimiter)) != std::string::npos) {
+        auto seqno_str = seqno_arg.substr(0, pos);
+        seqno_s.push_back(parse_seqno(seqno_str));
+        seqno_arg.erase(0, pos + 1);
+      }
+
+      if (!seqno_arg.empty()) {
+        seqno_s.push_back(parse_seqno(seqno_arg));
+      }
+    }
+
+    file.close();
+    return td::Status::OK();
+  });
   p.add_checked_option('S', "speed", "display speed true/false", [&](td::Slice arg) {
     const auto str = arg.str();
     if (str == "true") {
