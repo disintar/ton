@@ -1885,7 +1885,7 @@ class Indexer : public td::actor::Actor {
 
         auto blocks_size = seqno_last - seqno_first;
 
-        auto workers_count = threads;
+        auto workers_count = std::min(blocks_size, threads);
 
         LOG(WARNING) << "Current chunk size: " << chunk_size_ << " Workers: " << workers_count;
         LOG(WARNING) << "Total Masterchain seqno: " << seqno_last - seqno_first;
@@ -2021,18 +2021,19 @@ int main(int argc, char **argv) {
     }
 
     std::string seqno_arg;
-    while (std::getline(file, seqno_arg)) {
-      auto parse_seqno = [](const std::string &seqno_str) {
-        size_t d_pos = seqno_str.find(':');
-        if (d_pos == std::string::npos) {
-          // Handle invalid input here
-          return std::pair<ton::BlockSeqno, ton::BlockSeqno>();
-        }
-        auto seqno_first = td::to_integer_safe<ton::BlockSeqno>(seqno_str.substr(0, d_pos)).move_as_ok();
-        auto seqno_last = td::to_integer_safe<ton::BlockSeqno>(seqno_str.substr(d_pos + 1)).move_as_ok();
-        return std::make_pair(seqno_first, seqno_last);
-      };
+    auto parse_seqno = [](const std::string &seqno_str) {
+      size_t d_pos = seqno_str.find(':');
+      if (d_pos == std::string::npos) {
+        // Handle invalid input here
+        return std::pair<ton::BlockSeqno, ton::BlockSeqno>();
+      }
+      auto seqno_first = td::to_integer_safe<ton::BlockSeqno>(seqno_str.substr(0, d_pos)).move_as_ok();
+      auto seqno_last = td::to_integer_safe<ton::BlockSeqno>(seqno_str.substr(d_pos + 1)).move_as_ok();
+      LOG(WARNING) << seqno_first << " to " << seqno_last;
+      return std::make_pair(seqno_first, seqno_last);
+    };
 
+    while (std::getline(file, seqno_arg)) {
       size_t pos = 0;
       auto delimiter = ",";
 
