@@ -2013,11 +2013,11 @@ int main(int argc, char **argv) {
     return td::Status::OK();
   });
 
-  p.add_checked_option('s', "seqnoFile", "seqno_first[:seqno_last]\tseqno file", [&](td::Slice arg) {
+  p.add_option('s', "seqnoFile", "seqno_first[:seqno_last]\tseqno file", [&](td::Slice arg) {
     std::ifstream file("input.txt");
     if (!file.is_open()) {
       std::cerr << "Failed to open the file." << std::endl;
-      return 1;
+      return td::Status::Error(ton::ErrorCode::error, "Error");
     }
 
     std::string seqno_arg;
