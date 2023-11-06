@@ -1866,7 +1866,7 @@ class Indexer : public td::actor::Actor {
         ///TODO: danger danger
         LOG(WARNING) << "Calling std::exit(0)";
         dumper_->forceDump();
-        //        std::exit(0);
+        std::exit(0);
       } else {
         w_stopped = 0;
         while (!workers.empty()) {
@@ -2075,27 +2075,10 @@ int main(int argc, char **argv) {
   td::actor::Scheduler scheduler({threads});
   scheduler.run_in_context([&] {
     TRY_RESULT(size, td::to_integer_safe<ton::BlockSeqno>(chunk_size));
-    int numActors = 100;
-    int batchSize = seqno_s.size() / numActors;
 
-    for (int i = 0; i < numActors; i++) {
-      int startIndex = i * batchSize;
-      int endIndex = (i + 1) * batchSize;
-
-      if (i == numActors - 1) {
-        endIndex = seqno_s.size();
-      }
-
-      std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> subSeqno_s(seqno_s.begin() + startIndex,
-                                                                           seqno_s.begin() + endIndex);
-
-      td::actor::create_actor<ton::validator::Indexer>("CoolBlockIndexer_" + std::to_string(i), threads, db_root,
-                                                       config_path, size, subSeqno_s, speed)
-          .release();
-    }
-
-    //    td::actor::create_actor<ton::validator::Indexer>("CoolBlockIndexer", threads, db_root, config_path, size, seqno_s,
-    //                                                     speed).release();
+    td::actor::create_actor<ton::validator::Indexer>("CoolBlockIndexer", threads, db_root, config_path, size, seqno_s,
+                                                     speed)
+        .release();
 
     return td::Status::OK();
   });
