@@ -2020,7 +2020,7 @@ int main(int argc, char **argv) {
       return 1;
     }
 
-    std::string line;
+    std::string seqno_arg;
     while (std::getline(file, seqno_arg)) {
       auto parse_seqno = [](const std::string &seqno_str) {
         size_t d_pos = seqno_str.find(':');
@@ -2046,10 +2046,10 @@ int main(int argc, char **argv) {
         seqno_s.push_back(parse_seqno(seqno_arg));
       }
     }
-
     file.close();
     return td::Status::OK();
   });
+
   p.add_checked_option('S', "speed", "display speed true/false", [&](td::Slice arg) {
     const auto str = arg.str();
     if (str == "true") {
