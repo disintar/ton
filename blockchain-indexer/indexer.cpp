@@ -2013,8 +2013,8 @@ int main(int argc, char **argv) {
     return td::Status::OK();
   });
 
-  p.add_option('s', "seqnoFile", "seqno_first[:seqno_last]\tseqno file", [&](td::Slice arg) {
-    std::ifstream file("input.txt");
+  p.add_option('f', "seqnoFile", "seqno_first[:seqno_last]\tseqno file", [&](td::Slice arg) {
+    std::ifstream file(arg.str());
     if (!file.is_open()) {
       std::cerr << "Failed to open the file." << std::endl;
       return -1;
