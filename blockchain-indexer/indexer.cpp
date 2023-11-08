@@ -1891,13 +1891,7 @@ class Indexer : public td::actor::Actor {
 
         td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size_);
         td::actor::send_closure(w->get(), &IndexerWorker::set_display_speed, speed_);
-        ;
-        auto end = seqno_first + per_thread;
-        if ((end > seqno_last) | (i == workers_count - 1)) {
-          end = seqno_last;
-        }
-
-        td::actor::send_closure(w->get(), &IndexerWorker::set_seqno_range, seqno_first - 1, end + 1);
+        td::actor::send_closure(w->get(), &IndexerWorker::set_seqno_range, seqno_first - 1, seqno_last + 1);
 
         auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::uint32 s) {
           td::actor::send_closure(SelfId, &Indexer::shutdown_worker, s);
