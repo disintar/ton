@@ -663,11 +663,21 @@ class IndexerWorker : public td::actor::Actor {
   std::unordered_set<std::string> already_traversed_;
   std::mutex parsed_shards_mtx_;
   td::Promise<td::uint32> shutdown_promise;
+  std::vector<BlockSeqno> whitelist;
+  bool whitelist_enabled;
 
  public:
-  IndexerWorker(td::uint32 my_id_, Dumper *dumper) {
+  //  IndexerWorker(td::uint32 my_id_, Dumper *dumper) {
+  //    my_id = my_id_;
+  //    dumper_ = dumper;
+  //    whitelist_enabled = false;
+  //  }
+
+  IndexerWorker(td::uint32 my_id_, Dumper *dumper, std::vector<BlockSeqno> whitelist_) {
     my_id = my_id_;
     dumper_ = dumper;
+    whitelist = whitelist_;
+    whitelist_enabled = !whitelist_.empty();
   }
 
   void shutdown_actor() {
@@ -811,7 +821,10 @@ class IndexerWorker : public td::actor::Actor {
 
         auto blkid = block->block_id();
         LOG(INFO) << "Parse block: " << blkid.to_str() << " is_first: " << is_first << " time:" << timer;
-
+        bool in_whitelist = true;
+        if (whitelist_enabled) {
+          in_whitelist = std::find(whitelist.begin(), whitelist.end(), blkid.id.seqno) != whitelist.end();
+        }
         auto block_root = block->root_cell();
         if (block_root.is_null()) {
           LOG(ERROR) << "block has no valid root cell";
@@ -1159,7 +1172,7 @@ class IndexerWorker : public td::actor::Actor {
         account_blocks_dict->check_for_each_extra(f);
         bool skip_state = false;
 
-        if (!accounts_keys.empty()) {
+        if (!accounts_keys.empty() & in_whitelist) {
           if (!is_first) {
             LOG(DEBUG) << "Send state to parse: " << blkid.to_str() << " " << timer;
             td::actor::send_closure(SelfId, &IndexerWorker::increase_state_padding);
@@ -1368,7 +1381,7 @@ class IndexerWorker : public td::actor::Actor {
           std::exit(0);
         }
 
-        if (is_first && !info.not_master) {
+        if ((is_first && !info.not_master) || (!in_whitelist)) {
           LOG(DEBUG) << "First block, start parse other: " << blkid.to_str() << " " << timer;
           td::actor::send_closure(SelfId, &IndexerWorker::parse_other);
           td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
@@ -1622,9 +1635,11 @@ class IndexerWorker : public td::actor::Actor {
 class Indexer : public td::actor::Actor {
  public:
   Indexer(td::uint32 threads_, std::string db_root, std::string config_path, td::uint32 chunk_size,
-          std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> seqno_s_, bool speed) {
+          std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> seqno_s_, std::vector<ton::BlockSeqno> whitelist_,
+          bool speed) {
     dumper_ = std::make_unique<Dumper>("dump_", 5000);
     seqno_s = std::move(seqno_s_);
+    whitelist = std::move(whitelist_);
     threads = threads_;
     chunk_size_ = chunk_size;
     speed_ = speed;
@@ -1655,7 +1670,8 @@ class Indexer : public td::actor::Actor {
 
     for (unsigned int i = 0; i < workers_count; i++) {
       workers.push_back(td::actor::create_actor<ton::validator::IndexerWorker>("IndexerWorker #" + std::to_string(i), i,
-                                                                               dumper_.get()));
+                                                                               dumper_.get(), whitelist));
+
       auto w = &workers.back();
 
       td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size);
@@ -1796,6 +1812,7 @@ class Indexer : public td::actor::Actor {
   bool speed_;
   td::uint32 threads;
   std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> seqno_s;
+  std::vector<ton::BlockSeqno> whitelist;
 
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
   td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
@@ -1896,7 +1913,8 @@ class Indexer : public td::actor::Actor {
 
           for (unsigned int i = 0; i < workers_count; i++) {
             workers.push_back(td::actor::create_actor<ton::validator::IndexerWorker>(
-                "IndexerWorker #" + std::to_string(seqno_first) + "_" + std::to_string(seqno_last), i, dumper_.get()));
+                "IndexerWorker #" + std::to_string(seqno_first) + "_" + std::to_string(seqno_last), i, dumper_.get(),
+                whitelist));
             auto w = &workers.back();
 
             td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size_);
@@ -1945,6 +1963,7 @@ int main(int argc, char **argv) {
   std::string chunk_size;
   bool speed;
   std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> seqno_s;
+  std::vector<ton::BlockSeqno> whitelist;
 
   p.set_description("blockchain indexer");
   p.add_option('h', "help", "prints_help", [&]() {
@@ -2052,6 +2071,36 @@ int main(int argc, char **argv) {
     return 0;
   });
 
+  p.add_option('f', "whitelistFile", "seqno_first[:seqno_last]\tseqno file", [&](td::Slice arg) {
+    std::ifstream file(arg.str());
+    if (!file.is_open()) {
+      std::cerr << "Failed to open the file." << std::endl;
+      return -1;
+    }
+
+    std::string seqno_arg;
+    while (std::getline(file, seqno_arg)) {
+      size_t pos = 0;
+      auto delimiter = ",";
+
+      while ((pos = seqno_arg.find(delimiter)) != std::string::npos) {
+        auto seqno_str = seqno_arg.substr(0, pos);
+        auto tmp = td::to_integer_safe<ton::BlockSeqno>(seqno_str).move_as_ok();
+        whitelist.push_back(tmp);
+        seqno_arg.erase(0, pos + 1);
+      }
+
+      if (!seqno_arg.empty()) {
+        auto tmp = td::to_integer_safe<ton::BlockSeqno>(seqno_arg).move_as_ok();
+        whitelist.push_back(tmp);
+      }
+    }
+    file.close();
+
+    LOG(INFO) << "Successfully loaded whitelist: " << whitelist.size();
+    return 0;
+  });
+
   p.add_checked_option('S', "speed", "display speed true/false", [&](td::Slice arg) {
     const auto str = arg.str();
     if (str == "true") {
@@ -2076,8 +2125,8 @@ int main(int argc, char **argv) {
   scheduler.run_in_context([&] {
     TRY_RESULT(size, td::to_integer_safe<ton::BlockSeqno>(chunk_size));
 
-    td::actor::create_actor<ton::validator::Indexer>("CoolBlockIndexer", threads, db_root, config_path, size, seqno_s,
-                                                     speed)
+    td::actor::create_actor<ton::validator::Indexer>("CoolBlockIndexer", threads, db_root, config_path, size,
+                                                     std::move(seqno_s), std::move(whitelist), speed)
         .release();
 
     return td::Status::OK();
