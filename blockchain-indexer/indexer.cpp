@@ -1381,9 +1381,12 @@ class IndexerWorker : public td::actor::Actor {
           std::exit(0);
         }
 
-        if ((is_first && !info.not_master) || (!in_whitelist)) {
+        if ((is_first && !info.not_master)) {
           LOG(DEBUG) << "First block, start parse other: " << blkid.to_str() << " " << timer;
           td::actor::send_closure(SelfId, &IndexerWorker::parse_other);
+          td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
+          return;
+        } else if (!in_whitelist) {
           td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
           return;
         }
@@ -2071,7 +2074,7 @@ int main(int argc, char **argv) {
     return 0;
   });
 
-  p.add_option('f', "whitelistFile", "seqno_first[:seqno_last]\tseqno file", [&](td::Slice arg) {
+  p.add_option('w', "whitelistFile", "seqno_first[:seqno_last]\tseqno file", [&](td::Slice arg) {
     std::ifstream file(arg.str());
     if (!file.is_open()) {
       std::cerr << "Failed to open the file." << std::endl;
