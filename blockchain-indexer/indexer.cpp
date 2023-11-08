@@ -1896,7 +1896,7 @@ class Indexer : public td::actor::Actor {
 
           for (unsigned int i = 0; i < workers_count; i++) {
             workers.push_back(td::actor::create_actor<ton::validator::IndexerWorker>(
-                "IndexerWorker #" + std::to_string(i), i, dumper_.get()));
+                "IndexerWorker #" + std::to_string(seqno_first) + "_" + std::to_string(seqno_last), i, dumper_.get()));
             auto w = &workers.back();
 
             td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size_);
