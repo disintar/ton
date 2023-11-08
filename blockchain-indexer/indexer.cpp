@@ -1904,8 +1904,6 @@ class Indexer : public td::actor::Actor {
         seqno_last = std::get<1>(t);
 
         auto blocks_size = seqno_last - seqno_first;
-
-        auto blocks_size = seqno_last - seqno_first;
         auto workers_count = std::min(blocks_size, threads);
 
         LOG(WARNING) << "Current chunk size: " << chunk_size_ << " Workers: " << workers_count;
