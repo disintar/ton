@@ -1887,12 +1887,13 @@ class Indexer : public td::actor::Actor {
 
         auto blocks_size = seqno_last - seqno_first;
 
-        auto workers_count = std::min(blocks_size, threads);
+        td::uint32 cs = (blocks_size - 1) / chunk_size_ + 1;
+        auto workers_count = 1;  // std::min(cs, threads);
 
-        LOG(WARNING) << "Current chunk size: " << chunk_size_ << " Workers: " << workers_count;
+        LOG(WARNING) << "Current chunk size: " << cs << " Workers: " << workers_count;
         LOG(WARNING) << "Total Masterchain seqno: " << seqno_last - seqno_first;
 
-        auto per_thread = (unsigned int)ceil(blocks_size / workers_count);
+        auto per_thread = seqno_first - seqno_last;  // (unsigned int)ceil(blocks_size / workers_count);
         LOG(WARNING) << "Masterchain seqno per worker: " << per_thread;
 
         for (unsigned int i = 0; i < workers_count; i++) {
