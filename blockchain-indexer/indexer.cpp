@@ -1874,46 +1874,48 @@ class Indexer : public td::actor::Actor {
           workers.pop_back();
         }
 
-        BlockSeqno seqno_first;
-        BlockSeqno seqno_last;
+        while (!seqno_s.empty()) {
+          BlockSeqno seqno_first;
+          BlockSeqno seqno_last;
 
-        auto t = seqno_s.back();
-        seqno_s.pop_back();
+          auto t = seqno_s.back();
+          seqno_s.pop_back();
 
-        seqno_first = std::get<0>(t);
-        seqno_last = std::get<1>(t);
+          seqno_first = std::get<0>(t);
+          seqno_last = std::get<1>(t);
 
-        auto blocks_size = seqno_last - seqno_first;
+          auto blocks_size = seqno_last - seqno_first;
 
-        auto workers_count = 1;
+          auto workers_count = 1;
 
-        LOG(WARNING) << "Current chunk size: " << chunk_size_ << " Workers: " << workers_count;
-        LOG(WARNING) << "Total Masterchain seqno: " << seqno_last - seqno_first;
+          LOG(WARNING) << "Current chunk size: " << chunk_size_ << " Workers: " << workers_count;
+          LOG(WARNING) << "Total Masterchain seqno: " << seqno_last - seqno_first;
 
-        auto per_thread = (unsigned int)ceil(blocks_size / workers_count);
-        LOG(WARNING) << "Masterchain seqno per worker: " << per_thread;
+          auto per_thread = (unsigned int)ceil(blocks_size / workers_count);
+          LOG(WARNING) << "Masterchain seqno per worker: " << per_thread;
 
-        for (unsigned int i = 0; i < workers_count; i++) {
-          workers.push_back(td::actor::create_actor<ton::validator::IndexerWorker>(
-              "IndexerWorker #" + std::to_string(i), i, dumper_.get()));
-          auto w = &workers.back();
+          for (unsigned int i = 0; i < workers_count; i++) {
+            workers.push_back(td::actor::create_actor<ton::validator::IndexerWorker>(
+                "IndexerWorker #" + std::to_string(i), i, dumper_.get()));
+            auto w = &workers.back();
 
-          td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size_);
-          td::actor::send_closure(w->get(), &IndexerWorker::set_display_speed, speed_);
-          ;
-          auto end = seqno_first + per_thread;
-          if ((end > seqno_last) | (i == workers_count - 1)) {
-            end = seqno_last;
+            td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size_);
+            td::actor::send_closure(w->get(), &IndexerWorker::set_display_speed, speed_);
+            ;
+            auto end = seqno_first + per_thread;
+            if ((end > seqno_last) | (i == workers_count - 1)) {
+              end = seqno_last;
+            }
+
+            td::actor::send_closure(w->get(), &IndexerWorker::set_seqno_range, seqno_first - 1, end + 1);
+
+            auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::uint32 s) {
+              td::actor::send_closure(SelfId, &Indexer::shutdown_worker, s);
+            });
+
+            td::actor::send_closure(w->get(), &IndexerWorker::set_initial_data, std::move(P), validator_manager_.get());
+            seqno_first += per_thread;
           }
-
-          td::actor::send_closure(w->get(), &IndexerWorker::set_seqno_range, seqno_first - 1, end + 1);
-
-          auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::uint32 s) {
-            td::actor::send_closure(SelfId, &Indexer::shutdown_worker, s);
-          });
-
-          td::actor::send_closure(w->get(), &IndexerWorker::set_initial_data, std::move(P), validator_manager_.get());
-          seqno_first += per_thread;
         }
       }
     }
