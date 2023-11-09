@@ -1720,7 +1720,7 @@ class Indexer : public td::actor::Actor {
     class Callback : public ValidatorManagerInterface::Callback {
      public:
       void initial_read_complete(BlockHandle handle) override {
-        LOG(DEBUG) << "Initial read complete";
+        LOG(DEBUG) << "Initial read complete: " << handle->id().to_str();
         td::actor::send_closure(id_, &Indexer::sync_complete, handle);
       }
       void add_shard(ShardIdFull shard) override {
