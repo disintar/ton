@@ -998,6 +998,11 @@ class IndexerWorker : public td::actor::Actor {
           }
         }
 
+        if (!in_whitelist) {
+          td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
+          return;
+        }
+
         if (info.master_ref.not_null()) {
           block::gen::ExtBlkRef::Record master{};
           auto csr = load_cell_slice(info.master_ref);
@@ -1384,9 +1389,6 @@ class IndexerWorker : public td::actor::Actor {
         if ((is_first && !info.not_master)) {
           LOG(DEBUG) << "First block, start parse other: " << blkid.to_str() << " " << timer;
           td::actor::send_closure(SelfId, &IndexerWorker::parse_other);
-          td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
-          return;
-        } else if (!in_whitelist) {
           td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
           return;
         }
