@@ -728,6 +728,7 @@ class IndexerWorker : public td::actor::Actor {
 
     if (seqno_last_ > seqno_first_) {
       shutdown();  // No valid seqnos found(?)
+      return;
     }
 
     // separate first parse seqno to prevent WC shard seqno leak
