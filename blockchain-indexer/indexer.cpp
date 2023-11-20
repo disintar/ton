@@ -663,7 +663,7 @@ class IndexerWorker : public td::actor::Actor {
   std::unordered_set<std::string> already_traversed_;
   std::mutex parsed_shards_mtx_;
   td::Promise<td::uint32> shutdown_promise;
-  std::unique_ptr<std::vector<ton::BlockSeqno>> whitelist;
+  std::unique_ptr<std::vector<std::tuple<ton::WorkchainId, ton::BlockSeqno>>> whitelist;
   bool whitelist_enabled;
 
  public:
@@ -678,7 +678,7 @@ class IndexerWorker : public td::actor::Actor {
     dumper_ = dumper;
   }
 
-  void set_ws(std::unique_ptr<std::vector<ton::BlockSeqno>> whitelist_) {
+  void set_ws(std::unique_ptr<std::vector<std::tuple<ton::WorkchainId, ton::BlockSeqno>>> whitelist_) {
     whitelist = std::move(whitelist_);
     whitelist_enabled = !whitelist->empty();
   }
@@ -857,7 +857,8 @@ class IndexerWorker : public td::actor::Actor {
         LOG(INFO) << "Parse block: " << blkid.to_str() << " is_first: " << is_first << " time:" << timer;
         bool in_whitelist = true;
         if (whitelist_enabled) {
-          in_whitelist = std::find(whitelist->begin(), whitelist->end(), blkid.id.seqno) != whitelist->end();
+          in_whitelist = std::find(whitelist->begin(), whitelist->end(),
+                                   std::make_tuple(blkid.id.workchain, blkid.id.seqno)) != whitelist->end();
         }
         auto block_root = block->root_cell();
         if (block_root.is_null()) {
@@ -1674,8 +1675,8 @@ class IndexerWorker : public td::actor::Actor {
 class Indexer : public td::actor::Actor {
  public:
   Indexer(td::uint32 threads_, std::string db_root, std::string config_path, td::uint32 chunk_size,
-          std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> seqno_s_, std::vector<ton::BlockSeqno> whitelist_,
-          bool speed) {
+          std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> seqno_s_,
+          std::vector<std::tuple<ton::WorkchainId, ton::BlockSeqno>> whitelist_, bool speed) {
     dumper_ = std::make_unique<Dumper>("dump_", 5000);
     seqno_s = std::move(seqno_s_);
     whitelist = std::move(whitelist_);
@@ -1714,7 +1715,7 @@ class Indexer : public td::actor::Actor {
       auto w = &workers.back();
 
       td::actor::send_closure(w->get(), &IndexerWorker::set_ws,
-                              std::make_unique<std::vector<ton::BlockSeqno>>(whitelist));
+                              std::make_unique<std::vector<std::tuple<ton::WorkchainId, ton::BlockSeqno>>>(whitelist));
       td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size);
       td::actor::send_closure(w->get(), &IndexerWorker::set_display_speed, speed);
 
@@ -1853,8 +1854,7 @@ class Indexer : public td::actor::Actor {
   bool speed_;
   td::uint32 threads;
   std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> seqno_s;
-  std::vector<ton::BlockSeqno> whitelist;
-  std::shared_ptr<std::vector<ton::BlockSeqno>> whitelist_ptr;
+  std::vector<std::tuple<ton::WorkchainId, ton::BlockSeqno>> whitelist;
 
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
   td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
@@ -1956,8 +1956,9 @@ class Indexer : public td::actor::Actor {
               "IndexerWorker #" + std::to_string(seqno_first) + "_" + std::to_string(seqno_last), i, dumper_.get()));
           auto w = &workers.back();
 
-          td::actor::send_closure(w->get(), &IndexerWorker::set_ws,
-                                  std::make_unique<std::vector<ton::BlockSeqno>>(whitelist));
+          td::actor::send_closure(
+              w->get(), &IndexerWorker::set_ws,
+              std::make_unique<std::vector<std::tuple<ton::WorkchainId, ton::BlockSeqno>>>(whitelist));
           td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size_);
           td::actor::send_closure(w->get(), &IndexerWorker::set_display_speed, speed_);
 
@@ -2005,7 +2006,7 @@ int main(int argc, char **argv) {
   std::string chunk_size;
   bool speed;
   std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> seqno_s;
-  std::vector<ton::BlockSeqno> whitelist;
+  std::vector<std::tuple<ton::WorkchainId, ton::BlockSeqno>> whitelist;
 
   p.set_description("blockchain indexer");
   p.add_option('h', "help", "prints_help", [&]() {
@@ -2127,14 +2128,33 @@ int main(int argc, char **argv) {
 
       while ((pos = seqno_arg.find(delimiter)) != std::string::npos) {
         auto seqno_str = seqno_arg.substr(0, pos);
-        auto tmp = td::to_integer_safe<ton::BlockSeqno>(seqno_str).move_as_ok();
-        whitelist.push_back(tmp);
+
+        size_t d_pos = seqno_str.find(':');
+        if (d_pos == std::string::npos) {
+          // Handle invalid input here
+          LOG(ERROR) << "Error parse" << seqno_str;
+          continue;
+        }
+
+        auto wc = td::to_integer_safe<ton::WorkchainId>(seqno_str.substr(0, d_pos)).move_as_ok();
+        auto tmp = td::to_integer_safe<ton::BlockSeqno>(seqno_str.substr(d_pos + 1)).move_as_ok();
+
+        whitelist.push_back(std::make_tuple(wc, tmp));
         seqno_arg.erase(0, pos + 1);
       }
 
       if (!seqno_arg.empty()) {
-        auto tmp = td::to_integer_safe<ton::BlockSeqno>(seqno_arg).move_as_ok();
-        whitelist.push_back(tmp);
+        size_t d_pos = seqno_arg.find(':');
+        if (d_pos == std::string::npos) {
+          // Handle invalid input here
+          LOG(ERROR) << "Error parse" << seqno_arg;
+          continue;
+        }
+
+        auto wc = td::to_integer_safe<ton::WorkchainId>(seqno_arg.substr(0, d_pos)).move_as_ok();
+        auto tmp = td::to_integer_safe<ton::BlockSeqno>(seqno_arg.substr(d_pos + 1)).move_as_ok();
+
+        whitelist.push_back(std::make_tuple(wc, tmp));
       }
     }
     file.close();
