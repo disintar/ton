@@ -673,9 +673,12 @@ class IndexerWorker : public td::actor::Actor {
   //    whitelist_enabled = false;
   //  }
 
-  IndexerWorker(td::uint32 my_id_, Dumper *dumper, std::shared_ptr<std::vector<ton::BlockSeqno>> whitelist_) {
+  IndexerWorker(td::uint32 my_id_, Dumper *dumper) {
     my_id = my_id_;
     dumper_ = dumper;
+  }
+
+  void set_ws(std::shared_ptr<std::vector<ton::BlockSeqno>> whitelist_) {
     whitelist = std::move(whitelist_);
     whitelist_enabled = !whitelist_->empty();
   }
@@ -1706,12 +1709,13 @@ class Indexer : public td::actor::Actor {
     LOG(WARNING) << "Masterchain seqno per worker: " << per_thread;
 
     for (unsigned int i = 0; i < workers_count; i++) {
-      workers.push_back(td::actor::create_actor<ton::validator::IndexerWorker>(
-          "IndexerWorker #" + std::to_string(i), i, dumper_.get(),
-          std::make_shared<std::vector<ton::BlockSeqno>>(whitelist)));
+      workers.push_back(td::actor::create_actor<ton::validator::IndexerWorker>("IndexerWorker #" + std::to_string(i), i,
+                                                                               dumper_.get()));
 
       auto w = &workers.back();
 
+      td::actor::send_closure(w->get(), &IndexerWorker::set_ws,
+                              std::make_shared<std::vector<ton::BlockSeqno>>(whitelist));
       td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size);
       td::actor::send_closure(w->get(), &IndexerWorker::set_display_speed, speed);
 
@@ -1950,13 +1954,14 @@ class Indexer : public td::actor::Actor {
 
         for (unsigned int i = 0; i < workers_count; i++) {
           workers.push_back(td::actor::create_actor<ton::validator::IndexerWorker>(
-              "IndexerWorker #" + std::to_string(seqno_first) + "_" + std::to_string(seqno_last), i, dumper_.get(),
-              std::make_shared<std::vector<ton::BlockSeqno>>(whitelist)));
+              "IndexerWorker #" + std::to_string(seqno_first) + "_" + std::to_string(seqno_last), i, dumper_.get()));
           auto w = &workers.back();
 
+          td::actor::send_closure(w->get(), &IndexerWorker::set_ws,
+                                  std::make_shared<std::vector<ton::BlockSeqno>>(whitelist));
           td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size_);
           td::actor::send_closure(w->get(), &IndexerWorker::set_display_speed, speed_);
-          ;
+
           auto end = seqno_first + per_thread;
           if ((end > seqno_last) | (i == workers_count - 1)) {
             end = seqno_last;
