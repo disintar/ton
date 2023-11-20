@@ -705,9 +705,39 @@ class IndexerWorker : public td::actor::Actor {
       if (R.is_error()) {
         td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
         //            decrease_block_padding();
+        //        LOG(ERROR) << R.move_as_error().to_string();
+        //        LOG(WARNING) << "Calling std::exit(0)";
+        //        std::exit(0);
+        LOG(WARNING) << "Seqno not found, skip: " << seqno_first;
+        td::actor::send_closure(SelfId, &IndexerWorker::skip_first_seqno);
+      } else {
+        auto handle = R.move_as_ok();
+        LOG(DEBUG) << "got data for block " << handle->id().to_str();
+        td::actor::send_closure(SelfId, &IndexerWorker::got_block_handle, handle, handle->id().seqno() == seqno_first);
+      }
+    });
+
+    td::actor::send_closure(actor_id(this), &ton::validator::IndexerWorker::increase_block_padding);
+    ton::AccountIdPrefixFull pfx{-1, 0x8000000000000000};
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
+                            seqno_first_, std::move(P));
+  }
+
+  void skip_first_seqno() {
+    seqno_first_ += 1;
+
+    if (seqno_last_ > seqno_first_) {
+      shutdown();  // No valid seqnos found(?)
+    }
+
+    // separate first parse seqno to prevent WC shard seqno leak
+    auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this),
+                                         seqno_first = seqno_first_](td::Result<ConstBlockHandle> R) {
+      if (R.is_error()) {
+        td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
         LOG(ERROR) << R.move_as_error().to_string();
-        LOG(WARNING) << "Calling std::exit(0)";
-        std::exit(0);
+        LOG(WARNING) << "Seqno not found, skip: " << seqno_first;
+        td::actor::send_closure(SelfId, &IndexerWorker::skip_first_seqno);
       } else {
         auto handle = R.move_as_ok();
         LOG(DEBUG) << "got data for block " << handle->id().to_str();
@@ -1942,6 +1972,8 @@ class Indexer : public td::actor::Actor {
   }
 
   void sync_complete(const BlockHandle &handle) {
+    LOG(WARNING) << "Sync complete: " << handle->id().to_str();
+
     for (auto &w : workers) {
       auto P = td::PromiseCreator::lambda(
           [SelfId = actor_id(this)](td::uint32 s) { td::actor::send_closure(SelfId, &Indexer::shutdown_worker, s); });
