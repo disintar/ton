@@ -680,7 +680,7 @@ class IndexerWorker : public td::actor::Actor {
 
   void set_ws(std::unique_ptr<std::vector<ton::BlockSeqno>> whitelist_) {
     whitelist = std::move(whitelist_);
-    whitelist_enabled = !whitelist_->empty();
+    whitelist_enabled = !whitelist->empty();
   }
 
   void shutdown_actor() {
