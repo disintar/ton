@@ -663,7 +663,7 @@ class IndexerWorker : public td::actor::Actor {
   std::unordered_set<std::string> already_traversed_;
   std::mutex parsed_shards_mtx_;
   td::Promise<td::uint32> shutdown_promise;
-  std::shared_ptr<std::vector<ton::BlockSeqno>> whitelist;
+  std::unique_ptr<std::vector<ton::BlockSeqno>> whitelist;
   bool whitelist_enabled;
 
  public:
@@ -678,7 +678,7 @@ class IndexerWorker : public td::actor::Actor {
     dumper_ = dumper;
   }
 
-  void set_ws(std::shared_ptr<std::vector<ton::BlockSeqno>> whitelist_) {
+  void set_ws(std::unique_ptr<std::vector<ton::BlockSeqno>> whitelist_) {
     whitelist = std::move(whitelist_);
     whitelist_enabled = !whitelist_->empty();
   }
@@ -1679,7 +1679,6 @@ class Indexer : public td::actor::Actor {
     dumper_ = std::make_unique<Dumper>("dump_", 5000);
     seqno_s = std::move(seqno_s_);
     whitelist = std::move(whitelist_);
-    whitelist_ptr = std::make_shared<std::vector<ton::BlockSeqno>>(whitelist);
     threads = threads_;
     chunk_size_ = chunk_size;
     speed_ = speed;
@@ -1715,7 +1714,7 @@ class Indexer : public td::actor::Actor {
       auto w = &workers.back();
 
       td::actor::send_closure(w->get(), &IndexerWorker::set_ws,
-                              std::make_shared<std::vector<ton::BlockSeqno>>(whitelist));
+                              std::make_unique<std::vector<ton::BlockSeqno>>(whitelist));
       td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size);
       td::actor::send_closure(w->get(), &IndexerWorker::set_display_speed, speed);
 
@@ -1958,7 +1957,7 @@ class Indexer : public td::actor::Actor {
           auto w = &workers.back();
 
           td::actor::send_closure(w->get(), &IndexerWorker::set_ws,
-                                  std::make_shared<std::vector<ton::BlockSeqno>>(whitelist));
+                                  std::make_unique<std::vector<ton::BlockSeqno>>(whitelist));
           td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size_);
           td::actor::send_closure(w->get(), &IndexerWorker::set_display_speed, speed_);
 
