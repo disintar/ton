@@ -1677,7 +1677,7 @@ class Indexer : public td::actor::Actor {
   Indexer(td::uint32 threads_, std::string db_root, std::string config_path, td::uint32 chunk_size,
           std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> seqno_s_,
           std::vector<std::tuple<ton::WorkchainId, ton::BlockSeqno>> whitelist_, bool speed) {
-    dumper_ = std::make_unique<Dumper>("dump_", 5000);
+    dumper_ = std::make_unique<Dumper>("dump_", 100);
     seqno_s = std::move(seqno_s_);
     whitelist = std::move(whitelist_);
     threads = threads_;
