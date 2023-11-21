@@ -683,7 +683,7 @@ class IndexerWorker : public td::actor::Actor {
 
   void set_to_parse(td::Promise<td::uint32> promise, td::actor::ActorId<ton::validator::ValidatorManagerInterface> v,
                     std::unique_ptr<std::vector<std::tuple<ton::WorkchainId, ton::ShardId, ton::BlockSeqno>>> to_parse_,
-                    int start, int end) {
+                    unsigned int start, unsigned int end) {
     validator_manager_ = std::move(v);
     shutdown_promise = std::move(promise);
     allow_propagation = false;
@@ -691,7 +691,7 @@ class IndexerWorker : public td::actor::Actor {
     to_parse = std::move(to_parse_);
 
     // Iterate over the vector of tuples
-    for (int i = start; i <= std::min(end, (unsigned int)to_parse->size() - 1); ++i) {
+    for (unsigned int i = start; i <= end; ++i) {
       const auto &tuple = to_parse->at(i);
 
       // Access individual elements of the tuple
@@ -2256,7 +2256,7 @@ class IndexerSimple : public td::actor::Actor {
       td::actor::send_closure(w->get(), &IndexerWorker::set_display_speed, speed_);
 
       auto start = i * per_thread;
-      auto end = std::min(blocks_size, i * per_thread + per_thread);
+      auto end = (unsigned int)std::min(blocks_size - 1, i * per_thread + per_thread);
       LOG(WARNING) << "Set for IndexerWorker #" + std::to_string(i) << " blocks from " << start << " to " << end;
       td::actor::send_closure(
           w->get(), &IndexerWorker::set_to_parse, std::move(P), validator_manager_.get(),
