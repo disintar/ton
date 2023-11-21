@@ -664,7 +664,7 @@ class IndexerWorker : public td::actor::Actor {
   std::mutex parsed_shards_mtx_;
   td::Promise<td::uint32> shutdown_promise;
   std::unique_ptr<std::vector<std::tuple<ton::WorkchainId, ton::BlockSeqno>>> whitelist;
-  bool whitelist_enabled;
+  bool whitelist_enabled = false;
 
   bool allow_propagation = true;
   std::unique_ptr<std::vector<std::tuple<ton::WorkchainId, ton::ShardId, ton::BlockSeqno>>> to_parse;
@@ -687,6 +687,7 @@ class IndexerWorker : public td::actor::Actor {
     validator_manager_ = std::move(v);
     shutdown_promise = std::move(promise);
     allow_propagation = false;
+    whitelist_enabled = false;
     to_parse = std::move(to_parse_);
 
     // Iterate over the vector of tuples
