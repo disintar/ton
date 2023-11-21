@@ -1650,8 +1650,8 @@ class IndexerWorker : public td::actor::Actor {
         [SelfId = actor_id(this), state_indexer = std::move(state_indexer)](td::Result<ConstBlockHandle> R) {
           if (R.is_error()) {
             // todo: process normally
-            LOG(ERROR) << R.move_as_error().to_string() << " state error: " << block_id_string;
-            dumper_->addError(block_id_string, "state");
+            LOG(ERROR) << R.move_as_error().to_string() << " state handle error fatal";
+            std::exit(2);
           } else {
             td::actor::send_closure(SelfId, &IndexerWorker::got_prev_block_handle, R.move_as_ok(), state_indexer);
           }
