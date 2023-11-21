@@ -689,6 +689,8 @@ class IndexerWorker : public td::actor::Actor {
     allow_propagation = false;
     whitelist_enabled = false;
     to_parse = std::move(to_parse_);
+    chunk_current_ = 10;
+    chunk_count_ = 1;
 
     // Iterate over the vector of tuples
     for (unsigned int i = start; i <= end; ++i) {
