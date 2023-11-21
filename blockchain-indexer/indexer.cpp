@@ -703,7 +703,7 @@ class IndexerWorker : public td::actor::Actor {
 
       auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
         if (R.is_error()) {
-          LOG(ERROR) << "Can't get handle from db";
+          LOG(ERROR) << "Can't get handle from db: " << R.move_as_error().to_string();
           td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
         } else {
           auto handle = R.move_as_ok();
