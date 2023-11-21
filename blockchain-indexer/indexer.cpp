@@ -691,7 +691,7 @@ class IndexerWorker : public td::actor::Actor {
     to_parse = std::move(to_parse_);
 
     // Iterate over the vector of tuples
-    for (int i = start; i <= end; ++i) {
+    for (int i = start; i <= std::min(end, (unsigned int)to_parse->size() - 1); ++i) {
       const auto &tuple = to_parse->at(i);
 
       // Access individual elements of the tuple
