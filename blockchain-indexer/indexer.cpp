@@ -1593,7 +1593,6 @@ class IndexerWorker : public td::actor::Actor {
     }
   }
   void shutdown() {
-    LOG(WARNING) << "Ready to die";
     shutdown_promise.set_value(0);
   }
 
@@ -1977,6 +1976,8 @@ class Indexer : public td::actor::Actor {
           seqno_first += per_thread;
         }
       }
+    } else {
+      LOG(WARNING) << "Ready to die, but some active workers: " << workers.size() - w_stopped;
     }
   }
 
