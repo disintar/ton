@@ -1676,8 +1676,8 @@ class Indexer : public td::actor::Actor {
  public:
   Indexer(td::uint32 threads_, std::string db_root, std::string config_path, td::uint32 chunk_size,
           std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> seqno_s_,
-          std::vector<std::tuple<ton::WorkchainId, ton::BlockSeqno>> whitelist_, bool speed) {
-    dumper_ = std::make_unique<Dumper>("dump_", 100);
+          std::vector<std::tuple<ton::WorkchainId, ton::BlockSeqno>> whitelist_, bool speed, int dumper_size = 5000) {
+    dumper_ = std::make_unique<Dumper>("dump_", dumper_size);
     seqno_s = std::move(seqno_s_);
     whitelist = std::move(whitelist_);
     threads = threads_;
@@ -2007,6 +2007,7 @@ int main(int argc, char **argv) {
   bool speed;
   std::vector<std::tuple<ton::BlockSeqno, ton::BlockSeqno>> seqno_s;
   std::vector<std::tuple<ton::WorkchainId, ton::BlockSeqno>> whitelist;
+  int dump_size = 5000;
 
   p.set_description("blockchain indexer");
   p.add_option('h', "help", "prints_help", [&]() {
@@ -2026,6 +2027,11 @@ int main(int argc, char **argv) {
     verbosity = td::to_integer<int>(arg);
     SET_VERBOSITY_LEVEL(VERBOSITY_NAME(FATAL) + verbosity);
     return (verbosity >= 0 && verbosity <= 9) ? td::Status::OK() : td::Status::Error("verbosity must be 0..9");
+  });
+
+  p.add_checked_option('g', "dump_size", "set dump size", [&](td::Slice arg) {
+    dump_size = td::to_integer<int>(arg);
+    return td::Status::OK();
   });
   p.add_checked_option('u', "user", "change user", [&](td::Slice user) { return td::change_user(user.str()); });
   p.add_option('D', "db", "root for dbs", [&](td::Slice fname) { db_root = fname.str(); });
@@ -2188,7 +2194,7 @@ int main(int argc, char **argv) {
     TRY_RESULT(size, td::to_integer_safe<ton::BlockSeqno>(chunk_size));
 
     td::actor::create_actor<ton::validator::Indexer>("CoolBlockIndexer", threads, db_root, config_path, size,
-                                                     std::move(seqno_s), std::move(whitelist), speed)
+                                                     std::move(seqno_s), std::move(whitelist), speed, dump_size)
         .release();
 
     return td::Status::OK();
