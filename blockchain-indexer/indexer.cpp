@@ -714,6 +714,7 @@ class IndexerWorker : public td::actor::Actor {
 
       td::actor::send_closure(actor_id(this), &ton::validator::IndexerWorker::increase_block_padding);
       ton::AccountIdPrefixFull pfx{workchainId, shardId};
+      // todo: check applied on block handle
       td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                               blockSeqno, std::move(P));
     }
@@ -1677,6 +1678,7 @@ class IndexerWorker : public td::actor::Actor {
           if (R.is_error()) {
             LOG(ERROR) << R.move_as_error().to_string() << " state error: " << block_id_string;
             dumper_->addError(block_id_string, "state");
+            td::actor::send_closure(SelfId, &IndexerWorker::decrease_state_padding);
           } else {
             auto root_cell = R.move_as_ok();
             auto block_id = handle->id();
