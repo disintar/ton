@@ -99,6 +99,10 @@ bool PyAugmentationCheckData::eval_empty(vm::CellBuilder& cb) const {
 }
 
 PyCell PyDict::get_pycell() const {
+  if (is_augmented) {
+    auto dict = static_cast<vm::AugmentedDictionary*>(my_dict.get());
+    return PyCell(dict->get_root()->get_base_cell());
+  }
   td::Ref<vm::Cell> root = my_dict->get_root_cell();
   return PyCell(root);
 }
