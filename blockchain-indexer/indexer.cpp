@@ -2502,7 +2502,7 @@ int main(int argc, char **argv) {
           continue;
         }
 
-        ton::ShardId tmp1 = std::strtoull(seqno_str.substr(0, d2_pos);
+        ton::ShardId tmp1 = td::to_integer_safe<td::uint64>(seqno_str.substr(0, d2_pos)).move_as_ok();
 
         // Move to the last part of the string
         seqno_str.erase(0, d2_pos + 1);
