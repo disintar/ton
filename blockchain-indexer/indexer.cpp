@@ -2,6 +2,7 @@
 // Created by tvorogme on 5/21/22.
 //
 
+#include <stdlib.h>
 #include "td/utils/logging.h"
 #include "td/actor/actor.h"
 #include "td/utils/Time.h"
@@ -2501,7 +2502,11 @@ int main(int argc, char **argv) {
           continue;
         }
 
-        ton::ShardId tmp1 = 0x8000000000000000; // td::to_integer_safe<ton::ShardId>(seqno_str.substr(0, d2_pos)).move_as_ok();
+        ton::ShardId tmp1 = td::to_integer_safe<ton::ShardId>(seqno_str.substr(0, d2_pos)).move_as_ok();
+
+        if (tmp1 !== std::strtoull(seqno_str.substr(0, d2_pos))){
+          LOG(ERROR) << "Str: " << seqno_str.substr(0, d2_pos) << " TON WAY: " << tmp1 << " STD WAY: " << std::strtoull(seqno_str.substr(0, d2_pos));
+        }
 
         // Move to the last part of the string
         seqno_str.erase(0, d2_pos + 1);
