@@ -65,6 +65,7 @@ bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyC
 
   td::Ref<vm::CellSlice> addr_slice;
   auto account_slice = vm::load_cell_slice(shard_account.account);
+  bool account_exists = block::gen::t_Account.get_tag(account_slice) == block::gen::Account::account;
   if (block::gen::t_Account.get_tag(account_slice) == block::gen::Account::account_none) {
     if (msg_tag == block::gen::CommonMsgInfo::ext_in_msg_info) {
       block::gen::CommonMsgInfo::Record_ext_in_msg_info info;
@@ -81,12 +82,14 @@ bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyC
     } else {
       throw std::invalid_argument("Only ext in and int message are supported");
     }
-  } else {
+  } else if (block::gen::t_Account.get_tag(account_slice) == block::gen::Account::account) {
     block::gen::Account::Record_account account_record;
     if (!tlb::unpack(account_slice, account_record)) {
       throw std::invalid_argument("Can't unpack account cell");
     }
     addr_slice = std::move(account_record.addr);
+  } else {
+    throw std::invalid_argument("Can't parse account cell");
   }
 
   ton::WorkchainId wc;
@@ -103,8 +106,17 @@ bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyC
   account.block_lt = lt - lt % block::ConfigInfo::get_lt_align();
 
   bool is_special = wc == ton::masterchainId && emulator->get_config().is_special_smartcontract(addr);
-  if (!account.unpack(vm::load_cell_slice_ref(shard_account_cell.my_cell), td::Ref<vm::CellSlice>(), now, is_special)) {
-    throw std::invalid_argument("Can't unpack account data");
+  if (account_exists) {
+    if (!account.unpack(vm::load_cell_slice_ref(shard_account_cell.my_cell), td::Ref<vm::CellSlice>(), now,
+                        is_special)) {
+      throw std::invalid_argument("Can't unpack shard account");
+    }
+  } else {
+    if (!account.init_new(now)) {
+      throw std::invalid_argument("Can't init new account");
+    }
+    account.last_trans_lt_ = shard_account.last_trans_lt;
+    account.last_trans_hash_ = shard_account.last_trans_hash;
   }
 
   auto result = emulator->emulate_transaction(std::move(account), message_cell.my_cell, now, lt,

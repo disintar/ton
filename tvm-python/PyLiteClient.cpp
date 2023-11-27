@@ -89,7 +89,7 @@ void LiteClientActorEngine::get_MasterchainInfoExt(int mode) {
                           td::Timestamp::in(10.0), [&](td::Result<td::BufferSlice> res) -> void {
                             if (res.is_error()) {
                               output_queue->writer_put(
-                                  ResponseWrapper(std::make_unique<ResponseObj>(ResponseObj(false, "Error in fetch"))));
+                                  ResponseWrapper(std::make_unique<ResponseObj>(ResponseObj(false, "Error while fetch"))));
                               return;
                             } else {
                               auto F = res.move_as_ok();
