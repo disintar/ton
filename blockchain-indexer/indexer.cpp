@@ -2501,7 +2501,7 @@ int main(int argc, char **argv) {
           continue;
         }
 
-        ton::ShardId tmp1 = td::to_integer_safe<ton::ShardId>(seqno_str.substr(0, d2_pos)).move_as_ok();
+        ton::ShardId tmp1 = 0x8000000000000000; // td::to_integer_safe<ton::ShardId>(seqno_str.substr(0, d2_pos)).move_as_ok();
 
         // Move to the last part of the string
         seqno_str.erase(0, d2_pos + 1);
