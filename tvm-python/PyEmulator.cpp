@@ -120,9 +120,13 @@ bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyC
     account.last_trans_hash_ = shard_account.last_trans_hash;
   }
 
-  if (force_uninit){
-    account.orig_status = 1; // acc_uninit
-    account.status = 1;
+  if (force_uninit) {
+    if (account.orig_status == 0 or account.orig_status == 1 or account.orig_status == 4) {
+      account.orig_status = 1;  // acc_uninit
+      account.status = 1;
+    } else {
+      throw std::invalid_argument("Can't force uninited state on inited account");
+    }
   }
 
   auto result = emulator->emulate_transaction(std::move(account), message_cell.my_cell, now, lt,
