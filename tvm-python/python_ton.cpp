@@ -305,7 +305,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("set_libs", &PyEmulator::set_libs, py::arg("shardchain_libs_boc"))
       .def("set_debug_enabled", &PyEmulator::set_debug_enabled, py::arg("debug_enabled"))
       .def("emulate_transaction", &PyEmulator::emulate_transaction, py::arg("shard_account_cell"),
-           py::arg("message_cell"), py::arg("unixtime") = "0", py::arg("lt") = "0", py::arg("vm_ver") = 1)
+           py::arg("message_cell"), py::arg("unixtime") = "0", py::arg("lt") = "0", py::arg("vm_ver") = 1, py::arg("force_uninit") = false)
       .def("emulate_tick_tock_transaction", &PyEmulator::emulate_tick_tock_transaction, py::arg("shard_account_boc"),
            py::arg("is_tock"), py::arg("unixtime") = "0", py::arg("lt") = "0", py::arg("vm_ver") = 1)
       .def_property("vm_log", &PyEmulator::get_vm_log, &PyEmulator::dummy_set)

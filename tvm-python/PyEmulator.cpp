@@ -54,7 +54,8 @@ bool PyEmulator::set_debug_enabled(bool debug_enabled) {
 }
 
 bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyCell& message_cell,
-                                     const std::string& unixtime, const std::string& lt_str, int vm_ver) {
+                                     const std::string& unixtime, const std::string& lt_str, int vm_ver,
+                                     bool force_uninit) {
   auto message_cs = vm::load_cell_slice(message_cell.my_cell);
   int msg_tag = block::gen::t_CommonMsgInfo.get_tag(message_cs);
 
@@ -65,7 +66,7 @@ bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyC
 
   td::Ref<vm::CellSlice> addr_slice;
   auto account_slice = vm::load_cell_slice(shard_account.account);
-  bool account_exists = block::gen::t_Account.get_tag(account_slice) == block::gen::Account::account;
+  bool account_exists = (block::gen::t_Account.get_tag(account_slice) == block::gen::Account::account);
   if (block::gen::t_Account.get_tag(account_slice) == block::gen::Account::account_none) {
     if (msg_tag == block::gen::CommonMsgInfo::ext_in_msg_info) {
       block::gen::CommonMsgInfo::Record_ext_in_msg_info info;
@@ -117,6 +118,11 @@ bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyC
     }
     account.last_trans_lt_ = shard_account.last_trans_lt;
     account.last_trans_hash_ = shard_account.last_trans_hash;
+  }
+
+  if (force_uninit){
+    account.orig_status = 1; // acc_uninit
+    account.status = 1;
   }
 
   auto result = emulator->emulate_transaction(std::move(account), message_cell.my_cell, now, lt,

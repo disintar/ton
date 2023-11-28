@@ -62,7 +62,7 @@ class PyEmulator {
   bool set_libs(const PyCell& shardchain_libs_cell);
   bool set_debug_enabled(bool debug_enabled);
   bool emulate_transaction(const PyCell& shard_account_cell, const PyCell& message_cell,
-                           const std::string& unixtime = "0", const std::string& lt_str = "0", int vm_ver = 1);
+                           const std::string& unixtime = "0", const std::string& lt_str = "0", int vm_ver = 1, bool force_uninit = false);
   bool emulate_tick_tock_transaction(const PyCell& shard_account_boc, bool is_tock, const std::string& unixtime,
                                      const std::string& lt_str, int vm_ver);
   std::string get_vm_log();
