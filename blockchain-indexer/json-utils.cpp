@@ -883,7 +883,6 @@ json parse_transaction(const Ref<vm::CellSlice> &tvalue, int workchain) {
 
   transaction["hash"] = trans_root->get_hash().to_hex();
   transaction["prev_trans_hash"] = trans.prev_trans_hash.to_hex();
-
   transaction["prev_trans_lt"] = trans.prev_trans_lt;
   transaction["now"] = trans.now;
   transaction["outmsg_cnt"] = trans.outmsg_cnt;

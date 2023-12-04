@@ -528,6 +528,8 @@ void BlockParserAsync::parseBlockData() {
                                     {"extra", parse_extra_currency(value_flow.created.extra)}};
   answer["ValueFlow"]["minted"] = {{"grams", value_flow.minted.grams->to_dec_string()},
                                    {"extra", parse_extra_currency(value_flow.minted.extra)}};
+  answer["ValueFlow"]["burned"] = {{"grams", value_flow.burned.grams->to_dec_string()},
+                                   {"extra", parse_extra_currency(value_flow.burned.extra)}};
 
   LOG(DEBUG) << "Parse: " << blkid.to_str() << " ValueFlow success";
 
