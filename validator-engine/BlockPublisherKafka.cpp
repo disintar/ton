@@ -26,7 +26,7 @@ void BlockPublisherKafka::publishBlockApplied(unsigned long long shard, std::str
     }
 
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-applied-mainnet")
-                         .partition(shard_to_partition[shard])
+                         .partition(0)
                          .payload(json));
     deliver();
   } catch (std::exception& e) {
@@ -57,7 +57,7 @@ void BlockPublisherKafka::publishBlockData(unsigned long long shard, std::string
     }
 
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-data-mainnet")
-                         .partition(shard_to_partition[shard])
+                         .partition(0)
                          .payload(json));
     deliver();
   } catch (std::exception& e) {
@@ -79,7 +79,7 @@ void BlockPublisherKafka::publishBlockState(unsigned long long shard, std::strin
     }
 
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-state-mainnet")
-                         .partition(shard_to_partition[shard])
+                         .partition(0)
                          .payload(json));
     deliver();
   } catch (std::exception& e) {
