@@ -1,6 +1,7 @@
 // Copyright 2023 Disintar LLP / andrey@head-labs.com
 #include "adnl/adnl-ext-client.h"
 #include "PyKeys.h"
+#include "PyCell.h"
 #include "td/utils/MpscPollableQueue.h"
 #include "tl/generate/auto/tl/lite_api.h"
 #include "ton/lite-tl.hpp"
@@ -84,6 +85,7 @@ class LiteClientActorEngine : public td::actor::Actor {
 
   void get_time();
   void get_MasterchainInfoExt(int mode);
+  void send_message(vm::Ref<vm::Cell> message);
 
   void run();
 
@@ -138,6 +140,18 @@ class PyLiteClient {
       return time->now;
     } else {
       throw std::logic_error(time->error_message);
+    }
+  }
+
+  std::string send_message(PyCell& cell) {
+    scheduler_.run_in_context_external(
+        [&] { send_closure(engine, &LiteClientActorEngine::send_message, std::move(cell.my_cell)); });
+    auto response = wait_response();
+    ResponseObj* time = dynamic_cast<ResponseObj*>(response.get());
+    if (time->success) {
+      return "good";
+    } else {
+      return time->error_message;
     }
   }
 

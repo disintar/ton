@@ -30,7 +30,8 @@
 namespace {
 class StringLoggerTail : public td::LogInterface {
  public:
-  explicit StringLoggerTail(size_t max_size = 256) : buf(max_size, '\0') {}
+  explicit StringLoggerTail(size_t max_size = 256) : buf(max_size, '\0') {
+  }
   void append(td::CSlice slice) override {
     if (slice.size() > buf.size()) {
       slice.remove_prefix(slice.size() - buf.size());
@@ -55,12 +56,13 @@ class StringLoggerTail : public td::LogInterface {
       return buf.substr(0, pos);
     }
   }
+
  private:
   std::string buf;
   size_t pos = 0;
   bool truncated = false;
 };
-}
+}  // namespace
 
 namespace block {
 using td::Ref;
@@ -319,84 +321,84 @@ bool Account::init_rewrite_addr(int split_depth, td::ConstBitPtr orig_addr_rewri
 
 // used to unpack previously existing accounts
 bool Account::unpack(Ref<vm::CellSlice> shard_account, Ref<vm::CellSlice> extra, ton::UnixTime now, bool special) {
-LOG(DEBUG) << "unpacking " << (special ? "special " : "") << "account " << addr.to_hex();
-if (shard_account.is_null()) {
-LOG(ERROR) << "account " << addr.to_hex() << " does not have a valid ShardAccount to unpack";
-return false;
-}
-if (verbosity > 2) {
-shard_account->print_rec(std::cerr, 2);
-block::gen::t_ShardAccount.print(std::cerr, *shard_account);
-}
-block::gen::ShardAccount::Record acc_info;
-if (!(block::tlb::t_ShardAccount.validate_csr(shard_account) && tlb::unpack_exact(shard_account.write(), acc_info))) {
-LOG(ERROR) << "account " << addr.to_hex() << " state is invalid";
-return false;
-}
-last_trans_lt_ = acc_info.last_trans_lt;
-last_trans_hash_ = acc_info.last_trans_hash;
-now_ = now;
-auto account = std::move(acc_info.account);
-total_state = orig_total_state = account;
-auto acc_cs = load_cell_slice(std::move(account));
-if (block::gen::t_Account.get_tag(acc_cs) == block::gen::Account::account_none) {
-is_special = special;
-return acc_cs.size_ext() == 1 && init_new(now);
-}
-block::gen::Account::Record_account acc;
-block::gen::AccountStorage::Record storage;
+  LOG(DEBUG) << "unpacking " << (special ? "special " : "") << "account " << addr.to_hex();
+  if (shard_account.is_null()) {
+    LOG(ERROR) << "account " << addr.to_hex() << " does not have a valid ShardAccount to unpack";
+    return false;
+  }
+  if (verbosity > 2) {
+    shard_account->print_rec(std::cerr, 2);
+    block::gen::t_ShardAccount.print(std::cerr, *shard_account);
+  }
+  block::gen::ShardAccount::Record acc_info;
+  if (!(block::tlb::t_ShardAccount.validate_csr(shard_account) && tlb::unpack_exact(shard_account.write(), acc_info))) {
+    LOG(ERROR) << "account " << addr.to_hex() << " state is invalid";
+    return false;
+  }
+  last_trans_lt_ = acc_info.last_trans_lt;
+  last_trans_hash_ = acc_info.last_trans_hash;
+  now_ = now;
+  auto account = std::move(acc_info.account);
+  total_state = orig_total_state = account;
+  auto acc_cs = load_cell_slice(std::move(account));
+  if (block::gen::t_Account.get_tag(acc_cs) == block::gen::Account::account_none) {
+    is_special = special;
+    return acc_cs.size_ext() == 1 && init_new(now);
+  }
+  block::gen::Account::Record_account acc;
+  block::gen::AccountStorage::Record storage;
 
-auto extract_acc = tlb::unpack_exact(acc_cs, acc);
+  auto extract_acc = tlb::unpack_exact(acc_cs, acc);
 
-if (!extract_acc) {
-LOG(ERROR) << "extract_acc unvalid";
-return false;
-}
+  if (!extract_acc) {
+    LOG(ERROR) << "extract_acc unvalid";
+    return false;
+  }
 
-auto addr_valid = (my_addr = acc.addr).not_null();
+  auto addr_valid = (my_addr = acc.addr).not_null();
 
-if (!addr_valid) {
-LOG(ERROR) << "addr_valid unvalid";
-return false;
-}
+  if (!addr_valid) {
+    LOG(ERROR) << "addr_valid unvalid";
+    return false;
+  }
 
-auto addr_unpack = unpack_address(acc.addr.write());
+  auto addr_unpack = unpack_address(acc.addr.write());
 
-if (!addr_unpack) {
-LOG(ERROR) << "addr_unpack unvalid";
-return false;
-}
-auto addr_compute = compute_my_addr();
+  if (!addr_unpack) {
+    LOG(ERROR) << "addr_unpack unvalid";
+    return false;
+  }
+  auto addr_compute = compute_my_addr();
 
-if (!addr_compute) {
-LOG(ERROR) << "addr_compute unvalid";
-return false;
-}
-auto storage_info = unpack_storage_info(acc.storage_stat.write());
+  if (!addr_compute) {
+    LOG(ERROR) << "addr_compute unvalid";
+    return false;
+  }
+  auto storage_info = unpack_storage_info(acc.storage_stat.write());
 
-if (!storage_info) {
-LOG(ERROR) << "storage_info unvalid";
-return false;
-}
-auto storage_unpack = tlb::csr_unpack(this->storage = std::move(acc.storage), storage);
+  if (!storage_info) {
+    LOG(ERROR) << "storage_info unvalid";
+    return false;
+  }
+  auto storage_unpack = tlb::csr_unpack(this->storage = std::move(acc.storage), storage);
 
-if (!storage_unpack) {
-LOG(ERROR) << "storage_unpack unvalid";
-return false;
-}
+  if (!storage_unpack) {
+    LOG(ERROR) << "storage_unpack unvalid";
+    return false;
+  }
 
-auto storage_trans_lt = std::max(storage.last_trans_lt, 1ULL) > acc_info.last_trans_lt;
+  auto storage_trans_lt = std::max(storage.last_trans_lt, 1ULL) > acc_info.last_trans_lt;
 
-if (!storage_trans_lt) {
-LOG(ERROR) << "storage_trans_lt unvalid";
-return false;
-}
-auto balance_unpack = balance.unpack(std::move(storage.balance));
+  if (!storage_trans_lt) {
+    LOG(ERROR) << "storage_trans_lt unvalid";
+    return false;
+  }
+  auto balance_unpack = balance.unpack(std::move(storage.balance));
 
-if (!balance_unpack) {
-LOG(ERROR) << "balance_unpack unvalid";
-return false;
-}
+  if (!balance_unpack) {
+    LOG(ERROR) << "balance_unpack unvalid";
+    return false;
+  }
   is_special = special;
   last_trans_end_lt_ = storage.last_trans_lt;
   switch (block::gen::t_AccountState.get_tag(*storage.state)) {
@@ -426,7 +428,7 @@ return false;
     default:
       return false;
   }
-LOG(DEBUG) << "end of Account.unpack() for " << workchain << ":" << addr.to_hex()
+  LOG(DEBUG) << "end of Account.unpack() for " << workchain << ":" << addr.to_hex()
              << " (balance = " << balance.to_str() << " ; last_trans_lt = " << last_trans_lt_ << ".."
              << last_trans_end_lt_ << ")";
   return true;
@@ -973,25 +975,25 @@ Ref<vm::Tuple> Transaction::prepare_vm_c7(const ComputePhaseConfig& cfg) const {
     return {};
   }
   std::vector<vm::StackEntry> tuple = {
-      td::make_refint(0x076ef1ea),                // [ magic:0x076ef1ea
-      td::zero_refint(),                          //   actions:Integer
-      td::zero_refint(),                          //   msgs_sent:Integer
-      td::make_refint(now),                       //   unixtime:Integer
-      td::make_refint(account.block_lt),          //   block_lt:Integer
-      td::make_refint(start_lt),                  //   trans_lt:Integer
-      std::move(rand_seed_int),                   //   rand_seed:Integer
-      balance.as_vm_tuple(),                      //   balance_remaining:[Integer (Maybe Cell)]
-      my_addr,                                    //   myself:MsgAddressInt
-      vm::StackEntry::maybe(cfg.global_config)    //   global_config:(Maybe Cell) ] = SmartContractInfo;
+      td::make_refint(0x076ef1ea),              // [ magic:0x076ef1ea
+      td::zero_refint(),                        //   actions:Integer
+      td::zero_refint(),                        //   msgs_sent:Integer
+      td::make_refint(now),                     //   unixtime:Integer
+      td::make_refint(account.block_lt),        //   block_lt:Integer
+      td::make_refint(start_lt),                //   trans_lt:Integer
+      std::move(rand_seed_int),                 //   rand_seed:Integer
+      balance.as_vm_tuple(),                    //   balance_remaining:[Integer (Maybe Cell)]
+      my_addr,                                  //   myself:MsgAddressInt
+      vm::StackEntry::maybe(cfg.global_config)  //   global_config:(Maybe Cell) ] = SmartContractInfo;
   };
   if (cfg.global_version >= 4) {
-    tuple.push_back(new_code);                            // code:Cell
+    tuple.push_back(new_code);  // code:Cell
     if (msg_balance_remaining.is_valid()) {
       tuple.push_back(msg_balance_remaining.as_vm_tuple());  // in_msg_value:[Integer (Maybe Cell)]
     } else {
       tuple.push_back(block::CurrencyCollection::zero().as_vm_tuple());
     }
-    tuple.push_back(storage_phase->fees_collected);       // storage_fees:Integer
+    tuple.push_back(storage_phase->fees_collected);  // storage_fees:Integer
 
     // See crypto/block/mc-config.cpp#2115 (get_prev_blocks_info)
     // [ wc:Integer shard:Integer seqno:Integer root_hash:Integer file_hash:Integer] = BlockId;
@@ -1183,8 +1185,8 @@ bool Transaction::prepare_compute_phase(const ComputePhaseConfig& cfg) {
   }
   LOG(INFO) << "steps: " << vm.get_steps_count() << " gas: used=" << gas.gas_consumed() << ", max=" << gas.gas_max
             << ", limit=" << gas.gas_limit << ", credit=" << gas.gas_credit;
-LOG(DEBUG) << "out_of_gas=" << cp.out_of_gas << ", accepted=" << cp.accepted << ", success=" << cp.success
-            << ", time=" << elapsed << "s";
+  LOG(DEBUG) << "out_of_gas=" << cp.out_of_gas << ", accepted=" << cp.accepted << ", success=" << cp.success
+             << ", time=" << elapsed << "s";
   if (logger != nullptr) {
     cp.vm_log = logger->get_log();
   }
@@ -2030,7 +2032,7 @@ int Transaction::try_action_reserve_currency(vm::CellSlice& cs, ActionPhase& ap,
     return -1;
   }
   int mode = rec.mode;
-LOG(DEBUG) << "in try_action_reserve_currency(" << mode << ")";
+  LOG(DEBUG) << "in try_action_reserve_currency(" << mode << ")";
   CurrencyCollection reserve, newc;
   if (!reserve.validate_unpack(std::move(rec.currency))) {
     LOG(DEBUG) << "cannot parse currency field in action_reserve_currency";
@@ -2081,8 +2083,8 @@ LOG(DEBUG) << "in try_action_reserve_currency(" << mode << ")";
   ap.reserved_balance += std::move(reserve);
   CHECK(ap.reserved_balance.is_valid());
   CHECK(ap.remaining_balance.is_valid());
-LOG(DEBUG) << "changed remaining balance to " << ap.remaining_balance.to_str() << ", reserved balance to "
-            << ap.reserved_balance.to_str();
+  LOG(DEBUG) << "changed remaining balance to " << ap.remaining_balance.to_str() << ", reserved balance to "
+             << ap.reserved_balance.to_str();
   ap.spec_actions++;
   return 0;
 }

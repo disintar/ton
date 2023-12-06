@@ -373,6 +373,7 @@ PYBIND11_MODULE(python_ton, m) {
            py::arg("timeout"))
       .def("get_connected", &pylite::PyLiteClient::get_connected)
       .def("get_time", &pylite::PyLiteClient::get_time)
+      .def("send_message", &pylite::PyLiteClient::send_message, py::arg("cell"))
       .def("get_MasterchainInfoExt", &pylite::PyLiteClient::get_MasterchainInfoExt);
 
   m.def("create_new_mnemo", create_new_mnemo);
