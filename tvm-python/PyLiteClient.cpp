@@ -109,7 +109,7 @@ void LiteClientActorEngine::send_message(vm::Ref<vm::Cell> cell) {
   //  auto q = ton::create_tl_object<ton::lite_api::liteServer_query>(ton::serialize_tl_object(query, true));
 
   td::actor::send_closure(
-      client, &ton::adnl::AdnlExtClient::send_query, "query", std::move(q), td::Timestamp::in(2.0),
+      client, &ton::adnl::AdnlExtClient::send_query, "query", std::move(q), td::Timestamp::in(0.01),
       [&](td::Result<td::BufferSlice> res) -> void {
         if (res.is_error()) {
           output_queue->writer_put(
