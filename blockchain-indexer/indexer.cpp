@@ -495,8 +495,7 @@ class StateIndexer : public td::actor::Actor {
           td::make_unique<vm::AugmentedDictionary>(std::move(queue_info.out_queue), 352, block::tlb::aug_OutMsgQueue);
       int out_q_size;
 
-      auto fOutQ = [&out_q_size](const Ref<vm::CellSlice> &tvalue, const Ref<vm::CellSlice> &extra, td::ConstBitPtr key,
-                                 int key_len) {
+      auto fOutQ = [&out_q_size](Ref<vm::CellSlice> cs_ref, td::ConstBitPtr key, int n) {
         //        block::tlb::MsgEnvelope::Record_std env;
         //        tlb::unpack_cell(data.prefetch_ref(), env);
         //
@@ -1254,7 +1253,9 @@ class IndexerWorker : public td::actor::Actor {
                                              block::tlb::aug_AccountTransactions};
           LOG(DEBUG) << "Dict unpacked " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
 
-          auto fTransactions = [&last_key, &blkid, &timer, &transactions, &count, workchain](Ref<vm::CellSlice> cs_ref, td::ConstBitPtr key, int n) {
+          auto fTransactions = [&last_key, &blkid, &timer, &transactions, &count, workchain](
+                                   const Ref<vm::CellSlice> &tvalue, const Ref<vm::CellSlice> &extra,
+                                   td::ConstBitPtr key, int key_len) {
             LOG(DEBUG) << "Parse transaction " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
             json transaction = parse_transaction(tvalue, workchain);
             transactions.emplace_back(std::move(transaction));
