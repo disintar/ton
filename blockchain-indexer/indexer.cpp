@@ -487,20 +487,20 @@ class StateIndexer : public td::actor::Actor {
           {"extra", total_balance_cc.other->have_refs()
                         ? parse_extra_currency(total_validator_fees_cc.other->prefetch_ref())
                         : dummy}};
-      block::gen::OutMsgQueueInfo::Record queue_info;
-      CHECK(tlb::unpack_cell(shard_state.out_msg_queue_info, queue_info))
-
-      auto out_q =
-          td::make_unique<vm::AugmentedDictionary>(std::move(queue_info.out_queue), 352, block::tlb::aug_OutMsgQueue);
-      int out_q_size;
-
-      out_q->check_for_each([&out_q_size](Ref<vm::CellSlice> cs_ref, td::ConstBitPtr key, int n) {
-        out_q_size++;
-        if (out_q_size % 100 == 0) {
-          LOG(DEBUG) << "Parse out_q: " << out_q_size;
-        }
-        return true;
-      });
+      //      block::gen::OutMsgQueueInfo::Record queue_info;
+      //      CHECK(tlb::unpack_cell(shard_state.out_msg_queue_info, queue_info))
+      //
+      //      auto out_q =
+      //          td::make_unique<vm::AugmentedDictionary>(std::move(queue_info.out_queue), 352, block::tlb::aug_OutMsgQueue);
+      //      int out_q_size;
+      //
+      //      out_q->check_for_each([&out_q_size](Ref<vm::CellSlice> cs_ref, td::ConstBitPtr key, int n) {
+      //        out_q_size++;
+      //        if (out_q_size % 100 == 0) {
+      //          LOG(DEBUG) << "Parse out_q: " << out_q_size;
+      //        }
+      //        return true;
+      //      });
 
       answer = {
           {"type", "shard_state"},
