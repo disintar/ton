@@ -490,6 +490,7 @@ class StateIndexer : public td::actor::Actor {
       block::gen::OutMsgQueueInfo::Record queue_info;
       CHECK(tlb::unpack_cell(shard_state.out_msg_queue_info, queue_info))
 
+      LOG(DEBUG) << "Start parse out_q";
       auto out_q =
           td::make_unique<vm::AugmentedDictionary>(std::move(queue_info.out_queue), 352, block::tlb::aug_OutMsgQueue);
       int out_q_size;
@@ -507,6 +508,9 @@ class StateIndexer : public td::actor::Actor {
         //        };
         //        out_q_json.push_back(parsed);
         out_q_size++;
+        if (out_q_size % 100 == 0) {
+          LOG(DEBUG) << "Parse out_q: " << out_q_size;
+        }
         return true;
       };
       out_q->check_for_each_extra(fOutQ);
