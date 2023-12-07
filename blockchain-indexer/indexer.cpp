@@ -490,38 +490,17 @@ class StateIndexer : public td::actor::Actor {
       block::gen::OutMsgQueueInfo::Record queue_info;
       CHECK(tlb::unpack_cell(shard_state.out_msg_queue_info, queue_info))
 
-      LOG(WARNING) << "Start parse out_q";
-      vm::VmStorageStat stat{(1ULL << 63) - 1};
-      vm::CellBuilder cb;
-      cb.append_cellslice(std::move(queue_info.out_queue));
-      td::Ref<vm::Cell> ttqq{cb.finalize()};
+      auto out_q =
+          td::make_unique<vm::AugmentedDictionary>(std::move(queue_info.out_queue), 352, block::tlb::aug_OutMsgQueue);
+      int out_q_size;
 
-      LOG(WARNING) << "Add storage";
-      stat.add_storage(std::move(ttqq));
-      LOG(ERROR) << "STAT: " << stat.cells << " " << stat.bits << " " << stat.refs;
-
-      //      auto out_q =
-      //          td::make_unique<vm::AugmentedDictionary>(std::move(queue_info.out_queue), 352, block::tlb::aug_OutMsgQueue);
-      //      int out_q_size;
-      //
-      //      auto fOutQ = [&out_q_size](Ref<vm::CellSlice> cs_ref, td::ConstBitPtr key, int n) {
-      //        //        block::tlb::MsgEnvelope::Record_std env;
-      //        //        tlb::unpack_cell(data.prefetch_ref(), env);
-      //        //
-      //        //        block::gen::CommonMsgInfo::Record_int_msg_info info;
-      //        //        tlb::unpack_cell_inexact(env.msg, info)));
-      //        //        json parsed = {
-      //        //            {"src", parse_address(info.src)},
-      //        //            {"dest", parse_address(info.dest)},
-      //        //        };
-      //        //        out_q_json.push_back(parsed);
-      //        out_q_size++;
-      //        if (out_q_size % 100 == 0) {
-      //          LOG(DEBUG) << "Parse out_q: " << out_q_size;
-      //        }
-      //        return true;
-      //      };
-      //      out_q->check_for_each(fOutQ);
+      out_q->check_for_each([&out_q_size](Ref<vm::CellSlice> cs_ref, td::ConstBitPtr key, int n) {
+        out_q_size++;
+        if (out_q_size % 100 == 0) {
+          LOG(DEBUG) << "Parse out_q: " << out_q_size;
+        }
+        return true;
+      });
 
       answer = {
           {"type", "shard_state"},
