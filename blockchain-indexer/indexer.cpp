@@ -513,7 +513,7 @@ class StateIndexer : public td::actor::Actor {
         }
         return true;
       };
-      out_q->check_for_each_extra(fOutQ);
+      out_q->check_for_each(fOutQ);
 
       answer = {
           {"type", "shard_state"},
@@ -1254,9 +1254,7 @@ class IndexerWorker : public td::actor::Actor {
                                              block::tlb::aug_AccountTransactions};
           LOG(DEBUG) << "Dict unpacked " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
 
-          auto fTransactions = [&last_key, &blkid, &timer, &transactions, &count, workchain](
-                                   const Ref<vm::CellSlice> &tvalue, const Ref<vm::CellSlice> &extra,
-                                   td::ConstBitPtr key, int key_len) {
+          auto fTransactions = [&last_key, &blkid, &timer, &transactions, &count, workchain](Ref<vm::CellSlice> cs_ref, td::ConstBitPtr key, int n) {
             LOG(DEBUG) << "Parse transaction " << last_key.to_hex() << " " << blkid.to_str() << " " << timer;
             json transaction = parse_transaction(tvalue, workchain);
             transactions.emplace_back(std::move(transaction));

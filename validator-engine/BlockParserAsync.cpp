@@ -105,18 +105,18 @@ class AsyncStateIndexer : public td::actor::Actor {
                         ? parse_extra_currency(total_validator_fees_cc.other->prefetch_ref())
                         : dummy}};
 
-//      block::gen::OutMsgQueueInfo::Record queue_info;
-//      CHECK(tlb::unpack_cell(shard_state.out_msg_queue_info, queue_info))
-//
-//      auto out_q = td::make_unique<vm::AugmentedDictionary>(std::move(queue_info.out_queue), 352, block::tlb::aug_OutMsgQueue);
-//      int out_q_size;
-//
-//      auto fOutQ = [&out_q_size](const Ref<vm::CellSlice> &tvalue, const Ref<vm::CellSlice> &extra, td::ConstBitPtr key,
-//                                 int key_len) {
-//        out_q_size++;
-//        return true;
-//      };
-//      out_q->check_for_each_extra(fOutQ);
+      //      block::gen::OutMsgQueueInfo::Record queue_info;
+      //      CHECK(tlb::unpack_cell(shard_state.out_msg_queue_info, queue_info))
+      //
+      //      auto out_q = td::make_unique<vm::AugmentedDictionary>(std::move(queue_info.out_queue), 352, block::tlb::aug_OutMsgQueue);
+      //      int out_q_size;
+      //
+      //      auto fOutQ = [&out_q_size](const Ref<vm::CellSlice> &tvalue, const Ref<vm::CellSlice> &extra, td::ConstBitPtr key,
+      //                                 int key_len) {
+      //        out_q_size++;
+      //        return true;
+      //      };
+      //      out_q->check_for_each_extra(fOutQ);
 
       answer = {{"type", "shard_state"},
                 {"id",
