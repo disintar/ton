@@ -105,25 +105,47 @@ class AsyncStateIndexer : public td::actor::Actor {
                         ? parse_extra_currency(total_validator_fees_cc.other->prefetch_ref())
                         : dummy}};
 
-      answer = {
-          {"type", "shard_state"},
-          {"id",
-           {
-               {"workchain", block_id.id.workchain},
-               {"seqno", block_id.id.seqno},
-               {"shard", block_id.id.shard},
-           }},
-          {"seq_no", shard_state.seq_no},
-          {"vert_seq_no", shard_state.vert_seq_no},
-          {"gen_utime", shard_state.gen_utime},
-          {"gen_lt", shard_state.gen_lt},
-          {"min_ref_mc_seqno", shard_state.min_ref_mc_seqno},
-          {"before_split", shard_state.before_split},
-          {"overload_history", shard_state.r1.overload_history},
-          {"underload_history", shard_state.r1.underload_history},
-          {"total_balance", total_balance},
-          {"total_validator_fees", total_validator_fees},
+      block::gen::OutMsgQueueInfo::Record queue_info;
+      CHECK(tlb::unpack_cell(shard_state.out_msg_queue_info, queue_info))
+
+      auto out_q = td::make_unique<vm::AugmentedDictionary>(std::move(queue_info.out_queue), 352, block::tlb::aug_OutMsgQueue);
+      int out_q_size;
+
+      auto fOutQ = [&out_q_size](const Ref<vm::CellSlice> &tvalue, const Ref<vm::CellSlice> &extra, td::ConstBitPtr key,
+                                 int key_len) {
+        //        block::tlb::MsgEnvelope::Record_std env;
+        //        tlb::unpack_cell(data.prefetch_ref(), env);
+        //
+        //        block::gen::CommonMsgInfo::Record_int_msg_info info;
+        //        tlb::unpack_cell_inexact(env.msg, info)));
+        //        json parsed = {
+        //            {"src", parse_address(info.src)},
+        //            {"dest", parse_address(info.dest)},
+        //        };
+        //        out_q_json.push_back(parsed);
+        out_q_size++;
+        return true;
       };
+      out_q->check_for_each_extra(fOutQ);
+
+      answer = {{"type", "shard_state"},
+                {"id",
+                 {
+                     {"workchain", block_id.id.workchain},
+                     {"seqno", block_id.id.seqno},
+                     {"shard", block_id.id.shard},
+                 }},
+                {"seq_no", shard_state.seq_no},
+                {"vert_seq_no", shard_state.vert_seq_no},
+                {"gen_utime", shard_state.gen_utime},
+                {"gen_lt", shard_state.gen_lt},
+                {"min_ref_mc_seqno", shard_state.min_ref_mc_seqno},
+                {"before_split", shard_state.before_split},
+                {"overload_history", shard_state.r1.overload_history},
+                {"underload_history", shard_state.r1.underload_history},
+                {"total_balance", total_balance},
+                {"total_validator_fees", total_validator_fees},
+                {"out_q_size", out_q_size}};
 
       LOG(DEBUG) << "Parsed accounts shard state main info " << block_id_string << " " << timer;
 
@@ -1052,7 +1074,7 @@ void StartupBlockParser::ipad() {
     if (next_download != 0) {
       const auto next_block = last_masterchain_block_handle->id().seqno() + 1;
       LOG(INFO) << "Initial read of last " << k << " blocks end, start wait for " << next_block;
-       td::actor::send_closure(actor_id(this), &StartupBlockParser::start_wait_next, next_block, false);
+      td::actor::send_closure(actor_id(this), &StartupBlockParser::start_wait_next, next_block, false);
     } else {
       if (block_handles.size() != blocks.size() && blocks.size() != states.size() &&
           states.size() != prev_states.size()) {
