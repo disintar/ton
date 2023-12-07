@@ -491,28 +491,35 @@ class StateIndexer : public td::actor::Actor {
       CHECK(tlb::unpack_cell(shard_state.out_msg_queue_info, queue_info))
 
       LOG(DEBUG) << "Start parse out_q";
-      auto out_q =
-          td::make_unique<vm::AugmentedDictionary>(std::move(queue_info.out_queue), 352, block::tlb::aug_OutMsgQueue);
-      int out_q_size;
+      vm::VmStorageStat stat{(1ULL << 63) - 1};
+      vm::CellBuilder cb;
+      cb.append_cellslice(std::move(queue_info.out_queue));
+      td::Ref<vm::Cell> ttqq{cb.finalize()};
+      stat.add_storage(std::move(ttqq));
+      LOG(ERROR) << "STAT: " << stat.cells << " " << stat.bits << " " << stat.refs;
 
-      auto fOutQ = [&out_q_size](Ref<vm::CellSlice> cs_ref, td::ConstBitPtr key, int n) {
-        //        block::tlb::MsgEnvelope::Record_std env;
-        //        tlb::unpack_cell(data.prefetch_ref(), env);
-        //
-        //        block::gen::CommonMsgInfo::Record_int_msg_info info;
-        //        tlb::unpack_cell_inexact(env.msg, info)));
-        //        json parsed = {
-        //            {"src", parse_address(info.src)},
-        //            {"dest", parse_address(info.dest)},
-        //        };
-        //        out_q_json.push_back(parsed);
-        out_q_size++;
-        if (out_q_size % 100 == 0) {
-          LOG(DEBUG) << "Parse out_q: " << out_q_size;
-        }
-        return true;
-      };
-      out_q->check_for_each(fOutQ);
+      //      auto out_q =
+      //          td::make_unique<vm::AugmentedDictionary>(std::move(queue_info.out_queue), 352, block::tlb::aug_OutMsgQueue);
+      //      int out_q_size;
+      //
+      //      auto fOutQ = [&out_q_size](Ref<vm::CellSlice> cs_ref, td::ConstBitPtr key, int n) {
+      //        //        block::tlb::MsgEnvelope::Record_std env;
+      //        //        tlb::unpack_cell(data.prefetch_ref(), env);
+      //        //
+      //        //        block::gen::CommonMsgInfo::Record_int_msg_info info;
+      //        //        tlb::unpack_cell_inexact(env.msg, info)));
+      //        //        json parsed = {
+      //        //            {"src", parse_address(info.src)},
+      //        //            {"dest", parse_address(info.dest)},
+      //        //        };
+      //        //        out_q_json.push_back(parsed);
+      //        out_q_size++;
+      //        if (out_q_size % 100 == 0) {
+      //          LOG(DEBUG) << "Parse out_q: " << out_q_size;
+      //        }
+      //        return true;
+      //      };
+      //      out_q->check_for_each(fOutQ);
 
       answer = {
           {"type", "shard_state"},
@@ -532,7 +539,7 @@ class StateIndexer : public td::actor::Actor {
           {"underload_history", shard_state.r1.underload_history},
           {"total_balance", total_balance},
           {"total_validator_fees", total_validator_fees},
-          {"out_q_size", out_q_size}
+          //                {"out_q_size", out_q_size}
       };
 
       LOG(DEBUG) << "Parsed accounts shard state main info " << block_id_string << " " << timer;
