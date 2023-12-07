@@ -490,11 +490,13 @@ class StateIndexer : public td::actor::Actor {
       block::gen::OutMsgQueueInfo::Record queue_info;
       CHECK(tlb::unpack_cell(shard_state.out_msg_queue_info, queue_info))
 
-      LOG(DEBUG) << "Start parse out_q";
+      LOG(WARNING) << "Start parse out_q";
       vm::VmStorageStat stat{(1ULL << 63) - 1};
       vm::CellBuilder cb;
       cb.append_cellslice(std::move(queue_info.out_queue));
       td::Ref<vm::Cell> ttqq{cb.finalize()};
+
+      LOG(WARNING) << "Add storage";
       stat.add_storage(std::move(ttqq));
       LOG(ERROR) << "STAT: " << stat.cells << " " << stat.bits << " " << stat.refs;
 
