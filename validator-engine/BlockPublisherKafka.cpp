@@ -1,5 +1,6 @@
 #include "BlockPublisherKafka.hpp"
 #include "blockchain-indexer/json-utils.hpp"
+#include "tdutils/td/utils/Random.h"
 
 namespace ton::validator {
 
@@ -57,7 +58,7 @@ void BlockPublisherKafka::publishBlockData(unsigned long long shard, std::string
     }
 
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-data-mainnet")
-                         .partition(0)
+                         .partition(td::Random::fast(0, 10))
                          .payload(json));
     deliver();
   } catch (std::exception& e) {
@@ -79,7 +80,7 @@ void BlockPublisherKafka::publishBlockState(unsigned long long shard, std::strin
     }
 
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-state-mainnet")
-                         .partition(0)
+                         .partition(td::Random::fast(0, 10))
                          .payload(json));
     deliver();
   } catch (std::exception& e) {
