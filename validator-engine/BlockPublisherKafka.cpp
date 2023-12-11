@@ -58,7 +58,7 @@ void BlockPublisherKafka::publishBlockData(unsigned long long shard, std::string
     }
 
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-data-mainnet")
-                         .partition(td::Random::fast(0, 4got))
+                         .partition(td::Random::fast(0, 4))
                          .payload(json));
     deliver();
   } catch (std::exception& e) {
