@@ -33,19 +33,19 @@ namespace validator {
 void RootDb::store_block_data(BlockHandle handle, td::Ref<BlockData> block, td::Promise<td::Unit> promise) {
   if (publisher_) {
     const auto shard = handle->id().id.shard;
+    const auto wc = handle->id().id.workchain;
     const auto handle_id = handle->id();
 
     auto P = td::PromiseCreator::lambda(
-        [handle_id, publisher = publisher_, shard](td::Result<std::tuple<std::string, std::string>> R) {
+        [handle_id, publisher = publisher_, shard, wc](td::Result<std::tuple<std::string, std::string>> R) {
           if (R.is_ok()) {
             const auto answer = R.move_as_ok();
 
             // skip
             if (!std::get<0>(answer).empty()) {
               LOG(DEBUG) << "Send parsed data&state: " << handle_id.to_str();
-              const auto f = R.move_as_ok();
-              publisher->enqueuePublishBlockData(shard, std::get<0>(answer));
-              publisher->enqueuePublishBlockState(shard, std::get<1>(answer));
+              publisher->enqueuePublishBlockData(wc, shard, std::get<0>(answer));
+              publisher->enqueuePublishBlockState(wc,shard, std::get<1>(answer));
             }
           } else {
             LOG(FATAL) << "Failed to parse!";
@@ -249,17 +249,18 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
                                          publisher = publisher_, prev_id](td::Result<BlockHandle> R) mutable {
       const auto handle_id = next_handle->id();
       const auto shard = next_handle->id().id.shard;
+      const auto wc = next_handle->id().id.workchain;
 
       auto final_publish =
-          td::PromiseCreator::lambda([handle_id, publisher, shard](td::Result<std::tuple<std::string, std::string>> R) {
+          td::PromiseCreator::lambda([handle_id, publisher, shard, wc](td::Result<std::tuple<std::string, std::string>> R) {
             if (R.is_ok()) {
               const auto answer = R.move_as_ok();
 
               // skip
               if (!std::get<0>(answer).empty()) {
                 LOG(DEBUG) << "Send parsed data&state: " << handle_id.to_str();
-                publisher->enqueuePublishBlockData(shard, std::get<0>(answer));
-                publisher->enqueuePublishBlockState(shard, std::get<1>(answer));
+                publisher->enqueuePublishBlockData(wc, shard, std::get<0>(answer));
+                publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
               }
             } else {
               LOG(FATAL) << "Failed to parse!";

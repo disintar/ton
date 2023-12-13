@@ -10,9 +10,9 @@ class BlockPublisherKafka : public IBLockPublisher {
  public:
   explicit BlockPublisherKafka(const std::string& endpoint);
 
-  void publishBlockApplied(unsigned long long shard, std::string json) override;
-  void publishBlockData(unsigned long long shard, std::string json) override;
-  void publishBlockState(unsigned long long shard, std::string json) override;
+  void publishBlockApplied(int wc, unsigned long long shard, std::string json) override;
+  void publishBlockData(int wc, unsigned long long shard, std::string json) override;
+  void publishBlockState(int wc, unsigned long long shard, std::string json) override;
   void deliver() override;
 
  private:

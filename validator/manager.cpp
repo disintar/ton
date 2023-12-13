@@ -1764,10 +1764,11 @@ void ValidatorManagerImpl::completed_prestart_sync() {
               prev_states.pop_back();
 
               const auto shard = last_handle->id().id.shard;
+              const auto wc = last_handle->id().id.workchain;
 
               // TODO: store promises in BlockParserAsync
               auto P = td::PromiseCreator::lambda(
-                  [publisher_ = publisher, shard](td::Result<std::tuple<std::string, std::string>> R) {
+                  [publisher_ = publisher, shard, wc](td::Result<std::tuple<std::string, std::string>> R) {
                     if (R.is_ok()) {
                       const auto answer = R.move_as_ok();
 
@@ -1775,8 +1776,8 @@ void ValidatorManagerImpl::completed_prestart_sync() {
                       if (!std::get<0>(answer).empty()) {
                         const auto f = R.move_as_ok();
                         auto publisher = publisher_->get();
-                        publisher->enqueuePublishBlockData(shard, std::get<0>(answer));
-                        publisher->enqueuePublishBlockState(shard, std::get<1>(answer));
+                        publisher->enqueuePublishBlockData(wc, shard, std::get<0>(answer));
+                        publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
                       }
                     } else {
                       LOG(FATAL) << "Failed to parse!";
@@ -1787,7 +1788,7 @@ void ValidatorManagerImpl::completed_prestart_sync() {
 
               // TODO: store promises in BlockParserAsync
               auto P2 = td::PromiseCreator::lambda(
-                  [publisher_ = publisher, shard](td::Result<std::tuple<std::string, std::string>> R) {
+                  [publisher_ = publisher, shard, wc](td::Result<std::tuple<std::string, std::string>> R) {
                     if (R.is_ok()) {
                       const auto answer = R.move_as_ok();
 
@@ -1795,8 +1796,8 @@ void ValidatorManagerImpl::completed_prestart_sync() {
                       if (!std::get<0>(answer).empty()) {
                         const auto f = R.move_as_ok();
                         auto publisher = publisher_->get();
-                        publisher->enqueuePublishBlockData(shard, std::get<0>(answer));
-                        publisher->enqueuePublishBlockState(shard, std::get<1>(answer));
+                        publisher->enqueuePublishBlockData(wc, shard, std::get<0>(answer));
+                        publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
                       }
                     } else {
                       LOG(FATAL) << "Failed to parse!";
@@ -1807,7 +1808,7 @@ void ValidatorManagerImpl::completed_prestart_sync() {
 
               // TODO: store promises in BlockParserAsync
               auto P3 = td::PromiseCreator::lambda(
-                  [publisher_ = publisher, shard](td::Result<std::tuple<std::string, std::string>> R) {
+                  [publisher_ = publisher, shard, wc](td::Result<std::tuple<std::string, std::string>> R) {
                     if (R.is_ok()) {
                       const auto answer = R.move_as_ok();
 
@@ -1815,8 +1816,8 @@ void ValidatorManagerImpl::completed_prestart_sync() {
                       if (!std::get<0>(answer).empty()) {
                         const auto f = R.move_as_ok();
                         auto publisher = publisher_->get();
-                        publisher->enqueuePublishBlockData(shard, std::get<0>(answer));
-                        publisher->enqueuePublishBlockState(shard, std::get<1>(answer));
+                        publisher->enqueuePublishBlockData(wc, shard, std::get<0>(answer));
+                        publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
                       }
                     } else {
                       LOG(FATAL) << "Failed to parse!";

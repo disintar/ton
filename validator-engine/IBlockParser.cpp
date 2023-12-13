@@ -153,8 +153,7 @@ void BlockParser::handleBlockProgress(BlockIdExt id, td::Promise<std::tuple<td::
   }
 
   const auto applied_parsed = parseBlockApplied(id);
-  const auto shard = id.id.shard;
-  enqueuePublishBlockApplied(shard, applied_parsed);
+  enqueuePublishBlockApplied(id.id.workchain, id.id.shard, applied_parsed);
 
   ConstBlockHandle handle = block_found_iter->first;
   td::Ref<BlockData> data = block_found_iter->second;
@@ -192,23 +191,23 @@ std::string BlockParser::parseBlockApplied(BlockIdExt id) {
   return dump;
 }
 
-void BlockParser::enqueuePublishBlockApplied(unsigned long long shard, const std::string& json) {
+void BlockParser::enqueuePublishBlockApplied(td::int32 wc, unsigned long long shard, const std::string& json) {
   std::unique_lock lock(publish_applied_mtx_);
-  publish_applied_queue_.emplace(shard, json);
+  publish_applied_queue_.emplace(wc, shard, json);
   lock.unlock();
   publish_applied_cv_.notify_one();
 }
 
-void BlockParser::enqueuePublishBlockData(unsigned long long shard, const std::string& json) {
+void BlockParser::enqueuePublishBlockData(td::int32 wc, unsigned long long shard, const std::string& json) {
   std::unique_lock lock(publish_blocks_mtx_);
-  publish_blocks_queue_.emplace(shard, json);
+  publish_blocks_queue_.emplace(wc, shard, json);
   lock.unlock();
   publish_blocks_cv_.notify_one();
 }
 
-void BlockParser::enqueuePublishBlockState(unsigned long long shard, const std::string& json) {
+void BlockParser::enqueuePublishBlockState(td::int32 wc, unsigned long long shard, const std::string& json) {
   std::unique_lock lock(publish_states_mtx_);
-  publish_states_queue_.emplace(shard, json);
+  publish_states_queue_.emplace(wc, shard, json);
   lock.unlock();
   publish_states_cv_.notify_one();
 }
@@ -228,7 +227,7 @@ void BlockParser::publish_applied_worker() {
     should_run = running_ || !publish_applied_queue_.empty();
     lock.unlock();
 
-    publisher_->publishBlockApplied(std::get<0>(block), std::get<1>(block));
+    publisher_->publishBlockApplied(std::get<0>(block), std::get<1>(block), std::get<2>(block));
   }
 }
 
@@ -247,7 +246,7 @@ void BlockParser::publish_blocks_worker() {
     should_run = running_;
     lock.unlock();
 
-    publisher_->publishBlockData(std::get<0>(block), std::get<1>(block));
+    publisher_->publishBlockData(std::get<0>(block), std::get<1>(block), std::get<2>(block));
   }
 }
 
@@ -265,7 +264,7 @@ void BlockParser::publish_states_worker() {
     should_run = running_;
     lock.unlock();
 
-    publisher_->publishBlockState(std::get<0>(state), std::get<1>(state));
+    publisher_->publishBlockState(std::get<0>(state), std::get<1>(state), std::get<2>(state));
   }
 }
 
