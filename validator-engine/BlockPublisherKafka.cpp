@@ -28,7 +28,16 @@ void BlockPublisherKafka::publishBlockApplied(int wc, unsigned long long shard, 
     if (wc == -1) {
       p = 0;
     } else {
-      p = 1;
+      if (shard_to_partition.find(shard) == shard_to_partition.end()) {
+        max_partition++;
+        if (max_partition > 17) {
+          max_partition = 1;
+        }
+        p = max_partition;
+        shard_to_partition[shard] = max_partition;
+      } else {
+        p = shard_to_partition[shard];
+      }
     }
 
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-applied-mainnet").partition(p).payload(json));
@@ -55,16 +64,20 @@ void BlockPublisherKafka::publishBlockData(int wc, unsigned long long shard, std
   try {
     const char* value = getenv("KAFKA_BLOCK_TOPIC");
 
-    //    if (shard_to_partition.find(shard) == shard_to_partition.end()) {
-    //      max_partition++;
-    //      shard_to_partition[shard] = max_partition;
-    //    }
-
     int p;
     if (wc == -1) {
       p = 0;
     } else {
-      p = 1;
+      if (shard_to_partition.find(shard) == shard_to_partition.end()) {
+        max_partition++;
+        if (max_partition > 17) {
+          max_partition = 1;
+        }
+        p = max_partition;
+        shard_to_partition[shard] = max_partition;
+      } else {
+        p = shard_to_partition[shard];
+      }
     }
 
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-data-mainnet").partition(p).payload(json));
@@ -91,7 +104,16 @@ void BlockPublisherKafka::publishBlockState(int wc, unsigned long long shard, st
     if (wc == -1) {
       p = 0;
     } else {
-      p = 1;
+      if (shard_to_partition.find(shard) == shard_to_partition.end()) {
+        max_partition++;
+        if (max_partition > 17) {
+          max_partition = 1;
+        }
+        p = max_partition;
+        shard_to_partition[shard] = max_partition;
+      } else {
+        p = shard_to_partition[shard];
+      }
     }
 
     producer.produce(cppkafka::MessageBuilder(value ? value : "block-state-mainnet").partition(p).payload(json));

@@ -22,7 +22,7 @@ class BlockPublisherKafka : public IBLockPublisher {
   std::mutex net_mtx;
   cppkafka::Producer producer;
   std::map<unsigned long long, int> shard_to_partition{};
-  int max_partition = -1;
+  int max_partition = 0;
 };
 
 }  // namespace ton::validator
