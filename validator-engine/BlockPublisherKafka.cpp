@@ -30,7 +30,7 @@ void BlockPublisherKafka::publishBlockApplied(int wc, unsigned long long shard, 
     } else {
       if (shard_to_partition.find(shard) == shard_to_partition.end()) {
         max_partition++;
-        if (max_partition > 17) {
+        if (max_partition > 16) {
           max_partition = 1;
         }
         p = max_partition;
@@ -70,7 +70,7 @@ void BlockPublisherKafka::publishBlockData(int wc, unsigned long long shard, std
     } else {
       if (shard_to_partition.find(shard) == shard_to_partition.end()) {
         max_partition++;
-        if (max_partition > 17) {
+        if (max_partition > 16) {
           max_partition = 1;
         }
         p = max_partition;
@@ -106,7 +106,7 @@ void BlockPublisherKafka::publishBlockState(int wc, unsigned long long shard, st
     } else {
       if (shard_to_partition.find(shard) == shard_to_partition.end()) {
         max_partition++;
-        if (max_partition > 17) {
+        if (max_partition > 16) {
           max_partition = 1;
         }
         p = max_partition;
