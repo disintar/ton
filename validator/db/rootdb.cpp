@@ -34,6 +34,41 @@ void RootDb::store_block_data(BlockHandle handle, td::Ref<BlockData> block, td::
   if (publisher_) {
     const auto shard = handle->id().id.shard;
     const auto wc = handle->id().id.workchain;
+
+    if (wc == -1) {
+      // Update shard to partition
+      block::gen::Block::Record blk;
+      block::gen::BlockInfo::Record info;
+      block::gen::BlockExtra::Record extra;
+      auto block_root = block->root_cell();
+
+      if ((tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra) &&
+           tlb::unpack_cell(blk.info, info))) {
+        if ((int)extra.custom->prefetch_ulong(1) == 1) {
+          auto mc_extra = extra.custom->prefetch_ref();
+          block::gen::McBlockExtra::Record extra_mc;
+          CHECK(tlb::unpack_cell(mc_extra, extra_mc));
+          block::ShardConfig shards;
+          shards.unpack(extra_mc.shard_hashes);
+
+          std::map<unsigned long long, int> shard_to_num;
+          int num = 0;
+
+          auto parseShards = [this, &num, &shard_to_num](McShardHash &ms) {
+            num++;
+            if (num > 16) {
+              num = 1;  // unreachable
+            }
+            shard_to_num[ms.shard().shard] = num;
+            return 1;
+          };
+
+          shards.process_shard_hashes(parseShards);
+          publisher_->merge_new_shards(std::move(shard_to_num));
+        }
+      }
+    }
+
     const auto handle_id = handle->id();
 
     auto P = td::PromiseCreator::lambda(
@@ -45,7 +80,7 @@ void RootDb::store_block_data(BlockHandle handle, td::Ref<BlockData> block, td::
             if (!std::get<0>(answer).empty()) {
               LOG(DEBUG) << "Send parsed data&state: " << handle_id.to_str();
               publisher->enqueuePublishBlockData(wc, shard, std::get<0>(answer));
-              publisher->enqueuePublishBlockState(wc,shard, std::get<1>(answer));
+              publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
             }
           } else {
             LOG(FATAL) << "Failed to parse!";
@@ -251,8 +286,8 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
       const auto shard = next_handle->id().id.shard;
       const auto wc = next_handle->id().id.workchain;
 
-      auto final_publish =
-          td::PromiseCreator::lambda([handle_id, publisher, shard, wc](td::Result<std::tuple<std::string, std::string>> R) {
+      auto final_publish = td::PromiseCreator::lambda(
+          [handle_id, publisher, shard, wc](td::Result<std::tuple<std::string, std::string>> R) {
             if (R.is_ok()) {
               const auto answer = R.move_as_ok();
 
@@ -372,7 +407,7 @@ void RootDb::store_persistent_state_file(BlockIdExt block_id, BlockIdExt masterc
 }
 
 void RootDb::store_persistent_state_file_gen(BlockIdExt block_id, BlockIdExt masterchain_block_id,
-                                             std::function<td::Status(td::FileFd&)> write_data,
+                                             std::function<td::Status(td::FileFd &)> write_data,
                                              td::Promise<td::Unit> promise) {
   td::actor::send_closure(archive_db_, &ArchiveManager::add_persistent_state_gen, block_id, masterchain_block_id,
                           std::move(write_data), std::move(promise));

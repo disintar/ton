@@ -22,6 +22,7 @@ class IBLockPublisher {
   virtual void publishBlockData(int wc, unsigned long long shard, std::string json) = 0;
   virtual void publishBlockState(int wc, unsigned long long shard, std::string json) = 0;
   virtual void deliver() = 0;
+  virtual void merge_new_shards(std::map<unsigned long long, int> new_shards) = 0;
 };
 
 class BlockParser {
@@ -33,6 +34,9 @@ class BlockParser {
   void storeBlockApplied(BlockIdExt id, td::Promise<std::tuple<td::string, td::string>> P);
   void storeBlockData(ConstBlockHandle handle, td::Ref<BlockData> block,
                       td::Promise<std::tuple<td::string, td::string>> P);
+  void merge_new_shards(std::map<unsigned long long, int> new_shards) {
+    publisher_->merge_new_shards(std::move(new_shards));
+  }
   void storeBlockState(const ConstBlockHandle& handle, td::Ref<vm::Cell> state,
                        td::Promise<std::tuple<td::string, td::string>> P);
   void storeBlockStateWithPrev(const ConstBlockHandle& handle, td::Ref<vm::Cell> prev_state, td::Ref<vm::Cell> state,
