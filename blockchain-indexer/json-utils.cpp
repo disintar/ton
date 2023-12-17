@@ -254,11 +254,11 @@ json parse_state_init(vm::CellSlice state_init) {
     return answer;
   }
 }
-//
-//std::string map_to_utf8(const long long val) {
-//  std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> converter;
-//  return converter.to_bytes(static_cast<char32_t>(val));
-//}
+
+std::string map_to_utf8(const long long val) {
+  std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> converter;
+  return converter.to_bytes(static_cast<char32_t>(val));
+}
 
 std::string fetch_string(vm::CellSlice &cs, bool convert_to_utf8 = true) {
   if (convert_to_utf8) {
@@ -267,33 +267,8 @@ std::string fetch_string(vm::CellSlice &cs, bool convert_to_utf8 = true) {
     std::string text;
 
     while (text_size > 0) {
-      auto first_byte = cs.fetch_ulong(8);
-
-      // Determine the number of bytes for the UTF-8 character
-      size_t char_size = 0;
-      if ((first_byte & 0x80) == 0) {
-        char_size = 1;
-      } else if ((first_byte & 0xE0) == 0xC0) {
-        char_size = 2;
-      } else if ((first_byte & 0xF0) == 0xE0) {
-        char_size = 3;
-      } else if ((first_byte & 0xF8) == 0xF0) {
-        char_size = 4;
-      } else {
-        // Handle invalid UTF-8 sequence or adjust as needed
-        char_size = 1;
-      }
-
-      if (text_size - char_size >= 0) {
-        std::ostringstream utf8Stream;
-        utf8Stream << static_cast<char>(first_byte);
-        for (size_t i = 1; i < char_size; ++i) {
-          auto next_byte = cs.fetch_ulong(8);
-          utf8Stream << static_cast<char>(next_byte);
-        }
-        text += utf8Stream.str();
-      }
-      text_size -= char_size;
+      text += map_to_utf8(cs.fetch_long(8));
+      text_size -= 1;
     }
 
     return text;
