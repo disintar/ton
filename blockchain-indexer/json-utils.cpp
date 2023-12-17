@@ -268,7 +268,6 @@ std::string fetch_string(vm::CellSlice &cs, bool convert_to_utf8 = true) {
 
     while (text_size > 0) {
       auto first_byte = cs.fetch_ulong(8);
-      LOG(ERROR) << first_byte;
 
       // Determine the number of bytes for the UTF-8 character
       size_t char_size = 0;
