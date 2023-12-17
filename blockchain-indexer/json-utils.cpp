@@ -284,13 +284,15 @@ std::string fetch_string(vm::CellSlice &cs, bool convert_to_utf8 = true) {
         char_size = 1;
       }
 
-      std::ostringstream utf8Stream;
-      utf8Stream << static_cast<char>(first_byte);
-      for (size_t i = 1; i < char_size; ++i) {
-        auto next_byte = cs.fetch_ulong(8);
-        utf8Stream << static_cast<char>(next_byte);
+      if (text_size - char_size >= 0) {
+        std::ostringstream utf8Stream;
+        utf8Stream << static_cast<char>(first_byte);
+        for (size_t i = 1; i < char_size; ++i) {
+          auto next_byte = cs.fetch_ulong(8);
+          utf8Stream << static_cast<char>(next_byte);
+        }
+        text += utf8Stream.str();
       }
-      text += utf8Stream.str();
       text_size -= char_size;
     }
 
