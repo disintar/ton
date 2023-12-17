@@ -267,9 +267,6 @@ std::string fetch_string(vm::CellSlice &cs, bool convert_to_utf8 = true) {
     std::string text;
 
     while (text_size > 0) {
-      if (cs.size() < 8) {
-        throw throw std::invalid_argument("Must be %8");
-      }
       auto first_byte = cs.fetch_ulong(8);
 
       // Determine the number of bytes for the UTF-8 character
@@ -290,10 +287,6 @@ std::string fetch_string(vm::CellSlice &cs, bool convert_to_utf8 = true) {
       std::ostringstream utf8Stream;
       utf8Stream << static_cast<char>(first_byte);
       for (size_t i = 1; i < char_size; ++i) {
-        if (cs.size() < 8) {
-          throw throw std::invalid_argument("Must be %8");
-        }
-
         auto next_byte = cs.fetch_ulong(8);
         utf8Stream << static_cast<char>(next_byte);
       }
