@@ -267,7 +267,7 @@ std::string fetch_string(vm::CellSlice &cs, bool convert_to_utf8 = true) {
     std::string text;
 
     while (text_size > 0) {
-      text += map_to_utf8(cs.fetch_long(8));
+      text += map_to_utf8(cs.fetch_ulong(8));
       text_size -= 1;
     }
 
