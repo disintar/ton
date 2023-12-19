@@ -584,6 +584,12 @@ void ValidatorManagerImpl::run_ext_query(td::BufferSlice data, td::Promise<td::B
 
 void ValidatorManagerImpl::wait_block_state(BlockHandle handle, td::uint32 priority, td::Timestamp timeout,
                                             td::Promise<td::Ref<ShardState>> promise) {
+  auto it0 = block_state_cache_.find(handle->id());
+  if (it0 != block_state_cache_.end()) {
+    it0->second.ttl_ = td::Timestamp::in(30.0);
+    promise.set_result(it0->second.state_);
+    return;
+  }
   auto it = wait_state_.find(handle->id());
   if (it == wait_state_.end()) {
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), handle](td::Result<td::Ref<ShardState>> R) {
@@ -992,6 +998,9 @@ void ValidatorManagerImpl::get_block_by_seqno_from_db(AccountIdPrefixFull accoun
 }
 
 void ValidatorManagerImpl::finished_wait_state(BlockHandle handle, td::Result<td::Ref<ShardState>> R) {
+  if (R.is_ok()) {
+    block_state_cache_[handle->id()] = {R.ok(), td::Timestamp::in(30.0)};
+  }
   auto it = wait_state_.find(handle->id());
   if (it != wait_state_.end()) {
     if (R.is_error()) {
@@ -1445,7 +1454,7 @@ void ValidatorManagerImpl::send_block_broadcast(BlockBroadcast broadcast) {
 }
 
 void ValidatorManagerImpl::start_up() {
-  db_ = create_db_actor(actor_id(this), db_root_);
+  db_ = create_db_actor(actor_id(this), db_root_, opts_);
   lite_server_cache_ = create_liteserver_cache_actor(actor_id(this), db_root_);
   token_manager_ = td::actor::create_actor<TokenManager>("tokenmanager");
   td::mkdir(db_root_ + "/tmp/").ensure();
@@ -2377,7 +2386,15 @@ void ValidatorManagerImpl::allow_block_info_gc(BlockIdExt block_id, td::Promise<
 void ValidatorManagerImpl::got_next_gc_masterchain_handle(BlockHandle handle) {
   CHECK(gc_advancing_);
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), handle](td::Result<td::Ref<ShardState>> R) {
-    R.ensure();
+    if (R.is_error()) {
+      if (R.error().code() == ErrorCode::timeout) {
+        LOG(ERROR) << "Failed to get gc masterchain state, retrying: " << R.move_as_error();
+        td::actor::send_closure(SelfId, &ValidatorManagerImpl::got_next_gc_masterchain_handle, std::move(handle));
+      } else {
+        LOG(FATAL) << "Failed to get gc masterchain state: " << R.move_as_error();
+      }
+      return;
+    }
     td::actor::send_closure(SelfId, &ValidatorManagerImpl::got_next_gc_masterchain_state, std::move(handle),
                             td::Ref<MasterchainState>{R.move_as_ok()});
   });
@@ -2481,6 +2498,31 @@ void ValidatorManagerImpl::alarm() {
     }
     for (auto &w : shard_client_waiters_) {
       w.second.check_timers();
+    }
+    for (auto it = block_state_cache_.begin(); it != block_state_cache_.end();) {
+      bool del = it->second.ttl_.is_in_past();
+      if (del) {
+        auto block_id = it->first;
+        if (block_id.is_masterchain()) {
+          if (block_id.seqno() == last_masterchain_seqno_) {
+            it->second.ttl_ = td::Timestamp::in(30.0);
+            del = false;
+          }
+        } else if (last_masterchain_state_.not_null()) {
+          auto shard = last_masterchain_state_->get_shard_from_config(block_id.shard_full());
+          if (shard.not_null()) {
+            if (block_id.seqno() == shard->top_block_id().seqno()) {
+              it->second.ttl_ = td::Timestamp::in(30.0);
+              del = false;
+            }
+          }
+        }
+      }
+      if (del) {
+        it = block_state_cache_.erase(it);
+      } else {
+        ++it;
+      }
     }
   }
   alarm_timestamp().relax(check_waiters_at_);

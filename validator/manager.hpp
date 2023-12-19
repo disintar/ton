@@ -28,6 +28,7 @@
 #include "state-serializer.hpp"
 #include "rldp/rldp.h"
 #include "token-manager.h"
+#include "queue-size-counter.hpp"
 
 #include <map>
 #include <set>
@@ -182,6 +183,12 @@ class ValidatorManagerImpl : public ValidatorManager {
   };
   std::map<BlockIdExt, WaitList<WaitBlockState, td::Ref<ShardState>>> wait_state_;
   std::map<BlockIdExt, WaitList<WaitBlockData, td::Ref<BlockData>>> wait_block_data_;
+
+  struct CachedBlockState {
+    td::Ref<ShardState> state_;
+    td::Timestamp ttl_;
+  };
+  std::map<BlockIdExt, CachedBlockState> block_state_cache_;
 
   struct WaitBlockHandle {
     std::vector<td::Promise<BlockHandle>> waiting_;
@@ -543,6 +550,18 @@ class ValidatorManagerImpl : public ValidatorManager {
 
   void log_validator_session_stats(BlockIdExt block_id, validatorsession::ValidatorSessionStats stats) override;
 
+  void get_out_msg_queue_size(BlockIdExt block_id, td::Promise<td::uint32> promise) override {
+    if (queue_size_counter_.empty()) {
+      if (last_masterchain_state_.is_null()) {
+        promise.set_error(td::Status::Error(ErrorCode::notready, "not ready"));
+        return;
+      }
+      queue_size_counter_ = td::actor::create_actor<QueueSizeCounter>("queuesizecounter",
+                                                                      last_masterchain_state_, actor_id(this));
+    }
+    td::actor::send_closure(queue_size_counter_, &QueueSizeCounter::get_queue_size, block_id, std::move(promise));
+  }
+
   void set_block_publisher(std::unique_ptr<BlockParser> publisher) override {
     publisher_ = std::move(publisher);
     td::actor::send_closure(db_, &Db::set_block_publisher, publisher_.get());
@@ -619,6 +638,7 @@ class ValidatorManagerImpl : public ValidatorManager {
 
  private:
   std::map<BlockSeqno, WaitList<td::actor::Actor, td::Unit>> shard_client_waiters_;
+  td::actor::ActorOwn<QueueSizeCounter> queue_size_counter_;
 };
 
 }  // namespace validator

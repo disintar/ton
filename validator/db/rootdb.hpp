@@ -66,6 +66,7 @@
 #include "crypto/block/mc-config.h"
 
 #include "validator-engine/IBlockParser.hpp"
+#include "validator.h"
 
 namespace ton {
 
@@ -74,8 +75,9 @@ namespace validator {
 class RootDb : public Db {
  public:
   enum class Flags : td::uint32 { f_started = 1, f_ready = 2, f_switched = 4, f_archived = 8 };
-  RootDb(td::actor::ActorId<ValidatorManager> validator_manager, std::string root_path, bool read_only = false)
-      : validator_manager_(validator_manager), root_path_(std::move(root_path)), read_only_(read_only) {
+  RootDb(td::actor::ActorId<ValidatorManager> validator_manager, std::string root_path,
+         td::Ref<ValidatorManagerOptions> opts, bool read_only = false)
+      : validator_manager_(validator_manager), root_path_(std::move(root_path)), opts_(opts), read_only_(read_only) {
   }
 
   void set_block_publisher(BlockParser* publisher) override {
@@ -84,7 +86,7 @@ class RootDb : public Db {
       return;
     }
     publisher_ = publisher;
-//    LOG(INFO) << "Received BlockPublisher";
+    //    LOG(INFO) << "Received BlockPublisher";
   }
 
   void clear_boc_cache() override {
@@ -192,6 +194,7 @@ class RootDb : public Db {
 
   std::string root_path_;
   bool read_only_;
+  td::Ref<ValidatorManagerOptions> opts_;
 
   td::actor::ActorOwn<CellDb> cell_db_;
   td::actor::ActorOwn<StateDb> state_db_;

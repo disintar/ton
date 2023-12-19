@@ -25,6 +25,7 @@
 #include "ton/ton-types.h"
 #include "interfaces/block-handle.h"
 #include "auto/tl/ton_api.h"
+#include "validator.h"
 
 namespace ton {
 
@@ -53,7 +54,10 @@ class CellDbIn : public CellDbBase {
   void store_cell(BlockIdExt block_id, td::Ref<vm::Cell> cell, td::Promise<td::Ref<vm::DataCell>> promise);
   void get_cell_db_reader(td::Promise<std::shared_ptr<vm::CellDbReader>> promise);
 
-  CellDbIn(td::actor::ActorId<RootDb> root_db, td::actor::ActorId<CellDb> parent, std::string path, bool read_only=false);
+  void migrate_cell(td::Bits256 hash);
+
+  CellDbIn(td::actor::ActorId<RootDb> root_db, td::actor::ActorId<CellDb> parent, std::string path,
+           td::Ref<ValidatorManagerOptions> opts, bool read_only=false);
 
   void start_up() override;
   void alarm() override;
@@ -89,14 +93,21 @@ class CellDbIn : public CellDbBase {
   void gc_cont2(BlockHandle handle);
   void skip_gc();
 
+  void migrate_cells();
+
   td::actor::ActorId<RootDb> root_db_;
   td::actor::ActorId<CellDb> parent_;
 
   std::string path_;
+  td::Ref<ValidatorManagerOptions> opts_;
   bool read_only_;
 
   std::unique_ptr<vm::DynamicBagOfCellsDb> boc_;
   std::shared_ptr<vm::KeyValue> cell_db_;
+
+  std::function<void(const vm::CellLoader::LoadResult&)> on_load_callback_;
+  std::set<td::Bits256> cells_to_migrate_;
+  td::Timestamp migrate_after_ = td::Timestamp::never();
 };
 
 class CellDb : public CellDbBase {
@@ -105,15 +116,15 @@ class CellDb : public CellDbBase {
   void store_cell(BlockIdExt block_id, td::Ref<vm::Cell> cell, td::Promise<td::Ref<vm::DataCell>> promise);
   void update_snapshot(std::unique_ptr<td::KeyValueReader> snapshot) {
     started_ = true;
-    boc_->set_loader(std::make_unique<vm::CellLoader>(std::move(snapshot))).ensure();
+    boc_->set_loader(std::make_unique<vm::CellLoader>(std::move(snapshot), on_load_callback_)).ensure();
   }
   void get_cell_db_reader(td::Promise<std::shared_ptr<vm::CellDbReader>> promise);
   void clear_boc_cache() {
     boc_->clear_cache();
   }
 
-  CellDb(td::actor::ActorId<RootDb> root_db, std::string path, bool read_only=false)
-      : root_db_(root_db), path_(path), read_only_(read_only) {
+  CellDb(td::actor::ActorId<RootDb> root_db, std::string path, td::Ref<ValidatorManagerOptions> opts, bool read_only=false)
+      : root_db_(root_db), path_(path), opts_(opts), read_only_(read_only) {
   }
 
   void start_up() override;
@@ -121,12 +132,15 @@ class CellDb : public CellDbBase {
  private:
   td::actor::ActorId<RootDb> root_db_;
   std::string path_;
+  td::Ref<ValidatorManagerOptions> opts_;
   bool read_only_;
 
   td::actor::ActorOwn<CellDbIn> cell_db_;
 
   std::unique_ptr<vm::DynamicBagOfCellsDb> boc_;
   bool started_ = false;
+
+  std::function<void(const vm::CellLoader::LoadResult&)> on_load_callback_;
 };
 
 }  // namespace validator

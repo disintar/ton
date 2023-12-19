@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0.2 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 
 if (NOT OPENSSL_FOUND)
   find_package(OpenSSL REQUIRED)
@@ -57,6 +57,7 @@ set(VALIDATOR_HEADERS
   invariants.hpp
 
   import-db-slice.hpp
+  queue-size-counter.hpp
 
   manager-disk.h
   manager-disk.hpp
@@ -82,6 +83,7 @@ set(VALIDATOR_SOURCE
   validator-full-id.cpp
   validator-group.cpp
   validator-options.cpp
+  queue-size-counter.cpp
 
   downloaders/wait-block-data.cpp
   downloaders/wait-block-state.cpp
@@ -103,6 +105,7 @@ set(DISK_VALIDATOR_SOURCE
   validator-full-id.cpp
   validator-group.cpp
   validator-options.cpp
+  queue-size-counter.cpp
 
   downloaders/wait-block-data-disk.cpp
   downloaders/wait-block-state.cpp
@@ -122,6 +125,7 @@ set(HARDFORK_VALIDATOR_SOURCE
   validator-full-id.cpp
   validator-group.cpp
   validator-options.cpp
+  queue-size-counter.cpp
 
   downloaders/wait-block-data-disk.cpp
   downloaders/wait-block-state.cpp
