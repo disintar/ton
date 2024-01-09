@@ -84,8 +84,8 @@ Logger::Logger(LogInterface &log, const LogOptions &options, int log_level, Slic
   sb_ << thread_id << ']';
 
   // timestamp
-  //sb_ << '[' << StringBuilder::FixedDouble(Clocks::system(), 9) << ']';
-  sb_ << '[' << date::format("%F %T", std::chrono::system_clock::now()) << ']';
+  sb_ << '[' << StringBuilder::FixedDouble(Clocks::system(), 9) << ']';
+  //  sb_ << '[' << date::format("%F %T", std::chrono::system_clock::now()) << ']';
 
   // file : line
   if (!file_name.empty()) {

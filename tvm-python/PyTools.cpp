@@ -150,66 +150,73 @@ std::string onchain_hash_key_to_string(std::string hash) {
 }
 
 py::dict parse_token_data(const PyCell& codeCell) {
-  auto cell = codeCell.my_cell;
-  auto cs = load_cell_slice(cell);
+  try {
+    auto cell = codeCell.my_cell;
+    auto cs = load_cell_slice(cell);
 
-  if (cs.size() < 8) {
-    throw std::invalid_argument("Not valid cell slice, must be at least 8 bits");
-  }
-
-  int content_type;
-  cs.fetch_uint_to(8, content_type);
-
-  if (content_type == 0) {
-    auto data = cs.fetch_ref();
-
-    if (data.is_null()) {
-      throw std::invalid_argument("Can't find ref with dictionary");
+    if (cs.size() < 8) {
+      throw std::invalid_argument("Not valid cell slice, must be at least 8 bits");
     }
 
-    vm::Dictionary data_dict{data, 256};
-    py::dict py_dict;
+    int content_type;
+    cs.fetch_uint_to(8, content_type);
 
-    while (!data_dict.is_empty()) {
-      td::BitArray<256> key{};
-      data_dict.get_minmax_key(key);
+    if (content_type == 0) {
+      auto data = cs.fetch_ref();
 
-      auto key_text = onchain_hash_key_to_string(key.to_hex());
+      if (data.is_null()) {
+        throw std::invalid_argument("Can't find ref with dictionary");
+      }
 
-      td::Ref<vm::Cell> value = data_dict.lookup_delete(key)->prefetch_ref();
-      if (value.not_null()) {
-        std::stringstream a;
+      vm::Dictionary data_dict{data, 256};
+      py::dict py_dict;
 
-        auto vs = load_cell_slice(value);
+      while (!data_dict.is_empty()) {
+        td::BitArray<256> key{};
+        data_dict.get_minmax_key(key);
 
-        if (vs.size() >= 8) {
-          int value_type;
-          vs.fetch_uint_to(8, value_type);
+        auto key_text = onchain_hash_key_to_string(key.to_hex());
 
-          if (value_type == 0) {
-            py::dict d("type"_a = "snake", "value"_a = parse_snake_data_string(vs));
-            py_dict[py::str(key_text)] = d;
-          } else if (value_type == 1) {
-            py::dict d("type"_a = "chunks", "value"_a = parse_chunked_data(vs));
-            py_dict[py::str(key_text)] = d;
+        td::Ref<vm::Cell> value = data_dict.lookup_delete(key)->prefetch_ref();
+        if (value.not_null()) {
+          std::stringstream a;
+
+          auto vs = load_cell_slice(value);
+
+          if (vs.size() >= 8) {
+            int value_type;
+            vs.fetch_uint_to(8, value_type);
+
+            if (value_type == 0) {
+              py::dict d("type"_a = "snake", "value"_a = parse_snake_data_string(vs));
+              py_dict[py::str(key_text)] = d;
+            } else if (value_type == 1) {
+              py::dict d("type"_a = "chunks", "value"_a = parse_chunked_data(vs));
+              py_dict[py::str(key_text)] = d;
+            } else {
+              py::dict d("type"_a = "unknown", "value"_a = "");
+              py_dict[py::str(key_text)] = d;
+            }
           } else {
             py::dict d("type"_a = "unknown", "value"_a = "");
             py_dict[py::str(key_text)] = d;
           }
-        } else {
-          py::dict d("type"_a = "unknown", "value"_a = "");
-          py_dict[py::str(key_text)] = d;
         }
-      }
-    };
+      };
 
-    py::dict d("type"_a = "onchain", "value"_a = py_dict);
-    return d;
-  } else if (content_type == 1) {
-    py::dict d("type"_a = "offchain", "value"_a = parse_snake_data_string(cs));
-    return d;
-  } else {
-    throw std::invalid_argument("Not valid prefix, must be 0x00 / 0x01");
+      py::dict d("type"_a = "onchain", "value"_a = py_dict);
+      return d;
+    }
+    else if (content_type == 1) {
+      py::dict d("type"_a = "offchain", "value"_a = parse_snake_data_string(cs));
+      return d;
+    } else {
+      throw std::invalid_argument("Not valid prefix, must be 0x00 / 0x01");
+    }
+  } catch (const vm::VmError& e) {
+    throw std::runtime_error(e.get_msg());
+  } catch (const std::exception& e) {
+    throw std::invalid_argument("Can't parse token data");
   }
 }
 

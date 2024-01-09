@@ -16,5 +16,6 @@ std::string code_dissemble_cell(const PyCell& codeCell, const std::string& baseP
 py::dict parse_token_data(const PyCell& codeCell);
 PyCell run_asm(const std::string& code, const std::string& base_path);
 PyCellSlice pack_address(const std::string& address);
+std::string parse_chunked_data(vm::CellSlice& cs);
 
 #endif  //TON_PYTOOLS_H

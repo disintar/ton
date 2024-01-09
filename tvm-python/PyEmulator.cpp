@@ -54,7 +54,8 @@ bool PyEmulator::set_debug_enabled(bool debug_enabled) {
 }
 
 bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyCell& message_cell,
-                                     const std::string& unixtime, const std::string& lt_str, int vm_ver) {
+                                     const std::string& unixtime, const std::string& lt_str, int vm_ver,
+                                     bool force_uninit) {
   auto message_cs = vm::load_cell_slice(message_cell.my_cell);
   int msg_tag = block::gen::t_CommonMsgInfo.get_tag(message_cs);
 
@@ -65,6 +66,7 @@ bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyC
 
   td::Ref<vm::CellSlice> addr_slice;
   auto account_slice = vm::load_cell_slice(shard_account.account);
+  bool account_exists = (block::gen::t_Account.get_tag(account_slice) == block::gen::Account::account);
   if (block::gen::t_Account.get_tag(account_slice) == block::gen::Account::account_none) {
     if (msg_tag == block::gen::CommonMsgInfo::ext_in_msg_info) {
       block::gen::CommonMsgInfo::Record_ext_in_msg_info info;
@@ -81,12 +83,14 @@ bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyC
     } else {
       throw std::invalid_argument("Only ext in and int message are supported");
     }
-  } else {
+  } else if (block::gen::t_Account.get_tag(account_slice) == block::gen::Account::account) {
     block::gen::Account::Record_account account_record;
     if (!tlb::unpack(account_slice, account_record)) {
       throw std::invalid_argument("Can't unpack account cell");
     }
     addr_slice = std::move(account_record.addr);
+  } else {
+    throw std::invalid_argument("Can't parse account cell");
   }
 
   ton::WorkchainId wc;
@@ -103,8 +107,25 @@ bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyC
   account.block_lt = lt - lt % block::ConfigInfo::get_lt_align();
 
   bool is_special = wc == ton::masterchainId && emulator->get_config().is_special_smartcontract(addr);
-  if (!account.unpack(vm::load_cell_slice_ref(shard_account_cell.my_cell), td::Ref<vm::CellSlice>(), now, is_special)) {
-    throw std::invalid_argument("Can't unpack account data");
+  if (account_exists) {
+    if (!account.unpack(vm::load_cell_slice_ref(shard_account_cell.my_cell), now, is_special)) {
+      throw std::invalid_argument("Can't unpack shard account");
+    }
+  } else {
+    if (!account.init_new(now)) {
+      throw std::invalid_argument("Can't init new account");
+    }
+    account.last_trans_lt_ = shard_account.last_trans_lt;
+    account.last_trans_hash_ = shard_account.last_trans_hash;
+  }
+
+  if (force_uninit) {
+    if (account.orig_status == 0 or account.orig_status == 1 or account.orig_status == 4) {
+      account.orig_status = 1;  // acc_uninit
+      account.status = 1;
+    } else {
+      throw std::invalid_argument("Can't force uninited state on inited account");
+    }
   }
 
   auto result = emulator->emulate_transaction(std::move(account), message_cell.my_cell, now, lt,
@@ -178,7 +199,7 @@ bool PyEmulator::emulate_tick_tock_transaction(const PyCell& shard_account_boc, 
   account.block_lt = lt - lt % block::ConfigInfo::get_lt_align();
 
   bool is_special = wc == ton::masterchainId && emulator->get_config().is_special_smartcontract(addr);
-  if (!account.unpack(vm::load_cell_slice_ref(shard_account_cell), td::Ref<vm::CellSlice>(), now, is_special)) {
+  if (!account.unpack(vm::load_cell_slice_ref(shard_account_cell), now, is_special)) {
     throw std::invalid_argument("Can't unpack shard account");
   }
 
