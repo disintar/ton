@@ -120,7 +120,7 @@ bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyC
   }
 
   if (force_uninit) {
-    if (account.orig_status == 0 or account.orig_status == 1 or account.orig_status == 4) {
+    if (account.orig_status == 0 || account.orig_status == 1 || account.orig_status == 4) {
       account.orig_status = 1;  // acc_uninit
       account.status = 1;
     } else {
