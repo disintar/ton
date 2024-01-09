@@ -78,6 +78,17 @@ void ValidatorGroup::validate_block_candidate(td::uint32 round_id, BlockCandidat
     promise.set_error(td::Status::Error(ErrorCode::notready, "too old"));
     return;
   }
+
+  auto next_block_id = create_next_block_id(block.id.root_hash, block.id.file_hash);
+  block.id = next_block_id;
+
+  CacheKey cache_key = block_to_cache_key(block);
+  auto it = approved_candidates_cache_.find(cache_key);
+  if (it != approved_candidates_cache_.end()) {
+    promise.set_result(it->second);
+    return;
+  }
+
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), round_id, block = block.clone(),
                                        promise = std::move(promise)](td::Result<ValidateCandidateResult> R) mutable {
     if (R.is_error()) {
@@ -93,22 +104,30 @@ void ValidatorGroup::validate_block_candidate(td::uint32 round_id, BlockCandidat
           td::Timestamp::in(0.1));
     } else {
       auto v = R.move_as_ok();
-      v.visit(td::overloaded([&](UnixTime ts) { promise.set_result(ts); },
-                             [&](CandidateReject reject) {
-                               promise.set_error(td::Status::Error(ErrorCode::protoviolation,
-                                                                   PSTRING() << "bad candidate: " << reject.reason));
-                             }));
+      v.visit(td::overloaded(
+          [&](UnixTime ts) {
+            td::actor::send_closure(SelfId, &ValidatorGroup::update_approve_cache, block_to_cache_key(block),
+                                    ts);
+            promise.set_result(ts);
+          },
+          [&](CandidateReject reject) {
+            promise.set_error(
+                td::Status::Error(ErrorCode::protoviolation, PSTRING() << "bad candidate: " << reject.reason));
+          }));
     }
   });
   if (!started_) {
     P.set_error(td::Status::Error(ErrorCode::notready, "validator group not started"));
     return;
   }
-  auto next_block_id = create_next_block_id(block.id.root_hash, block.id.file_hash);
   VLOG(VALIDATOR_DEBUG) << "validating block candidate " << next_block_id;
   block.id = next_block_id;
   run_validate_query(shard_, min_ts_, min_masterchain_block_id_, prev_block_ids_, std::move(block), validator_set_,
                      manager_, td::Timestamp::in(15.0), std::move(P));
+}
+
+void ValidatorGroup::update_approve_cache(CacheKey key, UnixTime value) {
+  approved_candidates_cache_[key] = value;
 }
 
 void ValidatorGroup::accept_block_candidate(td::uint32 round_id, PublicKeyHash src, td::BufferSlice block_data,
@@ -117,7 +136,7 @@ void ValidatorGroup::accept_block_candidate(td::uint32 round_id, PublicKeyHash s
                                             std::vector<BlockSignature> approve_signatures,
                                             validatorsession::ValidatorSessionStats stats,
                                             td::Promise<td::Unit> promise) {
-  if (round_id >= last_known_round_id_) {
+      if (round_id >= last_known_round_id_) {
     last_known_round_id_ = round_id + 1;
   }
   auto sig_set = create_signature_set(std::move(signatures));
@@ -131,6 +150,7 @@ void ValidatorGroup::accept_block_candidate(td::uint32 round_id, PublicKeyHash s
     return;
   }
   auto next_block_id = create_next_block_id(root_hash, file_hash);
+  LOG(WARNING) << "Accepted block " << next_block_id;
   td::actor::send_closure(manager_, &ValidatorManager::log_validator_session_stats, next_block_id, std::move(stats));
   auto block =
       block_data.size() > 0 ? create_block(next_block_id, std::move(block_data)).move_as_ok() : td::Ref<BlockData>{};
@@ -155,6 +175,7 @@ void ValidatorGroup::accept_block_candidate(td::uint32 round_id, PublicKeyHash s
                          std::move(approve_sig_set), src == local_id_, manager_, std::move(P));
   prev_block_ids_ = std::vector<BlockIdExt>{next_block_id};
   cached_collated_block_ = nullptr;
+  approved_candidates_cache_.clear();
 }
 
 void ValidatorGroup::retry_accept_block_query(BlockIdExt block_id, td::Ref<BlockData> block,
@@ -310,6 +331,7 @@ void ValidatorGroup::start(std::vector<BlockIdExt> prev, BlockIdExt min_masterch
   min_masterchain_block_id_ = min_masterchain_block_id;
   min_ts_ = min_ts;
   cached_collated_block_ = nullptr;
+  approved_candidates_cache_.clear();
   started_ = true;
 
   if (init_) {
