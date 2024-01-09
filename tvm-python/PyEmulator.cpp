@@ -108,8 +108,7 @@ bool PyEmulator::emulate_transaction(const PyCell& shard_account_cell, const PyC
 
   bool is_special = wc == ton::masterchainId && emulator->get_config().is_special_smartcontract(addr);
   if (account_exists) {
-    if (!account.unpack(vm::load_cell_slice_ref(shard_account_cell.my_cell), td::Ref<vm::CellSlice>(), now,
-                        is_special)) {
+    if (!account.unpack(vm::load_cell_slice_ref(shard_account_cell.my_cell), now, is_special)) {
       throw std::invalid_argument("Can't unpack shard account");
     }
   } else {
@@ -200,7 +199,7 @@ bool PyEmulator::emulate_tick_tock_transaction(const PyCell& shard_account_boc, 
   account.block_lt = lt - lt % block::ConfigInfo::get_lt_align();
 
   bool is_special = wc == ton::masterchainId && emulator->get_config().is_special_smartcontract(addr);
-  if (!account.unpack(vm::load_cell_slice_ref(shard_account_cell), td::Ref<vm::CellSlice>(), now, is_special)) {
+  if (!account.unpack(vm::load_cell_slice_ref(shard_account_cell), now, is_special)) {
     throw std::invalid_argument("Can't unpack shard account");
   }
 
