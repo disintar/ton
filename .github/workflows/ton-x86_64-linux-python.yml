@@ -18,8 +18,6 @@ jobs:
       matrix:
         python: [39, 310, 311]
     runs-on: [self-hosted, Linux, X64]
-    needs:
-      - build39
     steps:
     - uses: actions/checkout@v3
       with:
