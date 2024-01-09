@@ -21,6 +21,7 @@
 #include <iostream>
 #include <locale>
 #include <sstream>
+#include <td/utils/utf8.h>
 
 std::string PyCellSlice::load_uint(unsigned n) {
   if (!my_cell_slice.have(n)) {
@@ -146,25 +147,45 @@ std::string PyCellSlice::toString() const {
   return "<CellSlice " + t + ">";
 }
 
-std::string map_to_utf8(const long long val) {
-  std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> converter;
-  return converter.to_bytes(static_cast<char32_t>(val));
-}
-
 std::string fetch_string(vm::CellSlice &cs, unsigned int text_size, bool convert_to_utf8) {
   if (convert_to_utf8) {
     std::string text;
-
     while (text_size > 0) {
-      text += map_to_utf8(cs.fetch_long(8));
-      text_size -= 1;
+      // Fetch the first byte to determine the length of the character
+      auto first_byte = cs.fetch_ulong(8);
+
+      // Determine the number of bytes for the UTF-8 character
+      size_t char_size = 0;
+      if ((first_byte & 0x80) == 0) {
+        char_size = 1;
+      } else if ((first_byte & 0xE0) == 0xC0) {
+        char_size = 2;
+      } else if ((first_byte & 0xF0) == 0xE0) {
+        char_size = 3;
+      } else if ((first_byte & 0xF8) == 0xF0) {
+        char_size = 4;
+      } else {
+        // Handle invalid UTF-8 sequence or adjust as needed
+        char_size = 1;
+      }
+
+      std::ostringstream utf8Stream;
+      utf8Stream << static_cast<char>(first_byte);
+      for (size_t i = 1; i < char_size; ++i) {
+        auto next_byte = cs.fetch_ulong(8);
+        utf8Stream << static_cast<char>(next_byte);
+      }
+      text += utf8Stream.str();
+
+      // Decrement the text_size based on the consumed bytes
+      text_size -= char_size;
     }
 
     return text;
   } else {
+    // Your existing code for non-UTF8 conversion
     td::BufferSlice s(text_size);
     cs.fetch_bytes((td::uint8 *)s.data(), text_size);
-
     return s.as_slice().str();
   }
 }
@@ -360,8 +381,31 @@ std::string fetch_string(vm::CellSlice &cs, bool convert_to_utf8 = true) {
     std::string text;
 
     while (text_size > 0) {
-      text += map_to_utf8(cs.fetch_long(8));
-      text_size -= 1;
+      auto first_byte = cs.fetch_ulong(8);
+
+      // Determine the number of bytes for the UTF-8 character
+      size_t char_size = 0;
+      if ((first_byte & 0x80) == 0) {
+        char_size = 1;
+      } else if ((first_byte & 0xE0) == 0xC0) {
+        char_size = 2;
+      } else if ((first_byte & 0xF0) == 0xE0) {
+        char_size = 3;
+      } else if ((first_byte & 0xF8) == 0xF0) {
+        char_size = 4;
+      } else {
+        // Handle invalid UTF-8 sequence or adjust as needed
+        char_size = 1;
+      }
+
+      std::ostringstream utf8Stream;
+      utf8Stream << static_cast<char>(first_byte);
+      for (size_t i = 1; i < char_size; ++i) {
+        auto next_byte = cs.fetch_ulong(8);
+        utf8Stream << static_cast<char>(next_byte);
+      }
+      text += utf8Stream.str();
+      text_size -= char_size;
     }
 
     return text;
