@@ -48,7 +48,8 @@
 namespace py = pybind11;
 using namespace pybind11::literals;  // to bring in the `_a` literal'
 
-std::string code_disassemble(const td::Ref<vm::Cell>& codeCell, const std::string& basePath) {
+std::string code_disassemble(const td::Ref<vm::Cell>& codeCell, const std::string& basePath,
+                             const td::Ref<vm::Cell>& vmlibsCell) {
   fift::Fift::Config config;
 
   config.source_lookup = fift::SourceLookup(std::make_unique<fift::OsFileLoader>());
@@ -71,10 +72,11 @@ std::string code_disassemble(const td::Ref<vm::Cell>& codeCell, const std::strin
   ss << fiftLib.ok();
   ss << listsLib.ok();
   ss << disasmLib.ok();
-  ss << "<s std-disasm disasm ";
+  ss << "@vmlibs ! std-disasm disasmc ";
 
   fift::IntCtx ctx{ss, "stdin", basePath, 0};
   ctx.stack.push_cell(codeCell);
+  ctx.stack.push_maybe_cell(vmlibsCell);
 
   ctx.ton_db = &fift.config().ton_db;
   ctx.source_lookup = &fift.config().source_lookup;
@@ -108,13 +110,23 @@ std::string code_disassemble(const td::Ref<vm::Cell>& codeCell, const std::strin
   }
 }
 
-std::string code_dissemble_str(const std::string& code, const std::string& basePath) {
+std::string code_dissemble_str(const std::string& code, const std::string& basePath, const PyCell& vmlibs) {
   auto codeCell = parse_string_to_cell(code);
-  return code_disassemble(std::move(codeCell.my_cell), basePath);
+  if (vmlibs.is_null()) {
+    return code_disassemble(std::move(codeCell.my_cell), basePath, {});
+  } else {
+    auto c = vmlibs.my_cell;
+    return code_disassemble(std::move(codeCell.my_cell), basePath, c.is_null() ? td::Ref<vm::Cell>{} : c);
+  }
 }
 
-std::string code_dissemble_cell(const PyCell& codeCell, const std::string& basePath) {
-  return code_disassemble(codeCell.my_cell, basePath);
+std::string code_dissemble_cell(const PyCell& codeCell, const std::string& basePath, const PyCell& vmlibs) {
+  if (vmlibs.is_null()) {
+    return code_disassemble(codeCell.my_cell, basePath, {});
+  } else {
+    auto c = vmlibs.my_cell;
+    return code_disassemble(codeCell.my_cell, basePath, c.is_null() ? td::Ref<vm::Cell>{} : c);
+  }
 }
 
 std::string parse_chunked_data(vm::CellSlice& cs) {
@@ -206,8 +218,7 @@ py::dict parse_token_data(const PyCell& codeCell) {
 
       py::dict d("type"_a = "onchain", "value"_a = py_dict);
       return d;
-    }
-    else if (content_type == 1) {
+    } else if (content_type == 1) {
       py::dict d("type"_a = "offchain", "value"_a = parse_snake_data_string(cs));
       return d;
     } else {
