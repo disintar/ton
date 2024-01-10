@@ -241,6 +241,10 @@ std::string PyEmulator::get_vm_log() {
   return vm_log;
 }
 
+void PyEmulator::set_prev_blocks_info(PyStackEntry entry) {
+  emulator->set_prev_blocks_info(entry.entry.as_tuple());
+}
+
 double PyEmulator::get_elapsed_time() {
   return elapsed_time;
 }

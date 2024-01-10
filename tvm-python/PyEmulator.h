@@ -12,6 +12,7 @@
 #include "block/block-auto.h"
 #include "tvm-python/PyCellSlice.h"
 #include "PyCell.h"
+#include "PyStack.h"
 #include "emulator/transaction-emulator.h"
 #include "emulator/tvm-emulator.hpp"
 #include "td/utils/base64.h"
@@ -70,6 +71,7 @@ class PyEmulator {
   PyCell get_transaction_cell();
   PyCell get_account_cell();
   PyCell get_actions_cell();
+  void set_prev_blocks_info(PyStackEntry pystack);
 
   static void dummy_set() {
     throw std::invalid_argument("Not settable");
