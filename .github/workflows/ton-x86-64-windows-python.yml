@@ -1,0 +1,76 @@
+name: Windows TON build (portable, x86-64)
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        python: [ 39, 310, 311 ]
+    runs-on: windows-2022
+    env:
+      RELEASE_NAME: ton-cpython-${{ matrix.python }}-x86_64-windows
+
+    steps:
+      - name: Get Current OS version
+        run: Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion
+
+      - name: Check out current repository
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+
+      - name: Setup msbuild.exe
+        uses: microsoft/setup-msbuild@v1.1
+
+      - name: Install Pkg-config Lite
+        run: choco install pkgconfiglite --allow-empty-checksums
+
+      - run: |
+          echo "pythonver=$(${{ matrix.python }} -replace '(\d)(\d+)$', '$1.$2')" >> $env:GITHUB_ENV
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.pythonver }}
+
+      - name: Build TON
+        run: |
+          copy assembly\native\build-windows-python.bat .
+          & .\build-windows-python.bat
+
+      - name: Find & copy binaries
+        run: |
+          mkdir artifacts
+          xcopy /i "build\tvm-python\*.pyd" "artifacts\"
+
+      - name: Simple binary test
+        run: |
+          cd artifacts
+          python -c 'import python_ton'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ env.RELEASE_NAME }}
+          path: artifacts
+
+      - name: Upload artifacts
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }} ||
+          ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          try {
+            gh release delete -y ${{ env.RELEASE_NAME }}
+          } catch {}
+          gh release create ${{ env.RELEASE_NAME }} --notes " " (Get-ChildItem -Path artifacts).FullName
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
