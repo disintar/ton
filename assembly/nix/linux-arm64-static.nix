@@ -3,16 +3,18 @@
 { pkgs ? import <nixpkgs> { system = builtins.currentSystem; }
 , lib ? pkgs.lib
 , stdenv ? pkgs.stdenv
+, system ? builtins.currentSystem
+, src ? ./.
 }:
 let
-  microhttpdmy = (import ./microhttpd.nix) {};
+  microhttpdmy = (import ./microhttpd.nix) { inherit pkgs; };
 in
 with import microhttpdmy;
 stdenv.mkDerivation {
   pname = "ton";
   version = "dev-bin";
 
-  src = ./.;
+  inherit src;
 
   nativeBuildInputs = with pkgs;
     [

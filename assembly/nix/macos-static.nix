@@ -1,15 +1,17 @@
 # export NIX_PATH=nixpkgs=https://github.com/nixOS/nixpkgs/archive/23.05.tar.gz
 
-{ pkgs ? import <nixpkgs> { system = builtins.currentSystem; }
+{ pkgs ? import <nixpkgs> { inherit system; }
 , lib ? pkgs.lib
 , stdenv ? pkgs.stdenv
+, system ? builtins.currentSystem
+, src ? ./.
 }:
 
 pkgs.llvmPackages_14.stdenv.mkDerivation {
   pname = "ton";
   version = "dev-bin";
 
-  src = ./.;
+  inherit src;
 
   nativeBuildInputs = with pkgs;
     [ cmake ninja git pkg-config ];
