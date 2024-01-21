@@ -2,6 +2,7 @@
 #include "adnl/adnl-ext-client.h"
 #include "PyKeys.h"
 #include "PyCell.h"
+#include "PyDict.h"
 #include "td/utils/MpscPollableQueue.h"
 #include "tl/generate/auto/tl/lite_api.h"
 #include "ton/lite-tl.hpp"
@@ -12,6 +13,8 @@
 #include "tl-utils/common-utils.hpp"
 #include "tl/tl/TlObject.h"
 #include "td/actor/PromiseFuture.h"
+#include "block/check-proof.h"
+#include "lite-client/lite-client.h"
 
 #ifndef TON_PYLITECLIENT_H
 #define TON_PYLITECLIENT_H
@@ -54,10 +57,9 @@ class GetTimeResponse : public ResponseObj {
   std::int32_t now;
 };
 
-class GetMasterchainInfoExt : public ResponseObj {
+class SuccessBufferSlice : public ResponseObj {
  public:
-  GetMasterchainInfoExt(std::unique_ptr<td::BufferSlice> obj_)
-      : ResponseObj(true, std::move("")), obj(std::move(obj_)) {
+  SuccessBufferSlice(std::unique_ptr<td::BufferSlice> obj_) : ResponseObj(true, std::move("")), obj(std::move(obj_)) {
   }
   std::unique_ptr<td::BufferSlice> obj;
 };
@@ -83,9 +85,17 @@ class LiteClientActorEngine : public td::actor::Actor {
     output_queue->writer_put(ResponseWrapper(std::make_unique<Connected>(Connected(connected))));
   }
 
+  void send_message(vm::Ref<vm::Cell> message);
+  void lookupBlock(int mode, ton::BlockId block, long long lt, long long time);
+
   void get_time();
   void get_MasterchainInfoExt(int mode);
-  void send_message(vm::Ref<vm::Cell> message);
+  void get_AccountState(int workchain, td::Bits256 address, ton::BlockIdExt blkid);
+  void get_Transactions(int count, int workchain, td::Bits256 address_bits, unsigned long long lt, td::Bits256 hash);
+  void get_ConfigAll(int mode, ton::BlockIdExt blkid);
+  void get_BlockHeader(ton::BlockIdExt blkid, int mode);
+  void get_Block(ton::BlockIdExt blkid);
+  void get_Libraries(std::vector<td::Bits256> libs);
 
   void run();
 
@@ -96,6 +106,7 @@ class LiteClientActorEngine : public td::actor::Actor {
   bool connected = false;
   td::actor::ActorOwn<ton::adnl::AdnlExtClient> client;
   std::unique_ptr<ton::adnl::AdnlExtClient::Callback> make_callback();
+  void qprocess(td::BufferSlice q);
 };
 
 // Python wrapper
@@ -155,20 +166,17 @@ class PyLiteClient {
     }
   }
 
-  std::unique_ptr<ton::lite_api::liteServer_masterchainInfoExt> get_MasterchainInfoExt() {
-    scheduler_.run_in_context_external(
-        [&] { send_closure(engine, &LiteClientActorEngine::get_MasterchainInfoExt, 0); });
-
-    auto response = wait_response();
-    if (response->success) {
-      GetMasterchainInfoExt* data = dynamic_cast<GetMasterchainInfoExt*>(response.get());
-      auto x =
-          ton::fetch_tl_object<ton::lite_api::liteServer_masterchainInfoExt>(data->obj->clone(), true).move_as_ok();
-      return std::move(x);
-    } else {
-      throw std::logic_error(response->error_message);
-    }
-  }
+  std::unique_ptr<ton::lite_api::liteServer_masterchainInfoExt> get_MasterchainInfoExt();
+  std::unique_ptr<block::AccountState::Info> get_AccountState(int workchain, std::string address_string,
+                                                              ton::BlockIdExt& blk);
+  std::pair<ton::BlockIdExt, PyCell> get_ConfigAll(int mode, ton::BlockIdExt block,
+                                                   bool force_check_on_key_block = true);
+  block::TransactionList::Info get_Transactions(int count, int workchain, std::string address_string,
+                                                unsigned long long lt, std::string hash_int_string);
+  TestNode::BlockHdrInfo get_BlockHeader(ton::BlockIdExt blkid, int mode);
+  TestNode::BlockHdrInfo lookupBlock(int mode, ton::BlockId block, long long lt, long long time);
+  PyCell get_Block(ton::BlockIdExt blkid);
+  PyDict get_Libraries(std::vector<std::string> libs);
 
  private:
   std::shared_ptr<OutputQueue> response_obj_;

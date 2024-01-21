@@ -39,6 +39,27 @@
 using td::Ref;
 
 class TestNode : public td::actor::Actor {
+ public:
+  struct BlockHdrInfo {
+    ton::BlockIdExt blk_id;
+    Ref<vm::Cell> proof, virt_blk_root;
+    int mode;
+    BlockHdrInfo() : mode(-1) {
+    }
+    BlockHdrInfo(const ton::BlockIdExt blk_id_, Ref<vm::Cell> proof_, Ref<vm::Cell> vroot_, int mode_)
+        : blk_id(blk_id_), proof(std::move(proof_)), virt_blk_root(std::move(vroot_)), mode(mode_) {
+    }
+  };
+
+  struct ConfigInfo {
+    std::unique_ptr<block::Config> config;
+    Ref<vm::Cell> state_proof, config_proof;
+    ConfigInfo() = default;
+    ConfigInfo(std::unique_ptr<block::Config> config_, Ref<vm::Cell> state_proof_, Ref<vm::Cell> config_proof_)
+        : config(std::move(config_)), state_proof(std::move(state_proof_)), config_proof(std::move(config_proof_)) {
+    }
+  };
+
  private:
   std::string global_config_ = "ton-global.config";
   enum {
@@ -99,26 +120,6 @@ class TestNode : public td::actor::Actor {
     ton::Bits256 trans_hash;
     TransId(const ton::Bits256& addr_, ton::LogicalTime lt_, const ton::Bits256& hash_)
         : acc_addr(addr_), trans_lt(lt_), trans_hash(hash_) {
-    }
-  };
-
-  struct BlockHdrInfo {
-    ton::BlockIdExt blk_id;
-    Ref<vm::Cell> proof, virt_blk_root;
-    int mode;
-    BlockHdrInfo() : mode(-1) {
-    }
-    BlockHdrInfo(const ton::BlockIdExt blk_id_, Ref<vm::Cell> proof_, Ref<vm::Cell> vroot_, int mode_)
-        : blk_id(blk_id_), proof(std::move(proof_)), virt_blk_root(std::move(vroot_)), mode(mode_) {
-    }
-  };
-
-  struct ConfigInfo {
-    std::unique_ptr<block::Config> config;
-    Ref<vm::Cell> state_proof, config_proof;
-    ConfigInfo() = default;
-    ConfigInfo(std::unique_ptr<block::Config> config_, Ref<vm::Cell> state_proof_, Ref<vm::Cell> config_proof_)
-        : config(std::move(config_)), state_proof(std::move(state_proof_)), config_proof(std::move(config_proof_)) {
     }
   };
 

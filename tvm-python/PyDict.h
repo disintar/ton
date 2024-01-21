@@ -33,7 +33,8 @@ struct PyAugmentationCheckData : vm::dict::AugmentationData {
       , py_eval_empty(py_eval_empty_) {
   }
 
-  PyAugmentationCheckData() {}
+  PyAugmentationCheckData() {
+  }
 
   bool eval_leaf(vm::CellBuilder& cb, vm::CellSlice& cs) const override;
   bool skip_extra(vm::CellSlice& cs) const override;
@@ -47,6 +48,13 @@ class PyDict {
   PyAugmentationCheckData aug;
   unsigned int key_len;
   bool sgnd, is_augmented;
+
+  explicit PyDict(vm::Dictionary& d) {
+    my_dict = std::make_unique<vm::Dictionary>(std::move(d));
+    key_len = d.get_key_bits();
+    is_augmented = false;
+    sgnd = false;
+  }
 
   explicit PyDict(int key_len_, bool sgnd_ = false, td::optional<PyCellSlice> cs_root = td::optional<PyCellSlice>()) {
     if (cs_root) {
@@ -100,6 +108,12 @@ class PyDict {
   std::string toString() const;
   std::string dump() const;
   void map(py::function& f);
+  void combine_with(PyDict& d2) {
+    bool success = my_dict->combine_with(*d2.my_dict);
+    if (!success) {
+      throw std::logic_error("Can't combine dicts");
+    }
+  }
 
   static void dummy_set() {
     throw std::invalid_argument("Not settable");

@@ -340,7 +340,7 @@ td::Result<BlockTransaction::Info> BlockTransaction::validate(bool check_proof) 
 td::Result<BlockTransactionList::Info> BlockTransactionList::validate(bool check_proof) const {
   constexpr int max_answer_transactions = 256;
 
-  TRY_RESULT_PREFIX(list, vm::std_boc_deserialize_multi(std::move(transactions_boc)), "cannot deserialize transactions boc: ");  
+  TRY_RESULT_PREFIX(list, vm::std_boc_deserialize_multi(std::move(transactions_boc)), "cannot deserialize transactions boc: ");
   std::vector<td::Ref<vm::Cell>> tx_proofs(list.size());
 
   if (check_proof) {

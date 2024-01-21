@@ -1,6 +1,7 @@
 // Copyright 2023 Disintar LLP / andrey@head-labs.com
 #include <string>
 #include <block/block.h>
+#include <ton/ton-shard.h>
 #include "PyCellSlice.h"
 #include "PyCellBuilder.h"
 
@@ -49,6 +50,10 @@ class PySmcAddress {
 
   std::string rserialize(bool base64_url) {
     return my_address.rserialize(base64_url);
+  }
+
+  unsigned long long shard_prefix(int len) {
+    return ton::shard_prefix(my_address.addr, len);
   }
 
   bool append_to_builder(PyCellBuilder& cb);

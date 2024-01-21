@@ -68,6 +68,14 @@ std::string py_parse_chunked_data(PyCellSlice cs) {
   return parse_chunked_data(cs.my_cell_slice);
 }
 
+bool shard_is_ancestor(ton::ShardId parent, ton::ShardId child) {
+  return ton::shard_is_ancestor(parent, child);
+}
+
+unsigned long long shard_child(ton::ShardId shard, bool left) {
+  return ton::shard_child(shard, left);
+}
+
 PYBIND11_MODULE(python_ton, m) {
   PSLICE() << "";
   SET_VERBOSITY_LEVEL(verbosity_ERROR);
@@ -86,6 +94,8 @@ PYBIND11_MODULE(python_ton, m) {
       throw std::runtime_error(e.get_msg());
     } catch (const vm::VmFatal& e) {
       throw std::runtime_error("VmFatal error");
+    } catch (vm::VmVirtError& err) {
+      throw std::runtime_error("Virtualization error");
     } catch (src::ParseError e) {
       throw std::runtime_error(e.message);
     } catch (std::exception& e) {
@@ -214,6 +224,7 @@ PYBIND11_MODULE(python_ton, m) {
            py::arg("signed") = false)
       .def("to_boc", &PyDict::to_boc)
       .def("map", &PyDict::map)
+      .def("combine_with", &PyDict::combine_with, py::arg("dict2"))
       .def("__repr__", &PyDict::toString);
 
   m.def("parse_string_to_cell", parse_string_to_cell, py::arg("cell_boc"));
@@ -306,7 +317,8 @@ PYBIND11_MODULE(python_ton, m) {
       .def("set_prev_blocks_info", &PyEmulator::set_prev_blocks_info, py::arg("prev_blocks"))
       .def("set_debug_enabled", &PyEmulator::set_debug_enabled, py::arg("debug_enabled"))
       .def("emulate_transaction", &PyEmulator::emulate_transaction, py::arg("shard_account_cell"),
-           py::arg("message_cell"), py::arg("unixtime") = "0", py::arg("lt") = "0", py::arg("vm_ver") = 1, py::arg("force_uninit") = false)
+           py::arg("message_cell"), py::arg("unixtime") = "0", py::arg("lt") = "0", py::arg("vm_ver") = 1,
+           py::arg("force_uninit") = false)
       .def("emulate_tick_tock_transaction", &PyEmulator::emulate_tick_tock_transaction, py::arg("shard_account_boc"),
            py::arg("is_tock"), py::arg("unixtime") = "0", py::arg("lt") = "0", py::arg("vm_ver") = 1)
       .def_property("vm_log", &PyEmulator::get_vm_log, &PyEmulator::dummy_set)
@@ -327,6 +339,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("rserialize", &PySmcAddress::rserialize, py::arg("base64_url"))
       .def("append_to_builder", &PySmcAddress::append_to_builder, py::arg("builder"))
       .def("pack", &PySmcAddress::pack)
+      .def("shard_prefix", &PySmcAddress::shard_prefix, py::arg("len"))
       .def("address", &PySmcAddress::address);
 
   py::class_<PyPublicKey>(m, "PyPublicKey", py::module_local())
@@ -347,13 +360,44 @@ PYBIND11_MODULE(python_ton, m) {
 
   py::class_<td::Bits256>(m, "Bits256", py::module_local()).def(py::init<>()).def("to_hex", &td::Bits256::to_hex);
 
-  py::class_<ton::lite_api::tonNode_blockIdExt>(m, "tonNode_blockIdExt", py::module_local())
-      .def(py::init<>())
-      .def_readonly("workchain", &ton::lite_api::tonNode_blockIdExt::workchain_)
-      .def_readonly("shard", &ton::lite_api::tonNode_blockIdExt::shard_)
-      .def_readonly("seqno", &ton::lite_api::tonNode_blockIdExt::seqno_)
-      .def_readonly("root_hash", &ton::lite_api::tonNode_blockIdExt::root_hash_)
-      .def_readonly("file_hash", &ton::lite_api::tonNode_blockIdExt::file_hash_);
+  py::class_<ton::BlockId>(m, "BlockId", py::module_local())
+      .def(py::init([](int workchain, unsigned long long shard, unsigned int seqno) -> ton::BlockId {
+             return ton::BlockId(workchain, shard, seqno);
+           }),
+           py::arg("workchain"), py::arg("shard"), py::arg("seqno"))
+      .def_readonly("workchain", &ton::BlockId::workchain)
+      .def_readonly("shard", &ton::BlockId::shard)
+      .def_readonly("seqno", &ton::BlockId::seqno)
+      .def("__str__", [](ton::BlockId obj) -> std::string { return obj.to_str(); })
+      .def("to_string", [](ton::BlockId obj) -> std::string { return obj.to_str(); });
+
+  py::class_<TestNode::BlockHdrInfo>(m, "BlockHdrInfo", py::module_local())
+      .def_readonly("blk_id", &TestNode::BlockHdrInfo::blk_id)
+      .def_readonly("mode", &TestNode::BlockHdrInfo::mode)
+      .def_property_readonly("proof", [](TestNode::BlockHdrInfo obj) -> PyCell { return PyCell(obj.proof); })
+      .def_property_readonly("virt_blk_root",
+                             [](TestNode::BlockHdrInfo obj) -> PyCell { return PyCell(obj.virt_blk_root); });
+
+  py::class_<ton::BlockIdExt>(m, "BlockIdExt", py::module_local())
+      .def(py::init([](ton::BlockId id_, std::string root_hash_, std::string file_hash_) -> ton::BlockIdExt {
+        td::RefInt256 root_hash_int = td::string_to_int256(root_hash_);
+        td::RefInt256 file_hash_int = td::string_to_int256(file_hash_);
+        td::Bits256 root_hash_bits;
+        td::Bits256 file_hash_bits;
+        if (!root_hash_int->export_bytes(root_hash_bits.data(), 32, false)) {
+          throw std::logic_error("Invalid root_hash");
+        }
+        if (!file_hash_int->export_bytes(file_hash_bits.data(), 32, false)) {
+          throw std::logic_error("Invalid file_hash");
+        }
+
+        return ton::BlockIdExt(std::move(id_), std::move(root_hash_bits), std::move(file_hash_bits));
+      }))
+      .def_readonly("id", &ton::BlockIdExt::id)
+      .def_property_readonly("root_hash", [](ton::BlockIdExt obj) -> std::string { return obj.root_hash.to_hex(); })
+      .def_property_readonly("file_hash", [](ton::BlockIdExt obj) -> std::string { return obj.file_hash.to_hex(); })
+      .def("__str__", [](ton::BlockIdExt obj) -> std::string { return obj.to_str(); })
+      .def("to_string", [](ton::BlockIdExt obj) -> std::string { return obj.to_str(); });
 
   py::class_<ton::lite_api::liteServer_masterchainInfoExt>(m, "liteServer_masterchainInfoExt", py::module_local())
       .def(py::init<>())
@@ -362,12 +406,50 @@ PYBIND11_MODULE(python_ton, m) {
       .def_readonly("capabilities", &ton::lite_api::liteServer_masterchainInfoExt::capabilities_)
       .def_readonly("last_utime", &ton::lite_api::liteServer_masterchainInfoExt::last_utime_)
       .def_readonly("now", &ton::lite_api::liteServer_masterchainInfoExt::now_)
-      .def_readonly("state_root_hash", &ton::lite_api::liteServer_masterchainInfoExt::state_root_hash_)
+      .def_property_readonly("state_root_hash",
+                             [](const ton::lite_api::liteServer_masterchainInfoExt& obj) -> std::string {
+                               return obj.state_root_hash_.to_hex();
+                             })
+      .def_property_readonly("last",
+                             [](const ton::lite_api::liteServer_masterchainInfoExt& obj) -> const ton::BlockIdExt {
+                               return std::move(ton::create_block_id(std::move(obj.last_)));
+                             });
+
+  py::class_<block::AccountState::Info>(m, "block_AccountState_Info", py::module_local())
+      .def(py::init<>())
+      .def_property_readonly("last_trans_lt",
+                             [](const block::AccountState::Info& obj) -> long long { return obj.last_trans_lt; })
       .def_property_readonly(
-          "last",
-          [](const ton::lite_api::liteServer_masterchainInfoExt& obj) -> const ton::lite_api::tonNode_blockIdExt& {
-            return *(obj.last_);
-          });
+          "last_trans_hash",
+          [](const block::AccountState::Info& obj) -> std::string { return obj.last_trans_hash.to_hex(); })
+      .def_property_readonly("gen_lt", [](const block::AccountState::Info& obj) -> long long { return obj.gen_lt; })
+      .def_property_readonly("gen_utime",
+                             [](const block::AccountState::Info& obj) -> long long { return obj.gen_utime; })
+      .def_property_readonly("root", [](const block::AccountState::Info& obj) -> PyCell { return PyCell(obj.root); })
+      .def_property_readonly("true_root",
+                             [](const block::AccountState::Info& obj) -> PyCell { return PyCell(obj.true_root); });
+
+  py::class_<block::Transaction::Info>(m, "block_Transaction_Info", py::module_local())
+      .def(py::init<>())
+      .def_property_readonly("blkid", [](const block::Transaction::Info& obj) -> ton::BlockIdExt { return obj.blkid; })
+      .def_property_readonly(
+          "prev_trans_lt", [](const block::Transaction::Info& obj) -> unsigned long long { return obj.prev_trans_lt; })
+      .def_property_readonly("now", [](const block::Transaction::Info& obj) -> unsigned long long { return obj.now; })
+      .def_property_readonly(
+          "prev_trans_hash",
+          [](const block::Transaction::Info& obj) -> std::string { return obj.prev_trans_hash.to_hex(); })
+      .def_property_readonly("transaction",
+                             [](const block::Transaction::Info& obj) -> PyCell { return PyCell(obj.transaction); });
+
+  py::class_<block::TransactionList::Info>(m, "block_TransactionList_Info", py::module_local())
+      .def(py::init<>())
+      .def_property_readonly("lt", [](const block::TransactionList::Info& obj) -> unsigned long long { return obj.lt; })
+      .def_property_readonly("hash",
+                             [](const block::TransactionList::Info& obj) -> std::string { return obj.hash.to_hex(); })
+      .def_property_readonly("transactions",
+                             [](const block::TransactionList::Info& obj) -> std::vector<block::Transaction::Info> {
+                               return obj.transactions;
+                             });
 
   py::class_<pylite::PyLiteClient>(m, "PyLiteClient", py::module_local())
       .def(py::init<std::string, int, PyPublicKey, double>(), py::arg("host"), py::arg("port"), py::arg("public_key"),
@@ -375,11 +457,24 @@ PYBIND11_MODULE(python_ton, m) {
       .def("get_connected", &pylite::PyLiteClient::get_connected)
       .def("get_time", &pylite::PyLiteClient::get_time)
       .def("send_message", &pylite::PyLiteClient::send_message, py::arg("cell"))
-      .def("get_MasterchainInfoExt", &pylite::PyLiteClient::get_MasterchainInfoExt);
+      .def("get_ConfigAll", &pylite::PyLiteClient::get_ConfigAll, py::arg("mode"), py::arg("req_blkid"),
+           py::arg("force_check_on_key_block"))
+      .def("get_MasterchainInfoExt", &pylite::PyLiteClient::get_MasterchainInfoExt)
+      .def("get_BlockHeader", &pylite::PyLiteClient::get_BlockHeader, py::arg("block_id"), py::arg("mode"))
+      .def("get_Transactions", &pylite::PyLiteClient::get_Transactions, py::arg("count"), py::arg("workchain"),
+           py::arg("address_int"), py::arg("lt"), py::arg("hash_int"))
+      .def("lookupBlock", &pylite::PyLiteClient::lookupBlock, py::arg("mode"), py::arg("block_id"), py::arg("lt"),
+           py::arg("gen_utime"))
+      .def("get_AccountState", &pylite::PyLiteClient::get_AccountState, py::arg("workchain"), py::arg("address"),
+           py::arg("block_id"))
+      .def("get_Block", &pylite::PyLiteClient::get_Block, py::arg("block_id"))
+      .def("get_Libraries", &pylite::PyLiteClient::get_Libraries, py::arg("libs"));
 
   m.def("create_new_mnemo", create_new_mnemo);
   m.def("get_bip39_words", get_bip39_words);
   m.def("ipv4_int_to_str", pylite::ipv4_int_to_str);
+  m.def("shard_is_ancestor", shard_is_ancestor, py::arg("parent"), py::arg("child"));
+  m.def("shard_child", shard_child, py::arg("shard"), py::arg("left"));
 
   m.def("address_from_string", address_from_string, py::arg("address"));
   m.def("parse_chunked_data", py_parse_chunked_data, py::arg("cs"));
