@@ -17,7 +17,7 @@ jobs:
     strategy:
       matrix:
         python: [ 39 ]
-    runs-on: [ self-hosted, Linux, X64 ]
+    runs-on: linux
 
     steps:
       - uses: actions/checkout@v3
