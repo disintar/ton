@@ -147,6 +147,32 @@ void LiteClientActorEngine::get_Block(ton::BlockIdExt blkid) {
   qprocess(std::move(q));
 }
 
+void LiteClientActorEngine::get_listBlockTransactionsExt(ton::BlockIdExt blkid, int mode, int count,
+                                                         std::optional<td::Bits256> account,
+                                                         std::optional<unsigned long long> lt) {
+  bool check_proof = mode & 32;
+  bool reverse_mode = mode & 64;
+  bool has_starting_tx = mode & 128;
+
+  ton::lite_api::object_ptr<ton::lite_api::liteServer_transactionId3> after;
+
+  if (has_starting_tx) {
+    after = ton::lite_api::make_object<ton::lite_api::liteServer_transactionId3>(std::move(account.value()),
+                                                                                 std::move(lt.value()));
+    LOG(ERROR) << after->account_.to_hex();
+    LOG(ERROR) << after->lt_;
+  } else {
+    after = nullptr;
+  }
+
+  auto q = ton::serialize_tl_object(
+      ton::create_tl_object<ton::lite_api::liteServer_listBlockTransactionsExt>(
+          ton::create_tl_lite_block_id(std::move(blkid)), mode, count, std::move(after), reverse_mode, check_proof),
+      true);
+
+  qprocess(std::move(q));
+}
+
 void LiteClientActorEngine::get_BlockHeader(ton::BlockIdExt blkid, int mode) {
   auto q = ton::serialize_tl_object(
       ton::create_tl_object<ton::lite_api::liteServer_getBlockHeader>(ton::create_tl_lite_block_id(blkid), mode), true);
@@ -537,4 +563,68 @@ PyDict PyLiteClient::get_Libraries(std::vector<std::string> libs) {
     throw std::logic_error(response->error_message);
   }
 }
+
+BlockTransactionsExt PyLiteClient::get_listBlockTransactionsExt(ton::BlockIdExt blkid, int mode, int count,
+                                                                std::optional<std::string> account,
+                                                                std::optional<unsigned long long> lt) {
+  bool check_proof = mode & 32;
+  bool reverse_mode = mode & 64;
+  bool has_starting_tx = mode & 128;
+
+  std::optional<td::Bits256> tmp;
+
+  if (has_starting_tx) {
+    if (!account || !lt) {
+      throw std::logic_error("No account or lt with this flag");
+    }
+
+    td::RefInt256 root_hash_int = td::string_to_int256(std::move(account.value()));
+    td::Bits256 root_hash_bits;
+    if (!root_hash_int->export_bytes(root_hash_bits.data(), 32, false)) {
+      throw std::logic_error("Invalid root_hash");
+    }
+
+    tmp = std::make_optional<td::Bits256>(std::move(root_hash_bits));
+  } else {
+    tmp = std::make_optional<td::Bits256>();
+  }
+
+  scheduler_.run_in_context_external([&] {
+    send_closure(engine, &LiteClientActorEngine::get_listBlockTransactionsExt, std::move(blkid), mode, count,
+                 std::move(tmp), std::move(lt));
+  });
+
+  auto response = wait_response();
+  if (response->success) {
+    SuccessBufferSlice* rdata = dynamic_cast<SuccessBufferSlice*>(response.get());
+    auto R = ton::fetch_tl_object<ton::lite_api::liteServer_blockTransactionsExt>(std::move(rdata->obj->clone()), true);
+    if (R.is_error()) {
+      throw_lite_error(rdata->obj->clone());
+    }
+
+    auto x = R.move_as_ok();
+
+    // todo: check proof if check_proof
+    auto r = vm::std_boc_deserialize_multi(std::move(x->transactions_));
+    if (r.is_error()) {
+      throw std::logic_error(r.move_as_error().to_string());
+    }
+
+    std::vector<PyCell> txs;
+    for (auto y : r.move_as_ok()) {
+      txs.push_back(PyCell(y));
+    };
+
+    BlockTransactionsExt answer;
+    answer.id = ton::create_block_id(std::move(x->id_));
+    answer.incomplete = x->incomplete_;
+    answer.req_count = x->req_count_;
+    answer.transactions = std::move(txs);
+
+    return answer;
+  } else {
+    throw std::logic_error(response->error_message);
+  }
+}
+
 }  // namespace pylite

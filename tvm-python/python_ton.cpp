@@ -17,6 +17,7 @@
 #include "tvm-python/PyLiteClient.h"
 #include "crypto/tl/tlbc-data.h"
 #include "td/utils/optional.h"
+#include "tl/generate/auto/tl/tonlib_api.h"
 
 namespace py = pybind11;
 using namespace pybind11::literals;  // to bring in the `_a` literal
@@ -358,7 +359,9 @@ PYBIND11_MODULE(python_ton, m) {
       .def("get_private_key_hex", &PyMnemonic::get_private_key_hex)
       .def("get_private_key", &PyMnemonic::get_private_key);
 
-  py::class_<td::Bits256>(m, "Bits256", py::module_local()).def(py::init<>()).def("to_hex", &td::Bits256::to_hex);
+  py::class_<td::Bits256>(m, "Bits256", py::module_local())
+      .def(py::init<>())
+      .def("to_hex", &td::Bits256::to_hex);
 
   py::class_<ton::BlockId>(m, "BlockId", py::module_local())
       .def(py::init([](int workchain, unsigned long long shard, unsigned int seqno) -> ton::BlockId {
@@ -468,7 +471,18 @@ PYBIND11_MODULE(python_ton, m) {
       .def("get_AccountState", &pylite::PyLiteClient::get_AccountState, py::arg("workchain"), py::arg("address"),
            py::arg("block_id"))
       .def("get_Block", &pylite::PyLiteClient::get_Block, py::arg("block_id"))
-      .def("get_Libraries", &pylite::PyLiteClient::get_Libraries, py::arg("libs"));
+      .def("get_Libraries", &pylite::PyLiteClient::get_Libraries, py::arg("libs"))
+      .def("get_listBlockTransactionsExt", &pylite::PyLiteClient::get_listBlockTransactionsExt, py::arg("blkid"),
+           py::arg("mode"), py::arg("count"), py::arg("account"), py::arg("lt"));
+
+
+  py::class_<pylite::BlockTransactionsExt>(m, "BlockTransactionsExt", py::module_local())
+      .def(py::init<>())
+      .def_readonly("id", &pylite::BlockTransactionsExt::id)
+      .def_readonly("req_count", &pylite::BlockTransactionsExt::req_count)
+      .def_readonly("incomplete", &pylite::BlockTransactionsExt::incomplete)
+      .def_readonly("transactions", &pylite::BlockTransactionsExt::transactions);
+
 
   m.def("create_new_mnemo", create_new_mnemo);
   m.def("get_bip39_words", get_bip39_words);

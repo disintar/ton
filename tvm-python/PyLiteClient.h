@@ -15,6 +15,8 @@
 #include "td/actor/PromiseFuture.h"
 #include "block/check-proof.h"
 #include "lite-client/lite-client.h"
+#include "tl/generate/auto/tl/tonlib_api.h"
+#include "tonlib/tonlib/TonlibClient.h"
 
 #ifndef TON_PYLITECLIENT_H
 #define TON_PYLITECLIENT_H
@@ -57,6 +59,13 @@ class GetTimeResponse : public ResponseObj {
   std::int32_t now;
 };
 
+struct BlockTransactionsExt {
+  ton::BlockIdExt id;
+  int req_count;
+  bool incomplete;
+  std::vector<PyCell> transactions;
+};
+
 class SuccessBufferSlice : public ResponseObj {
  public:
   SuccessBufferSlice(std::unique_ptr<td::BufferSlice> obj_) : ResponseObj(true, std::move("")), obj(std::move(obj_)) {
@@ -96,6 +105,9 @@ class LiteClientActorEngine : public td::actor::Actor {
   void get_BlockHeader(ton::BlockIdExt blkid, int mode);
   void get_Block(ton::BlockIdExt blkid);
   void get_Libraries(std::vector<td::Bits256> libs);
+  void get_listBlockTransactionsExt(ton::BlockIdExt blkid, int mode, int count,
+                                    std::optional<td::Bits256> account = std::optional<td::Bits256>(),
+                                    std::optional<unsigned long long> lt = std::optional<unsigned long long>());
 
   void run();
 
@@ -177,6 +189,9 @@ class PyLiteClient {
   TestNode::BlockHdrInfo lookupBlock(int mode, ton::BlockId block, long long lt, long long time);
   PyCell get_Block(ton::BlockIdExt blkid);
   PyDict get_Libraries(std::vector<std::string> libs);
+  BlockTransactionsExt get_listBlockTransactionsExt(
+      ton::BlockIdExt blkid, int mode, int count, std::optional<td::string> account = std::optional<std::string>(),
+      std::optional<unsigned long long> lt = std::optional<unsigned long long>());
 
  private:
   std::shared_ptr<OutputQueue> response_obj_;
