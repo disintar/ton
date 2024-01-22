@@ -30,10 +30,11 @@ std::unique_ptr<ton::adnl::AdnlExtClient::Callback> LiteClientActorEngine::make_
 }
 
 LiteClientActorEngine::LiteClientActorEngine(std::string host, int port, td::Ed25519::PublicKey public_key,
-                                             std::shared_ptr<OutputQueue> output_queue_)
+                                             std::shared_ptr<OutputQueue> output_queue_, double timeout_)
     : output_queue(std::move(output_queue_)) {
   adnl_id = ton::adnl::AdnlNodeIdFull{ton::PublicKey(std::move(public_key))};
   remote_addr.init_host_port(host, port).ensure();
+  timeout = timeout_;
 }
 
 void LiteClientActorEngine::run() {
@@ -64,7 +65,7 @@ void LiteClientActorEngine::get_time() {
 
   td::actor::send_closure(
       client, &ton::adnl::AdnlExtClient::send_query, "query", serialize_tl_object(std::move(q), true),
-      td::Timestamp::in(10.0), [&](td::Result<td::BufferSlice> res) -> void {
+      td::Timestamp::in(timeout), [&](td::Result<td::BufferSlice> res) -> void {
         if (res.is_error()) {
           output_queue->writer_put(
               ResponseWrapper(std::make_unique<GetTimeResponse>(GetTimeResponse(0, false, "cannot get server time"))));
@@ -88,7 +89,7 @@ void LiteClientActorEngine::qprocess(td::BufferSlice q) {
   td::actor::send_closure(
       client, &ton::adnl::AdnlExtClient::send_query, "query",
       ton::serialize_tl_object(ton::create_tl_object<ton::lite_api::liteServer_query>(std::move(q)), true),
-      td::Timestamp::in(10.0), [&](td::Result<td::BufferSlice> res) -> void {
+      td::Timestamp::in(timeout), [&](td::Result<td::BufferSlice> res) -> void {
         if (res.is_error()) {
           output_queue->writer_put(
               ResponseWrapper(std::make_unique<ResponseObj>(ResponseObj(false, "Error while fetch"))));
@@ -192,7 +193,7 @@ void LiteClientActorEngine::send_message(vm::Ref<vm::Cell> cell) {
   //  auto q = ton::create_tl_object<ton::lite_api::liteServer_query>(ton::serialize_tl_object(query, true));
 
   td::actor::send_closure(
-      client, &ton::adnl::AdnlExtClient::send_query, "query", std::move(q), td::Timestamp::in(0.01),
+      client, &ton::adnl::AdnlExtClient::send_query, "query", std::move(q), td::Timestamp::in(timeout),
       [&](td::Result<td::BufferSlice> res) -> void {
         if (res.is_error()) {
           output_queue->writer_put(

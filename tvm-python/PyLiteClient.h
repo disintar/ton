@@ -80,7 +80,7 @@ using OutputQueue = td::MpscPollableQueue<pylite::ResponseWrapper>;
 class LiteClientActorEngine : public td::actor::Actor {
  public:
   LiteClientActorEngine(std::string host, int port, td::Ed25519::PublicKey public_key,
-                        std::shared_ptr<OutputQueue> output_queue_);
+                        std::shared_ptr<OutputQueue> output_queue_, double timeout_);
 
   void conn_ready() {
     connected = true;
@@ -119,6 +119,7 @@ class LiteClientActorEngine : public td::actor::Actor {
   td::actor::ActorOwn<ton::adnl::AdnlExtClient> client;
   std::unique_ptr<ton::adnl::AdnlExtClient::Callback> make_callback();
   void qprocess(td::BufferSlice q);
+  double timeout;
 };
 
 // Python wrapper
@@ -135,7 +136,7 @@ class PyLiteClient {
 
     scheduler_.run_in_context([&] {
       engine = td::actor::create_actor<LiteClientActorEngine>("LiteClientActorEngine", ipv4, port,
-                                                              std::move(public_key.key), response_obj_);
+                                                              std::move(public_key.key), response_obj_, timeout_);
 
       scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::run); });
     });

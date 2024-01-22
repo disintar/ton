@@ -20,13 +20,10 @@ jobs:
     runs-on: linux
 
     steps:
-      - name: Compile
+      - name: Install deps
         run: |
           sudo apt update -y
-          
           sudo apt install -y git curl xz-utils
-          sudo install -d -m755 -o $(id -u) -g $(id -g) /nix
-          curl -L https://nixos.org/nix/install | sh
 
       - uses: actions/checkout@v3
         with:
