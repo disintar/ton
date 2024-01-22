@@ -52,7 +52,7 @@ ResponseWrapper PyLiteClient::receive_unlocked() {
     return res;
   }
   if (timeout != 0) {
-    response_obj_->reader_get_event_fd().wait(static_cast<int>(timeout * 1000));
+    response_obj_->reader_get_event_fd().wait(static_cast<int>(timeout * 10 * 1000));
     return receive_unlocked();
   }
 
