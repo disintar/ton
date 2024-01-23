@@ -385,6 +385,9 @@ std::pair<ton::BlockIdExt, PyCell> PyLiteClient::get_ConfigAll(int mode, ton::Bl
         throw std::logic_error(y.move_as_error().to_string());
       }
       config_proof = y.move_as_ok();
+      if (config_proof.is_null()) {
+        throw std::logic_error("cannot virtualize configuration proof constructed from key block " + blkid.to_str());
+      }
 
       block = vm::MerkleProof::virtualize(config_proof, 1);
       if (block.is_null()) {
