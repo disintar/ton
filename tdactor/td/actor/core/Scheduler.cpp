@@ -43,7 +43,7 @@ Scheduler::Scheduler(std::shared_ptr<SchedulerGroupInfo> scheduler_group_info, S
   info_->id = id;
   if (cpu_threads_count != 0) {
     info_->cpu_threads_count = cpu_threads_count;
-    info_->cpu_queue = std::make_unique<MpmcQueue<SchedulerMessage::Raw *>>(1024, max_thread_count());
+    info_->cpu_queue = std::make_unique<MpmcQueue<SchedulerMessage::Raw *>>(1024, max_thread_count() + 1);
     info_->cpu_queue_waiter = std::make_unique<MpmcWaiter>();
 
     info_->cpu_local_queue = std::vector<LocalQueue<SchedulerMessage::Raw *>>(cpu_threads_count);
