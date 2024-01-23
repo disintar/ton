@@ -148,6 +148,13 @@ void LiteClientActorEngine::get_Block(ton::BlockIdExt blkid) {
   qprocess(std::move(q));
 }
 
+void LiteClientActorEngine::get_AllShardsInfo(ton::BlockIdExt blkid) {
+  auto q = ton::serialize_tl_object(
+      ton::create_tl_object<ton::lite_api::liteServer_getAllShardsInfo>(ton::create_tl_lite_block_id(blkid)), true);
+
+  qprocess(std::move(q));
+}
+
 void LiteClientActorEngine::get_listBlockTransactionsExt(ton::BlockIdExt blkid, int mode, int count,
                                                          std::optional<td::Bits256> account,
                                                          std::optional<unsigned long long> lt) {
@@ -515,6 +522,43 @@ PyCell PyLiteClient::get_Block(ton::BlockIdExt req_blkid) {
     }
 
     return PyCell(std::move(root));
+  } else {
+    throw std::logic_error(response->error_message);
+  }
+}
+
+std::vector<ton::BlockId> PyLiteClient::get_AllShardsInfo(ton::BlockIdExt req_blkid) {
+  scheduler_.run_in_context_external(
+      [&] { send_closure(engine, &LiteClientActorEngine::get_AllShardsInfo, std::move(req_blkid)); });
+
+  auto response = wait_response();
+  if (response->success) {
+    SuccessBufferSlice* rdata = dynamic_cast<SuccessBufferSlice*>(response.get());
+    auto R = ton::fetch_tl_object<ton::lite_api::liteServer_allShardsInfo>(std::move(rdata->obj->clone()), true);
+    if (R.is_error()) {
+      throw_lite_error(rdata->obj->clone());
+    }
+
+    auto x = R.move_as_ok();
+    // todo: proofs
+
+    td::BufferSlice data = std::move((*x).data_);
+    if (data.empty()) {
+      throw std::logic_error("shard configuration is empty");
+    } else {
+      auto R2 = vm::std_boc_deserialize(data.clone());
+      if (R2.is_error()) {
+        throw std::logic_error(R2.move_as_error().to_string());
+      }
+      auto root = R2.move_as_ok();
+
+      block::ShardConfig sh_conf;
+      if (!sh_conf.unpack(vm::load_cell_slice_ref(root))) {
+        throw std::logic_error("cannot extract shard block list from shard configuration");
+      } else {
+        return sh_conf.get_shard_hash_ids(true);
+      }
+    }
   } else {
     throw std::logic_error(response->error_message);
   }

@@ -104,6 +104,7 @@ class LiteClientActorEngine : public td::actor::Actor {
   void get_ConfigAll(int mode, ton::BlockIdExt blkid);
   void get_BlockHeader(ton::BlockIdExt blkid, int mode);
   void get_Block(ton::BlockIdExt blkid);
+  void get_AllShardsInfo(ton::BlockIdExt blkid);
   void get_Libraries(std::vector<td::Bits256> libs);
   void get_listBlockTransactionsExt(ton::BlockIdExt blkid, int mode, int count,
                                     std::optional<td::Bits256> account = std::optional<td::Bits256>(),
@@ -193,6 +194,7 @@ class PyLiteClient {
   BlockTransactionsExt get_listBlockTransactionsExt(
       ton::BlockIdExt blkid, int mode, int count, std::optional<td::string> account = std::optional<std::string>(),
       std::optional<unsigned long long> lt = std::optional<unsigned long long>());
+  std::vector<ton::BlockId> get_AllShardsInfo(ton::BlockIdExt req_blkid);
 
  private:
   std::shared_ptr<OutputQueue> response_obj_;

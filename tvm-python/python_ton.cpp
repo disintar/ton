@@ -472,6 +472,7 @@ PYBIND11_MODULE(python_ton, m) {
            py::arg("block_id"))
       .def("get_Block", &pylite::PyLiteClient::get_Block, py::arg("block_id"))
       .def("get_Libraries", &pylite::PyLiteClient::get_Libraries, py::arg("libs"))
+      .def("get_AllShardsInfo", &pylite::PyLiteClient::get_AllShardsInfo, py::arg("blkid"))
       .def("get_listBlockTransactionsExt", &pylite::PyLiteClient::get_listBlockTransactionsExt, py::arg("blkid"),
            py::arg("mode"), py::arg("count"), py::arg("account"), py::arg("lt"));
 
