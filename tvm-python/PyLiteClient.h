@@ -131,7 +131,12 @@ class PyLiteClient {
   td::actor::ActorOwn<LiteClientActorEngine> engine;
   double timeout;
 
-  PyLiteClient(std::string ipv4, int port, PyPublicKey public_key, double timeout_ = 5) : timeout(timeout_) {
+  PyLiteClient(std::string ipv4, int port,
+               PyPublicKey public_key,
+               double timeout_ = 5,
+               unsigned long long threads = 5)
+      : timeout(timeout_) {
+    scheduler_.init_with_new_infos({{threads}});
     response_obj_ = std::make_shared<OutputQueue>();
     response_obj_->init();
 
@@ -201,7 +206,7 @@ class PyLiteClient {
   std::atomic<bool> receive_lock_{false};
   int response_obj_queue_ready_ = 0;
 
-  td::actor::Scheduler scheduler_{{6}};
+  td::actor::Scheduler scheduler_{{6}, false, td::actor::Scheduler::Mode::Wait};
   td::thread scheduler_thread_;
 
   std::unique_ptr<ResponseObj> wait_response();

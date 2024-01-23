@@ -105,13 +105,20 @@ class Scheduler {
     size_t io_threads_{1};
   };
 
-  enum Mode { Running, Paused };
+  enum Mode { Running, Paused, Wait };
   Scheduler(std::vector<NodeInfo> infos, bool skip_timeouts = false, Mode mode = Paused)
       : infos_(std::move(infos)), skip_timeouts_(skip_timeouts) {
-    init();
+    if (mode != Wait) {
+      init();
+    }
     if (mode == Running) {
       start();
     }
+  }
+
+  void init_with_new_infos(std::vector<NodeInfo> infos) {
+    infos_ = std::move(infos);
+    init();
   }
 
   ~Scheduler() {
@@ -324,7 +331,7 @@ void send_closure_impl(ActorRef actor_ref, ClosureT &&closure) {
 }
 
 template <class... ArgsT>
-void send_closure(ActorRef actor_ref, ArgsT &&... args) {
+void send_closure(ActorRef actor_ref, ArgsT &&...args) {
   send_closure_impl(actor_ref, create_immediate_closure(std::forward<ArgsT>(args)...));
 }
 
@@ -365,7 +372,7 @@ void send_closure_with_promise_later(ActorRef actor_ref, ClosureT &&closure, Pro
 }
 
 template <class... ArgsT>
-void send_closure_later(ActorRef actor_ref, ArgsT &&... args) {
+void send_closure_later(ActorRef actor_ref, ArgsT &&...args) {
   send_closure_later_impl(actor_ref, create_delayed_closure(std::forward<ArgsT>(args)...));
 }
 
@@ -400,7 +407,7 @@ inline void register_actor_info_ptr(core::ActorInfoPtr actor_info_ptr) {
 }
 
 template <class T, class... ArgsT>
-core::ActorInfoPtr create_actor(core::ActorOptions &options, ArgsT &&... args) noexcept {
+core::ActorInfoPtr create_actor(core::ActorOptions &options, ArgsT &&...args) noexcept {
   auto *scheduler_context = core::SchedulerContext::get();
   if (!options.has_scheduler()) {
     options.on_scheduler(scheduler_context->get_scheduler_id());

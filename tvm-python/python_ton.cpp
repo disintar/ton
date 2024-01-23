@@ -455,8 +455,8 @@ PYBIND11_MODULE(python_ton, m) {
                              });
 
   py::class_<pylite::PyLiteClient>(m, "PyLiteClient", py::module_local())
-      .def(py::init<std::string, int, PyPublicKey, double>(), py::arg("host"), py::arg("port"), py::arg("public_key"),
-           py::arg("timeout"))
+      .def(py::init<std::string, int, PyPublicKey, double, int>(), py::arg("host"), py::arg("port"), py::arg("public_key"),
+           py::arg("timeout"),  py::arg("threads"))
       .def("get_connected", &pylite::PyLiteClient::get_connected)
       .def("get_time", &pylite::PyLiteClient::get_time)
       .def("send_message", &pylite::PyLiteClient::send_message, py::arg("cell"))
