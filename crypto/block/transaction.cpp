@@ -35,7 +35,8 @@ namespace {
  */
 class StringLoggerTail : public td::LogInterface {
  public:
-  explicit StringLoggerTail(size_t max_size = 256) : buf(max_size, '\0') {}
+  explicit StringLoggerTail(size_t max_size = 256) : buf(max_size, '\0') {
+  }
 
   /**
    * Appends a slice of data to the buffer.
@@ -95,9 +96,9 @@ Ref<vm::Cell> ComputePhaseConfig::lookup_library(td::ConstBitPtr key) const {
 }
 
 /*
- * 
+ *
  *   ACCOUNTS
- * 
+ *
  */
 
 /**
@@ -2779,9 +2780,9 @@ bool Transaction::prepare_bounce_phase(const ActionPhaseConfig& cfg) {
 }  // namespace transaction
 
 /*
- * 
+ *
  *  SERIALIZE PREPARED TRANSACTION
- * 
+ *
  */
 
 /**
@@ -3270,9 +3271,9 @@ bool Transaction::update_limits(block::BlockLimitStatus& blimst, bool with_size)
 }
 
 /*
- * 
+ *
  *  COMMIT TRANSACTION
- * 
+ *
  */
 
 /**

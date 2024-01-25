@@ -359,9 +359,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("get_private_key_hex", &PyMnemonic::get_private_key_hex)
       .def("get_private_key", &PyMnemonic::get_private_key);
 
-  py::class_<td::Bits256>(m, "Bits256", py::module_local())
-      .def(py::init<>())
-      .def("to_hex", &td::Bits256::to_hex);
+  py::class_<td::Bits256>(m, "Bits256", py::module_local()).def(py::init<>()).def("to_hex", &td::Bits256::to_hex);
 
   py::class_<ton::BlockId>(m, "BlockId", py::module_local())
       .def(py::init([](int workchain, unsigned long long shard, unsigned int seqno) -> ton::BlockId {
@@ -393,7 +391,6 @@ PYBIND11_MODULE(python_ton, m) {
         if (!file_hash_int->export_bytes(file_hash_bits.data(), 32, false)) {
           throw std::logic_error("Invalid file_hash");
         }
-
         return ton::BlockIdExt(std::move(id_), std::move(root_hash_bits), std::move(file_hash_bits));
       }))
       .def_readonly("id", &ton::BlockIdExt::id)
@@ -455,8 +452,8 @@ PYBIND11_MODULE(python_ton, m) {
                              });
 
   py::class_<pylite::PyLiteClient>(m, "PyLiteClient", py::module_local())
-      .def(py::init<std::string, int, PyPublicKey, double, int>(), py::arg("host"), py::arg("port"), py::arg("public_key"),
-           py::arg("timeout"),  py::arg("threads"))
+      .def(py::init<std::string, int, PyPublicKey, double, int>(), py::arg("host"), py::arg("port"),
+           py::arg("public_key"), py::arg("timeout"), py::arg("threads"))
       .def("get_connected", &pylite::PyLiteClient::get_connected)
       .def("get_time", &pylite::PyLiteClient::get_time)
       .def("send_message", &pylite::PyLiteClient::send_message, py::arg("cell"))
@@ -476,14 +473,12 @@ PYBIND11_MODULE(python_ton, m) {
       .def("get_listBlockTransactionsExt", &pylite::PyLiteClient::get_listBlockTransactionsExt, py::arg("blkid"),
            py::arg("mode"), py::arg("count"), py::arg("account"), py::arg("lt"));
 
-
   py::class_<pylite::BlockTransactionsExt>(m, "BlockTransactionsExt", py::module_local())
       .def(py::init<>())
       .def_readonly("id", &pylite::BlockTransactionsExt::id)
       .def_readonly("req_count", &pylite::BlockTransactionsExt::req_count)
       .def_readonly("incomplete", &pylite::BlockTransactionsExt::incomplete)
       .def_readonly("transactions", &pylite::BlockTransactionsExt::transactions);
-
 
   m.def("create_new_mnemo", create_new_mnemo);
   m.def("get_bip39_words", get_bip39_words);

@@ -32,7 +32,7 @@ td::Result<std::unique_ptr<TransactionEmulator::EmulationResult>> TransactionEmu
     return fetch_res.move_as_error_prefix("cannot fetch config params ");
   }
 
-    TRY_STATUS(vm::init_vm(debug_enabled_));
+  TRY_STATUS(vm::init_vm(debug_enabled_));
 
   if (!lt) {
     lt = lt_;
