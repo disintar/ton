@@ -22,6 +22,7 @@ jobs:
     steps:
       - uses: kenchan0130/actions-system-info@master
         id: system-info
+
       - name: System info
         run: |
           OUTPUTS=(
