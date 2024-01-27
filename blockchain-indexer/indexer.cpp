@@ -434,7 +434,13 @@ class AccountIndexer : public td::actor::Actor {
 class StateIndexer : public td::actor::Actor {
   Dumper *dumper_;
   std::shared_ptr<vm::AugmentedDictionary> accounts;
-  std::shared_ptr<vm::AugmentedDictionary> prev_accounts;
+
+  bool after_merge;
+  std::shared_ptr<vm::AugmentedDictionary> prev_accounts_left;
+  ShardId prev_accounts_left_shard;
+  std::shared_ptr<vm::AugmentedDictionary> prev_accounts_right;
+  ShardId prev_accounts_right_shard;
+
   std::vector<json> json_accounts;
   std::string block_id_string;
   td::Timer timer;
@@ -593,12 +599,25 @@ class StateIndexer : public td::actor::Actor {
     }
   }
 
-  void got_prev_state(vm::Ref<vm::Cell> prev_root_cell) {
+  void got_prev_state(vm::Ref<vm::Cell> prev_root_cell, bool left, bool after_merge_, ShardId shard_ident) {
     block::gen::ShardStateUnsplit::Record prev_shard_state;
+    after_merge = after_merge_;
+
     CHECK(tlb::unpack_cell(std::move(prev_root_cell), prev_shard_state));
 
-    prev_accounts = std::make_shared<vm::AugmentedDictionary>(vm::load_cell_slice_ref(prev_shard_state.accounts), 256,
-                                                              block::tlb::aug_ShardAccounts);
+    if (left) {
+      prev_accounts_left = std::make_shared<vm::AugmentedDictionary>(vm::load_cell_slice_ref(prev_shard_state.accounts),
+                                                                     256, block::tlb::aug_ShardAccounts);
+      prev_accounts_left_shard = shard_ident;
+    } else {
+      prev_accounts_right = std::make_shared<vm::AugmentedDictionary>(
+          vm::load_cell_slice_ref(prev_shard_state.accounts), 256, block::tlb::aug_ShardAccounts);
+      prev_accounts_right_shard = shard_ident;
+    }
+
+    if (left & after_merge) {
+      return;
+    }
 
     if (accounts_keys.empty()) {
       td::actor::send_closure(actor_id(this), &StateIndexer::finalize);
@@ -622,9 +641,22 @@ class StateIndexer : public td::actor::Actor {
       }
     });
 
-    td::actor::create_actor<AccountIndexer>("AccountIndexer", accounts, prev_accounts, account, tx_count,
-                                            block_id_string, block_id.id.workchain, std::move(P))
-        .release();
+    if (!after_merge) {
+      td::actor::create_actor<AccountIndexer>("AccountIndexer", accounts, prev_accounts_left, account, tx_count,
+                                              block_id_string, block_id.id.workchain, std::move(P))
+          .release();
+    } else {
+      auto shard_id = ton::shard_prefix(account, 60);
+      if (ton::shard_is_ancestor(prev_accounts_left_shard, shard_id)) {
+        td::actor::create_actor<AccountIndexer>("AccountIndexer", accounts, prev_accounts_left, account, tx_count,
+                                                block_id_string, block_id.id.workchain, std::move(P))
+            .release();
+      } else {
+        td::actor::create_actor<AccountIndexer>("AccountIndexer", accounts, prev_accounts_right, account, tx_count,
+                                                block_id_string, block_id.id.workchain, std::move(P))
+            .release();
+      }
+    }
   }
 
   bool finalize() {
@@ -1273,7 +1305,8 @@ class IndexerWorker : public td::actor::Actor {
           if (!is_first) {
             LOG(DEBUG) << "Send state to parse: " << blkid.to_str() << " " << timer;
             td::actor::send_closure(SelfId, &IndexerWorker::increase_state_padding);
-            td::actor::send_closure(SelfId, &IndexerWorker::got_state_accounts, block_handle, accounts_keys);
+            td::actor::send_closure(SelfId, &IndexerWorker::got_state_accounts, block_handle, accounts_keys,
+                                    info.after_merge);
           }
         } else {
           skip_state = true;
@@ -1644,16 +1677,18 @@ class IndexerWorker : public td::actor::Actor {
   }
 
   void got_prev_block_handle(std::shared_ptr<const BlockHandleInterface> handle,
-                             td::actor::ActorId<StateIndexer> state_indexer) {
-    auto P =
-        td::PromiseCreator::lambda([state_indexer = std::move(state_indexer)](td::Result<td::Ref<vm::DataCell>> R) {
+                             td::actor::ActorId<StateIndexer> state_indexer, bool left, bool after_merge) {
+    auto shard = handle->id().id.shard;
+    auto P = td::PromiseCreator::lambda(
+        [state_indexer = std::move(state_indexer), left, after_merge, shard](td::Result<td::Ref<vm::DataCell>> R) {
           if (R.is_error()) {
             // todo: process normally
             LOG(ERROR) << R.move_as_error().to_string() << " state error fatal";
             std::exit(2);
           } else {
             auto root_cell = R.move_as_ok();
-            td::actor::send_closure(state_indexer, &StateIndexer::got_prev_state, std::move(root_cell));
+            td::actor::send_closure(state_indexer, &StateIndexer::got_prev_state, std::move(root_cell), left,
+                                    after_merge, shard);
           }
         });
 
@@ -1662,54 +1697,76 @@ class IndexerWorker : public td::actor::Actor {
   }
 
   void get_prev_state_handle(const std::shared_ptr<const BlockHandleInterface> &handle,
-                             td::actor::ActorId<StateIndexer> state_indexer) {
+                             td::actor::ActorId<StateIndexer> state_indexer, bool after_merge) {
     auto prev_id = handle->one_prev(true);
 
-    auto P = td::PromiseCreator::lambda(
-        [SelfId = actor_id(this), state_indexer = std::move(state_indexer)](td::Result<ConstBlockHandle> R) {
-          if (R.is_error()) {
-            // todo: process normally
-            LOG(ERROR) << R.move_as_error().to_string() << " state handle error fatal";
-            std::exit(2);
-          } else {
-            td::actor::send_closure(SelfId, &IndexerWorker::got_prev_block_handle, R.move_as_ok(), state_indexer);
-          }
-        });
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), state_indexer = std::move(state_indexer),
+                                         after_merge](td::Result<ConstBlockHandle> R) {
+      if (R.is_error()) {
+        // todo: process normally
+        LOG(ERROR) << R.move_as_error().to_string() << " state handle error fatal";
+        std::exit(2);
+      } else {
+        td::actor::send_closure(SelfId, &IndexerWorker::got_prev_block_handle, R.move_as_ok(), state_indexer, true,
+                                after_merge);
+      }
+    });
 
     ton::AccountIdPrefixFull pfx{prev_id.id.workchain, prev_id.id.shard};
 
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
                             prev_id.id.seqno, std::move(P));
+
+    if (after_merge) {
+      auto prev_id2 = handle->one_prev(false);
+
+      auto P2 = td::PromiseCreator::lambda([SelfId = actor_id(this), state_indexer = std::move(state_indexer),
+                                            after_merge](td::Result<ConstBlockHandle> R) {
+        if (R.is_error()) {
+          // todo: process normally
+          LOG(ERROR) << R.move_as_error().to_string() << " state handle error fatal";
+          std::exit(2);
+        } else {
+          td::actor::send_closure(SelfId, &IndexerWorker::got_prev_block_handle, R.move_as_ok(), state_indexer, false,
+                                  after_merge);
+        }
+      });
+
+      ton::AccountIdPrefixFull pfx2{prev_id2.id.workchain, prev_id2.id.shard};
+
+      td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx2,
+                              prev_id2.id.seqno, std::move(P2));
+    }
   }
 
   void got_state_accounts(std::shared_ptr<const BlockHandleInterface> handle,
-                          std::vector<std::tuple<td::Bits256, int>> accounts_keys) {
+                          std::vector<std::tuple<td::Bits256, int>> accounts_keys, bool after_merge) {
     const auto block_id = handle->id().id;
     const auto id = std::to_string(block_id.workchain) + ":" + std::to_string(block_id.shard) + ":" +
                     std::to_string(block_id.seqno);
 
-    auto P =
-        td::PromiseCreator::lambda([this, SelfId = actor_id(this), block_id_string = id, handle,
-                                    accounts_keys = std::move(accounts_keys)](td::Result<td::Ref<vm::DataCell>> R) {
-          if (R.is_error()) {
-            LOG(ERROR) << R.move_as_error().to_string() << " state error: " << block_id_string;
-            dumper_->addError(block_id_string, "state");
-            td::actor::send_closure(SelfId, &IndexerWorker::decrease_state_padding);
-          } else {
-            auto root_cell = R.move_as_ok();
-            auto block_id = handle->id();
-            td::Promise<td::int32> Pfinal = td::PromiseCreator::lambda([SelfId = SelfId](td::int32 a) {
-              td::actor::send_closure(SelfId, &IndexerWorker::decrease_state_padding);
-            });
-
-            auto state_indexer =
-                td::actor::create_actor<StateIndexer>("StateIndexer", block_id_string, root_cell, accounts_keys,
-                                                      block_id, dumper_, std::move(Pfinal))
-                    .release();
-
-            td::actor::send_closure(SelfId, &IndexerWorker::get_prev_state_handle, handle, std::move(state_indexer));
-          }
+    auto P = td::PromiseCreator::lambda([this, SelfId = actor_id(this), block_id_string = id, handle,
+                                         accounts_keys = std::move(accounts_keys),
+                                         after_merge](td::Result<td::Ref<vm::DataCell>> R) {
+      if (R.is_error()) {
+        LOG(ERROR) << R.move_as_error().to_string() << " state error: " << block_id_string;
+        dumper_->addError(block_id_string, "state");
+        td::actor::send_closure(SelfId, &IndexerWorker::decrease_state_padding);
+      } else {
+        auto root_cell = R.move_as_ok();
+        auto block_id = handle->id();
+        td::Promise<td::int32> Pfinal = td::PromiseCreator::lambda([SelfId = SelfId](td::int32 a) {
+          td::actor::send_closure(SelfId, &IndexerWorker::decrease_state_padding);
         });
+
+        auto state_indexer = td::actor::create_actor<StateIndexer>("StateIndexer", block_id_string, root_cell,
+                                                                   accounts_keys, block_id, dumper_, std::move(Pfinal))
+                                 .release();
+
+        td::actor::send_closure(SelfId, &IndexerWorker::get_prev_state_handle, handle, std::move(state_indexer),
+                                after_merge);
+      }
+    });
 
     LOG(DEBUG) << "getting state from db " << handle->id().to_str() << " "
                << td::base64_encode(handle->id().root_hash.as_slice());
