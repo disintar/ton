@@ -1680,7 +1680,7 @@ class IndexerWorker : public td::actor::Actor {
                              td::actor::ActorId<StateIndexer> state_indexer, bool left, bool after_merge) {
     auto shard = handle->id().id.shard;
     auto P = td::PromiseCreator::lambda(
-        [state_indexer = std::move(state_indexer), left, after_merge, shard](td::Result<td::Ref<vm::DataCell>> R) {
+        [state_indexer, left, after_merge, shard](td::Result<td::Ref<vm::DataCell>> R) {
           if (R.is_error()) {
             // todo: process normally
             LOG(ERROR) << R.move_as_error().to_string() << " state error fatal";
