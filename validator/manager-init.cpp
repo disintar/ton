@@ -367,7 +367,7 @@ void ValidatorManagerMasterchainStarter::got_init_block_state(td::Ref<Masterchai
   state_ = std::move(state);
   CHECK(state_->get_block_id() == opts_->init_block_id() || state_->ancestor_is_valid(opts_->init_block_id()) ||
         state_->get_block_id().seqno() < opts_->get_last_fork_masterchain_seqno());
-  finish();
+  //finish();
 
   auto P = td::PromiseCreator::lambda(
       [SelfId = actor_id(this), block_id = opts_->init_block_id()](td::Result<BlockIdExt> R) {
