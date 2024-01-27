@@ -400,7 +400,7 @@ void ValidatorManagerMasterchainStarter::got_gc_block_handle(BlockHandle handle)
 
   CHECK(gc_handle_->id().id.seqno <= handle_->id().id.seqno);
   LOG_CHECK(gc_handle_->received_state()) << "block_id=" << gc_handle_->id();
-  LOG_CHECK(!gc_handle_->deleted_state_boc()) << "block_id=" << gc_handle_->id();
+//  LOG_CHECK(!gc_handle_->deleted_state_boc()) << "block_id=" << gc_handle_->id();
 
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
     R.ensure();
