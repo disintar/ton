@@ -652,6 +652,7 @@ class StateIndexer : public td::actor::Actor {
                                                 block_id_string, block_id.id.workchain, std::move(P))
             .release();
       } else {
+        LOG(WARNING) << "Got right: ";
         td::actor::create_actor<AccountIndexer>("AccountIndexer", accounts, prev_accounts_right, account, tx_count,
                                                 block_id_string, block_id.id.workchain, std::move(P))
             .release();
