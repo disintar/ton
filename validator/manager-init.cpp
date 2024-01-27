@@ -367,7 +367,7 @@ void ValidatorManagerMasterchainStarter::got_init_block_state(td::Ref<Masterchai
   state_ = std::move(state);
   CHECK(state_->get_block_id() == opts_->init_block_id() || state_->ancestor_is_valid(opts_->init_block_id()) ||
         state_->get_block_id().seqno() < opts_->get_last_fork_masterchain_seqno());
-  //finish();
+  finish();
 
   auto P = td::PromiseCreator::lambda(
       [SelfId = actor_id(this), block_id = opts_->init_block_id()](td::Result<BlockIdExt> R) {
@@ -400,7 +400,7 @@ void ValidatorManagerMasterchainStarter::got_gc_block_handle(BlockHandle handle)
 
   CHECK(gc_handle_->id().id.seqno <= handle_->id().id.seqno);
   LOG_CHECK(gc_handle_->received_state()) << "block_id=" << gc_handle_->id();
-//  LOG_CHECK(!gc_handle_->deleted_state_boc()) << "block_id=" << gc_handle_->id();
+  LOG_CHECK(!gc_handle_->deleted_state_boc()) << "block_id=" << gc_handle_->id();
 
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
     R.ensure();
