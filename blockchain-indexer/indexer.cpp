@@ -647,7 +647,7 @@ class StateIndexer : public td::actor::Actor {
           .release();
     } else {
       auto shard_id = ton::shard_prefix(account, 60);
-      if (ton::shard_is_ancestor(prev_accounts_left_shard, shard_id)) {
+      if (ton::shard_is_ancestor(prev_accounts_left_shard, shard_id)){
         td::actor::create_actor<AccountIndexer>("AccountIndexer", accounts, prev_accounts_left, account, tx_count,
                                                 block_id_string, block_id.id.workchain, std::move(P))
             .release();
@@ -1680,7 +1680,7 @@ class IndexerWorker : public td::actor::Actor {
                              td::actor::ActorId<StateIndexer> state_indexer, bool left, bool after_merge) {
     auto shard = handle->id().id.shard;
     auto P = td::PromiseCreator::lambda(
-        [state_indexer, left, after_merge, shard](td::Result<td::Ref<vm::DataCell>> R) {
+        [state_indexer = std::move(state_indexer), left, after_merge, shard](td::Result<td::Ref<vm::DataCell>> R) {
           if (R.is_error()) {
             // todo: process normally
             LOG(ERROR) << R.move_as_error().to_string() << " state error fatal";
@@ -1700,7 +1700,7 @@ class IndexerWorker : public td::actor::Actor {
                              td::actor::ActorId<StateIndexer> state_indexer, bool after_merge) {
     auto prev_id = handle->one_prev(true);
 
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), state_indexer = std::move(state_indexer),
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), state_indexer,
                                          after_merge](td::Result<ConstBlockHandle> R) {
       if (R.is_error()) {
         // todo: process normally
