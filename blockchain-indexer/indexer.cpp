@@ -647,7 +647,7 @@ class StateIndexer : public td::actor::Actor {
           .release();
     } else {
       auto shard_id = ton::shard_prefix(account, 60);
-      if (!ton::shard_is_ancestor(prev_accounts_left_shard, shard_id)){
+      if (ton::shard_is_ancestor(prev_accounts_left_shard, shard_id)){
         td::actor::create_actor<AccountIndexer>("AccountIndexer", accounts, prev_accounts_left, account, tx_count,
                                                 block_id_string, block_id.id.workchain, std::move(P))
             .release();
