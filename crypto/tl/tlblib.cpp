@@ -304,6 +304,7 @@ bool PrettyPrinter::field_int(long long x) {
 
 bool PrettyPrinter::field_uint(unsigned long long x, std::string name) {
   LOG(ERROR) << "Field: " << name << " x: " << x;
+  os << 321;
   os << ' ' << name << ':' << x;
   return true;
 }
