@@ -367,7 +367,7 @@ std::string PyCellSlice::dump_as_tlb(std::string tlb_type) const {
   vm::CellBuilder cb;
   cb.append_cellslice(my_cell_slice.clone());
 
-  std::stringstream ss;
+  std::ostringstream ss;
   _template->print_ref(9 << 20, ss, cb.finalize_copy());
 
   auto output = ss.str();

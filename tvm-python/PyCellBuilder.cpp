@@ -191,7 +191,7 @@ std::string PyCellBuilder::dump_as_tlb(std::string tlb_type) const {
     throw std::invalid_argument("Parse tlb error: not valid tlb type");
   }
 
-  std::stringstream ss;
+  std::ostringstream ss;
   _template->print_ref(9 << 20, ss, my_builder.finalize_copy());
 
   auto output = ss.str();
