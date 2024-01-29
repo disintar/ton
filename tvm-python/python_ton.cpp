@@ -69,18 +69,6 @@ std::string py_parse_chunked_data(PyCellSlice cs) {
   return parse_chunked_data(cs.my_cell_slice);
 }
 
-std::string test_gg() {
-  std::stringstream os;
-  os << "LOLKEK!";
-  os << "\nKEKLOL!";
-
-  LOG(ERROR) << 321;
-  LOG(ERROR) << "432123 " << 3333;
-  LOG(ERROR) << "\n\n\tlolkk";
-
-  return os.str();
-}
-
 bool shard_is_ancestor(ton::ShardId parent, ton::ShardId child) {
   return ton::shard_is_ancestor(parent, child);
 }
@@ -501,5 +489,4 @@ PYBIND11_MODULE(python_ton, m) {
   m.def("address_from_string", address_from_string, py::arg("address"));
   m.def("parse_chunked_data", py_parse_chunked_data, py::arg("cs"));
   m.def("address_from_cell_slice", address_from_cell_slice, py::arg("cell_slice"));
-  m.def("test_gg", test_gg);
 }

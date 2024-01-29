@@ -282,6 +282,7 @@ bool PrettyPrinter::mode_nl() {
 
 bool PrettyPrinter::field(std::string name) {
   mode_nl();
+  LOG(ERROR) << "FIELD: " << name;
   os << name << ':';
   return true;
 }
