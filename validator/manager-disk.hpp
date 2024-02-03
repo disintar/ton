@@ -312,10 +312,10 @@ class ValidatorManagerImpl : public ValidatorManager {
                        BlockIdExt shard_to_block_id, std::string db_root, bool read_only = false)
       : local_id_(local_id)
       , opts_(std::move(opts))
+      , read_only_(read_only)
       , db_root_(db_root)
       , shard_to_generate_(shard_id)
-      , block_to_generate_(shard_to_block_id)
-      , read_only_(read_only) {
+      , block_to_generate_(shard_to_block_id) {
   }
 
  public:

@@ -592,7 +592,6 @@ engine.validator.config out_port:int addrs:(vector engine.Addr) adnl:(vector eng
         fullnodeconfig:engine.validator.fullNodeConfig
         liteservers:(vector engine.liteServer) control:(vector engine.controlInterface)
         gc:engine.gc = engine.validator.Config;
-
 ---functions---
 ---types---
 
