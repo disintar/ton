@@ -1,0 +1,36 @@
+{
+  "@type": "engine.liteserver.config",
+  "ip": -957035708,
+  "out_port": 8088,
+  "adnl": [
+    {
+      "@type": "engine.adnl",
+      "id": "w8h8xXjb10qg6xsREWZl+h3uLuPQXhtr0Rle+RJ7ABc=",
+      "category": 0
+    }
+  ],
+  "liteservers": [
+    {
+      "@type": "engine.liteServer",
+      "id": "nVThU/TA820lpFxSgiDwK6M8sbl15Am/H1bWgBiqn70=",
+      "port": 8089
+    }
+  ],
+  "dht": [
+    {
+      "@type": "engine.dht",
+      "id": "w8h8xXjb10qg6xsREWZl+h3uLuPQXhtr0Rle+RJ7ABc="
+    }
+  ],
+  "fullnodeslaves": [
+    {
+      "@type": "engine.validator.fullNodeSlave",
+      "ip": -957042655,
+      "port": 30128,
+      "adnl": {
+        "@type": "pub.ed25519",
+        "key": "kfqlyntvYuNb00aJRoLS4EIEAmUmfTfSa61BUihDTyI="
+      }
+    }
+  ]
+}
