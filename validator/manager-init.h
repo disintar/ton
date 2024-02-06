@@ -38,7 +38,8 @@ struct ValidatorManagerInitResult {
 };
 
 void validator_manager_init(td::Ref<ValidatorManagerOptions> opts, td::actor::ActorId<ValidatorManager> manager,
-                            td::actor::ActorId<Db> db, td::Promise<ValidatorManagerInitResult> promise);
+                            td::actor::ActorId<Db> db, td::Promise<ValidatorManagerInitResult> promise,
+                            bool read_only = false);
 
 }  // namespace validator
 

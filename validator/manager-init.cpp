@@ -367,19 +367,21 @@ void ValidatorManagerMasterchainStarter::got_init_block_state(td::Ref<Masterchai
   state_ = std::move(state);
   CHECK(state_->get_block_id() == opts_->init_block_id() || state_->ancestor_is_valid(opts_->init_block_id()) ||
         state_->get_block_id().seqno() < opts_->get_last_fork_masterchain_seqno());
-  //finish();
+  if (read_only_) {
+    finish();
+  } else {
+    auto P = td::PromiseCreator::lambda(
+        [SelfId = actor_id(this), block_id = opts_->init_block_id()](td::Result<BlockIdExt> R) {
+          if (R.is_error()) {
+            LOG_CHECK(R.error().code() == ErrorCode::notready) << R.move_as_error();
+            td::actor::send_closure(SelfId, &ValidatorManagerMasterchainStarter::got_gc_block_id, block_id);
+          } else {
+            td::actor::send_closure(SelfId, &ValidatorManagerMasterchainStarter::got_gc_block_id, R.move_as_ok());
+          }
+        });
 
-  auto P = td::PromiseCreator::lambda(
-      [SelfId = actor_id(this), block_id = opts_->init_block_id()](td::Result<BlockIdExt> R) {
-        if (R.is_error()) {
-          LOG_CHECK(R.error().code() == ErrorCode::notready) << R.move_as_error();
-          td::actor::send_closure(SelfId, &ValidatorManagerMasterchainStarter::got_gc_block_id, block_id);
-        } else {
-          td::actor::send_closure(SelfId, &ValidatorManagerMasterchainStarter::got_gc_block_id, R.move_as_ok());
-        }
-      });
-
-  td::actor::send_closure(db_, &Db::get_gc_masterchain_block, std::move(P));
+    td::actor::send_closure(db_, &Db::get_gc_masterchain_block, std::move(P));
+  }
 }
 
 void ValidatorManagerMasterchainStarter::got_gc_block_id(BlockIdExt block_id) {
@@ -642,10 +644,11 @@ void ValidatorManagerMasterchainStarter::finish() {
 }
 
 void validator_manager_init(td::Ref<ValidatorManagerOptions> opts, td::actor::ActorId<ValidatorManager> manager,
-                            td::actor::ActorId<Db> db, td::Promise<ValidatorManagerInitResult> promise) {
+                            td::actor::ActorId<Db> db, td::Promise<ValidatorManagerInitResult> promise,
+                            bool read_only_) {
   CHECK(!opts.is_null());
   td::actor::create_actor<ValidatorManagerMasterchainStarter>("starter", std::move(opts), manager, db,
-                                                              std::move(promise))
+                                                              std::move(promise), read_only_)
       .release();
 }
 
