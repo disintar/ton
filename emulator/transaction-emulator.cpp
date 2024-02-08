@@ -34,13 +34,13 @@ td::Result<std::unique_ptr<TransactionEmulator::EmulationResult>> TransactionEmu
 
   TRY_STATUS(vm::init_vm(debug_enabled_));
 
-  if (!lt) {
-    lt = lt_;
-  }
-  if (!lt) {
-    lt = (account.last_trans_lt_ / block::ConfigInfo::get_lt_align() + 1) *
-         block::ConfigInfo::get_lt_align();  // next block after account_.last_trans_lt_
-  }
+    if (!lt) {
+      lt = lt_;
+    }
+    if (!lt) {
+      lt = (account.last_trans_lt_ / block::ConfigInfo::get_lt_align() + 1) * block::ConfigInfo::get_lt_align(); // next block after account_.last_trans_lt_
+    }
+    account.block_lt = lt - lt % block::ConfigInfo::get_lt_align();
 
   compute_phase_cfg.libraries = std::make_unique<vm::Dictionary>(libraries_);
   compute_phase_cfg.ignore_chksig = ignore_chksig_;
