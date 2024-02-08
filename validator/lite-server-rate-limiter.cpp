@@ -13,6 +13,7 @@
 namespace ton::liteserver {
 void LiteServerLimiter::start_up() {
   LOG(INFO) << "Rate limiter start";
+  alarm();
 }
 
 void LiteServerLimiter::set_validator_manager(
@@ -38,14 +39,16 @@ void LiteServerLimiter::set_validator_manager(
       if (t <= user_data->valid_until_) {
         auto key = adnl::AdnlNodeIdFull{ton::pubkeys::Ed25519(pubkey)};
 
-        LOG(INFO) << "Add key from DB: " << key.pubkey().ed25519_value().raw().to_hex()
-                  << ", valid until: " << user_data->valid_until_ << ", ratelimit " << user_data->ratelimit_;
+        if (limits.find(key.compute_short_id()) == limits.end()) {
+          LOG(INFO) << "Add key from DB: " << key.pubkey().ed25519_value().raw().to_hex()
+                    << ", valid until: " << user_data->valid_until_ << ", ratelimit " << user_data->ratelimit_;
 
-        limits[key.compute_short_id()] = std::make_tuple(user_data->valid_until_, user_data->ratelimit_);
-        td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::add_ext_server_id,
-                                key.compute_short_id());
-        td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(key), ton::adnl::AdnlAddressList{},
-                                static_cast<td::uint8>(255));
+          limits[key.compute_short_id()] = std::make_tuple(user_data->valid_until_, user_data->ratelimit_);
+          td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::add_ext_server_id,
+                                  key.compute_short_id());
+          td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(key), ton::adnl::AdnlAddressList{},
+                                  static_cast<td::uint8>(255));
+        }
       }
     }
   }
@@ -77,6 +80,12 @@ void LiteServerLimiter::process_add_user(td::Bits256 private_key, td::int64 vali
   auto pk = ton::PrivateKey{ton::privkeys::Ed25519{private_key}};
   auto id = pk.compute_short_id();
   auto adnlkey = adnl::AdnlNodeIdFull{pk.compute_public_key()};
+
+  if (limits.find(adnlkey.compute_short_id()) != limits.end()) {
+    promise.set_error(td::Status::Error("Account already exist"));
+    return;
+  }
+
   LOG(WARNING) << "Add user: " << adnlkey.pubkey().ed25519_value().raw().to_hex() << " valid until: " << valid_until
                << " ratelimit: " << ratelimit;
   td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false, [](td::Unit) {});
@@ -87,13 +96,19 @@ void LiteServerLimiter::process_add_user(td::Bits256 private_key, td::int64 vali
   ratelimitdb->commit_write_batch();
 
   limits[adnlkey.compute_short_id()] = std::make_tuple(valid_until, ratelimit);
+  auto k = adnlkey.pubkey().ed25519_value().raw();
 
   td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::add_ext_server_id,
                           adnlkey.compute_short_id());
   td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(adnlkey), ton::adnl::AdnlAddressList{},
                           static_cast<td::uint8>(255));
 
-  promise.set_value(create_serialize_tl_object<ton::lite_api::liteServer_success>(0));
+  promise.set_value(create_serialize_tl_object<ton::lite_api::liteServer_newUser>(k));
+}
+
+void LiteServerLimiter::alarm() {
+  alarm_timestamp() = td::Timestamp::in(1.0);
+  usage.clear();
 }
 
 void LiteServerLimiter::recv_connection(

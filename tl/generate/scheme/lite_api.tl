@@ -23,8 +23,7 @@ tonNode.zeroStateIdExt workchain:int root_hash:int256 file_hash:int256 = tonNode
 adnl.message.query query_id:int256 query:bytes = adnl.Message;
 adnl.message.answer query_id:int256 answer:bytes = adnl.Message;
 
-liteServer.error code:int message:string = liteServer.Error; 
-liteServer.success code:int = liteServer.Success;
+liteServer.error code:int message:string = liteServer.Error;
 
 liteServer.accountId workchain:int id:int256 = liteServer.AccountId;
 liteServer.libraryEntry hash:int256 data:bytes = liteServer.LibraryEntry;
@@ -59,6 +58,7 @@ liteServer.shardBlockLink id:tonNode.blockIdExt proof:bytes = liteServer.ShardBl
 liteServer.shardBlockProof masterchain_id:tonNode.blockIdExt links:(vector liteServer.shardBlockLink) = liteServer.ShardBlockProof;
 
 liteServer.debug.verbosity value:int = liteServer.debug.Verbosity;
+liteServer.newUser pubkey:int256 = liteServer.NewUser;
 
 ---functions---
 
@@ -88,7 +88,7 @@ liteServer.getLibraries library_list:(vector int256) = liteServer.LibraryResult;
 liteServer.getShardBlockProof id:tonNode.blockIdExt = liteServer.ShardBlockProof;
 
 // admin query
-liteServer.addUser key:int256 valid_until:int64 ratelimit:int  = liteServer.Success;
+liteServer.addUser key:int256 valid_until:int64 ratelimit:int  = liteServer.NewUser;
 
 liteServer.queryPrefix = Object; 
 liteServer.query data:bytes = Object;
