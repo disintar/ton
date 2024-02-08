@@ -88,7 +88,7 @@ liteServer.getLibraries library_list:(vector int256) = liteServer.LibraryResult;
 liteServer.getShardBlockProof id:tonNode.blockIdExt = liteServer.ShardBlockProof;
 
 // admin query
-liteServer.addUser pubkey:int256 valid_until:int64 ratelimit:int  = liteServer.Success;
+liteServer.addUser key:int256 valid_until:int64 ratelimit:int  = liteServer.Success;
 
 liteServer.queryPrefix = Object; 
 liteServer.query data:bytes = Object;

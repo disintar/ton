@@ -30,8 +30,12 @@ void LiteServerLimiter::start_up() {
     } else {
       auto user_data = f.move_as_ok();
       if (user_data->valid_until_ <= t) {
-        limits[adnl::AdnlNodeIdFull{ton::pubkeys::Ed25519(pubkey)}.compute_short_id()] =
-            std::make_tuple(user_data->valid_until_, user_data->ratelimit_);
+        auto key = adnl::AdnlNodeIdFull{ton::pubkeys::Ed25519(pubkey)};
+        limits[key.compute_short_id()] = std::make_tuple(user_data->valid_until_, user_data->ratelimit_);
+        td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::add_ext_server_id,
+                                key.compute_short_id());
+        td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(key), ton::adnl::AdnlAddressList{},
+                                static_cast<td::uint8>(255));
       }
     }
   }
@@ -51,22 +55,33 @@ void LiteServerLimiter::process_admin_request(
   lite_api::downcast_call(*pf,
                           td::overloaded(
                               [&](lite_api::liteServer_addUser& q) {
-                                this->process_add_user(q.pubkey_, q.valid_until_, q.ratelimit_, std::move(promise));
+                                this->process_add_user(q.key_, q.valid_until_, q.ratelimit_, std::move(promise));
                               },
                               [&](auto& obj) { promise.set_error(td::Status::Error("admin function not found")); }));
 
   P.set_value(std::make_tuple(td::BufferSlice{}, std::move(promise), StatusCode::PROCESSED));
 }
 
-void LiteServerLimiter::process_add_user(td::Bits256 pubkey, td::int64 valid_until, td::int32 ratelimit,
+void LiteServerLimiter::process_add_user(td::Bits256 private_key, td::int64 valid_until, td::int32 ratelimit,
                                          td::Promise<td::BufferSlice> promise) {
-  LOG(WARNING) << "Add user: " << pubkey.to_hex() << " valid until: " << valid_until << " ratelimit: " << ratelimit;
+  auto pk = ton::PrivateKey{ton::privkeys::Ed25519{private_key}};
+  auto id = pk.compute_short_id();
+  auto adnlkey = adnl::AdnlNodeIdFull{pk.compute_public_key()};
+  LOG(WARNING) << "Add user: " << adnlkey.pubkey().ed25519_value().raw().to_hex() << " valid until: " << valid_until
+               << " ratelimit: " << ratelimit;
+  td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false, [](td::Unit) {});
 
-  ratelimitdb->set(pubkey.as_slice(),
+  ratelimitdb->begin_write_batch();
+  ratelimitdb->set(adnlkey.pubkey().ed25519_value().raw().as_slice(),
                    create_serialize_tl_object<ton::ton_api::storage_liteserver_user>(valid_until, ratelimit));
+  ratelimitdb->commit_write_batch();
 
-  limits[adnl::AdnlNodeIdFull{ton::pubkeys::Ed25519(pubkey)}.compute_short_id()] =
-      std::make_tuple(valid_until, ratelimit);
+  limits[adnlkey.compute_short_id()] = std::make_tuple(valid_until, ratelimit);
+
+  td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::add_ext_server_id,
+                          adnlkey.compute_short_id());
+  td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(adnlkey), ton::adnl::AdnlAddressList{},
+                          static_cast<td::uint8>(255));
 
   promise.set_value(create_serialize_tl_object<ton::lite_api::liteServer_success>(0));
 }
@@ -90,16 +105,12 @@ void LiteServerLimiter::recv_connection(
     // process ordinary lite query from admin
   } else {
     // Check key in hot cache
-    //    auto key = dst.pubkey_hash().bits256_value().to_hex();
-    //
-    //    auto tmpc = ratelimitdb->count(key);
-    //    if (tmpc.is_error()) {
-    //      P.set_value(std::make_tuple(std::move(data), std::move(promise), StatusCode::NOTREADY));
-    //      return;
-    //    } else {
-    //      auto res = tmpc.move_as_ok();
-    //      LOG(INFO) << "Rate limit: " << res;
-    //    }
+    usage[dst]++;
+    auto k = limits[dst];
+    if (usage[dst] > std::get<1>(k) || std::time(nullptr) > std::get<0>(k)) {
+      P.set_value(std::make_tuple(std::move(data), std::move(promise), StatusCode::RATELIMIT));
+      return;
+    }
   }
 
   // All ok

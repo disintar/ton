@@ -110,7 +110,7 @@ class LiteServerDaemon : public td::actor::Actor {
     auto shard_top =
         ton::BlockIdExt{ton::masterchainId, ton::shardIdAll, 0, ton::RootHash::zero(), ton::FileHash::zero()};
 
-    lslimiter_ = td::actor::create_actor<ton::liteserver::LiteServerLimiter>("LsLimiter", db_root_, adnl_.get());
+    lslimiter_ = td::actor::create_actor<ton::liteserver::LiteServerLimiter>("LsLimiter", db_root_, adnl_.get(), keyring_.get());
 
     auto id = ton::PublicKeyHash::zero();
     validator_manager_ = ton::validator::ValidatorManagerDiskFactory::create(

@@ -30,22 +30,26 @@ class LiteServerLimiter : public td::actor::Actor {
   bool inited{false};
   td::actor::ActorId<ton::validator::ValidatorManagerInterface> validator_manager_;
   td::actor::ActorId<adnl::Adnl> adnl_;
+  td::actor::ActorId<keyring::Keyring> keyring_;
   std::vector<ton::adnl::AdnlNodeIdShort> admins_;
   std::map<ton::adnl::AdnlNodeIdShort, std::tuple<ValidUntil, RateLimit>> limits;
   std::map<ton::adnl::AdnlNodeIdShort, int> usage;
 
  public:
-  LiteServerLimiter(std::string db_root, td::actor::ActorId<adnl::Adnl> adnl) {
+  LiteServerLimiter(std::string db_root, td::actor::ActorId<adnl::Adnl> adnl,
+                    td::actor::ActorId<keyring::Keyring> keyring) {
     db_root_ = std::move(db_root);
     adnl_ = std::move(adnl);
     ratelimitdb = std::make_shared<td::RocksDb>(td::RocksDb::open(db_root_ + "rate-limits").move_as_ok());
+    keyring_ = std::move(keyring);
   }
 
   void start_up() override;
   void process_admin_request(td::BufferSlice query, td::Promise<td::BufferSlice> promise,
                              td::Promise<std::tuple<td::BufferSlice, td::Promise<td::BufferSlice>, td::uint8>> P);
-  void process_add_user(td::Bits256 pubkey, td::int64 valid_until, td::int32 ratelimit,
+  void process_add_user(td::Bits256 private_key, td::int64 valid_until, td::int32 ratelimit,
                         td::Promise<td::BufferSlice> promise);
+  void continue_process_add_user();
   void set_validator_manager(td::actor::ActorId<ton::validator::ValidatorManagerInterface> validator_manager) {
     validator_manager_ = std::move(validator_manager);
     inited = true;
