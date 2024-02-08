@@ -9,6 +9,7 @@
 #include "tuple"
 #include "td/db/RocksDb.h"
 #include "validator/validator.h"
+#include <map>
 
 namespace ton::liteserver {
 
@@ -19,6 +20,9 @@ enum StatusCode : td::uint8 {
   RATELIMIT = 228,
 };
 
+using ValidUntil = td::int64;
+using RateLimit = td::int32;
+
 class LiteServerLimiter : public td::actor::Actor {
  private:
   std::string db_root_;
@@ -27,6 +31,8 @@ class LiteServerLimiter : public td::actor::Actor {
   td::actor::ActorId<ton::validator::ValidatorManagerInterface> validator_manager_;
   td::actor::ActorId<adnl::Adnl> adnl_;
   std::vector<ton::adnl::AdnlNodeIdShort> admins_;
+  std::map<ton::adnl::AdnlNodeIdShort, std::tuple<ValidUntil, RateLimit>> limits;
+  std::map<ton::adnl::AdnlNodeIdShort, int> usage;
 
  public:
   LiteServerLimiter(std::string db_root, td::actor::ActorId<adnl::Adnl> adnl) {
@@ -38,7 +44,8 @@ class LiteServerLimiter : public td::actor::Actor {
   void start_up() override;
   void process_admin_request(td::BufferSlice query, td::Promise<td::BufferSlice> promise,
                              td::Promise<std::tuple<td::BufferSlice, td::Promise<td::BufferSlice>, td::uint8>> P);
-  void process_add_user(td::Bits256 pubkey, td::int64 valid_until, td::int32 ratelimit, td::Promise<td::BufferSlice> promise);
+  void process_add_user(td::Bits256 pubkey, td::int64 valid_until, td::int32 ratelimit,
+                        td::Promise<td::BufferSlice> promise);
   void set_validator_manager(td::actor::ActorId<ton::validator::ValidatorManagerInterface> validator_manager) {
     validator_manager_ = std::move(validator_manager);
     inited = true;

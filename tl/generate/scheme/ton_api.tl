@@ -12,6 +12,7 @@ boolFalse = Bool;
 
 vector {t:Type} # [ t ] = Vector t;
 
+int64 2*[ int ] = Int64;
 int128 4*[ int ] = Int128;
 int256 8*[ int ] = Int256;
 
@@ -853,6 +854,7 @@ storage.daemon.providerInfo address:string balance:string config:storage.daemon.
     contracts_count:int contracts_total_size:long
     contracts:(vector storage.daemon.contractInfo) = storage.daemon.ProviderInfo;
 storage.daemon.providerAddress address:string = storage.daemon.ProviderAddress;
+storage.liteserver.user valid_until:int64 ratelimit:int = storage.liteserver.User;
 
 ---functions---
 storage.daemon.setVerbosity verbosity:int = storage.daemon.Success;

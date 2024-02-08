@@ -116,6 +116,10 @@ void ValidatorManagerImpl::add_ext_server_id(adnl::AdnlNodeIdShort id) {
                             adnl::Adnl::int_to_bytestring(lite_api::liteServer_query::ID),
                             std::make_unique<Cb>(actor_id(this)));
 
+    td::actor::send_closure(adnl_, &adnl::Adnl::subscribe, id,
+                            adnl::Adnl::int_to_bytestring(lite_api::liteServer_adminQuery::ID),
+                            std::make_unique<Cb>(actor_id(this)));
+
     if (lite_server_.empty()) {
       pending_ext_ids_.push_back(id);
     } else {

@@ -5,15 +5,35 @@
 #include "td/utils/crypto.h"
 #include "td/utils/overloaded.h"
 #include "auto/tl/lite_api.h"
+#include "auto/tl/ton_api.h"
 #include "auto/tl/lite_api.hpp"
 #include "tl-utils/lite-utils.hpp"
+#include <ctime>
 
 namespace ton::liteserver {
 void LiteServerLimiter::start_up() {
   LOG(INFO) << "Rate limiter start";
+  auto t = std::time(nullptr);
 
   for (auto k : ratelimitdb->get_all_keys().move_as_ok()) {
-    // add existing ID to ADNL
+    std::string tmp;
+    ratelimitdb->get(k, tmp);
+
+    td::Bits256 pubkey;
+    std::memcpy(&pubkey, k.data(), k.size());
+    LOG(INFO) << "Got key from db: " << pubkey.to_hex();
+
+    auto f = fetch_tl_object<ton::ton_api::storage_liteserver_user>(td::Slice{tmp}, true);
+    if (f.is_error()) {
+      LOG(ERROR) << "Broken db on user: " << k;
+      continue;
+    } else {
+      auto user_data = f.move_as_ok();
+      if (user_data->valid_until_ <= t) {
+        limits[adnl::AdnlNodeIdFull{ton::pubkeys::Ed25519(pubkey)}.compute_short_id()] =
+            std::make_tuple(user_data->valid_until_, user_data->ratelimit_);
+      }
+    }
   }
 }
 
@@ -41,6 +61,13 @@ void LiteServerLimiter::process_admin_request(
 void LiteServerLimiter::process_add_user(td::Bits256 pubkey, td::int64 valid_until, td::int32 ratelimit,
                                          td::Promise<td::BufferSlice> promise) {
   LOG(WARNING) << "Add user: " << pubkey.to_hex() << " valid until: " << valid_until << " ratelimit: " << ratelimit;
+
+  ratelimitdb->set(pubkey.as_slice(),
+                   create_serialize_tl_object<ton::ton_api::storage_liteserver_user>(valid_until, ratelimit));
+
+  limits[adnl::AdnlNodeIdFull{ton::pubkeys::Ed25519(pubkey)}.compute_short_id()] =
+      std::make_tuple(valid_until, ratelimit);
+
   promise.set_value(create_serialize_tl_object<ton::lite_api::liteServer_success>(0));
 }
 
