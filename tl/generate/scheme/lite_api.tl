@@ -12,6 +12,7 @@ boolFalse = Bool;
 
 vector {t:Type} # [ t ] = Vector t;
 
+int64 2*[ int ] = Int64;
 int128 4*[ int ] = Int128;
 int256 8*[ int ] = Int256;
 
@@ -23,6 +24,7 @@ adnl.message.query query_id:int256 query:bytes = adnl.Message;
 adnl.message.answer query_id:int256 answer:bytes = adnl.Message;
 
 liteServer.error code:int message:string = liteServer.Error; 
+liteServer.success code:int = liteServer.Success;
 
 liteServer.accountId workchain:int id:int256 = liteServer.AccountId;
 liteServer.libraryEntry hash:int256 data:bytes = liteServer.LibraryEntry;
@@ -85,6 +87,10 @@ liteServer.getValidatorStats#091a58bc mode:# id:tonNode.blockIdExt limit:int sta
 liteServer.getLibraries library_list:(vector int256) = liteServer.LibraryResult;
 liteServer.getShardBlockProof id:tonNode.blockIdExt = liteServer.ShardBlockProof;
 
+// admin query
+liteServer.addUser pubkey:int256 valid_until:int64 ratelimit:int  = liteServer.Success;
+
 liteServer.queryPrefix = Object; 
 liteServer.query data:bytes = Object;
+liteServer.adminQuery data:bytes = Object;
 liteServer.waitMasterchainSeqno seqno:int timeout_ms:int = Object; // query prefix

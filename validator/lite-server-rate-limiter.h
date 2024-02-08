@@ -36,6 +36,9 @@ class LiteServerLimiter : public td::actor::Actor {
   }
 
   void start_up() override;
+  void process_admin_request(td::BufferSlice query, td::Promise<td::BufferSlice> promise,
+                             td::Promise<std::tuple<td::BufferSlice, td::Promise<td::BufferSlice>, td::uint8>> P);
+  void process_add_user(td::Bits256 pubkey, td::int64 valid_until, td::int32 ratelimit);
   void set_validator_manager(td::actor::ActorId<ton::validator::ValidatorManagerInterface> validator_manager) {
     validator_manager_ = std::move(validator_manager);
     inited = true;
