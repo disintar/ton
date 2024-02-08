@@ -6,6 +6,7 @@
 #include "td/utils/overloaded.h"
 #include "auto/tl/lite_api.h"
 #include "auto/tl/lite_api.hpp"
+#include "tl-utils/lite-utils.hpp"
 
 namespace ton::liteserver {
 void LiteServerLimiter::start_up() {
@@ -27,17 +28,20 @@ void LiteServerLimiter::process_admin_request(
   }
   auto pf = F.move_as_ok();
 
-  lite_api::downcast_call(
-      *pf,
-      td::overloaded(
-          [&](lite_api::liteServer_addUser& q) { this->process_add_user(q.pubkey_, q.valid_until_, q.ratelimit_); },
-          [&](auto& obj) { promise.set_error(td::Status::Error("admin function not found")); }));
+  lite_api::downcast_call(*pf,
+                          td::overloaded(
+                              [&](lite_api::liteServer_addUser& q) {
+                                this->process_add_user(q.pubkey_, q.valid_until_, q.ratelimit_, std::move(promise));
+                              },
+                              [&](auto& obj) { promise.set_error(td::Status::Error("admin function not found")); }));
 
   P.set_value(std::make_tuple(td::BufferSlice{}, std::move(promise), StatusCode::PROCESSED));
 }
 
-void LiteServerLimiter::process_add_user(td::Bits256 pubkey, td::int64 valid_until, td::int32 ratelimit) {
-  LOG(INFO) << "Add user: " << pubkey.to_hex() << " valid until: " << valid_until << " ratelimit: " << ratelimit;
+void LiteServerLimiter::process_add_user(td::Bits256 pubkey, td::int64 valid_until, td::int32 ratelimit,
+                                         td::Promise<td::BufferSlice> promise) {
+  LOG(WARNING) << "Add user: " << pubkey.to_hex() << " valid until: " << valid_until << " ratelimit: " << ratelimit;
+  promise.set_value(create_serialize_tl_object<ton::lite_api::liteServer_success>(0));
 }
 
 void LiteServerLimiter::recv_connection(
