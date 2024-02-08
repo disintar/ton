@@ -104,6 +104,25 @@ void LiteClientActorEngine::qprocess(td::BufferSlice q) {
       });
 }
 
+void LiteClientActorEngine::admin_qprocess(td::BufferSlice q) {
+  td::actor::send_closure(
+      client, &ton::adnl::AdnlExtClient::send_query, "adminquery",
+      ton::serialize_tl_object(ton::create_tl_object<ton::lite_api::liteServer_adminQuery>(std::move(q)), true),
+      td::Timestamp::in(timeout), [&](td::Result<td::BufferSlice> res) -> void {
+        if (res.is_error()) {
+          output_queue->writer_put(
+              ResponseWrapper(std::make_unique<ResponseObj>(ResponseObj(false, "Error while fetch"))));
+          return;
+        } else {
+          auto F = res.move_as_ok();
+          std::unique_ptr<td::BufferSlice> x = std::make_unique<td::BufferSlice>(std::move(F));
+
+          output_queue->writer_put(
+              ResponseWrapper(std::make_unique<SuccessBufferSlice>(SuccessBufferSlice(std::move(x)))));
+        }
+      });
+}
+
 void LiteClientActorEngine::get_MasterchainInfoExt(int mode) {
   auto q = ton::serialize_tl_object(ton::create_tl_object<ton::lite_api::liteServer_getMasterchainInfoExt>(mode), true);
   qprocess(std::move(q));
@@ -146,6 +165,13 @@ void LiteClientActorEngine::get_Block(ton::BlockIdExt blkid) {
       ton::create_tl_object<ton::lite_api::liteServer_getBlock>(ton::create_tl_lite_block_id(blkid)), true);
 
   qprocess(std::move(q));
+}
+
+void LiteClientActorEngine::admin_AddUser(td::Bits256 pubkey, td::int64 valid_until, td::int32 ratelimit) {
+  auto q = ton::serialize_tl_object(
+      ton::create_tl_object<ton::lite_api::liteServer_addUser>(std::move(pubkey), valid_until, ratelimit), true);
+
+  admin_qprocess(std::move(q));
 }
 
 void LiteClientActorEngine::get_AllShardsInfo(ton::BlockIdExt blkid) {
@@ -479,6 +505,25 @@ TestNode::BlockHdrInfo PyLiteClient::get_BlockHeader(ton::BlockIdExt req_blkid, 
   if (response->success) {
     SuccessBufferSlice* data = dynamic_cast<SuccessBufferSlice*>(response.get());
     return process_block_header(req_blkid, data->obj->clone(), true);
+  } else {
+    throw std::logic_error(response->error_message);
+  }
+}
+
+int PyLiteClient::admin_AddUser(std::string pubkey, td::int64 valid_until, td::int32 ratelimit) {
+  td::RefInt256 pubkey_int = td::string_to_int256(pubkey);
+  td::Bits256 pubkey_bits;
+  if (!pubkey_int->export_bytes(pubkey_bits.data(), 32, false)) {
+    throw std::logic_error("Invalid pubkey");
+  }
+
+  scheduler_.run_in_context_external(
+      [&] { send_closure(engine, &LiteClientActorEngine::admin_AddUser, pubkey_bits, valid_until, ratelimit); });
+
+  auto response = wait_response();
+  if (response->success) {
+    SuccessBufferSlice* data = dynamic_cast<SuccessBufferSlice*>(response.get());
+    return 0;
   } else {
     throw std::logic_error(response->error_message);
   }

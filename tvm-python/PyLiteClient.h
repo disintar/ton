@@ -110,6 +110,8 @@ class LiteClientActorEngine : public td::actor::Actor {
                                     std::optional<td::Bits256> account = std::optional<td::Bits256>(),
                                     std::optional<unsigned long long> lt = std::optional<unsigned long long>());
 
+  void admin_AddUser(td::Bits256 pubkey, td::int64 valid_until, td::int32 ratelimit);
+
   void run();
 
  private:
@@ -120,6 +122,7 @@ class LiteClientActorEngine : public td::actor::Actor {
   td::actor::ActorOwn<ton::adnl::AdnlExtClient> client;
   std::unique_ptr<ton::adnl::AdnlExtClient::Callback> make_callback();
   void qprocess(td::BufferSlice q);
+  void admin_qprocess(td::BufferSlice q);
   double timeout;
 };
 
@@ -131,10 +134,7 @@ class PyLiteClient {
   td::actor::ActorOwn<LiteClientActorEngine> engine;
   double timeout;
 
-  PyLiteClient(std::string ipv4, int port,
-               PyPublicKey public_key,
-               double timeout_ = 5,
-               unsigned long long threads = 5)
+  PyLiteClient(std::string ipv4, int port, PyPublicKey public_key, double timeout_ = 5, unsigned long long threads = 5)
       : timeout(timeout_) {
     scheduler_.init_with_new_infos({{threads}});
     response_obj_ = std::make_shared<OutputQueue>();
@@ -200,6 +200,7 @@ class PyLiteClient {
       ton::BlockIdExt blkid, int mode, int count, std::optional<td::string> account = std::optional<std::string>(),
       std::optional<unsigned long long> lt = std::optional<unsigned long long>());
   std::vector<ton::BlockId> get_AllShardsInfo(ton::BlockIdExt req_blkid);
+  int admin_AddUser(std::string pubkey, td::int64 valid_until, td::int32 ratelimit);
 
  private:
   std::shared_ptr<OutputQueue> response_obj_;
