@@ -25,7 +25,7 @@
 #include "manager-disk.h"
 #include "queue-size-counter.hpp"
 #include "auto/tl/lite_api.h"
-#include "lite-server-daemon/lite-server-rate-limiter.h"
+#include "lite-server-rate-limiter.h"
 
 #include <map>
 #include <set>

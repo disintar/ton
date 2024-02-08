@@ -20,7 +20,7 @@
 #include "validator/validator.h"
 #include "adnl/adnl.h"
 #include "rldp/rldp.h"
-#include "lite-server-daemon/lite-server-rate-limiter.h"
+#include "lite-server-rate-limiter.h"
 
 namespace ton::validator {
 

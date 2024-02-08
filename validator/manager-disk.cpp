@@ -31,6 +31,7 @@
 #include "auto/tl/lite_api.h"
 #include "tl-utils/lite-utils.hpp"
 #include "common/delay.h"
+#include "lite-server-rate-limiter.h"
 
 namespace ton {
 
