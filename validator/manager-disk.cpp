@@ -76,7 +76,7 @@ void ValidatorManagerImpl::add_ext_server_id(adnl::AdnlNodeIdShort id) {
       }
       void receive_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
                          td::Promise<td::BufferSlice> promise) override {
-        LOG(INFO) << "Receive LiteServer request, src: " << src.pubkey_hash();
+        LOG(INFO) << "Receive LiteServer request, src: " << src.pubkey_hash() << " dst: " << dst.pubkey_hash();
         td::actor::send_closure(id_, &ValidatorManagerImpl::run_ext_query, std::move(data), std::move(promise));
       }
 
@@ -976,17 +976,19 @@ void ValidatorManagerImpl::start_up() {
   validator_manager_init(opts_, actor_id(this), db_.get(), std::move(P), read_only_);
 
   if (!offline_) {
-    delay_action([SelfId = actor_id(this)]() { td::actor::send_closure(SelfId, &ValidatorManagerImpl::reinit); },
-                 td::Timestamp::in(1.0));
+    alarm();
   }
 }
+
+void ValidatorManagerImpl::alarm() {
+  alarm_timestamp() = td::Timestamp::in(1.0);
+  reinit();
+}
+
 void ValidatorManagerImpl::reinit() {
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ValidatorManagerInitResult> R) {
     R.ensure();
     td::actor::send_closure(SelfId, &ValidatorManagerImpl::started, R.move_as_ok(), true);
-
-    delay_action([SelfId]() { td::actor::send_closure(SelfId, &ValidatorManagerImpl::reinit); },
-                 td::Timestamp::in(1.0));
   });
 
   validator_manager_init(opts_, actor_id(this), db_.get(), std::move(P), read_only_);
@@ -1152,7 +1154,7 @@ void ValidatorManagerImpl::update_shard_blocks() {
 }
 
 void ValidatorManagerImpl::check_external_message(td::BufferSlice data, td::Promise<td::Ref<ExtMessage>> promise) {
-  auto state = last_masterchain_state_; // todo: last_liteserver_state_
+  auto state = last_masterchain_state_;  // todo: last_liteserver_state_
   if (state.is_null()) {
     promise.set_error(td::Status::Error(ErrorCode::notready, "not ready"));
     return;
