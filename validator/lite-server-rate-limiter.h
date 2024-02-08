@@ -50,10 +50,7 @@ class LiteServerLimiter : public td::actor::Actor {
   void process_add_user(td::Bits256 private_key, td::int64 valid_until, td::int32 ratelimit,
                         td::Promise<td::BufferSlice> promise);
   void continue_process_add_user();
-  void set_validator_manager(td::actor::ActorId<ton::validator::ValidatorManagerInterface> validator_manager) {
-    validator_manager_ = std::move(validator_manager);
-    inited = true;
-  }
+  void set_validator_manager(td::actor::ActorId<ton::validator::ValidatorManagerInterface> validator_manager);
 
   void add_admin(ton::adnl::AdnlNodeIdShort admin) {
     admins_.push_back(admin);

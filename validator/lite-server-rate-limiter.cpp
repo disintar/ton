@@ -13,6 +13,13 @@
 namespace ton::liteserver {
 void LiteServerLimiter::start_up() {
   LOG(INFO) << "Rate limiter start";
+}
+
+void LiteServerLimiter::set_validator_manager(
+    td::actor::ActorId<ton::validator::ValidatorManagerInterface> validator_manager) {
+  validator_manager_ = std::move(validator_manager);
+  inited = true;
+
   auto t = std::time(nullptr);
 
   for (auto k : ratelimitdb->get_all_keys().move_as_ok()) {
@@ -21,7 +28,6 @@ void LiteServerLimiter::start_up() {
 
     td::Bits256 pubkey;
     std::memcpy(&pubkey, k.data(), k.size());
-    LOG(INFO) << "Got key from db: " << pubkey.to_hex();
 
     auto f = fetch_tl_object<ton::ton_api::storage_liteserver_user>(td::Slice{tmp}, true);
     if (f.is_error()) {
@@ -29,8 +35,12 @@ void LiteServerLimiter::start_up() {
       continue;
     } else {
       auto user_data = f.move_as_ok();
-      if (user_data->valid_until_ <= t) {
+      if (t <= user_data->valid_until_) {
         auto key = adnl::AdnlNodeIdFull{ton::pubkeys::Ed25519(pubkey)};
+
+        LOG(INFO) << "Add key from DB: " << key.pubkey().ed25519_value().raw().to_hex()
+                  << ", valid until: " << user_data->valid_until_ << ", ratelimit " << user_data->ratelimit_;
+
         limits[key.compute_short_id()] = std::make_tuple(user_data->valid_until_, user_data->ratelimit_);
         td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::add_ext_server_id,
                                 key.compute_short_id());
