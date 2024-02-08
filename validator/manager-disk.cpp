@@ -74,9 +74,11 @@ void ValidatorManagerImpl::check_ext_query(adnl::AdnlNodeIdShort src, adnl::Adnl
           auto promise = std::move(std::get<1>(proxy_data));
           auto status = std::get<2>(proxy_data);
 
-          if (status == 0) {
+          if (status == ton::liteserver::StatusCode::OK) {
             td::actor::send_closure(SelfId, &ValidatorManagerImpl::run_ext_query, std::move(std::get<0>(proxy_data)),
                                     std::move(promise));
+          } else if (status == ton::liteserver::StatusCode::PROCESSED) {
+            return;
           } else {
             promise.set_error(td::Status::Error(status, "ratelimit"));
           }

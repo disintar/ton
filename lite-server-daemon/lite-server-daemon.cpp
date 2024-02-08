@@ -63,8 +63,14 @@ class LiteServerDaemon : public td::actor::Actor {
 
     // Start LightServers
     for (auto &s : config_.liteservers) {
-      td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, ton::adnl::AdnlNodeIdFull{keys_[s.second]},
-                              ton::adnl::AdnlAddressList{}, static_cast<td::uint8>(255));
+      auto key = ton::adnl::AdnlNodeIdFull{keys_[s.second]};
+
+      // add admin to lslimiter
+      td::actor::send_closure(lslimiter_, &LiteServerLimiter::add_admin,
+                              ton::adnl::AdnlNodeIdShort{key.pubkey().compute_short_id()});
+
+      td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(key), ton::adnl::AdnlAddressList{},
+                              static_cast<td::uint8>(255));
       td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::add_ext_server_id,
                               ton::adnl::AdnlNodeIdShort{s.second});
       td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::add_ext_server_port,
@@ -104,11 +110,14 @@ class LiteServerDaemon : public td::actor::Actor {
     auto shard_top =
         ton::BlockIdExt{ton::masterchainId, ton::shardIdAll, 0, ton::RootHash::zero(), ton::FileHash::zero()};
 
-    lslimiter_ = td::actor::create_actor<ton::liteserver::LiteServerLimiter>("LsLimiter", db_root_);
+    lslimiter_ = td::actor::create_actor<ton::liteserver::LiteServerLimiter>("LsLimiter", db_root_, adnl_.get());
 
     auto id = ton::PublicKeyHash::zero();
     validator_manager_ = ton::validator::ValidatorManagerDiskFactory::create(
-        id, opts_, shard, shard_top, db_root_, keyring_.get(), adnl_.get(), rldp_.get(), overlay_manager_.get(), lslimiter_.get(), true);
+        id, opts_, shard, shard_top, db_root_, keyring_.get(), adnl_.get(), rldp_.get(), overlay_manager_.get(),
+        lslimiter_.get(), true);
+
+    td::actor::send_closure(lslimiter_, &LiteServerLimiter::set_validator_manager, validator_manager_.get());
 
     class Callback : public ton::validator::ValidatorManagerInterface::Callback {
      public:
@@ -410,7 +419,7 @@ class LiteServerDaemon : public td::actor::Actor {
     return td::Status::OK();
   }
 };
-}  // namespace ton
+}  // namespace ton::liteserver
 
 int main(int argc, char **argv) {
   SET_VERBOSITY_LEVEL(verbosity_DEBUG);
