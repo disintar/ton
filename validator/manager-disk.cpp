@@ -976,19 +976,18 @@ void ValidatorManagerImpl::start_up() {
   validator_manager_init(opts_, actor_id(this), db_.get(), std::move(P), read_only_);
 
   if (!offline_) {
-    alarm();
+    delay_action([SelfId = actor_id(this)]() { td::actor::send_closure(SelfId, &ValidatorManagerImpl::reinit); },
+                 td::Timestamp::in(1.0));
   }
-}
-
-void ValidatorManagerImpl::alarm() {
-  alarm_timestamp() = td::Timestamp::in(1.0);
-  reinit();
 }
 
 void ValidatorManagerImpl::reinit() {
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ValidatorManagerInitResult> R) {
     R.ensure();
     td::actor::send_closure(SelfId, &ValidatorManagerImpl::started, R.move_as_ok(), true);
+
+    delay_action([SelfId]() { td::actor::send_closure(SelfId, &ValidatorManagerImpl::reinit); },
+                 td::Timestamp::in(1.0));
   });
 
   validator_manager_init(opts_, actor_id(this), db_.get(), std::move(P), read_only_);
