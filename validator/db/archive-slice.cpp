@@ -533,7 +533,7 @@ void ArchiveSlice::reinit() {
 void ArchiveSlice::before_query() {
   if (status_ == st_closed) {
     LOG(DEBUG) << "Opening archive slice " << db_path_;
-    kv_ = std::make_unique<td::RocksDb>(td::RocksDb::open(db_path_).move_as_ok());
+    kv_ = std::make_unique<td::RocksDb>(td::RocksDb::open(db_path_, read_only_).move_as_ok());
     reinit();
   }
   status_ = st_open;

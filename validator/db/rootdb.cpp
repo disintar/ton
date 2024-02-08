@@ -397,9 +397,13 @@ void RootDb::get_hardforks(td::Promise<std::vector<BlockIdExt>> promise) {
 }
 
 void RootDb::start_up() {
+  if (read_only_) {
+    LOG(INFO) << "Run RootDb in readonly mode";
+  }
   cell_db_ = td::actor::create_actor<CellDb>("celldb", actor_id(this), root_path_ + "/celldb/", opts_, read_only_);
   state_db_ = td::actor::create_actor<StateDb>("statedb", actor_id(this), root_path_ + "/state/", read_only_);
-  static_files_db_ = td::actor::create_actor<StaticFilesDb>("staticfilesdb", actor_id(this), root_path_ + "/static/", read_only_);
+  static_files_db_ =
+      td::actor::create_actor<StaticFilesDb>("staticfilesdb", actor_id(this), root_path_ + "/static/", read_only_);
   archive_db_ = td::actor::create_actor<ArchiveManager>("archive", actor_id(this), root_path_, opts_, read_only_);
 }
 
