@@ -7,6 +7,7 @@
 #include "td/utils/Time.h"
 #include "adnl/utils.hpp"
 #include "tuple"
+#include "auto/tl/lite_api.h"
 #include "td/db/RocksDb.h"
 #include "validator/validator.h"
 #include <map>
@@ -23,6 +24,22 @@ enum StatusCode : td::uint8 {
 using ValidUntil = td::int64;
 using RateLimit = td::int32;
 
+class LiteServerStatItem {
+ private:
+  adnl::AdnlNodeIdShort dst_;
+  int lite_query_id_;
+
+ public:
+  LiteServerStatItem(adnl::AdnlNodeIdShort dst, int lite_query_id) {
+    dst_ = dst;
+    lite_query_id_ = lite_query_id;
+  }
+
+  std::unique_ptr<ton::lite_api::liteServer_statItem> serialize() {
+    return create_tl_object<ton::lite_api::liteServer_statItem>(dst_.bits256_value(), lite_query_id_);
+  }
+};
+
 class LiteServerLimiter : public td::actor::Actor {
  private:
   std::string db_root_;
@@ -32,6 +49,7 @@ class LiteServerLimiter : public td::actor::Actor {
   td::actor::ActorId<adnl::Adnl> adnl_;
   td::actor::ActorId<keyring::Keyring> keyring_;
   std::vector<ton::adnl::AdnlNodeIdShort> admins_;
+  std::vector<LiteServerStatItem> stats_data_;
   std::map<ton::adnl::AdnlNodeIdShort, std::tuple<ValidUntil, RateLimit>> limits;
   std::map<ton::adnl::AdnlNodeIdShort, int> usage;
 
@@ -46,6 +64,7 @@ class LiteServerLimiter : public td::actor::Actor {
 
   void start_up() override;
   void alarm() override;
+  void process_get_stat_data(td::Promise<td::BufferSlice> promise);
   void process_admin_request(td::BufferSlice query, td::Promise<td::BufferSlice> promise,
                              td::Promise<std::tuple<td::BufferSlice, td::Promise<td::BufferSlice>, td::uint8>> P);
   void process_add_user(td::Bits256 private_key, td::int64 valid_until, td::int32 ratelimit,
@@ -56,6 +75,10 @@ class LiteServerLimiter : public td::actor::Actor {
   void add_admin(ton::adnl::AdnlNodeIdShort admin) {
     admins_.push_back(admin);
   }
+
+  void add_lite_query_stats(int lite_query_id, adnl::AdnlNodeIdShort dst) {
+    stats_data_.emplace_back(dst, lite_query_id);
+  };
 
   void recv_connection(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
                        td::Promise<td::BufferSlice> promise,

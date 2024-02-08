@@ -65,14 +65,26 @@ void LiteServerLimiter::process_admin_request(
   }
   auto pf = F.move_as_ok();
 
-  lite_api::downcast_call(*pf,
-                          td::overloaded(
-                              [&](lite_api::liteServer_addUser& q) {
-                                this->process_add_user(q.key_, q.valid_until_, q.ratelimit_, std::move(promise));
-                              },
-                              [&](auto& obj) { promise.set_error(td::Status::Error("admin function not found")); }));
+  lite_api::downcast_call(
+      *pf, td::overloaded(
+               [&](lite_api::liteServer_addUser& q) {
+                 this->process_add_user(q.key_, q.valid_until_, q.ratelimit_, std::move(promise));
+               },
+               [&](lite_api::liteServer_getStatData& q) { this->process_get_stat_data(std::move(promise)); },
+               [&](auto& obj) { promise.set_error(td::Status::Error("admin function not found")); }));
 
   P.set_value(std::make_tuple(td::BufferSlice{}, std::move(promise), StatusCode::PROCESSED));
+}
+
+void LiteServerLimiter::process_get_stat_data(td::Promise<td::BufferSlice> promise) {
+  std::vector<std::unique_ptr<ton::lite_api::liteServer_statItem>> tmp;
+  tmp.reserve(stats_data_.size());
+
+  for (auto e : stats_data_) {
+    tmp.emplace_back(e.serialize());
+  }
+
+  promise.set_value(create_serialize_tl_object<ton::lite_api::liteServer_stats>(std::move(tmp)));
 }
 
 void LiteServerLimiter::process_add_user(td::Bits256 private_key, td::int64 valid_until, td::int32 ratelimit,
@@ -97,18 +109,24 @@ void LiteServerLimiter::process_add_user(td::Bits256 private_key, td::int64 vali
 
   limits[adnlkey.compute_short_id()] = std::make_tuple(valid_until, ratelimit);
   auto k = adnlkey.pubkey().ed25519_value().raw();
+  auto k_short = adnlkey.compute_short_id().bits256_value();
 
   td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::add_ext_server_id,
                           adnlkey.compute_short_id());
   td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(adnlkey), ton::adnl::AdnlAddressList{},
                           static_cast<td::uint8>(255));
 
-  promise.set_value(create_serialize_tl_object<ton::lite_api::liteServer_newUser>(k));
+  promise.set_value(create_serialize_tl_object<ton::lite_api::liteServer_newUser>(k, k_short));
 }
 
 void LiteServerLimiter::alarm() {
   alarm_timestamp() = td::Timestamp::in(1.0);
   usage.clear();
+
+  if (stats_data_.size() > 1000) {  // move to const?
+    stats_data_.clear();
+    LOG(ERROR) << "Stat cache too large, clear";
+  }
 }
 
 void LiteServerLimiter::recv_connection(

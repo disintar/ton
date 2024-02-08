@@ -305,7 +305,11 @@ class ValidatorManagerImpl : public ValidatorManager {
   void get_vertical_seqno(BlockSeqno seqno, td::Promise<td::uint32> promise) override {
     promise.set_result(opts_->get_vertical_seqno(seqno));
   }
-  void run_ext_query(td::BufferSlice data, td::Promise<td::BufferSlice> promise) override;
+  void run_ext_query_extended(td::BufferSlice data, adnl::AdnlNodeIdShort dst, td::Promise<td::BufferSlice> promise);
+  void run_ext_query(td::BufferSlice data, td::Promise<td::BufferSlice> promise) override {
+    UNREACHABLE();
+  };
+  void add_lite_query_stats_extended(int lite_query_id, adnl::AdnlNodeIdShort dst) override;
 
   ValidatorManagerImpl(PublicKeyHash local_id, td::Ref<ValidatorManagerOptions> opts, ShardIdFull shard_id,
                        BlockIdExt shard_to_block_id, std::string db_root, bool read_only = false)

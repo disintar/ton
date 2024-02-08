@@ -180,6 +180,8 @@ class ValidatorManager : public ValidatorManagerInterface {
 
   virtual void add_lite_query_stats(int lite_query_id) {
   }
+  virtual void add_lite_query_stats_extended(int lite_query_id, adnl::AdnlNodeIdShort dst) {
+  }
 
   static bool is_persistent_state(UnixTime ts, UnixTime prev_ts) {
     return ts / (1 << 17) != prev_ts / (1 << 17);
