@@ -1,6 +1,6 @@
 
 set(LITESERVER_DAEMON_SOURCE
-        lite-server-daemon.cpp lite-server-config.hpp)
+        lite-server-rate-limiter.h lite-server-daemon.cpp lite-server-config.hpp lite-server-rate-limiter.h lite-server-rate-limiter.cpp)
 
 add_executable(lite-server ${LITESERVER_DAEMON_SOURCE})
 

@@ -25,6 +25,7 @@
 #include "manager-disk.h"
 #include "queue-size-counter.hpp"
 #include "auto/tl/lite_api.h"
+#include "lite-server-daemon/lite-server-rate-limiter.h"
 
 #include <map>
 #include <set>
@@ -135,7 +136,8 @@ class ValidatorManagerImpl : public ValidatorManager {
   void add_ext_server_port(td::uint16 port) override;
 
   void get_block_handle(BlockIdExt id, bool force, td::Promise<BlockHandle> promise) override;
-
+  void check_ext_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
+                       td::Promise<td::BufferSlice> promise);
   void set_block_state(BlockHandle handle, td::Ref<ShardState> state,
                        td::Promise<td::Ref<ShardState>> promise) override;
   void get_cell_db_reader(td::Promise<std::shared_ptr<vm::CellDbReader>> promise) override;
@@ -240,7 +242,7 @@ class ValidatorManagerImpl : public ValidatorManager {
     UNREACHABLE();
   }
   void send_external_message(td::Ref<ExtMessage> message) override {
-    if (offline_){
+    if (offline_) {
       new_external_message(message->serialize());
     } else {
       callback_->send_ext_message(message->shard(), message->serialize());
@@ -318,7 +320,8 @@ class ValidatorManagerImpl : public ValidatorManager {
   ValidatorManagerImpl(PublicKeyHash local_id, td::Ref<ValidatorManagerOptions> opts, ShardIdFull shard_id,
                        BlockIdExt shard_to_block_id, std::string db_root, td::actor::ActorId<keyring::Keyring> keyring,
                        td::actor::ActorId<adnl::Adnl> adnl, td::actor::ActorId<rldp::Rldp> rldp,
-                       td::actor::ActorId<overlay::Overlays> overlays, bool read_only = false)
+                       td::actor::ActorId<overlay::Overlays> overlays,
+                       td::actor::ActorId<liteserver::LiteServerLimiter> lslimiter, bool read_only = false)
       : local_id_(local_id)
       , opts_(std::move(opts))
       , read_only_(read_only)
@@ -327,6 +330,7 @@ class ValidatorManagerImpl : public ValidatorManager {
       , adnl_(std::move(adnl))
       , rldp_(std::move(rldp))
       , overlays_(std::move(overlays))
+      , lslimiter_(lslimiter)
       , db_root_(std::move(db_root))
       , shard_to_generate_(shard_id)
       , block_to_generate_(shard_to_block_id) {
@@ -490,6 +494,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   td::actor::ActorId<adnl::Adnl> adnl_;
   td::actor::ActorId<rldp::Rldp> rldp_;
   td::actor::ActorId<overlay::Overlays> overlays_;
+  td::actor::ActorId<liteserver::LiteServerLimiter> lslimiter_;
 
   std::string db_root_;
   ShardIdFull shard_to_generate_;

@@ -10,8 +10,7 @@
 #include "adnl/adnl-ext-client.h"
 
 using AdnlCategory = td::uint8;
-namespace ton {
-namespace liteserver {
+namespace ton::liteserver {
 class Config {
   struct Addr {
     td::IPAddress addr;
@@ -171,5 +170,4 @@ class Config {
         std::move(full_node_slaves_vec));
   };
 };
-}  // namespace liteserver
 }  // namespace ton

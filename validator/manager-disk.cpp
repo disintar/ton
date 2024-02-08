@@ -64,6 +64,30 @@ void ValidatorManagerImpl::validate_block_proof_link(BlockIdExt block_id, td::Bu
   UNREACHABLE();
 }
 
+void ValidatorManagerImpl::check_ext_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
+                                           td::Promise<td::BufferSlice> promise) {
+  auto P = td::PromiseCreator::lambda(
+      [SelfId = actor_id(this)](td::Result<std::tuple<td::BufferSlice, td::Promise<td::BufferSlice>, td::uint8>> R) {
+        if (R.is_ok()) {
+          auto proxy_data = R.move_as_ok();
+          auto promise = std::move(std::get<1>(proxy_data));
+          auto status = std::get<2>(proxy_data);
+
+          if (status == 0) {
+            td::actor::send_closure(SelfId, &ValidatorManagerImpl::run_ext_query, std::move(std::get<0>(proxy_data)),
+                                    std::move(promise));
+          } else {
+            promise.set_error(td::Status::Error(status, "ratelimit"));
+          }
+        } else {
+          return;
+        }
+      });
+
+  td::actor::send_closure(lslimiter_, &liteserver::LiteServerLimiter::recv_connection, src, dst, std::move(data),
+                          std::move(promise), std::move(P));
+};
+
 void ValidatorManagerImpl::add_ext_server_id(adnl::AdnlNodeIdShort id) {
   if (offline_) {
     UNREACHABLE();
@@ -76,12 +100,12 @@ void ValidatorManagerImpl::add_ext_server_id(adnl::AdnlNodeIdShort id) {
       }
       void receive_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
                          td::Promise<td::BufferSlice> promise) override {
-        LOG(INFO) << "Receive LiteServer request, src: " << src.pubkey_hash() << " dst: " << dst.pubkey_hash();
-        td::actor::send_closure(id_, &ValidatorManagerImpl::run_ext_query, std::move(data), std::move(promise));
+        td::actor::send_closure(id_, &ValidatorManagerImpl::check_ext_query, src, dst, std::move(data),
+                                std::move(promise));
       }
 
      public:
-      Cb(td::actor::ActorId<ValidatorManagerImpl> id) : id_(id) {
+      Cb(td::actor::ActorId<ValidatorManagerImpl> id) : id_(std::move(id)) {
       }
     };
 
@@ -1188,10 +1212,11 @@ td::actor::ActorOwn<ValidatorManagerInterface> ValidatorManagerDiskFactory::crea
 td::actor::ActorOwn<ValidatorManagerInterface> ValidatorManagerDiskFactory::create(
     PublicKeyHash id, td::Ref<ValidatorManagerOptions> opts, ShardIdFull shard, BlockIdExt shard_top_block_id,
     std::string db_root, td::actor::ActorId<keyring::Keyring> keyring, td::actor::ActorId<adnl::Adnl> adnl,
-    td::actor::ActorId<rldp::Rldp> rldp, td::actor::ActorId<overlay::Overlays> overlays, bool read_only_) {
+    td::actor::ActorId<rldp::Rldp> rldp, td::actor::ActorId<overlay::Overlays> overlays,
+    td::actor::ActorId<liteserver::LiteServerLimiter> lslimiter, bool read_only_) {
   return td::actor::create_actor<validator::ValidatorManagerImpl>(
       "manager", id, std::move(opts), shard, shard_top_block_id, db_root, std::move(keyring), std::move(adnl),
-      std::move(rldp), std::move(overlays), read_only_);
+      std::move(rldp), std::move(overlays), std::move(lslimiter), read_only_);
 }
 
 }  // namespace validator

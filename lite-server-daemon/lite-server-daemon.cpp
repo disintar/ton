@@ -33,8 +33,7 @@
 #include <chrono>
 #include <thread>
 
-namespace ton {
-namespace liteserver {
+namespace ton::liteserver {
 class LiteServerDaemon : public td::actor::Actor {
  public:
   LiteServerDaemon(std::string db_root, std::string server_config_path, std::string ipaddr, std::string config_path) {
@@ -95,6 +94,7 @@ class LiteServerDaemon : public td::actor::Actor {
   td::actor::ActorOwn<ton::overlay::Overlays> overlay_manager_;
   td::actor::ActorOwn<ton::rldp::Rldp> rldp_;
   td::actor::ActorOwn<ton::rldp2::Rldp> rldp2_;
+  td::actor::ActorOwn<ton::liteserver::LiteServerLimiter> lslimiter_;
   ton::PublicKeyHash default_dht_node_ = ton::PublicKeyHash::zero();
 
   int to_load_keys = 0;
@@ -104,9 +104,11 @@ class LiteServerDaemon : public td::actor::Actor {
     auto shard_top =
         ton::BlockIdExt{ton::masterchainId, ton::shardIdAll, 0, ton::RootHash::zero(), ton::FileHash::zero()};
 
+    lslimiter_ = td::actor::create_actor<ton::liteserver::LiteServerLimiter>("LsLimiter", db_root_);
+
     auto id = ton::PublicKeyHash::zero();
     validator_manager_ = ton::validator::ValidatorManagerDiskFactory::create(
-        id, opts_, shard, shard_top, db_root_, keyring_.get(), adnl_.get(), rldp_.get(), overlay_manager_.get(), true);
+        id, opts_, shard, shard_top, db_root_, keyring_.get(), adnl_.get(), rldp_.get(), overlay_manager_.get(), lslimiter_.get(), true);
 
     class Callback : public ton::validator::ValidatorManagerInterface::Callback {
      public:
@@ -408,7 +410,6 @@ class LiteServerDaemon : public td::actor::Actor {
     return td::Status::OK();
   }
 };
-}  // namespace liteserver
 }  // namespace ton
 
 int main(int argc, char **argv) {

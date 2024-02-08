@@ -108,6 +108,7 @@ set(DISK_VALIDATOR_SOURCE
   downloaders/wait-block-state-merge.cpp
   downloaders/download-state.cpp
 
+  ../lite-server-daemon/lite-server-rate-limiter.h
   manager-init.cpp
   manager-disk.cpp
 
