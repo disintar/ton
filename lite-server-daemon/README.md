@@ -2,7 +2,7 @@
 
 ## Setup
 
-Run `./lite-server-daemon/lite-server -D <NODE-DB> --ip <IP>>:<PORT>` to generate config file.
+Run `./lite-server-daemon/lite-server -D <NODE-DB> --ip <IP>>:<PORT> -C <GLOBAL-CONFIG-PATH>` to generate config file.
 
 Check:
 
@@ -17,7 +17,8 @@ Check:
 ## Configurate sending external messages
 
 1. Create keypair `generate-random-id -m keys -n master`
-2. Save TCP port and hash of key (it'll be in output) to config of your node, don't forget to add it to `adnl`
+2. Copy master key to keyring in node with hex name from output
+3. Save TCP port and hash of key (it'll be second in output) to config of your node, don't forget to add it to `adnl`
    with `category` 1:
    ```
      "fullnodemasters" : [
@@ -36,12 +37,12 @@ Check:
          "category" : 0
       },
    ```
-3. Obtain pub key from `master.pub`:
+4. Obtain pub key from `master.pub`:
    ```
    import base64 as b
    b.b64encode(open("master.pub", "rb").read()[4:])
    ```
-4. Put pub key to `liteserver.json` config with IP and port:
+5. Put pub key to `liteserver.json` config with IP and port:
    ```
      "fullnodeslaves": [
     {
@@ -56,4 +57,4 @@ Check:
    ]
    ```
 
-5. Enjoy of proxy external messages over slave node
+6. Enjoy of proxy external messages over slave node

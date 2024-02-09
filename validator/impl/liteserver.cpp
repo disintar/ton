@@ -107,7 +107,7 @@ void LiteQuery::abort_query(td::Status reason) {
 void LiteQuery::abort_query_ext(td::Status reason, bool unknown) {
   if (dst_.is_zero()) {
     int q = 0;
-    if (!unknown) {
+    if (!unknown && query_obj_ != nullptr) {
       q = query_obj_->get_id();
     }
 
