@@ -458,7 +458,7 @@ FullNodeMasterImpl::FullNodeMasterImpl(adnl::AdnlNodeIdShort adnl_id, td::uint16
     , keyring_(keyring)
     , adnl_(adnl)
     , validator_manager_(validator_manager) {
-  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<PublicKey> R) {
+  auto P = td::PromiseCreator::lambda([](td::Result<PublicKey> R) {
     R.ensure();
     LOG(WARNING) << "Start full node master with: " << R.move_as_ok().ed25519_value().raw().to_hex();
   });
