@@ -103,7 +103,6 @@ void ValidatorManagerImpl::add_ext_server_id(adnl::AdnlNodeIdShort id) {
       }
       void receive_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
                          td::Promise<td::BufferSlice> promise) override {
-        LOG(WARNING) << "Recevie: " << dst;
         td::actor::send_closure(id_, &ValidatorManagerImpl::check_ext_query, src, dst, std::move(data),
                                 std::move(promise));
       }
@@ -1091,11 +1090,11 @@ void ValidatorManagerImpl::run_ext_query_extended(td::BufferSlice data, adnl::Ad
 
     auto E = fetch_tl_prefix<lite_api::liteServer_waitMasterchainSeqno>(data, true);
     if (E.is_error()) {
-      run_liteserver_query(std::move(data), actor_id(this), lite_server_cache_.get(), std::move(P));
+      run_liteserver_query(std::move(data), actor_id(this), lite_server_cache_.get(), std::move(P), dst);
     } else {
       auto e = E.move_as_ok();
       if (static_cast<BlockSeqno>(e->seqno_) <= last_masterchain_seqno_) {
-        run_liteserver_query(std::move(data), actor_id(this), lite_server_cache_.get(), std::move(P));
+        run_liteserver_query(std::move(data), actor_id(this), lite_server_cache_.get(), std::move(P), dst);
       } else {
         auto t = e->timeout_ms_ < 10000 ? e->timeout_ms_ * 0.001 : 10.0;
         auto Q = td::PromiseCreator::lambda([data = std::move(data), SelfId = actor_id(this),
