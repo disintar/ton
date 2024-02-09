@@ -309,7 +309,8 @@ class ValidatorManagerImpl : public ValidatorManager {
   void run_ext_query(td::BufferSlice data, td::Promise<td::BufferSlice> promise) override {
     UNREACHABLE();
   };
-  void add_lite_query_stats_extended(int lite_query_id, adnl::AdnlNodeIdShort dst) override;
+  void add_lite_query_stats_extended(int lite_query_id, adnl::AdnlNodeIdShort dst, long start_at, long end_at,
+                                     bool success) override;
 
   ValidatorManagerImpl(PublicKeyHash local_id, td::Ref<ValidatorManagerOptions> opts, ShardIdFull shard_id,
                        BlockIdExt shard_to_block_id, std::string db_root, bool read_only = false)

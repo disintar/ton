@@ -59,7 +59,7 @@ liteServer.shardBlockProof masterchain_id:tonNode.blockIdExt links:(vector liteS
 
 liteServer.debug.verbosity value:int = liteServer.debug.Verbosity;
 liteServer.newUser pubkey:int256 short:int256 = liteServer.NewUser;
-liteServer.statItem shortid:int256 method:int = liteServer.StatItem;
+liteServer.statItem shortid:int256 method:int start_at:int64 end_at:int64 success:Bool = liteServer.StatItem;
 liteServer.stats data:(vector liteServer.StatItem) = liteServer.Stats;
 
 ---functions---
@@ -90,7 +90,7 @@ liteServer.getLibraries library_list:(vector int256) = liteServer.LibraryResult;
 liteServer.getShardBlockProof id:tonNode.blockIdExt = liteServer.ShardBlockProof;
 
 // admin query
-liteServer.addUser key:int256 valid_until:int64 ratelimit:int  = liteServer.NewUser;
+liteServer.addUser key:int256 valid_until:int64 ratelimit:int = liteServer.NewUser;
 liteServer.getStatData = liteServer.Stats;
 
 liteServer.queryPrefix = Object; 

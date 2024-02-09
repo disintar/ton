@@ -76,8 +76,8 @@ void ValidatorManagerImpl::check_ext_query(adnl::AdnlNodeIdShort src, adnl::Adnl
           auto status = std::get<2>(proxy_data);
 
           if (status == ton::liteserver::StatusCode::OK) {
-            td::actor::send_closure(SelfId, &ValidatorManagerImpl::run_ext_query_extended, std::move(std::get<0>(proxy_data)),
-                                    dst, std::move(promise));
+            td::actor::send_closure(SelfId, &ValidatorManagerImpl::run_ext_query_extended,
+                                    std::move(std::get<0>(proxy_data)), dst, std::move(promise));
           } else if (status == ton::liteserver::StatusCode::PROCESSED) {
             return;
           } else {
@@ -899,8 +899,10 @@ void ValidatorManagerImpl::new_block(BlockHandle handle, td::Ref<ShardState> sta
   }
 }
 
-void ValidatorManagerImpl::add_lite_query_stats_extended(int lite_query_id, adnl::AdnlNodeIdShort dst) {
-  td::actor::send_closure(lslimiter_, &liteserver::LiteServerLimiter::add_lite_query_stats, lite_query_id, dst);
+void ValidatorManagerImpl::add_lite_query_stats_extended(int lite_query_id, adnl::AdnlNodeIdShort dst, long start_at, long end_at,
+                                                         bool success) {
+  td::actor::send_closure(lslimiter_, &liteserver::LiteServerLimiter::add_lite_query_stats, lite_query_id, dst,
+                          start_at, end_at, success);
 }
 
 void ValidatorManagerImpl::get_block_handle(BlockIdExt id, bool force, td::Promise<BlockHandle> promise) {
@@ -1062,7 +1064,7 @@ void ValidatorManagerImpl::wait_shard_client_state(BlockSeqno seqno, td::Timesta
 }
 
 void ValidatorManagerImpl::run_ext_query_extended(td::BufferSlice data, adnl::AdnlNodeIdShort dst,
-                                         td::Promise<td::BufferSlice> promise) {
+                                                  td::Promise<td::BufferSlice> promise) {
   if (offline_) {
     UNREACHABLE();
   } else {

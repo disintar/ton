@@ -90,6 +90,7 @@ LiteQuery::LiteQuery(td::BufferSlice data, td::actor::ActorId<ValidatorManager> 
     , promise_(std::move(promise))
     , dst_(dst) {
   timeout_ = td::Timestamp::in(default_timeout_msec * 0.001);
+  started_at_ = std::time(nullptr);
 }
 
 LiteQuery::LiteQuery(
@@ -100,6 +101,22 @@ LiteQuery::LiteQuery(
 }
 
 void LiteQuery::abort_query(td::Status reason) {
+  abort_query_ext(std::move(reason), false);
+}
+
+void LiteQuery::abort_query_ext(td::Status reason, bool unknown) {
+  if (dst_.is_zero()) {
+    int q = 0;
+    if (!unknown) {
+      q = query_obj_->get_id();
+    }
+
+    td::actor::send_closure(manager_, &ValidatorManager::add_lite_query_stats, q);
+  } else {
+    td::actor::send_closure(manager_, &ValidatorManager::add_lite_query_stats_extended, query_obj_->get_id(), dst_,
+                            started_at_, std::time(nullptr), false);
+  }
+
   LOG(INFO) << "aborted liteserver query: " << reason.to_string();
   if (acc_state_promise_) {
     acc_state_promise_.set_error(std::move(reason));
@@ -135,6 +152,13 @@ void LiteQuery::alarm() {
 }
 
 bool LiteQuery::finish_query(td::BufferSlice result, bool skip_cache_update) {
+  if (dst_.is_zero()) {
+    td::actor::send_closure(manager_, &ValidatorManager::add_lite_query_stats, query_obj_->get_id());
+  } else {
+    td::actor::send_closure(manager_, &ValidatorManager::add_lite_query_stats_extended, query_obj_->get_id(), dst_,
+                            started_at_, std::time(nullptr), true);
+  }
+
   if (use_cache_ && !skip_cache_update) {
     td::actor::send_closure(cache_, &LiteServerCache::update, cache_key_, result.clone());
   }
@@ -158,12 +182,7 @@ void LiteQuery::start_up() {
 
   auto F = fetch_tl_object<ton::lite_api::Function>(query_, true);
   if (F.is_error()) {
-    if (dst_.is_zero()) {
-      td::actor::send_closure(manager_, &ValidatorManager::add_lite_query_stats, 0);  // unknown
-    } else {
-      td::actor::send_closure(manager_, &ValidatorManager::add_lite_query_stats_extended, 0, dst_);  // unknown
-    }
-    abort_query(F.move_as_error());
+    abort_query_ext(F.move_as_error(), true);
     return;
   }
   query_obj_ = F.move_as_ok();
@@ -199,12 +218,6 @@ void LiteQuery::start_up() {
 }
 
 void LiteQuery::perform() {
-  if (dst_.is_zero()){
-    td::actor::send_closure(manager_, &ValidatorManager::add_lite_query_stats, query_obj_->get_id());
-  } else {
-    td::actor::send_closure(manager_, &ValidatorManager::add_lite_query_stats_extended, query_obj_->get_id(), dst_);
-  }
-
   lite_api::downcast_call(
       *query_obj_,
       td::overloaded(

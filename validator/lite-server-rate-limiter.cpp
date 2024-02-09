@@ -83,6 +83,7 @@ void LiteServerLimiter::process_get_stat_data(td::Promise<td::BufferSlice> promi
   for (auto e : stats_data_) {
     tmp.emplace_back(e.serialize());
   }
+  stats_data_.clear();
 
   promise.set_value(create_serialize_tl_object<ton::lite_api::liteServer_stats>(std::move(tmp)));
 }
@@ -102,10 +103,8 @@ void LiteServerLimiter::process_add_user(td::Bits256 private_key, td::int64 vali
                << " ratelimit: " << ratelimit;
   td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false, [](td::Unit) {});
 
-  ratelimitdb->begin_write_batch();
   ratelimitdb->set(adnlkey.pubkey().ed25519_value().raw().as_slice(),
                    create_serialize_tl_object<ton::ton_api::storage_liteserver_user>(valid_until, ratelimit));
-  ratelimitdb->commit_write_batch();
 
   limits[adnlkey.compute_short_id()] = std::make_tuple(valid_until, ratelimit);
   auto k = adnlkey.pubkey().ed25519_value().raw();

@@ -39,6 +39,7 @@ class LiteQuery : public td::actor::Actor {
   td::actor::ActorId<ton::validator::ValidatorManager> manager_;
   td::actor::ActorId<LiteServerCache> cache_;
   td::Timestamp timeout_;
+  long started_at_;
   td::Promise<td::BufferSlice> promise_;
   adnl::AdnlNodeIdShort dst_ = adnl::AdnlNodeIdShort::zero();
 
@@ -104,6 +105,7 @@ class LiteQuery : public td::actor::Actor {
   bool fatal_error(std::string err_msg, int err_code = -400);
   bool fatal_error(int err_code, std::string err_msg = "");
   void abort_query(td::Status reason);
+  void abort_query_ext(td::Status reason, bool unknown);
   void abort_query_ext(td::Status reason, std::string err_msg);
   bool finish_query(td::BufferSlice result, bool skip_cache_update = false);
   void alarm() override;

@@ -28,15 +28,22 @@ class LiteServerStatItem {
  private:
   adnl::AdnlNodeIdShort dst_;
   int lite_query_id_;
+  long start_at_;
+  long end_at_;
+  bool success_;
 
  public:
-  LiteServerStatItem(adnl::AdnlNodeIdShort dst, int lite_query_id) {
+  LiteServerStatItem(adnl::AdnlNodeIdShort dst, int lite_query_id, long start_at, long end_at, bool success) {
     dst_ = dst;
     lite_query_id_ = lite_query_id;
+    start_at_ = start_at;
+    end_at_ = end_at;
+    success_ = success;
   }
 
   std::unique_ptr<ton::lite_api::liteServer_statItem> serialize() {
-    return create_tl_object<ton::lite_api::liteServer_statItem>(dst_.bits256_value(), lite_query_id_);
+    return create_tl_object<ton::lite_api::liteServer_statItem>(dst_.bits256_value(), lite_query_id_, start_at_,
+                                                                end_at_, success_);
   }
 };
 
@@ -76,8 +83,8 @@ class LiteServerLimiter : public td::actor::Actor {
     admins_.push_back(admin);
   }
 
-  void add_lite_query_stats(int lite_query_id, adnl::AdnlNodeIdShort dst) {
-    stats_data_.emplace_back(dst, lite_query_id);
+  void add_lite_query_stats(int lite_query_id, adnl::AdnlNodeIdShort dst, long start_at, long end_at, bool success) {
+    stats_data_.emplace_back(dst, lite_query_id, start_at, end_at, success);
   };
 
   void recv_connection(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
