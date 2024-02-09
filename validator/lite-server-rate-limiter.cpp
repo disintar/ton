@@ -29,7 +29,6 @@ void LiteServerLimiter::set_validator_manager(
 
     td::Bits256 pubkey;
     std::memcpy(&pubkey, k.data(), k.size());
-
     auto f = fetch_tl_object<ton::ton_api::storage_liteserver_user>(td::Slice{tmp}, true);
     if (f.is_error()) {
       LOG(ERROR) << "Broken db on user: " << k;
@@ -103,8 +102,10 @@ void LiteServerLimiter::process_add_user(td::Bits256 private_key, td::int64 vali
                << " ratelimit: " << ratelimit;
   td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false, [](td::Unit) {});
 
+  ratelimitdb->begin_transaction();
   ratelimitdb->set(adnlkey.pubkey().ed25519_value().raw().as_slice(),
                    create_serialize_tl_object<ton::ton_api::storage_liteserver_user>(valid_until, ratelimit));
+  ratelimitdb->commit_transaction();
 
   limits[adnlkey.compute_short_id()] = std::make_tuple(valid_until, ratelimit);
   auto k = adnlkey.pubkey().ed25519_value().raw();
