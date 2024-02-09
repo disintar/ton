@@ -28,9 +28,11 @@ void LiteServerLimiter::set_validator_manager(
     ratelimitdb->get("users", utmp);
 
     auto users = fetch_tl_object<ton::ton_api::storage_liteserver_users>(td::Slice{utmp}, true).move_as_ok();
+    LOG(INFO) << "Known users: " << users->values_.size();
 
     for (td::Bits256 pubkey : users->values_) {
-      LOG(INFO) << "Loading: " << pubkey.to_hex();
+      users_.push_back(pubkey);
+      LOG(INFO) << "Loading user: " << pubkey.to_hex();
 
       std::string tmp;
       ratelimitdb->get(pubkey.as_slice(), tmp);
@@ -103,28 +105,24 @@ void LiteServerLimiter::process_add_user(td::Bits256 private_key, td::int64 vali
   auto pk = ton::PrivateKey{ton::privkeys::Ed25519{private_key}};
   auto id = pk.compute_short_id();
   auto adnlkey = adnl::AdnlNodeIdFull{pk.compute_public_key()};
+  auto pubk = adnlkey.pubkey().ed25519_value().raw();
 
   if (limits.find(adnlkey.compute_short_id()) != limits.end()) {
     promise.set_error(td::Status::Error("Account already exist"));
     return;
   }
 
-  LOG(WARNING) << "Add user: " << adnlkey.pubkey().ed25519_value().raw().to_hex() << " valid until: " << valid_until
+  LOG(WARNING) << "Add user: " << pubk.to_hex() << " valid until: " << valid_until
                << " ratelimit: " << ratelimit;
 
   limits[adnlkey.compute_short_id()] = std::make_tuple(valid_until, ratelimit);
 
   td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false, [](td::Unit) {});
-
-  ratelimitdb->set(adnlkey.pubkey().ed25519_value().raw().as_slice(),
+  users_.push_back(pubk);
+  ratelimitdb->set(pubk.as_slice(),
                    create_serialize_tl_object<ton::ton_api::storage_liteserver_user>(valid_until, ratelimit));
 
-  std::vector<td::Bits256> users;
-  std::for_each(limits.begin(), limits.end(),
-                [&users](const std::pair<ton::adnl::AdnlNodeIdShort, std::tuple<ValidUntil, RateLimit>>& entry) {
-                  users.push_back(entry.first.bits256_value());
-                });
-
+  std::vector<td::Bits256> users(users_);
   ratelimitdb->set("users", create_serialize_tl_object<ton::ton_api::storage_liteserver_users>(std::move(users)));
   ratelimitdb->flush();
 

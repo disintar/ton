@@ -59,6 +59,7 @@ class LiteServerLimiter : public td::actor::Actor {
   std::vector<LiteServerStatItem> stats_data_;
   std::map<ton::adnl::AdnlNodeIdShort, std::tuple<ValidUntil, RateLimit>> limits;
   std::map<ton::adnl::AdnlNodeIdShort, int> usage;
+  std::vector<td::Bits256> users_;
 
  public:
   LiteServerLimiter(std::string db_root, td::actor::ActorId<adnl::Adnl> adnl,
