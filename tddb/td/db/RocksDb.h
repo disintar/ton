@@ -55,7 +55,6 @@ class RocksDb : public KeyValue {
   Status abort_transaction() override;
   Status flush() override;
 
-  Result<std::vector<Slice>> get_all_keys();
   Status begin_snapshot();
   Status end_snapshot();
 

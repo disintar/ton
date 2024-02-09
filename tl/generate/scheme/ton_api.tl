@@ -855,6 +855,7 @@ storage.daemon.providerInfo address:string balance:string config:storage.daemon.
     contracts:(vector storage.daemon.contractInfo) = storage.daemon.ProviderInfo;
 storage.daemon.providerAddress address:string = storage.daemon.ProviderAddress;
 storage.liteserver.user valid_until:int64 ratelimit:int = storage.liteserver.User;
+storage.liteserver.users values:(vector int256) = storage.liteserver.Users;
 
 ---functions---
 storage.daemon.setVerbosity verbosity:int = storage.daemon.Success;

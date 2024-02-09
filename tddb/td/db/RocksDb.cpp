@@ -184,15 +184,6 @@ Result<size_t> RocksDb::count(Slice prefix) {
   return res;
 }
 
-Result<std::vector<Slice>> RocksDb::get_all_keys() {
-  rocksdb::Iterator *it = db_->NewIterator(rocksdb::ReadOptions());
-
-  std::vector<Slice> keys;
-  for (it->SeekToFirst(); it->Valid(); it->Next()) {
-    keys.push_back(from_rocksdb(it->key()));
-  }
-  return keys;
-}
 
 Status RocksDb::begin_write_batch() {
   CHECK(!transaction_);

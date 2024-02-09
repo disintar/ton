@@ -65,7 +65,7 @@ class LiteServerLimiter : public td::actor::Actor {
                     td::actor::ActorId<keyring::Keyring> keyring) {
     db_root_ = std::move(db_root);
     adnl_ = std::move(adnl);
-    ratelimitdb = std::make_shared<td::RocksDb>(td::RocksDb::open(db_root_ + "rate-limits").move_as_ok());
+    ratelimitdb = std::make_shared<td::RocksDb>(td::RocksDb::open(db_root_ + "/rate-limits/").move_as_ok());
     keyring_ = std::move(keyring);
   }
 

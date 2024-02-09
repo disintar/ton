@@ -23,30 +23,41 @@ void LiteServerLimiter::set_validator_manager(
 
   auto t = std::time(nullptr);
 
-  for (auto k : ratelimitdb->get_all_keys().move_as_ok()) {
-    std::string tmp;
-    ratelimitdb->get(k, tmp);
+  if (ratelimitdb->count("users").move_as_ok() > 0) {
+    std::string utmp;
+    ratelimitdb->get("users", utmp);
 
-    td::Bits256 pubkey;
-    std::memcpy(&pubkey, k.data(), k.size());
-    auto f = fetch_tl_object<ton::ton_api::storage_liteserver_user>(td::Slice{tmp}, true);
-    if (f.is_error()) {
-      LOG(ERROR) << "Broken db on user: " << k;
-      continue;
-    } else {
-      auto user_data = f.move_as_ok();
-      if (t <= user_data->valid_until_) {
+    auto users = fetch_tl_object<ton::ton_api::storage_liteserver_users>(td::Slice{utmp}, true).move_as_ok();
+
+    for (td::Bits256 pubkey : users->values_) {
+      LOG(INFO) << "Loading: " << pubkey.to_hex();
+
+      std::string tmp;
+      ratelimitdb->get(pubkey.as_slice(), tmp);
+
+      auto f = fetch_tl_object<ton::ton_api::storage_liteserver_user>(td::Slice{tmp}, true);
+      if (f.is_error()) {
+        LOG(ERROR) << "Broken db on user: " << pubkey;
+        continue;
+      } else {
+        auto user_data = f.move_as_ok();
         auto key = adnl::AdnlNodeIdFull{ton::pubkeys::Ed25519(pubkey)};
 
-        if (limits.find(key.compute_short_id()) == limits.end()) {
-          LOG(INFO) << "Add key from DB: " << key.pubkey().ed25519_value().raw().to_hex()
-                    << ", valid until: " << user_data->valid_until_ << ", ratelimit " << user_data->ratelimit_;
+        if (t <= user_data->valid_until_) {
+          if (limits.find(key.compute_short_id()) == limits.end()) {
+            LOG(INFO) << "Add key from DB: " << key.pubkey().ed25519_value().raw().to_hex()
+                      << ", valid until: " << user_data->valid_until_ << ", ratelimit " << user_data->ratelimit_;
 
-          limits[key.compute_short_id()] = std::make_tuple(user_data->valid_until_, user_data->ratelimit_);
-          td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::add_ext_server_id,
-                                  key.compute_short_id());
-          td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(key), ton::adnl::AdnlAddressList{},
-                                  static_cast<td::uint8>(255));
+            limits[key.compute_short_id()] = std::make_tuple(user_data->valid_until_, user_data->ratelimit_);
+            td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::add_ext_server_id,
+                                    key.compute_short_id());
+            td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(key), ton::adnl::AdnlAddressList{},
+                                    static_cast<td::uint8>(255));
+          } else {
+            LOG(INFO) << "Liteserver key: " << key.pubkey().ed25519_value().raw().to_hex() << " duplicated";
+          }
+        } else {
+          LOG(INFO) << "Liteserver key: " << key.pubkey().ed25519_value().raw().to_hex() << " expired";
         }
       }
     }
@@ -100,14 +111,23 @@ void LiteServerLimiter::process_add_user(td::Bits256 private_key, td::int64 vali
 
   LOG(WARNING) << "Add user: " << adnlkey.pubkey().ed25519_value().raw().to_hex() << " valid until: " << valid_until
                << " ratelimit: " << ratelimit;
-  td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false, [](td::Unit) {});
-
-  ratelimitdb->begin_transaction();
-  ratelimitdb->set(adnlkey.pubkey().ed25519_value().raw().as_slice(),
-                   create_serialize_tl_object<ton::ton_api::storage_liteserver_user>(valid_until, ratelimit));
-  ratelimitdb->commit_transaction();
 
   limits[adnlkey.compute_short_id()] = std::make_tuple(valid_until, ratelimit);
+
+  td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false, [](td::Unit) {});
+
+  ratelimitdb->set(adnlkey.pubkey().ed25519_value().raw().as_slice(),
+                   create_serialize_tl_object<ton::ton_api::storage_liteserver_user>(valid_until, ratelimit));
+
+  std::vector<td::Bits256> users;
+  std::for_each(limits.begin(), limits.end(),
+                [&users](const std::pair<ton::adnl::AdnlNodeIdShort, std::tuple<ValidUntil, RateLimit>>& entry) {
+                  users.push_back(entry.first.bits256_value());
+                });
+
+  ratelimitdb->set("users", create_serialize_tl_object<ton::ton_api::storage_liteserver_users>(std::move(users)));
+  ratelimitdb->flush();
+
   auto k = adnlkey.pubkey().ed25519_value().raw();
   auto k_short = adnlkey.compute_short_id().bits256_value();
 
