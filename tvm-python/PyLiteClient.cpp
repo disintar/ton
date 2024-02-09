@@ -167,9 +167,15 @@ void LiteClientActorEngine::get_Block(ton::BlockIdExt blkid) {
   qprocess(std::move(q));
 }
 
-void LiteClientActorEngine::admin_AddUser(td::Bits256 pubkey, td::int64 valid_until, td::int32 ratelimit) {
+void LiteClientActorEngine::admin_AddUser(td::Bits256 privkey, td::int64 valid_until, td::int32 ratelimit) {
   auto q = ton::serialize_tl_object(
-      ton::create_tl_object<ton::lite_api::liteServer_addUser>(std::move(pubkey), valid_until, ratelimit), true);
+      ton::create_tl_object<ton::lite_api::liteServer_addUser>(std::move(privkey), valid_until, ratelimit), true);
+
+  admin_qprocess(std::move(q));
+}
+
+void LiteClientActorEngine::admin_GetStatData() {
+  auto q = ton::serialize_tl_object(ton::create_tl_object<ton::lite_api::liteServer_getStatData>(), true);
 
   admin_qprocess(std::move(q));
 }
@@ -510,24 +516,59 @@ TestNode::BlockHdrInfo PyLiteClient::get_BlockHeader(ton::BlockIdExt req_blkid, 
   }
 }
 
-int PyLiteClient::admin_AddUser(std::string pubkey, td::int64 valid_until, td::int32 ratelimit) {
-  td::RefInt256 pubkey_int = td::string_to_int256(pubkey);
-  td::Bits256 pubkey_bits;
-  if (!pubkey_int->export_bytes(pubkey_bits.data(), 32, false)) {
+std::tuple<PubKeyHex, ShortKeyHex> PyLiteClient::admin_AddUser(std::string privkey, td::int64 valid_until,
+                                                               td::int32 ratelimit) {
+  td::RefInt256 pubkey_int = td::string_to_int256(privkey);
+  td::Bits256 privkey_bits;
+  if (!pubkey_int->export_bytes(privkey_bits.data(), 32, false)) {
     throw std::logic_error("Invalid pubkey");
   }
 
   scheduler_.run_in_context_external(
-      [&] { send_closure(engine, &LiteClientActorEngine::admin_AddUser, pubkey_bits, valid_until, ratelimit); });
+      [&] { send_closure(engine, &LiteClientActorEngine::admin_AddUser, privkey_bits, valid_until, ratelimit); });
 
   auto response = wait_response();
   if (response->success) {
     SuccessBufferSlice* data = dynamic_cast<SuccessBufferSlice*>(response.get());
-    return 0;
+    auto R = ton::fetch_tl_object<ton::lite_api::liteServer_newUser>(std::move(data->obj->clone()), true);
+    if (R.is_error()) {
+      throw_lite_error(data->obj->clone());
+    }
+    auto x = R.move_as_ok();
+
+    return std::make_tuple(x->pubkey_.to_hex(), x->short_.to_hex());
   } else {
     throw std::logic_error(response->error_message);
   }
 }
+
+std::vector<std::tuple<ShortKeyHex, int, td::int64, td::int64, bool>> PyLiteClient::admin_getStatData() {
+  scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::admin_GetStatData); });
+
+  auto response = wait_response();
+  if (response->success) {
+    SuccessBufferSlice* data = dynamic_cast<SuccessBufferSlice*>(response.get());
+    auto R = ton::fetch_tl_object<ton::lite_api::liteServer_stats>(std::move(data->obj->clone()), true);
+    if (R.is_error()) {
+      throw_lite_error(data->obj->clone());
+    }
+    auto x = R.move_as_ok();
+
+    std::vector<std::tuple<ShortKeyHex, int, td::int64, td::int64, bool>> tmp;
+    tmp.reserve(x->data_.size());
+
+    while (!x->data_.empty()) {
+      auto e = std::move(x->data_.back());
+      x->data_.pop_back();
+
+      tmp.emplace_back(e->shortid_.to_hex(), e->method_, e->start_at_, e->end_at_, e->success_);
+    }
+
+    return tmp;
+  } else {
+    throw std::logic_error(response->error_message);
+  }
+};
 
 PyCell PyLiteClient::get_Block(ton::BlockIdExt req_blkid) {
   scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::get_Block, req_blkid); });

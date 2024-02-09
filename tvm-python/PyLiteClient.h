@@ -27,6 +27,9 @@ std::string ipv4_int_to_str(int ipv4);
 
 // Response objects
 
+using PubKeyHex = std::string;
+using ShortKeyHex = std::string;
+
 class ResponseObj {
  public:
   ResponseObj(bool success_, std::string error_message_ = "")
@@ -111,6 +114,7 @@ class LiteClientActorEngine : public td::actor::Actor {
                                     std::optional<unsigned long long> lt = std::optional<unsigned long long>());
 
   void admin_AddUser(td::Bits256 pubkey, td::int64 valid_until, td::int32 ratelimit);
+  void admin_GetStatData();
 
   void run();
 
@@ -200,7 +204,8 @@ class PyLiteClient {
       ton::BlockIdExt blkid, int mode, int count, std::optional<td::string> account = std::optional<std::string>(),
       std::optional<unsigned long long> lt = std::optional<unsigned long long>());
   std::vector<ton::BlockId> get_AllShardsInfo(ton::BlockIdExt req_blkid);
-  int admin_AddUser(std::string pubkey, td::int64 valid_until, td::int32 ratelimit);
+  std::tuple<PubKeyHex, ShortKeyHex> admin_AddUser(std::string pubkey, td::int64 valid_until, td::int32 ratelimit);
+  std::vector<std::tuple<ShortKeyHex, int, td::int64, td::int64, bool>> admin_getStatData();
 
  private:
   std::shared_ptr<OutputQueue> response_obj_;
