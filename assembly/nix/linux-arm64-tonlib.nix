@@ -1,18 +1,20 @@
 # export NIX_PATH=nixpkgs=https://github.com/nixOS/nixpkgs/archive/23.05.tar.gz
 {
-  pkgs ? import <nixpkgs> { system = builtins.currentSystem; }
+  pkgs ? import <nixpkgs> { inherit system; }
 , lib ? pkgs.lib
 , stdenv ? pkgs.stdenv
+, system ? builtins.currentSystem
+, src ? ./.
 }:
 let
-     microhttpdmy = (import ./microhttpd.nix) {};
+     microhttpdmy = (import ./microhttpd.nix) { inherit pkgs; };
 in
 with import microhttpdmy;
 pkgs.llvmPackages_16.stdenv.mkDerivation {
   pname = "ton";
   version = "dev-lib";
 
-  src = ./.;
+  inherit src;
 
   nativeBuildInputs = with pkgs;
     [
@@ -21,7 +23,12 @@ pkgs.llvmPackages_16.stdenv.mkDerivation {
 
   buildInputs = with pkgs;
     [
-      pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.libsodium.dev pkgsStatic.secp256k1
+      pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.secp256k1
+      (pkgsStatic.libsodium.overrideAttrs (oldAttrs: {
+        # https://github.com/jedisct1/libsodium/issues/292#issuecomment-137135369
+        configureFlags = oldAttrs.configureFlags ++ [ " --disable-pie" ];
+        hardeningDisable = oldAttrs.hardeningDisable ++ [ "pie" ];
+      }))
     ];
 
   dontAddStaticConfigureFlags = false;

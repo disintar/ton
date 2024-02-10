@@ -1,19 +1,20 @@
 # export NIX_PATH=nixpkgs=https://github.com/nixOS/nixpkgs/archive/23.05.tar.gz
 
-{ pkgs ? import <nixpkgs> { system = builtins.currentSystem; }
+{ pkgs ? import <nixpkgs> { inherit system; }
 , lib ? pkgs.lib
 , stdenv ? pkgs.stdenv
-, testing ? false
+, system ? builtins.currentSystem
+, src ? ./.
 }:
 let
-  microhttpdmy = (import ./microhttpd.nix) {};
+  microhttpdmy = (import ./microhttpd.nix) { inherit pkgs; };
 in
 with import microhttpdmy;
 stdenv.mkDerivation {
   pname = "ton";
   version = "dev-bin";
 
-  src = ./.;
+  inherit src;
 
   nativeBuildInputs = with pkgs;
     [
@@ -26,7 +27,7 @@ stdenv.mkDerivation {
     ];
 
   makeStatic = true;
-  doCheck = testing;
+  doCheck = true;
 
   cmakeFlags = [
     "-DTON_USE_ABSEIL=OFF"

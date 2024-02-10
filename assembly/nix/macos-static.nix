@@ -1,16 +1,17 @@
 # export NIX_PATH=nixpkgs=https://github.com/nixOS/nixpkgs/archive/23.05.tar.gz
 
-{ pkgs ? import <nixpkgs> { system = builtins.currentSystem; }
+{ pkgs ? import <nixpkgs> { inherit system; }
 , lib ? pkgs.lib
 , stdenv ? pkgs.stdenv
-, testing ? false
+, system ? builtins.currentSystem
+, src ? ./.
 }:
 
 pkgs.llvmPackages_14.stdenv.mkDerivation {
   pname = "ton";
   version = "dev-bin";
 
-  src = ./.;
+  inherit src;
 
   nativeBuildInputs = with pkgs;
     [ cmake ninja git pkg-config ];
@@ -30,7 +31,7 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
 
   dontAddStaticConfigureFlags = true;
   makeStatic = true;
-  doCheck = testing;
+  doCheck = true;
 
   configureFlags = [];
 
@@ -56,11 +57,21 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
   '';
 
   preFixup = ''
-      for fn in "$bin"/bin/* "$out"/lib/*.dylib; do
-        echo Fixing libc++ in "$fn"
-        install_name_tool -change "$(otool -L "$fn" | grep libc++.1 | cut -d' ' -f1 | xargs)" libc++.1.dylib "$fn"
-        install_name_tool -change "$(otool -L "$fn" | grep libc++abi.1 | cut -d' ' -f1 | xargs)" libc++abi.dylib "$fn"
-      done
+      if [[ -n "$bin" ]]; then
+        for fn in "$bin"/bin/*; do
+          echo "Fixing libc++ in $fn"
+          install_name_tool -change "$(otool -L "$fn" | grep libc++.1 | cut -d' ' -f1 | xargs)" libc++.1.dylib "$fn"
+          install_name_tool -change "$(otool -L "$fn" | grep libc++abi.1 | cut -d' ' -f1 | xargs)" libc++abi.dylib "$fn"
+        done
+      fi
+
+      if [[ -n "$out" ]]; then
+        for fn in "$out"/lib/*.{dylib,so}; do
+          echo "Fixing libc++ in $fn"
+          install_name_tool -change "$(otool -L "$fn" | grep libc++.1 | cut -d' ' -f1 | xargs)" libc++.1.dylib "$fn"
+          install_name_tool -change "$(otool -L "$fn" | grep libc++abi.1 | cut -d' ' -f1 | xargs)" libc++abi.dylib "$fn"
+        done
+        fi
   '';
   outputs = [ "bin" "out" ];
 }
