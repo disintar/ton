@@ -110,8 +110,8 @@ class LiteServerDaemon : public td::actor::Actor {
     auto shard_top =
         ton::BlockIdExt{ton::masterchainId, ton::shardIdAll, 0, ton::RootHash::zero(), ton::FileHash::zero()};
 
-    lslimiter_ =
-        td::actor::create_actor<ton::liteserver::LiteServerLimiter>("LsLimiter", db_root_, adnl_.get(), keyring_.get());
+    lslimiter_ = td::actor::create_actor<ton::liteserver::LiteServerLimiter>("LsLimiter", db_root_, adnl_.get(),
+                                                                             keyring_.get(), config_.overlay_prefix);
 
     auto id = ton::PublicKeyHash::zero();
     validator_manager_ = ton::validator::ValidatorManagerDiskFactory::create(
@@ -237,8 +237,7 @@ class LiteServerDaemon : public td::actor::Actor {
     }
     // Start Overlay
     overlay_manager_ = ton::overlay::Overlays::create(db_root_, keyring_.get(), adnl_.get(),
-                                                      dht_nodes_[default_dht_node_].get(),
-                                                      config_.overlay_prefix);
+                                                      dht_nodes_[default_dht_node_].get(), config_.overlay_prefix);
 
     // Start client
     if (!config_.full_node_slaves.empty()) {
