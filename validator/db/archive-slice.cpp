@@ -50,6 +50,17 @@ class PackageReader : public td::actor::Actor {
                 td::Promise<std::pair<std::string, td::BufferSlice>> promise, bool read_only = false)
       : package_(std::move(package)), read_only_(read_only), offset_(offset), promise_(std::move(promise)) {
   }
+
+  PackageReader(std::shared_ptr<Package> package, td::uint64 offset,
+                td::Promise<std::pair<std::string, td::BufferSlice>> promise,
+                td::Promise<td::Promise<std::pair<std::string, td::BufferSlice>>> on_fail, bool read_only = false)
+      : package_(std::move(package))
+      , read_only_(read_only)
+      , offset_(offset)
+      , on_fail_(std::move(on_fail))
+      , promise_(std::move(promise)) {
+    raise_on_fail = true;
+  }
   void start_up() override {
     if (read_only_) {
       auto s = package_->try_sync();
@@ -73,6 +84,8 @@ class PackageReader : public td::actor::Actor {
   std::shared_ptr<Package> package_;
   bool read_only_;
   td::uint64 offset_;
+  td::Promise<td::Promise<std::pair<std::string, td::BufferSlice>>> on_fail_;
+  bool raise_on_fail{false};
   td::Promise<std::pair<std::string, td::BufferSlice>> promise_;
 };
 
@@ -311,7 +324,50 @@ void ArchiveSlice::get_file(ConstBlockHandle handle, FileReference ref_id, td::P
         }
       });
 
-  td::actor::create_actor<PackageReader>("reader", p->package, offset, std::move(P), read_only_).release();
+  LOG(INFO) << "Package: " << p->idx << " " << p->path << " " << offset;
+
+  if (!read_only_) {
+    td::actor::create_actor<PackageReader>("reader", p->package, offset, std::move(P), read_only_).release();
+  } else {
+    auto on_fail =
+        td::PromiseCreator::lambda([SelfId = actor_id(this), handle, ref_id](
+                                       td::Result<td::Promise<std::pair<std::string, td::BufferSlice>>> R) mutable {
+          if (R.is_error()) {
+            return;
+          } else {
+            LOG(ERROR) << "Try read package one more time";
+            td::actor::send_closure(SelfId, &ArchiveSlice::try_get_file, handle, ref_id, R.move_as_ok());
+          }
+        });
+
+    td::actor::create_actor<PackageReader>("reader", p->package, offset, std::move(P), std::move(on_fail), read_only_)
+        .release();
+  }
+}
+
+void ArchiveSlice::try_get_file(ConstBlockHandle handle, FileReference ref_id,
+                                td::Promise<std::pair<std::string, td::BufferSlice>> promise) {
+  if (destroyed_) {
+    promise.set_error(td::Status::Error(ErrorCode::notready, "package already gc'd"));
+    return;
+  }
+  before_query();
+  std::string value;
+  auto R = kv_->get(ref_id.hash().to_hex(), value);
+  R.ensure();
+  if (R.move_as_ok() == td::KeyValue::GetStatus::NotFound) {
+    promise.set_error(td::Status::Error(ErrorCode::notready, "file not in archive slice"));
+    return;
+  }
+  auto offset = td::to_integer<td::uint64>(value);
+  TRY_RESULT_PROMISE(
+      promise, p,
+      choose_package(
+          handle ? handle->id().is_masterchain() ? handle->id().seqno() : handle->masterchain_ref_block() : 0, false));
+
+  LOG(INFO) << "Package: " << p->idx << " " << p->path << " " << offset;
+
+  td::actor::create_actor<PackageReader>("reader", p->package, offset, std::move(promise)).release();
 }
 
 void ArchiveSlice::get_block_common(AccountIdPrefixFull account_id,
@@ -564,7 +620,7 @@ void ArchiveSlice::do_close() {
   packages_.clear();
 }
 
-template<typename T>
+template <typename T>
 td::Promise<T> ArchiveSlice::begin_async_query(td::Promise<T> promise) {
   ++active_queries_;
   return [SelfId = actor_id(this), promise = std::move(promise)](td::Result<T> R) mutable {
@@ -618,7 +674,7 @@ void ArchiveSlice::set_async_mode(bool mode, td::Promise<td::Unit> promise) {
 }
 
 ArchiveSlice::ArchiveSlice(td::uint32 archive_id, bool key_blocks_only, bool temp, bool finalized, std::string db_root,
-                           td::actor::ActorId<ArchiveLru> archive_lru,  bool read_only)
+                           td::actor::ActorId<ArchiveLru> archive_lru, bool read_only)
     : archive_id_(archive_id)
     , key_blocks_only_(key_blocks_only)
     , temp_(temp)
