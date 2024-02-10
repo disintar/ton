@@ -41,6 +41,7 @@ class Config {
   std::map<ton::PublicKeyHash, td::uint32> keys_refcnt;
   std::vector<FullNodeSlave> full_node_slaves;
   std::set<ton::PublicKeyHash> dht_ids;
+  std::string overlay_prefix;
 
   Config() {
   }
@@ -69,6 +70,8 @@ class Config {
       ip.init_ipv4_port(td::IPAddress::ipv4_to_str(s->ip_), static_cast<td::uint16>(s->port_)).ensure();
       config_add_full_node_slave(ip, ton::PublicKey{s->adnl_}).ensure();
     }
+
+    overlay_prefix = config.overlay_prefix_;
   }
 
   td::Result<bool> config_add_dht_node(ton::PublicKeyHash id) {
@@ -167,7 +170,7 @@ class Config {
 
     return ton::create_tl_object<ton::ton_api::engine_liteserver_config>(
         addr_.get_ipv4(), addr_.get_port(), std::move(adnl_vec), std::move(liteserver_vec), std::move(dht_vec),
-        std::move(full_node_slaves_vec));
+        std::move(full_node_slaves_vec), overlay_prefix);
   };
 };
 }  // namespace ton

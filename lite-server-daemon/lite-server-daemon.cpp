@@ -285,6 +285,7 @@ class LiteServerDaemon : public td::actor::Actor {
       LOG(WARNING) << "Generate config file, write to: " << server_config_ << ", double-check and run again";
 
       auto config = ton::liteserver::Config();
+      config.overlay_prefix = "liteserver";
 
       td::IPAddress addr;
       auto s = addr.init_host_port(tmp_ipaddr_);
