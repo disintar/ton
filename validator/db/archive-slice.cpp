@@ -70,6 +70,14 @@ class PackageReader : public td::actor::Actor {
       }
     }
     auto result = package_->read(offset_);
+
+    if (result.is_error() and raise_on_fail){
+      on_fail_.set_value(std::move(promise_));
+      return;
+    } else {
+      on_fail_.set_error(td::Status::Error(0));
+    }
+
     package_ = {};
     promise_.set_result(std::move(result));
     stop();
