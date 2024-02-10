@@ -1107,7 +1107,10 @@ bool LiteQuery::make_state_root_proof(Ref<vm::Cell>& proof, Ref<vm::Cell> state_
                                       const BlockIdExt& blkid) {
   CHECK(block_root.not_null() && state_root.not_null());
   RootHash rhash{block_root->get_hash().bits()};
-  CHECK(rhash == blkid.root_hash);
+  if (rhash != blkid.root_hash){
+    // TODO: can raised on readonly
+    return fatal_error("rhash != blkid.root_hash, cannot make proof, try one more time");
+  };
   vm::MerkleProofBuilder pb{std::move(block_root)};
   block::gen::Block::Record blk;
   block::gen::BlockInfo::Record info;
