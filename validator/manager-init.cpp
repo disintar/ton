@@ -330,6 +330,12 @@ void ValidatorManagerMasterchainStarter::got_init_block_handle(BlockHandle handl
                                 td::actor::send_closure(
                                     SelfId, &ValidatorManagerMasterchainStarter::got_init_block_handle, handle);
                               });
+    } else {
+      delay_action(
+          [SelfId = actor_id(this), handle]() {
+            td::actor::send_closure(SelfId, &ValidatorManagerMasterchainStarter::got_init_block_handle, handle);
+          },
+          td::Timestamp::in(0.1));
     }
     return;
   }
