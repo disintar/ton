@@ -311,7 +311,7 @@ void ArchiveSlice::get_file(ConstBlockHandle handle, FileReference ref_id, td::P
         }
       });
 
-  td::actor::create_actor<PackageReader>("reader", p->package, offset, std::move(P)).release();
+  td::actor::create_actor<PackageReader>("reader", p->package, offset, std::move(P), read_only_).release();
 }
 
 void ArchiveSlice::get_block_common(AccountIdPrefixFull account_id,
