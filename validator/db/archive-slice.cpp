@@ -72,8 +72,7 @@ class PackageReader : public td::actor::Actor {
     auto result = package_->read(offset_);
 
     if (result.is_error() and raise_on_fail) {
-      reinit();
-      //      on_fail_.set_value(std::move(promise_));
+      on_fail_.set_value(std::move(promise_));
       return;
     }
     on_fail_.set_error(td::Status::Error(0));
@@ -81,11 +80,6 @@ class PackageReader : public td::actor::Actor {
     package_ = {};
     promise_.set_result(std::move(result));
     stop();
-  }
-
-  void reinit() {
-    delay_action([SelfId = actor_id(this)]() { td::actor::send_closure(SelfId, &PackageReader::start_up); },
-                 td::Timestamp::in(0.1));
   }
 
  private:
@@ -359,6 +353,7 @@ void ArchiveSlice::try_get_file(ConstBlockHandle handle, FileReference ref_id,
     promise.set_error(td::Status::Error(ErrorCode::notready, "package already gc'd"));
     return;
   }
+  status_ = st_closed;
   before_query();
   std::string value;
   auto R = kv_->get(ref_id.hash().to_hex(), value);
@@ -541,6 +536,8 @@ void ArchiveSlice::get_archive_id(BlockSeqno masterchain_seqno, td::Promise<td::
 }
 
 void ArchiveSlice::reinit() {
+  packages_.clear();
+
   std::string value;
   auto R2 = kv_->get("status", value);
   R2.ensure();
