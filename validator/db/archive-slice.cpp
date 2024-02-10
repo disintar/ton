@@ -71,12 +71,12 @@ class PackageReader : public td::actor::Actor {
     }
     auto result = package_->read(offset_);
 
-    if (result.is_error() and raise_on_fail){
-      on_fail_.set_value(std::move(promise_));
+    if (result.is_error() and raise_on_fail) {
+      reinit();
+      //      on_fail_.set_value(std::move(promise_));
       return;
-    } else {
-      on_fail_.set_error(td::Status::Error(0));
     }
+    on_fail_.set_error(td::Status::Error(0));
 
     package_ = {};
     promise_.set_result(std::move(result));
@@ -719,6 +719,7 @@ td::Result<ArchiveSlice::PackageInfo *> ArchiveSlice::choose_package(BlockSeqno 
 
       return &packages_[v];
     } else {
+      LOG(ERROR) << "Force adding package files!";
       auto max_val = masterchain_seqno - archive_id_ - (masterchain_seqno % slice_size_);
       max_val /= slice_size_;
       std::string value;
@@ -733,7 +734,9 @@ td::Result<ArchiveSlice::PackageInfo *> ArchiveSlice::choose_package(BlockSeqno 
         if (R2.move_as_ok() == td::KeyValue::GetStatus::Ok) {
           ver = td::to_integer<td::uint32>(value);
         }
-        add_package(archive_id_ + slice_size_ * i, len, ver);
+        auto packid = archive_id_ + slice_size_ * i;
+        LOG(ERROR) << "Force add: " << packid << " " << len << " " << ver;
+        add_package(packid, len, ver);
       }
 
       return &packages_[max_val];
