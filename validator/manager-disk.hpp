@@ -225,8 +225,6 @@ class ValidatorManagerImpl : public ValidatorManager {
   void get_top_masterchain_state_block(td::Promise<std::pair<td::Ref<MasterchainState>, BlockIdExt>> promise) override;
   void get_last_liteserver_state_block(td::Promise<std::pair<td::Ref<MasterchainState>, BlockIdExt>> promise) override;
 
-  td::Ref<MasterchainState> do_get_last_liteserver_state();
-
   void send_get_block_request(BlockIdExt id, td::uint32 priority, td::Promise<ReceivedBlock> promise) override;
   void send_get_zero_state_request(BlockIdExt id, td::uint32 priority, td::Promise<td::BufferSlice> promise) override;
   void send_get_persistent_state_request(BlockIdExt id, BlockIdExt masterchain_block_id, td::uint32 priority,
@@ -382,14 +380,6 @@ class ValidatorManagerImpl : public ValidatorManager {
   }
   void update_shard_client_block_handle(BlockHandle handle, td::Ref<MasterchainState> state,
                                         td::Promise<td::Unit> promise) override {
-    shard_client_handle_ = std::move(handle);
-    auto seqno = shard_client_handle_->id().seqno();
-    LOG(WARNING) << "Update shard client to: " << seqno;
-    if (state.not_null()) {
-      if (last_liteserver_state_.is_null() || last_liteserver_state_->get_block_id().seqno() < seqno) {
-        last_liteserver_state_ = std::move(state);
-      }
-    }
   }
 
   void prepare_stats(td::Promise<std::vector<std::pair<std::string, std::string>>> promise) override {
@@ -514,8 +504,6 @@ class ValidatorManagerImpl : public ValidatorManager {
   std::string db_root_;
   ShardIdFull shard_to_generate_;
   BlockIdExt block_to_generate_;
-  td::Ref<MasterchainState> last_liteserver_state_;
-  BlockHandle shard_client_handle_;
 
   int pending_new_shard_block_descr_{0};
   std::vector<td::Promise<std::vector<td::Ref<ShardTopBlockDescription>>>> waiting_new_shard_block_descr_;
