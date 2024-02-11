@@ -965,9 +965,39 @@ void ValidatorManagerImpl::get_top_masterchain_state_block(
       std::pair<td::Ref<MasterchainState>, BlockIdExt>{last_masterchain_state_, last_masterchain_block_id_});
 }
 
+td::Ref<MasterchainState> ValidatorManagerImpl::do_get_last_liteserver_state() {
+  if (last_masterchain_state_.is_null()) {
+    return {};
+  }
+  if (last_liteserver_state_.is_null()) {
+    last_liteserver_state_ = last_masterchain_state_;
+    return last_liteserver_state_;
+  }
+  if (last_liteserver_state_->get_seqno() == last_masterchain_state_->get_seqno()) {
+    return last_liteserver_state_;
+  }
+  // If liteserver seqno (i.e. shard client) lags then use last masterchain state for liteserver
+  // Allowed lag depends on the block rate
+  double time_per_block = double(last_masterchain_state_->get_unix_time() - last_liteserver_state_->get_unix_time()) /
+                          double(last_masterchain_state_->get_seqno() - last_liteserver_state_->get_seqno());
+  if (td::Clocks::system() - double(last_liteserver_state_->get_unix_time()) > std::min(time_per_block * 8, 180.0)) {
+    last_liteserver_state_ = last_masterchain_state_;
+  }
+  return last_liteserver_state_;
+}
+
 void ValidatorManagerImpl::get_last_liteserver_state_block(
     td::Promise<std::pair<td::Ref<MasterchainState>, BlockIdExt>> promise) {
-  return get_top_masterchain_state_block(std::move(promise));
+  if (!offline_){
+    auto state = do_get_last_liteserver_state();
+    if (state.is_null()) {
+      promise.set_error(td::Status::Error(ton::ErrorCode::notready, "not started"));
+    } else {
+      promise.set_result(std::pair<td::Ref<MasterchainState>, BlockIdExt>{state, state->get_block_id()});
+    }
+  } else {
+    return get_top_masterchain_state_block(std::move(promise));
+  }
 }
 
 void ValidatorManagerImpl::send_get_block_request(BlockIdExt id, td::uint32 priority,
