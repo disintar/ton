@@ -37,6 +37,10 @@ std::string codeget_python_tlb(std::string tlb_code) {
   return tlbc::codegen_python_tlb(tlb_code);
 }
 
+unsigned long long shard_parent(unsigned long long s){
+  return ton::shard_parent(s);
+}
+
 const ton::lite_api::tonNode_blockIdExt& getLast(const ton::lite_api::liteServer_masterchainInfoExt& obj) {
   return *(obj.last_);
 }
@@ -489,6 +493,7 @@ PYBIND11_MODULE(python_ton, m) {
   m.def("create_new_mnemo", create_new_mnemo);
   m.def("get_bip39_words", get_bip39_words);
   m.def("ipv4_int_to_str", pylite::ipv4_int_to_str);
+  m.def("shard_parent", shard_parent);
   m.def("shard_is_ancestor", shard_is_ancestor, py::arg("parent"), py::arg("child"));
   m.def("shard_child", shard_child, py::arg("shard"), py::arg("left"));
 
