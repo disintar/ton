@@ -104,6 +104,7 @@ class LiteClientActorEngine : public td::actor::Actor {
   void get_MasterchainInfoExt(int mode);
   void get_AccountState(int workchain, td::Bits256 address, ton::BlockIdExt blkid);
   void get_Transactions(int count, int workchain, td::Bits256 address_bits, unsigned long long lt, td::Bits256 hash);
+  void get_OneTransaction(ton::BlockIdExt blkid, int workchain, td::Bits256 address_bits, unsigned long long lt);
   void get_ConfigAll(int mode, ton::BlockIdExt blkid);
   void get_BlockHeader(ton::BlockIdExt blkid, int mode);
   void get_Block(ton::BlockIdExt blkid);
@@ -117,6 +118,11 @@ class LiteClientActorEngine : public td::actor::Actor {
   void admin_GetStatData();
 
   void run();
+
+  void exit() {
+    client.reset();
+    hangup();
+  };
 
  private:
   ton::adnl::AdnlNodeIdFull adnl_id;
@@ -196,6 +202,7 @@ class PyLiteClient {
                                                    bool force_check_on_key_block = true);
   block::TransactionList::Info get_Transactions(int count, int workchain, std::string address_string,
                                                 unsigned long long lt, std::string hash_int_string);
+  PyCell get_OneTransaction(ton::BlockIdExt blkid, int workchain, std::string address_string, unsigned long long lt);
   TestNode::BlockHdrInfo get_BlockHeader(ton::BlockIdExt blkid, int mode);
   TestNode::BlockHdrInfo lookupBlock(int mode, ton::BlockId block, long long lt, long long time);
   PyCell get_Block(ton::BlockIdExt blkid);
@@ -204,8 +211,16 @@ class PyLiteClient {
       ton::BlockIdExt blkid, int mode, int count, std::optional<td::string> account = std::optional<std::string>(),
       std::optional<unsigned long long> lt = std::optional<unsigned long long>());
   std::vector<ton::BlockId> get_AllShardsInfo(ton::BlockIdExt req_blkid);
+
+  // Admin functions
   std::tuple<PubKeyHex, ShortKeyHex> admin_AddUser(std::string pubkey, td::int64 valid_until, td::int32 ratelimit);
   std::vector<std::tuple<ShortKeyHex, int, td::int64, td::int64, bool>> admin_getStatData();
+
+  void stop() {
+    scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::exit); });
+    scheduler_.run_in_context_external([] { td::actor::SchedulerContext::get()->stop(); });
+    scheduler_thread_.join();
+  }
 
  private:
   std::shared_ptr<OutputQueue> response_obj_;

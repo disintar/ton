@@ -3,6 +3,7 @@
 #include "PyLiteClient.h"
 #include "vm/boc.h"
 #include "lite-client/lite-client.h"
+#include "terminal/terminal.h"
 #include "crypto/vm/cells/MerkleProof.h"
 
 namespace pylite {
@@ -91,6 +92,7 @@ void LiteClientActorEngine::qprocess(td::BufferSlice q) {
       ton::serialize_tl_object(ton::create_tl_object<ton::lite_api::liteServer_query>(std::move(q)), true),
       td::Timestamp::in(timeout), [&](td::Result<td::BufferSlice> res) -> void {
         if (res.is_error()) {
+          LOG(ERROR) << res.move_as_error();
           output_queue->writer_put(
               ResponseWrapper(std::make_unique<ResponseObj>(ResponseObj(false, "Error while fetch"))));
           return;
@@ -149,6 +151,17 @@ void LiteClientActorEngine::get_Transactions(int count, int workchain, td::Bits2
   auto a = ton::create_tl_object<ton::lite_api::liteServer_accountId>(workchain, address_bits);
   auto q = ton::serialize_tl_object(
       ton::create_tl_object<ton::lite_api::liteServer_getTransactions>(count, std::move(a), lt, hash), true);
+
+  qprocess(std::move(q));
+}
+
+void LiteClientActorEngine::get_OneTransaction(ton::BlockIdExt blkid, int workchain, td::Bits256 address_bits,
+                                               unsigned long long lt) {
+  //  liteServer.getOneTransaction id:tonNode.blockIdExt account:liteServer.accountId lt:long = liteServer.TransactionInfo;
+  auto a = ton::create_tl_object<ton::lite_api::liteServer_accountId>(workchain, address_bits);
+  auto q = ton::serialize_tl_object(ton::create_tl_object<ton::lite_api::liteServer_getOneTransaction>(
+                                        ton::create_tl_lite_block_id(blkid), std::move(a), lt),
+                                    true);
 
   qprocess(std::move(q));
 }
@@ -511,6 +524,99 @@ TestNode::BlockHdrInfo PyLiteClient::get_BlockHeader(ton::BlockIdExt req_blkid, 
   if (response->success) {
     SuccessBufferSlice* data = dynamic_cast<SuccessBufferSlice*>(response.get());
     return process_block_header(req_blkid, data->obj->clone(), true);
+  } else {
+    throw std::logic_error(response->error_message);
+  }
+}
+
+PyCell PyLiteClient::get_OneTransaction(ton::BlockIdExt req_blkid, int workchain, std::string address_string,
+                                        unsigned long long trans_lt) {
+  td::RefInt256 address_int = td::string_to_int256(address_string);
+  td::Bits256 address_bits;
+  if (!address_int->export_bytes(address_bits.data(), 32, false)) {
+    throw std::logic_error("Invalid address");
+  }
+
+  scheduler_.run_in_context_external([&] {
+    send_closure(engine, &LiteClientActorEngine::get_OneTransaction, req_blkid, workchain, address_bits, trans_lt);
+  });
+
+  auto response = wait_response();
+  if (response->success) {
+    SuccessBufferSlice* data = dynamic_cast<SuccessBufferSlice*>(response.get());
+    auto R = ton::fetch_tl_object<ton::lite_api::liteServer_transactionInfo>(std::move(data->obj->clone()), true);
+    if (R.is_error()) {
+      throw_lite_error(data->obj->clone());
+    } else {
+      auto f = R.move_as_ok();
+      auto blkid = ton::create_block_id(f->id_);
+
+      if (blkid != req_blkid) {
+        throw std::logic_error("obtained TransactionInfo for a different block " + blkid.to_str() +
+                               " instead of requested " + req_blkid.to_str());
+      }
+      if (!ton::shard_contains(blkid.shard_full(), ton::extract_addr_prefix(workchain, address_bits))) {
+        throw std::logic_error("received data from block " + blkid.to_str() +
+                               " that cannot contain requested account " + std::to_string(workchain) + ":" +
+                               address_bits.to_hex());
+      }
+      Ref<vm::Cell> root;
+      if (!f->transaction_.empty()) {
+        auto A = vm::std_boc_deserialize(std::move(f->transaction_));
+        if (A.is_error()) {
+          throw std::logic_error("cannot deserialize transaction");
+        }
+        root = A.move_as_ok();
+        CHECK(root.not_null());
+      }
+      auto P = vm::std_boc_deserialize(std::move(f->proof_));
+      if (P.is_error()) {
+        throw std::logic_error("cannot deserialize block transaction proof");
+      }
+      auto proof_root = P.move_as_ok();
+      try {
+        auto block_root = vm::MerkleProof::virtualize(std::move(proof_root), 1);
+        if (block_root.is_null()) {
+          throw std::logic_error("transaction block proof is invalid");
+        }
+        auto res1 = block::check_block_header_proof(block_root, blkid);
+        if (res1.is_error()) {
+          throw std::logic_error("error in transaction block header proof : " + res1.move_as_error().to_string());
+        }
+        auto trans_root_res =
+            block::get_block_transaction_try(std::move(block_root), workchain, address_bits, trans_lt);
+        if (trans_root_res.is_error()) {
+          throw std::logic_error("Transaction get from block error");
+        }
+        auto trans_root = trans_root_res.move_as_ok();
+        if (trans_root.is_null() && root.not_null()) {
+          throw std::logic_error(
+              "error checking transaction proof: proof claims there is no such transaction, but we have got "
+              "transaction data with hash " +
+              root->get_hash().bits().to_hex(256));
+        }
+        if (trans_root.not_null() && root.is_null()) {
+          throw std::logic_error(
+              "error checking transaction proof: proof claims there is such a transaction with hash " +
+              trans_root->get_hash().bits().to_hex(256) + ", but we have got no transaction data");
+        }
+        if (trans_root.not_null() && trans_root->get_hash().bits().compare(root->get_hash().bits(), 256)) {
+          throw std::logic_error("transaction hash mismatch: Merkle proof expects " +
+                                 trans_root->get_hash().bits().to_hex(256) + " but received data has " +
+                                 root->get_hash().bits().to_hex(256));
+        }
+      } catch (vm::VmError err) {
+        throw std::logic_error("error while traversing block transaction proof");
+      } catch (vm::VmVirtError err) {
+        throw std::logic_error("virtualization error while traversing block transaction proof");
+      }
+      auto out = td::TerminalIO::out();
+      if (root.is_null()) {
+        throw std::logic_error("transaction not found");
+      }
+
+      return PyCell(root);
+    }
   } else {
     throw std::logic_error(response->error_message);
   }

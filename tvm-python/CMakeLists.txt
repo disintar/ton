@@ -14,7 +14,7 @@ endif ()
 
 add_library(combined INTERFACE)
 target_link_libraries(combined INTERFACE
-        tonlib overlay tdutils tdactor adnl tl_api dht
+        tonlib overlay tdutils tdactor adnl tl_api dht terminal
         rldp catchain validatorsession full-node emulator emulator_static validator-disk validator-hardfork ton_validator
         validator-hardfork fift-lib memprof)
 bundle_static_library_deps(combined combined_bundled)
