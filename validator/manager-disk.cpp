@@ -100,18 +100,24 @@ void ShardClientDetector::receive_result(BlockIdExt mc_blkid, BlockIdExt shard_b
   }
 
   if (R.is_ok()) {
-    mc_shards_waits_[mc_blkid] -= 1;
-    if (mc_shards_waits_[mc_blkid] == 0) {
-      mc_shards_waits_.erase(mc_blkid);
-      auto state = std::move(mc_states_[mc_blkid]);
-      mc_states_.erase(mc_blkid);
+    auto x = R.move_as_ok();
+    auto cell = x->root_cell();
 
-      if (shard_waiters.empty()) {
-        alarm_timestamp() = td::Timestamp::never();
+    if (!cell.is_null()) {
+      mc_shards_waits_[mc_blkid] -= 1;
+      if (mc_shards_waits_[mc_blkid] == 0) {
+        mc_shards_waits_.erase(mc_blkid);
+        auto state = std::move(mc_states_[mc_blkid]);
+        mc_states_.erase(mc_blkid);
+
+        if (shard_waiters.empty()) {
+          alarm_timestamp() = td::Timestamp::never();
+        }
+
+        td::actor::send_closure_later(manager_, &ValidatorManager::update_lite_server_state, mc_blkid,
+                                      std::move(state));
+        return;
       }
-
-      td::actor::send_closure_later(manager_, &ValidatorManager::update_lite_server_state, mc_blkid, std::move(state));
-      return;
     }
   }
 
@@ -1381,7 +1387,7 @@ void ValidatorManagerImpl::update_shard_client_state(BlockIdExt masterchain_bloc
 
 void ValidatorManagerImpl::update_lite_server_state(BlockIdExt shard_client, td::Ref<MasterchainState> state) {
   if (last_liteserver_state_.is_null()) {
-    LOG(INFO) << "New shard client available: " << shard_client;
+    LOG(INFO) << "New shard client available (from null): " << shard_client;
     last_liteserver_block_id_ = shard_client;
     last_liteserver_state_ = std::move(state);
     return;
