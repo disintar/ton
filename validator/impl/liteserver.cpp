@@ -331,7 +331,6 @@ void LiteQuery::perform_getMasterchainInfo(int mode) {
 
 void LiteQuery::gotMasterchainInfoForAccountState(Ref<ton::validator::MasterchainState> mc_state, BlockIdExt blkid,
                                                   int mode) {
-  LOG(ERROR) << "gotMasterchainInfoForAccountState: " << acc_workchain_ << ":" << acc_addr_.to_hex() << " " << blkid.to_str();
   perform_getAccountState(blkid, acc_workchain_, acc_addr_, 0x80000000);
 }
 

@@ -32,6 +32,39 @@
 #include "tl-utils/lite-utils.hpp"
 #include "common/delay.h"
 #include "lite-server-rate-limiter.h"
+#include "block/block.h"
+#include "block/block-parse.h"
+#include "block/block-auto.h"
+#include "td/utils/date.h"
+
+// todo: move from explorer
+std::string time_to_human(unsigned ts) {
+  td::StringBuilder sb;
+  sb << date::format("%F %T",
+                     std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds>{std::chrono::seconds(ts)})
+     << ", ";
+  auto now = (unsigned)td::Clocks::system();
+  bool past = now >= ts;
+  unsigned x = past ? now - ts : ts - now;
+  if (!past) {
+    sb << "in ";
+  }
+  if (x < 60) {
+    sb << x << "s";
+  } else if (x < 3600) {
+    sb << x / 60 << "m " << x % 60 << "s";
+  } else if (x < 3600 * 24) {
+    x /= 60;
+    sb << x / 60 << "h " << x % 60 << "m";
+  } else {
+    x /= 3600;
+    sb << x / 24 << "d " << x % 24 << "h";
+  }
+  if (past) {
+    sb << " ago";
+  }
+  return sb.as_cslice().str();
+}
 
 namespace ton {
 
@@ -1117,14 +1150,57 @@ void ValidatorManagerImpl::run_ext_query_extended(td::BufferSlice data, adnl::Ad
 void ValidatorManagerImpl::receiveLastBlock(td::Result<td::Ref<BlockData>> block_result,
                                             ValidatorManagerInitResult init_result) {
   if (block_result.is_ok()) {
+    auto block_data = block_result.move_as_ok();
+    auto block_root = block_data->root_cell();
+    if (block_root.is_null()) {
+      LOG(ERROR) << "block has no valid root cell";
+      return;
+    }
+
     last_masterchain_block_handle_ = std::move(init_result.handle);
     last_masterchain_block_id_ = last_masterchain_block_handle_->id();
     last_masterchain_seqno_ = last_masterchain_block_id_.id.seqno;
     last_masterchain_state_ = std::move(init_result.state);
 
+    block::gen::Block::Record blk;
+    block::gen::BlockInfo::Record info;
+    block::gen::BlockExtra::Record extra;
+    block::gen::McBlockExtra::Record extra_mc;
+    block::ShardConfig shards;
+
+    if (!(tlb::unpack_cell(block_root, blk) && tlb::unpack_cell(blk.extra, extra) && tlb::unpack_cell(blk.info, info) &&
+          tlb::unpack_cell(extra.custom->prefetch_ref(), extra_mc) && shards.unpack(extra_mc.shard_hashes))) {
+      LOG(ERROR) << "Error unpack tlb in block: " << last_masterchain_block_id_;
+      return;
+    }
+
+    std::string shards_idents;
+    int total_shards{0};
+
+    auto parseShards = [&shards_idents, SelfId = actor_id(this), mc_id = last_masterchain_block_id_,
+                        &total_shards](McShardHash &ms) {
+      auto shard_seqno = ms.top_block_id().id.seqno;
+      auto shard_shard = ms.top_block_id().id.shard;
+      auto shard_workchain = ms.shard().workchain;
+
+      shards_idents += ", " + std::to_string(shard_workchain) + ":" + std::to_string(shard_shard) + ":" +
+                       std::to_string(shard_seqno);
+      total_shards += 1;
+      //
+      //      td::actor::send_closure_later(SelfId, &IndexerWorker::start_parse_shards, shard_seqno, shard_shard,
+      //                                    shard_workchain, mc_handle);
+      return 1;
+    };
+
+    mc_shards_waits_[last_masterchain_block_id_] = total_shards;
+    shards.process_shard_hashes(parseShards);
+
+    last_masterchain_time_ = info.gen_utime;
+
     // update DB if needed
     td::actor::send_closure(db_, &Db::reinit);
-    LOG(INFO) << "New MC block: " << last_masterchain_block_id_;
+    LOG(INFO) << "New MC block: " << last_masterchain_block_id_
+              << " at: " << time_to_human(last_masterchain_time_) + "shards: " << shards_idents;
 
     // Handle wait_block
     while (!shard_client_waiters_.empty()) {

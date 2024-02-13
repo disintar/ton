@@ -70,6 +70,9 @@ class ValidatorManagerImpl : public ValidatorManager {
   BlockSeqno last_masterchain_seqno_ = 0;
   bool started_ = false;
   td::Ref<MasterchainState> last_masterchain_state_;
+  std::map<BlockIdExt, int> mc_shards_waits_;
+
+  unsigned int last_masterchain_time_;
   //BlockHandle last_masterchain_block_;
 
  public:
