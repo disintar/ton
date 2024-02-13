@@ -80,14 +80,18 @@ void ShardClientDetector::increase_wait(BlockIdExt blkid) {
 
 void ShardClientDetector::receive_result(BlockIdExt mc_blkid, BlockIdExt shard_blkid, td::Result<BlockHandle> R) {
   if (R.is_ok()) {
-    mc_shards_waits_[mc_blkid] -= 1;
-    if (mc_shards_waits_[mc_blkid] == 0) {
-      mc_shards_waits_.erase(mc_blkid);
-      LOG(WARNING) << "New shard client available: " << mc_blkid;
+    auto x = R.move_as_ok();
+    if (x->is_applied()) {
+      mc_shards_waits_[mc_blkid] -= 1;
+      if (mc_shards_waits_[mc_blkid] == 0) {
+        mc_shards_waits_.erase(mc_blkid);
+        LOG(WARNING) << "New shard client available: " << mc_blkid;
+        return;
+      }
     }
-  } else {
-    LOG(INFO) << "Cant get shard for: " << mc_blkid << " shard: " << shard_blkid;
   }
+
+  LOG(INFO) << "Cant get shard for: " << mc_blkid << " shard: " << shard_blkid;
 }
 
 void ShardClientDetector::alarm() {
