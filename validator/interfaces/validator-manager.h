@@ -177,6 +177,7 @@ class ValidatorManager : public ValidatorManagerInterface {
                                                             td::Promise<ConstBlockHandle> promise) = 0;
   virtual void get_block_by_seqno_from_db_for_litequery(AccountIdPrefixFull account, BlockSeqno seqno,
                                                         td::Promise<ConstBlockHandle> promise) = 0;
+  virtual void update_lite_server_state(BlockIdExt shard_client, td::Ref<MasterchainState> state) = 0;
 
   virtual void add_lite_query_stats(int lite_query_id) {
   }

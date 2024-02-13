@@ -574,6 +574,9 @@ class ValidatorManagerImpl : public ValidatorManager {
   void process_lookup_block_for_litequery_error(AccountIdPrefixFull account, int type, td::uint64 value,
                                                 td::Result<ConstBlockHandle> r_handle,
                                                 td::Promise<ConstBlockHandle> promise);
+  void update_lite_server_state(BlockIdExt shard_client, td::Ref<MasterchainState> state) override {
+    UNREACHABLE();
+  };
 
   void add_lite_query_stats(int lite_query_id) override {
     ++ls_stats_[lite_query_id];

@@ -74,23 +74,45 @@ void ShardClientDetector::start_up() {
   //  alarm_timestamp() = td::Timestamp::in(0.2);
 }
 
+void ShardClientDetector::init_wait(BlockIdExt blkid, td::Ref<MasterchainState> mcs) {
+  if (mc_states_.size() >= allow_degrade) { // todo: rewrite on blockrate
+    // We're in degrade mode, too many blocks without actual shard
+    // Return current block as up-to-date and clear all waiters
+    td::actor::send_closure_later(manager_, &ValidatorManager::update_lite_server_state, blkid, std::move(mcs));
+
+    mc_states_.clear();
+    mc_shards_waits_.clear();
+  } else {
+    mc_states_[blkid] = std::move(mcs);
+    mc_shards_waits_[blkid] = 0;
+  }
+}
+
 void ShardClientDetector::increase_wait(BlockIdExt blkid) {
   mc_shards_waits_[blkid] += 1;
 }
 
 void ShardClientDetector::receive_result(BlockIdExt mc_blkid, BlockIdExt shard_blkid, td::Result<BlockHandle> R) {
+  if (mc_shards_waits_.find(mc_blkid) == mc_shards_waits_.end()) {
+    // skip degraded block
+    return;
+  }
+
   if (R.is_ok()) {
     auto x = R.move_as_ok();
     if (x->is_applied()) {
       mc_shards_waits_[mc_blkid] -= 1;
       if (mc_shards_waits_[mc_blkid] == 0) {
         mc_shards_waits_.erase(mc_blkid);
+        auto state = std::move(mc_states_[mc_blkid]);
+        mc_states_.erase(mc_blkid);
 
         if (shard_waiters.empty()) {
           alarm_timestamp() = td::Timestamp::never();
         }
 
-        LOG(INFO) << "New shard client available: " << mc_blkid;
+        td::actor::send_closure_later(manager_, &ValidatorManager::update_lite_server_state, mc_blkid,
+                                      std::move(state));
         return;
       }
     }
@@ -1228,6 +1250,9 @@ void ValidatorManagerImpl::receiveLastBlock(td::Result<td::Ref<BlockData>> block
     std::string shards_idents;
     int total_shards{0};
 
+    td::actor::send_closure_later(shardclientdetector_, &ShardClientDetector::init_wait, last_masterchain_block_id_,
+                                  last_masterchain_state_);
+
     auto parseShards = [&shards_idents, SelfId = actor_id(this), DetectorId = shardclientdetector_,
                         mc_id = last_masterchain_block_id_, &total_shards](McShardHash &ms) {
       auto shard_seqno = ms.top_block_id().id.seqno;
@@ -1353,6 +1378,21 @@ ValidatorSessionId ValidatorManagerImpl::get_validator_set_id(ShardIdFull shard,
 
 void ValidatorManagerImpl::update_shard_client_state(BlockIdExt masterchain_block_id, td::Promise<td::Unit> promise) {
   td::actor::send_closure(db_, &Db::update_shard_client_state, masterchain_block_id, std::move(promise));
+}
+
+void ValidatorManagerImpl::update_lite_server_state(BlockIdExt shard_client, td::Ref<MasterchainState> state) {
+  if (last_liteserver_state_.is_null()) {
+    LOG(INFO) << "New shard client available: " << shard_client;
+    last_liteserver_block_id_ = shard_client;
+    last_liteserver_state_ = std::move(state);
+    return;
+  }
+
+  if (shard_client.seqno() > last_liteserver_block_id_.seqno()) {
+    LOG(INFO) << "New shard client available: " << shard_client;
+    last_liteserver_block_id_ = shard_client;
+    last_liteserver_state_ = std::move(state);
+  }
 }
 
 void ValidatorManagerImpl::get_shard_client_state(bool from_db, td::Promise<BlockIdExt> promise) {

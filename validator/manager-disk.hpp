@@ -47,13 +47,16 @@ class ShardClientDetector : public td::actor::Actor {
   }
   void start_up() override;
   void alarm() override;
+  void init_wait(BlockIdExt blkid, td::Ref<MasterchainState> mcs);
   void increase_wait(BlockIdExt blkid);
   void receive_result(BlockIdExt mc_blkid, BlockIdExt shard_blkid, td::Result<BlockHandle> R);
 
  private:
   std::map<BlockIdExt, int> mc_shards_waits_;
+  std::map<BlockIdExt, td::Ref<MasterchainState>> mc_states_;
   std::vector<std::tuple<BlockIdExt, BlockIdExt>> shard_waiters;
   td::actor::ActorId<ValidatorManager> manager_;
+  unsigned long allow_degrade{30};
 };
 
 class ValidatorManagerImpl : public ValidatorManager {
@@ -118,6 +121,7 @@ class ValidatorManagerImpl : public ValidatorManager {
     UNREACHABLE();
   }
   void validate_block(ReceivedBlock block, td::Promise<BlockHandle> promise) override;
+  void update_lite_server_state(BlockIdExt shard_client, td::Ref<MasterchainState> state) override;
   void prevalidate_block(BlockBroadcast broadcast, td::Promise<td::Unit> promise) override;
 
   //void create_validate_block(BlockId block, td::BufferSlice data, td::Promise<Block> promise) = 0;
@@ -504,6 +508,10 @@ class ValidatorManagerImpl : public ValidatorManager {
   std::map<BlockSeqno, WaitList<td::actor::Actor, td::Unit>> shard_client_waiters_;
   BlockIdExt last_masterchain_block_id_;
   BlockHandle last_masterchain_block_handle_;
+
+  BlockIdExt last_liteserver_block_id_;
+  td::Ref<MasterchainState> last_liteserver_state_;
+
   bool read_only_ = false;
   bool offline_ = true;
 
