@@ -75,7 +75,7 @@ void ShardClientDetector::start_up() {
 }
 
 void ShardClientDetector::init_wait(BlockIdExt blkid, td::Ref<MasterchainState> mcs) {
-  if (mc_states_.size() >= allow_degrade) { // todo: rewrite on blockrate
+  if (mc_states_.size() >= allow_degrade) {  // todo: rewrite on blockrate
     // We're in degrade mode, too many blocks without actual shard
     // Return current block as up-to-date and clear all waiters
     td::actor::send_closure_later(manager_, &ValidatorManager::update_lite_server_state, blkid, std::move(mcs));
@@ -92,29 +92,26 @@ void ShardClientDetector::increase_wait(BlockIdExt blkid) {
   mc_shards_waits_[blkid] += 1;
 }
 
-void ShardClientDetector::receive_result(BlockIdExt mc_blkid, BlockIdExt shard_blkid, td::Result<BlockHandle> R) {
+void ShardClientDetector::receive_result(BlockIdExt mc_blkid, BlockIdExt shard_blkid,
+                                         td::Result<td::Ref<ShardState>> R) {
   if (mc_shards_waits_.find(mc_blkid) == mc_shards_waits_.end()) {
     // skip degraded block
     return;
   }
 
   if (R.is_ok()) {
-    auto x = R.move_as_ok();
-    if (x->is_applied()) {
-      mc_shards_waits_[mc_blkid] -= 1;
-      if (mc_shards_waits_[mc_blkid] == 0) {
-        mc_shards_waits_.erase(mc_blkid);
-        auto state = std::move(mc_states_[mc_blkid]);
-        mc_states_.erase(mc_blkid);
+    mc_shards_waits_[mc_blkid] -= 1;
+    if (mc_shards_waits_[mc_blkid] == 0) {
+      mc_shards_waits_.erase(mc_blkid);
+      auto state = std::move(mc_states_[mc_blkid]);
+      mc_states_.erase(mc_blkid);
 
-        if (shard_waiters.empty()) {
-          alarm_timestamp() = td::Timestamp::never();
-        }
-
-        td::actor::send_closure_later(manager_, &ValidatorManager::update_lite_server_state, mc_blkid,
-                                      std::move(state));
-        return;
+      if (shard_waiters.empty()) {
+        alarm_timestamp() = td::Timestamp::never();
       }
+
+      td::actor::send_closure_later(manager_, &ValidatorManager::update_lite_server_state, mc_blkid, std::move(state));
+      return;
     }
   }
 
@@ -130,13 +127,13 @@ void ShardClientDetector::alarm() {
     auto x = shard_waiters.back();
     shard_waiters.pop_back();
 
-    auto P_cb = td::PromiseCreator::lambda(
-        [DetectorId = actor_id(this), mc_id = std::get<0>(x), my_id = std::get<1>(x)](td::Result<BlockHandle> R) {
-          td::actor::send_closure_later(DetectorId, &ShardClientDetector::receive_result, mc_id, my_id, std::move(R));
-        });
+    auto P_cb = td::PromiseCreator::lambda([DetectorId = actor_id(this), mc_id = std::get<0>(x),
+                                            my_id = std::get<1>(x)](td::Result<td::Ref<ShardState>> R) {
+      td::actor::send_closure_later(DetectorId, &ShardClientDetector::receive_result, mc_id, my_id, std::move(R));
+    });
 
     LOG(WARNING) << "Try shard client one more time: " << std::get<0>(x);
-    td::actor::send_closure_later(manager_, &ValidatorManager::get_block_handle, std::get<0>(x), false,
+    td::actor::send_closure_later(manager_, &ValidatorManager::get_shard_state_from_db_short, std::get<0>(x),
                                   std::move(P_cb));
   }
 }
@@ -1265,11 +1262,12 @@ void ValidatorManagerImpl::receiveLastBlock(td::Result<td::Ref<BlockData>> block
 
       td::actor::send_closure_later(DetectorId, &ShardClientDetector::increase_wait, mc_id);
 
-      auto P_cb = td::PromiseCreator::lambda([DetectorId, mc_id, my_id = ms.top_block_id()](td::Result<BlockHandle> R) {
-        td::actor::send_closure_later(DetectorId, &ShardClientDetector::receive_result, mc_id, my_id, std::move(R));
-      });
+      auto P_cb =
+          td::PromiseCreator::lambda([DetectorId, mc_id, my_id = ms.top_block_id()](td::Result<td::Ref<ShardState>> R) {
+            td::actor::send_closure_later(DetectorId, &ShardClientDetector::receive_result, mc_id, my_id, std::move(R));
+          });
 
-      td::actor::send_closure_later(SelfId, &ValidatorManagerImpl::get_block_handle, ms.top_block_id(), false,
+      td::actor::send_closure_later(SelfId, &ValidatorManagerImpl::get_shard_state_from_db_short, ms.top_block_id(),
                                     std::move(P_cb));
       return 1;
     };

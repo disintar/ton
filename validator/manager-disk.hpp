@@ -49,7 +49,7 @@ class ShardClientDetector : public td::actor::Actor {
   void alarm() override;
   void init_wait(BlockIdExt blkid, td::Ref<MasterchainState> mcs);
   void increase_wait(BlockIdExt blkid);
-  void receive_result(BlockIdExt mc_blkid, BlockIdExt shard_blkid, td::Result<BlockHandle> R);
+  void receive_result(BlockIdExt mc_blkid, BlockIdExt shard_blkid, td::Result<td::Ref<ShardState>> R);
 
  private:
   std::map<BlockIdExt, int> mc_shards_waits_;
