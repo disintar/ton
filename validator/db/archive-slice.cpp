@@ -326,8 +326,6 @@ void ArchiveSlice::get_file(ConstBlockHandle handle, FileReference ref_id, td::P
         }
       });
 
-  LOG(INFO) << "Package: " << p->idx << " " << p->path << " " << offset;
-
   if (!read_only_) {
     td::actor::create_actor<PackageReader>("reader", p->package, offset, std::move(P), read_only_).release();
   } else {

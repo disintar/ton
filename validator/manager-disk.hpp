@@ -52,6 +52,7 @@ class ShardClientDetector : public td::actor::Actor {
 
  private:
   std::map<BlockIdExt, int> mc_shards_waits_;
+  std::vector<std::tuple<BlockIdExt, BlockIdExt>> shard_waiters;
   td::actor::ActorId<ValidatorManager> manager_;
 };
 

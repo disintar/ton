@@ -85,17 +85,38 @@ void ShardClientDetector::receive_result(BlockIdExt mc_blkid, BlockIdExt shard_b
       mc_shards_waits_[mc_blkid] -= 1;
       if (mc_shards_waits_[mc_blkid] == 0) {
         mc_shards_waits_.erase(mc_blkid);
-        LOG(WARNING) << "New shard client available: " << mc_blkid;
+
+        if (shard_waiters.empty()) {
+          alarm_timestamp() = td::Timestamp::never();
+        }
+
+        LOG(INFO) << "New shard client available: " << mc_blkid;
         return;
       }
     }
   }
 
-  LOG(INFO) << "Cant get shard for: " << mc_blkid << " shard: " << shard_blkid;
+  LOG(WARNING) << "Can't get shard for: " << mc_blkid << " shard: " << shard_blkid;
+  shard_waiters.push_back(std::make_tuple(mc_blkid, shard_blkid));
+  alarm_timestamp() = td::Timestamp::in(0.2);
 }
 
 void ShardClientDetector::alarm() {
-  //  alarm_timestamp() = td::Timestamp::in(0.2);
+  alarm_timestamp() = td::Timestamp::never();
+
+  while (!shard_waiters.empty()) {
+    auto x = shard_waiters.back();
+    shard_waiters.pop_back();
+
+    auto P_cb = td::PromiseCreator::lambda(
+        [DetectorId = actor_id(this), mc_id = std::get<0>(x), my_id = std::get<1>(x)](td::Result<BlockHandle> R) {
+          td::actor::send_closure_later(DetectorId, &ShardClientDetector::receive_result, mc_id, my_id, std::move(R));
+        });
+
+    LOG(WARNING) << "Try shard client one more time: " << std::get<0>(x);
+    td::actor::send_closure_later(manager_, &ValidatorManager::get_block_handle, std::get<0>(x), false,
+                                  std::move(P_cb));
+  }
 }
 
 void ValidatorManagerImpl::validate_block_is_next_proof(BlockIdExt prev_block_id, BlockIdExt next_block_id,
