@@ -358,7 +358,8 @@ class ValidatorManagerImpl : public ValidatorManager {
       , shard_to_generate_(shard_id)
       , block_to_generate_(shard_to_block_id) {
     // Need to detect last mc block with shards
-    shardclientdetector_ = td::actor::create_actor<ShardClientDetector>("ShardClientDetector", actor_id(this));
+    shardclientdetector_ =
+        td::actor::create_actor<ShardClientDetector>("ShardClientDetector", actor_id(this)).release();
   }
 
  public:
@@ -520,7 +521,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   td::actor::ActorId<rldp::Rldp> rldp_;
   td::actor::ActorId<overlay::Overlays> overlays_;
   td::actor::ActorId<liteserver::LiteServerLimiter> lslimiter_;
-  td::actor::ActorOwn<ShardClientDetector> shardclientdetector_;
+  td::actor::ActorId<ShardClientDetector> shardclientdetector_;
 
   std::string db_root_;
   ShardIdFull shard_to_generate_;
