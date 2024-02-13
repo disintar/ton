@@ -1201,7 +1201,7 @@ void ValidatorManagerImpl::receiveLastBlock(td::Result<td::Ref<BlockData>> block
     std::string shards_idents;
     int total_shards{0};
 
-    auto parseShards = [&shards_idents, SelfId = actor_id(this), DetectorId = shardclientdetector_.get(),
+    auto parseShards = [&shards_idents, SelfId = actor_id(this), DetectorId = shardclientdetector_,
                         mc_id = last_masterchain_block_id_, &total_shards](McShardHash &ms) {
       auto shard_seqno = ms.top_block_id().id.seqno;
       auto shard_shard = ms.top_block_id().id.shard;
