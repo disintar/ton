@@ -1049,6 +1049,8 @@ void ValidatorManagerImpl::send_top_shard_block_description(td::Ref<ShardTopBloc
 
 void ValidatorManagerImpl::start_up() {
   db_ = create_db_actor(actor_id(this), db_root_, opts_, read_only_);
+  // Need to detect last mc block with shards
+  shardclientdetector_ = td::actor::create_actor<ShardClientDetector>("ShardClientDetector", actor_id(this)).release();
 
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ValidatorManagerInitResult> R) {
     R.ensure();

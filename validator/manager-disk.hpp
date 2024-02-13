@@ -357,9 +357,6 @@ class ValidatorManagerImpl : public ValidatorManager {
       , db_root_(std::move(db_root))
       , shard_to_generate_(shard_id)
       , block_to_generate_(shard_to_block_id) {
-    // Need to detect last mc block with shards
-    shardclientdetector_ =
-        td::actor::create_actor<ShardClientDetector>("ShardClientDetector", actor_id(this)).release();
   }
 
  public:
