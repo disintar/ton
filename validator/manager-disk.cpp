@@ -1234,9 +1234,8 @@ void ValidatorManagerImpl::receiveLastBlock(td::Result<td::Ref<BlockData>> block
       auto shard_shard = ms.top_block_id().id.shard;
       auto shard_workchain = ms.shard().workchain;
 
-      shards_idents += shards_idents.empty() ? ""
-                                             : ", " + std::to_string(shard_workchain) + ":" +
-                                                   std::to_string(shard_shard) + ":" + std::to_string(shard_seqno);
+      shards_idents += (shards_idents.empty() ? "" : ", ") + std::to_string(shard_workchain) + ":" +
+                       std::to_string(shard_shard) + ":" + std::to_string(shard_seqno);
       total_shards += 1;
 
       td::actor::send_closure_later(DetectorId, &ShardClientDetector::increase_wait, mc_id);
