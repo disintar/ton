@@ -40,6 +40,21 @@ class WaitZeroState;
 class WaitShardState;
 class WaitBlockDataDisk;
 
+class ShardClientDetector : public td::actor::Actor {
+ public:
+  ShardClientDetector(td::actor::ActorId<ValidatorManager> manager) {
+    manager_ = std::move(manager);
+  }
+  void start_up() override;
+  void alarm() override;
+  void increase_wait(BlockIdExt blkid);
+  void receive_result(BlockIdExt mc_blkid, BlockIdExt shard_blkid, td::Result<BlockHandle> R);
+
+ private:
+  std::map<BlockIdExt, int> mc_shards_waits_;
+  td::actor::ActorId<ValidatorManager> manager_;
+};
+
 class ValidatorManagerImpl : public ValidatorManager {
  private:
   std::vector<td::Ref<ExtMessage>> ext_messages_;
@@ -70,7 +85,6 @@ class ValidatorManagerImpl : public ValidatorManager {
   BlockSeqno last_masterchain_seqno_ = 0;
   bool started_ = false;
   td::Ref<MasterchainState> last_masterchain_state_;
-  std::map<BlockIdExt, int> mc_shards_waits_;
 
   unsigned int last_masterchain_time_;
   //BlockHandle last_masterchain_block_;
@@ -343,6 +357,8 @@ class ValidatorManagerImpl : public ValidatorManager {
       , db_root_(std::move(db_root))
       , shard_to_generate_(shard_id)
       , block_to_generate_(shard_to_block_id) {
+    // Need to detect last mc block with shards
+    shardclientdetector_ = td::actor::create_actor<ShardClientDetector>("ShardClientDetector", actor_id(this));
   }
 
  public:
@@ -504,6 +520,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   td::actor::ActorId<rldp::Rldp> rldp_;
   td::actor::ActorId<overlay::Overlays> overlays_;
   td::actor::ActorId<liteserver::LiteServerLimiter> lslimiter_;
+  td::actor::ActorOwn<ShardClientDetector> shardclientdetector_;
 
   std::string db_root_;
   ShardIdFull shard_to_generate_;
