@@ -1137,6 +1137,8 @@ void ValidatorManagerImpl::receiveLastBlock(td::Result<td::Ref<BlockData>> block
       }
       shard_client_waiters_.erase(it);
     }
+  } else {
+    LOG(ERROR) << "Last block error" << init_result.handle->id() << ", skip, in db: " << last_masterchain_block_id_;
   }
 }
 
@@ -1148,7 +1150,6 @@ void ValidatorManagerImpl::started(ValidatorManagerInitResult R, bool reinited) 
     last_masterchain_state_ = std::move(R.state);
 
     //new_masterchain_block();
-
     callback_->initial_read_complete(last_masterchain_block_handle_);
   } else {
     if (last_masterchain_block_id_ != R.handle->id()) {
@@ -1160,6 +1161,8 @@ void ValidatorManagerImpl::started(ValidatorManagerInitResult R, bool reinited) 
       });
 
       td::actor::send_closure(actor_id(this), &ValidatorManagerImpl::get_block_data_from_db, blk, std::move(P));
+    } else {
+      LOG(INFO) << "Handle is the same!";
     }
   }
 }

@@ -331,6 +331,7 @@ void LiteQuery::perform_getMasterchainInfo(int mode) {
 
 void LiteQuery::gotMasterchainInfoForAccountState(Ref<ton::validator::MasterchainState> mc_state, BlockIdExt blkid,
                                                   int mode) {
+  LOG(ERROR) << "gotMasterchainInfoForAccountState: " << acc_workchain_ << ":" << acc_addr_.to_hex() << " " << blkid.to_str();
   perform_getAccountState(blkid, acc_workchain_, acc_addr_, 0x80000000);
 }
 
@@ -1107,7 +1108,7 @@ bool LiteQuery::make_state_root_proof(Ref<vm::Cell>& proof, Ref<vm::Cell> state_
                                       const BlockIdExt& blkid) {
   CHECK(block_root.not_null() && state_root.not_null());
   RootHash rhash{block_root->get_hash().bits()};
-  if (rhash != blkid.root_hash){
+  if (rhash != blkid.root_hash) {
     // TODO: can raised on readonly
     return fatal_error("rhash != blkid.root_hash, cannot make proof, try one more time");
   };
