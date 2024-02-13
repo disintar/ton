@@ -117,7 +117,8 @@ void LiteQuery::abort_query_ext(td::Status reason, bool unknown) {
                             started_at_, std::time(nullptr), false);
   }
 
-  LOG(INFO) << "aborted liteserver query: " << reason.to_string();
+  LOG(INFO) << "aborted liteserver query: " << reason.to_string()
+            << " query: " << lite_query_name_by_id(query_obj_->get_id());
   if (acc_state_promise_) {
     acc_state_promise_.set_error(std::move(reason));
   } else if (promise_) {
