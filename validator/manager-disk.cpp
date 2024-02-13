@@ -1024,7 +1024,7 @@ void ValidatorManagerImpl::reinit() {
     td::actor::send_closure(SelfId, &ValidatorManagerImpl::started, R.move_as_ok(), true);
 
     delay_action([SelfId]() { td::actor::send_closure(SelfId, &ValidatorManagerImpl::reinit); },
-                 td::Timestamp::in(1.0));
+                 td::Timestamp::in(0.3));
   });
 
   validator_manager_init(opts_, actor_id(this), db_.get(), std::move(P), read_only_);
@@ -1114,9 +1114,34 @@ void ValidatorManagerImpl::run_ext_query_extended(td::BufferSlice data, adnl::Ad
   }
 }
 
+void ValidatorManagerImpl::receiveLastBlock(td::Result<td::Ref<BlockData>> block_result,
+                                            ValidatorManagerInitResult init_result) {
+  if (block_result.is_ok()) {
+    last_masterchain_block_handle_ = std::move(init_result.handle);
+    last_masterchain_block_id_ = last_masterchain_block_handle_->id();
+    last_masterchain_seqno_ = last_masterchain_block_id_.id.seqno;
+    last_masterchain_state_ = std::move(init_result.state);
+
+    // update DB if needed
+    td::actor::send_closure(db_, &Db::reinit);
+    LOG(INFO) << "New MC block: " << last_masterchain_block_id_;
+
+    // Handle wait_block
+    while (!shard_client_waiters_.empty()) {
+      auto it = shard_client_waiters_.begin();
+      if (it->first > last_masterchain_seqno_) {
+        break;
+      }
+      for (auto &y : it->second.waiting_) {
+        y.promise.set_value(td::Unit());
+      }
+      shard_client_waiters_.erase(it);
+    }
+  }
+}
+
 void ValidatorManagerImpl::started(ValidatorManagerInitResult R, bool reinited) {
   if (!reinited) {
-    LOG(DEBUG) << "started()";
     last_masterchain_block_handle_ = std::move(R.handle);
     last_masterchain_block_id_ = last_masterchain_block_handle_->id();
     last_masterchain_seqno_ = last_masterchain_block_id_.id.seqno;
@@ -1126,27 +1151,15 @@ void ValidatorManagerImpl::started(ValidatorManagerInitResult R, bool reinited) 
 
     callback_->initial_read_complete(last_masterchain_block_handle_);
   } else {
-    last_masterchain_block_handle_ = std::move(R.handle);
-    if (last_masterchain_block_id_ != last_masterchain_block_handle_->id()) {
-      last_masterchain_block_id_ = last_masterchain_block_handle_->id();
-      last_masterchain_seqno_ = last_masterchain_block_id_.id.seqno;
-      last_masterchain_state_ = std::move(R.state);
+    if (last_masterchain_block_id_ != R.handle->id()) {
+      auto blk = R.handle;
+      auto P = td::PromiseCreator::lambda([validatorInitResult = std::move(R), SelfId = actor_id(this)](
+                                              td::Result<td::Ref<BlockData>> block_result) mutable {
+        td::actor::send_closure(SelfId, &ValidatorManagerImpl::receiveLastBlock, std::move(block_result),
+                                std::move(validatorInitResult));
+      });
 
-      // update DB if needed
-      td::actor::send_closure(db_, &Db::reinit);
-      LOG(INFO) << "New MC block: " << last_masterchain_block_id_;
-
-      // Handle wait_block
-      while (!shard_client_waiters_.empty()) {
-        auto it = shard_client_waiters_.begin();
-        if (it->first > last_masterchain_seqno_) {
-          break;
-        }
-        for (auto &y : it->second.waiting_) {
-          y.promise.set_value(td::Unit());
-        }
-        shard_client_waiters_.erase(it);
-      }
+      td::actor::send_closure(actor_id(this), &ValidatorManagerImpl::get_block_data_from_db, blk, std::move(P));
     }
   }
 }

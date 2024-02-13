@@ -90,6 +90,7 @@ class ValidatorManagerImpl : public ValidatorManager {
     UNREACHABLE();
   }
 
+  void receiveLastBlock(td::Result<td::Ref<BlockData>> block_result, ValidatorManagerInitResult init_result);
   void validate_block_is_next_proof(BlockIdExt prev_block_id, BlockIdExt next_block_id, td::BufferSlice proof,
                                     td::Promise<td::Unit> promise) override;
   void validate_block_proof(BlockIdExt block_id, td::BufferSlice proof, td::Promise<td::Unit> promise) override;

@@ -848,8 +848,6 @@ void LiteQuery::perform_getAccountState(BlockIdExt blkid, WorkchainId workchain,
         manager_, &ton::validator::ValidatorManager::get_last_liteserver_state_block,
         [Self = actor_id(this)](td::Result<std::pair<Ref<ton::validator::MasterchainState>, BlockIdExt>> res) -> void {
           if (res.is_error()) {
-            // Here can be not found
-            LOG(ERROR) << "Block not found raised here?";
             td::actor::send_closure(Self, &LiteQuery::abort_query, res.move_as_error());
           } else {
             auto pair = res.move_as_ok();
