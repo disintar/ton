@@ -1161,8 +1161,6 @@ void ValidatorManagerImpl::started(ValidatorManagerInitResult R, bool reinited) 
       });
 
       td::actor::send_closure(actor_id(this), &ValidatorManagerImpl::get_block_data_from_db, blk, std::move(P));
-    } else {
-      LOG(INFO) << "Handle is the same!";
     }
   }
 }
