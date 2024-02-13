@@ -38,6 +38,35 @@
 #include "blockchain-indexer/json-utils.hpp"
 #include "td/utils/port/sleep.h"
 #include "td/utils/Time.h"
+#include "td/utils/date.h"
+
+std::string time_to_human(unsigned ts) {
+  td::StringBuilder sb;
+  sb << date::format("%F %T",
+                     std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds>{std::chrono::seconds(ts)})
+     << ", ";
+  auto now = (unsigned)td::Clocks::system();
+  bool past = now >= ts;
+  unsigned x = past ? now - ts : ts - now;
+  if (!past) {
+    sb << "in ";
+  }
+  if (x < 60) {
+    sb << x << "s";
+  } else if (x < 3600) {
+    sb << x / 60 << "m " << x % 60 << "s";
+  } else if (x < 3600 * 24) {
+    x /= 60;
+    sb << x / 60 << "h " << x % 60 << "m";
+  } else {
+    x /= 3600;
+    sb << x / 24 << "d " << x % 24 << "h";
+  }
+  if (past) {
+    sb << " ago";
+  }
+  return sb.as_cslice().str();
+}
 
 namespace ton::validator {
 
@@ -369,7 +398,6 @@ void BlockParserAsync::parseBlockData() {
   LOG(DEBUG) << "Parse block data" << id.to_str();
 
   auto blkid = data->block_id();
-  LOG(INFO) << "Parse block: " << blkid.id.to_str();
 
   auto block_root = data->root_cell();
   if (block_root.is_null()) {
@@ -407,6 +435,8 @@ void BlockParserAsync::parseBlockData() {
 
   answer["global_id"] = blk.global_id;
   auto now = info.gen_utime;
+  LOG(INFO) << "Parse block: " << blkid.id.to_str() << " time: " << time_to_human(now);
+
   auto start_lt = info.start_lt;
 
   answer["BlockInfo"] = {
