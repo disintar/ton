@@ -104,6 +104,7 @@ void ShardClientDetector::receive_result(BlockIdExt mc_blkid, BlockIdExt shard_b
     auto cell = x->root_cell();
 
     if (!cell.is_null()) {
+      LOG(WARNING) << "Validate main block: " << mc_blkid << ", shard: " << shard_blkid;
       mc_shards_waits_[mc_blkid] -= 1;
       if (mc_shards_waits_[mc_blkid] == 0) {
         mc_shards_waits_.erase(mc_blkid);
