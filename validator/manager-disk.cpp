@@ -1302,7 +1302,7 @@ void ValidatorManagerImpl::receiveLastBlock(td::Result<td::Ref<BlockData>> block
     td::actor::send_closure(db_, &Db::reinit);
     LOG(INFO) << "New MC block: " << last_masterchain_block_id_
               << " at: " << time_to_human(last_masterchain_time_) + ", shards: " << shards_idents;
-    td::actor::send_closure(actor_id(this), &ValidatorManagerImpl::reinit);
+    td::actor::send_closure(db_, &Db::reinit);
 
     // Handle wait_block
     while (!shard_client_waiters_.empty()) {
@@ -1403,7 +1403,6 @@ void ValidatorManagerImpl::update_shard_client_state(BlockIdExt masterchain_bloc
 void ValidatorManagerImpl::update_lite_server_state(BlockIdExt shard_client, td::Ref<MasterchainState> state) {
   if (last_liteserver_state_.is_null()) {
     LOG(INFO) << "New shard client available (from null): " << shard_client;
-    td::actor::send_closure(actor_id(this), &ValidatorManagerImpl::reinit);
     last_liteserver_block_id_ = shard_client;
     last_liteserver_state_ = std::move(state);
     return;
@@ -1414,6 +1413,8 @@ void ValidatorManagerImpl::update_lite_server_state(BlockIdExt shard_client, td:
     last_liteserver_block_id_ = shard_client;
     last_liteserver_state_ = std::move(state);
   }
+
+  td::actor::send_closure(db_, &Db::reinit);
 }
 
 void ValidatorManagerImpl::get_shard_client_state(bool from_db, td::Promise<BlockIdExt> promise) {
