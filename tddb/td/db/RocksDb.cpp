@@ -102,6 +102,11 @@ Result<RocksDb> RocksDb::open(std::string path, bool read_only) {
 }
 
 std::unique_ptr<KeyValueReader> RocksDb::snapshot() {
+  if (!last_catch_timeout_ || last_catch_timeout_.is_in_past()) {
+    db_->TryCatchUpWithPrimary();
+    last_catch_timeout_ = td::Timestamp::at(0.2);
+  }
+
   auto res = std::make_unique<RocksDb>(clone());
   res->begin_snapshot().ensure();
   return std::move(res);
@@ -119,7 +124,7 @@ Result<RocksDb::GetStatus> RocksDb::get(Slice key, std::string &value) {
   if (read_only_) {
     if (!last_catch_timeout_ || last_catch_timeout_.is_in_past()) {
       db_->TryCatchUpWithPrimary();
-      last_catch_timeout_ = td::Timestamp::at(1.0);
+      last_catch_timeout_ = td::Timestamp::at(0.2);
     }
   }
   rocksdb::Status status;
@@ -183,7 +188,6 @@ Result<size_t> RocksDb::count(Slice prefix) {
   }
   return res;
 }
-
 
 Status RocksDb::begin_write_batch() {
   CHECK(!transaction_);

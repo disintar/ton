@@ -97,6 +97,7 @@ class CellDbIn : public CellDbBase {
 
   td::actor::ActorId<RootDb> root_db_;
   td::actor::ActorId<CellDb> parent_;
+  td::Timestamp last_catch_timeout_;
 
   std::string path_;
   td::Ref<ValidatorManagerOptions> opts_;

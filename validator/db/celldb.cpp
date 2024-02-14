@@ -92,7 +92,7 @@ void CellDbIn::start_up() {
   boc_->set_celldb_compress_depth(opts_->get_celldb_compress_depth());
   boc_->set_loader(std::make_unique<vm::CellLoader>(cell_db_->snapshot(), on_load_callback_)).ensure();
   td::actor::send_closure(parent_, &CellDb::update_snapshot, cell_db_->snapshot());
-
+  last_catch_timeout_ = td::Timestamp::at(0.2);
   alarm_timestamp() = td::Timestamp::in(10.0);
 
   auto empty = get_empty_key_hash();
@@ -105,6 +105,10 @@ void CellDbIn::start_up() {
 }
 
 void CellDbIn::load_cell(RootHash hash, td::Promise<td::Ref<vm::DataCell>> promise) {
+  if (read_only_ && last_catch_timeout_.is_in_past()) {
+    td::actor::send_closure(parent_, &CellDb::update_snapshot, cell_db_->snapshot());
+    last_catch_timeout_ = td::Timestamp::at(0.2);
+  }
   boc_->load_cell_async(hash.as_slice(), async_executor, std::move(promise));
 }
 
