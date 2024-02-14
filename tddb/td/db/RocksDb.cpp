@@ -104,7 +104,7 @@ Result<RocksDb> RocksDb::open(std::string path, bool read_only) {
 std::unique_ptr<KeyValueReader> RocksDb::snapshot() {
   if (!last_catch_timeout_ || last_catch_timeout_.is_in_past()) {
     db_->TryCatchUpWithPrimary();
-    last_catch_timeout_ = td::Timestamp::at(0.2);
+    last_catch_timeout_ = td::Timestamp::at(0.1);
   }
 
   auto res = std::make_unique<RocksDb>(clone());
@@ -124,7 +124,7 @@ Result<RocksDb::GetStatus> RocksDb::get(Slice key, std::string &value) {
   if (read_only_) {
     if (!last_catch_timeout_ || last_catch_timeout_.is_in_past()) {
       db_->TryCatchUpWithPrimary();
-      last_catch_timeout_ = td::Timestamp::at(0.2);
+      last_catch_timeout_ = td::Timestamp::at(0.1);
     }
   }
   rocksdb::Status status;
