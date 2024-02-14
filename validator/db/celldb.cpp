@@ -198,6 +198,7 @@ void CellDbIn::alarm() {
 }
 
 void CellDbIn::reinit() {
+  boc_->set_loader(std::make_unique<vm::CellLoader>(cell_db_->snapshot(), on_load_callback_)).ensure();
   td::actor::send_closure(parent_, &CellDb::update_snapshot, cell_db_->snapshot());
 }
 
