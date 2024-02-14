@@ -39,8 +39,10 @@ class CellDbAsyncExecutor;
 class CellDbBase : public td::actor::Actor {
  public:
   virtual void start_up();
+
  protected:
   std::shared_ptr<vm::DynamicBagOfCellsDb::AsyncExecutor> async_executor;
+
  private:
   void execute_sync(std::function<void()> f);
   friend CellDbAsyncExecutor;
@@ -57,10 +59,11 @@ class CellDbIn : public CellDbBase {
   void migrate_cell(td::Bits256 hash);
 
   CellDbIn(td::actor::ActorId<RootDb> root_db, td::actor::ActorId<CellDb> parent, std::string path,
-           td::Ref<ValidatorManagerOptions> opts, bool read_only=false);
+           td::Ref<ValidatorManagerOptions> opts, bool read_only = false);
 
   void start_up() override;
   void alarm() override;
+  void reinit();
 
  private:
   struct DbEntry {
@@ -97,7 +100,6 @@ class CellDbIn : public CellDbBase {
 
   td::actor::ActorId<RootDb> root_db_;
   td::actor::ActorId<CellDb> parent_;
-  td::Timestamp last_catch_timeout_;
 
   std::string path_;
   td::Ref<ValidatorManagerOptions> opts_;
@@ -145,11 +147,15 @@ class CellDb : public CellDbBase {
   }
   void get_cell_db_reader(td::Promise<std::shared_ptr<vm::CellDbReader>> promise);
 
-  CellDb(td::actor::ActorId<RootDb> root_db, std::string path, td::Ref<ValidatorManagerOptions> opts, bool read_only=false)
-      : root_db_(root_db), path_(path), opts_(opts), read_only_(read_only)  {
+  CellDb(td::actor::ActorId<RootDb> root_db, std::string path, td::Ref<ValidatorManagerOptions> opts,
+         bool read_only = false)
+      : root_db_(root_db), path_(path), opts_(opts), read_only_(read_only) {
   }
 
   void start_up() override;
+  void reinit() {
+    td::actor::send_closure(cell_db_, &CellDbIn::reinit);
+  }
 
  private:
   td::actor::ActorId<RootDb> root_db_;

@@ -507,6 +507,7 @@ void RootDb::run_gc(UnixTime mc_ts, UnixTime gc_ts, UnixTime archive_ttl) {
 
 void RootDb::reinit() {
   td::actor::send_closure(archive_db_, &ArchiveManager::reinit);
+  td::actor::send_closure(cell_db_, &CellDb::reinit);
 }
 
 }  // namespace validator
