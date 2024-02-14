@@ -101,7 +101,7 @@ class DynamicBagOfCellsDbImpl : public DynamicBagOfCellsDb, private ExtCellCreat
          ext_cell_creator = std::move(ext_cell_creator), promise = std::move(promise_ptr)]() mutable {
           TRY_RESULT_PROMISE((*promise), res, loader.load(hash.as_slice(), true, ext_cell_creator));
           if (res.status != CellLoader::LoadResult::Ok) {
-            promise->set_error(td::Status::Error("cell not found"));
+            promise->set_error(td::Status::Error(57, "cell not found"));
             return;
           }
           Ref<Cell> cell = res.cell();
@@ -294,7 +294,7 @@ class DynamicBagOfCellsDbImpl : public DynamicBagOfCellsDb, private ExtCellCreat
       }
       TRY_RESULT(load_result, cell_loader_->load(hash, true, *this));
       if (load_result.status != CellLoader::LoadResult::Ok) {
-        return td::Status::Error("cell not found");
+        return td::Status::Error(57, "cell not found");
       }
       return std::move(load_result.cell());
     }

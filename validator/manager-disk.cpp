@@ -759,16 +759,36 @@ void ValidatorManagerImpl::get_shard_state_from_db(ConstBlockHandle handle, td::
 
 void ValidatorManagerImpl::get_shard_state_from_db_short(BlockIdExt block_id,
                                                          td::Promise<td::Ref<ShardState>> promise) {
-  auto P =
-      td::PromiseCreator::lambda([db = db_.get(), promise = std::move(promise)](td::Result<BlockHandle> R) mutable {
-        if (R.is_error()) {
-          promise.set_error(R.move_as_error());
+  if (read_only_) {
+    auto P =
+        td::PromiseCreator::lambda([db = db_.get(), promise = std::move(promise)](td::Result<BlockHandle> R) mutable {
+          if (R.is_error()) {
+            promise.set_error(R.move_as_error());
+          } else {
+            auto handle = R.move_as_ok();
+            td::actor::send_closure(db, &Db::get_block_state, std::move(handle), std::move(promise));
+          }
+        });
+    get_block_handle(block_id, false, std::move(P));
+  } else {
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), db = db_.get(), promise = std::move(promise),
+                                         block_id](td::Result<BlockHandle> R) mutable {
+      if (R.is_error()) {
+        auto x = R.move_as_error();
+        if (x.code() == 57) {  // cell not found
+          LOG(ERROR) << "Cell not found in readonly mode, try one more time";
+          td::actor::send_closure(SelfId, &ValidatorManagerImpl::get_shard_state_from_db_short, block_id,
+                                  std::move(promise));
         } else {
-          auto handle = R.move_as_ok();
-          td::actor::send_closure(db, &Db::get_block_state, std::move(handle), std::move(promise));
+          promise.set_error(std::move(x));
         }
-      });
-  get_block_handle(block_id, false, std::move(P));
+      } else {
+        auto handle = R.move_as_ok();
+        td::actor::send_closure(db, &Db::get_block_state, std::move(handle), std::move(promise));
+      }
+    });
+    get_block_handle(block_id, false, std::move(P));
+  }
 }
 
 void ValidatorManagerImpl::get_block_candidate_from_db(PublicKey source, BlockIdExt id,
