@@ -1299,10 +1299,8 @@ void ValidatorManagerImpl::receiveLastBlock(td::Result<td::Ref<BlockData>> block
     last_masterchain_time_ = info.gen_utime;
 
     // update DB if needed
-    td::actor::send_closure(db_, &Db::reinit);
     LOG(INFO) << "New MC block: " << last_masterchain_block_id_
               << " at: " << time_to_human(last_masterchain_time_) + ", shards: " << shards_idents;
-    td::actor::send_closure(db_, &Db::reinit);
 
     // Handle wait_block
     while (!shard_client_waiters_.empty()) {
@@ -1320,6 +1318,17 @@ void ValidatorManagerImpl::receiveLastBlock(td::Result<td::Ref<BlockData>> block
   }
 }
 
+void ValidatorManagerImpl::started_final(ton::validator::ValidatorManagerInitResult R) {
+  auto blk = R.handle;
+  auto P = td::PromiseCreator::lambda([validatorInitResult = std::move(R),
+                                       SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> block_result) mutable {
+    td::actor::send_closure(SelfId, &ValidatorManagerImpl::receiveLastBlock, std::move(block_result),
+                            std::move(validatorInitResult));
+  });
+
+  td::actor::send_closure(actor_id(this), &ValidatorManagerImpl::get_block_data_from_db, blk, std::move(P));
+}
+
 void ValidatorManagerImpl::started(ValidatorManagerInitResult R, bool reinited) {
   if (!reinited) {
     last_masterchain_block_handle_ = std::move(R.handle);
@@ -1331,14 +1340,12 @@ void ValidatorManagerImpl::started(ValidatorManagerInitResult R, bool reinited) 
     callback_->initial_read_complete(last_masterchain_block_handle_);
   } else {
     if (last_masterchain_block_id_ != R.handle->id()) {
-      auto blk = R.handle;
-      auto P = td::PromiseCreator::lambda([validatorInitResult = std::move(R), SelfId = actor_id(this)](
-                                              td::Result<td::Ref<BlockData>> block_result) mutable {
-        td::actor::send_closure(SelfId, &ValidatorManagerImpl::receiveLastBlock, std::move(block_result),
-                                std::move(validatorInitResult));
-      });
+      auto P = td::PromiseCreator::lambda(
+          [SelfId = actor_id(this), validatorInitResult = std::move(R)](td::Result<td::Unit> f) mutable {
+            td::actor::send_closure(SelfId, &ValidatorManagerImpl::started_final, std::move(validatorInitResult));
+          });
 
-      td::actor::send_closure(actor_id(this), &ValidatorManagerImpl::get_block_data_from_db, blk, std::move(P));
+      td::actor::send_closure(db_, &Db::reinit, std::move(P));
     }
   }
 }
@@ -1400,21 +1407,22 @@ void ValidatorManagerImpl::update_shard_client_state(BlockIdExt masterchain_bloc
   td::actor::send_closure(db_, &Db::update_shard_client_state, masterchain_block_id, std::move(promise));
 }
 
+void ValidatorManagerImpl::update_lite_server_state_final(ton::BlockIdExt shard_client,
+                                                          td::Ref<MasterchainState> state) {
+  LOG(INFO) << "New shard client available: " << shard_client;
+  last_liteserver_block_id_ = shard_client;
+  last_liteserver_state_ = std::move(state);
+}
+
 void ValidatorManagerImpl::update_lite_server_state(BlockIdExt shard_client, td::Ref<MasterchainState> state) {
-  if (last_liteserver_state_.is_null()) {
-    LOG(INFO) << "New shard client available (from null): " << shard_client;
-    last_liteserver_block_id_ = shard_client;
-    last_liteserver_state_ = std::move(state);
-    return;
-  }
+  if (last_liteserver_state_.is_null() || shard_client.seqno() > last_liteserver_block_id_.seqno()) {
+    auto P = td::PromiseCreator::lambda(
+        [SelfId = actor_id(this), client = shard_client, s = std::move(state)](td::Result<td::Unit> R) {
+          td::actor::send_closure(SelfId, &ValidatorManagerImpl::update_lite_server_state_final, client, s);
+        });
 
-  if (shard_client.seqno() > last_liteserver_block_id_.seqno()) {
-    LOG(INFO) << "New shard client available: " << shard_client;
-    last_liteserver_block_id_ = shard_client;
-    last_liteserver_state_ = std::move(state);
+    td::actor::send_closure(db_, &Db::reinit, std::move(P));
   }
-
-  td::actor::send_closure(db_, &Db::reinit);
 }
 
 void ValidatorManagerImpl::get_shard_client_state(bool from_db, td::Promise<BlockIdExt> promise) {

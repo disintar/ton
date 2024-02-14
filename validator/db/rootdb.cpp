@@ -505,7 +505,7 @@ void RootDb::run_gc(UnixTime mc_ts, UnixTime gc_ts, UnixTime archive_ttl) {
   td::actor::send_closure(archive_db_, &ArchiveManager::run_gc, mc_ts, gc_ts, archive_ttl);
 }
 
-void RootDb::reinit() {
+void RootDb::reinit(td::Promise<td::Unit>) {
   td::actor::send_closure(archive_db_, &ArchiveManager::reinit);
   td::actor::send_closure(cell_db_, &CellDb::reinit);
 }

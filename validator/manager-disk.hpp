@@ -122,6 +122,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   }
   void validate_block(ReceivedBlock block, td::Promise<BlockHandle> promise) override;
   void update_lite_server_state(BlockIdExt shard_client, td::Ref<MasterchainState> state) override;
+  void update_lite_server_state_final(BlockIdExt shard_client, td::Ref<MasterchainState> state);
   void prevalidate_block(BlockBroadcast broadcast, td::Promise<td::Unit> promise) override;
 
   //void create_validate_block(BlockId block, td::BufferSlice data, td::Promise<Block> promise) = 0;
@@ -314,6 +315,7 @@ class ValidatorManagerImpl : public ValidatorManager {
 
   void start_up() override;
   void started(ValidatorManagerInitResult result, bool reinited = false);
+  void started_final(ValidatorManagerInitResult result);
 
   void write_fake(BlockCandidate candidate, std::vector<BlockIdExt> prev, BlockIdExt last,
                   td::Ref<ValidatorSet> val_set);

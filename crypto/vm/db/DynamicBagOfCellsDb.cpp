@@ -200,6 +200,7 @@ class DynamicBagOfCellsDbImpl : public DynamicBagOfCellsDb, private ExtCellCreat
   }
 
   td::Status set_loader(std::unique_ptr<CellLoader> loader) override {
+    LOG(WARNING) << "SET LOADER!";
     reset_cell_db_reader();
     loader_ = std::move(loader);
     //cell_db_reader_ = std::make_shared<CellDbReaderImpl>(this);
