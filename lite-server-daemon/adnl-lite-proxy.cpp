@@ -39,7 +39,7 @@ class LiteProxy : public td::actor::Actor {
   LiteProxy(std::string config_path, std::string db_path, std::string address) {
     config_path_ = std::move(config_path);
     db_root_ = std::move(db_path);
-    address_ = td::IPAddress::get_ip_address(std::move(address)).move_as_ok();
+    address_.init_host_port(std::move(address)).ensure();
   }
 
   void start_up() override {
