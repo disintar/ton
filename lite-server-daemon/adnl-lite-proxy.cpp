@@ -486,7 +486,7 @@ class LiteProxy : public td::actor::Actor {
               td::actor::send_closure(ProxyId, &LiteProxy::check_ext_query, std::move(src), std::move(dst),
                                       std::move(data), std::move(promise), refire + 1);
             },
-            td::Timestamp::in(0.1));
+            td::Timestamp::in(0.03 * refire_));
       }
 
       Callback(td::actor::ActorId<LiteProxy> id, int refire) : id_(std::move(id)), refire_(refire) {
@@ -503,8 +503,8 @@ class LiteProxy : public td::actor::Actor {
 
   void check_ext_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
                        td::Promise<td::BufferSlice> promise, int refire = 0) {
-    if (refire > 10) {
-      LOG(ERROR) << "Too deep refire";
+    if (refire > 50) {
+      LOG(ERROR) << "Too deep refire";  // todo: move to public LC
       promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Too deep refire"));
       return;
     }
@@ -561,7 +561,7 @@ class LiteProxy : public td::actor::Actor {
                             make_refire_callback(refire))
                             .release();
 
-          for (auto &s : private_servers_) {
+          for (auto &s : private_servers_) {  // Todo: Add some public LC
             LOG(INFO) << "[all] Send: " << dst << " to " << s.first.bits256_value().to_hex();
             auto P =
                 td::PromiseCreator::lambda([WaiterId = waiter, s = s.first](td::Result<td::BufferSlice> R) mutable {

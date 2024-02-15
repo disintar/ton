@@ -2027,11 +2027,11 @@ void ValidatorManagerImpl::update_shards() {
     });
     td::actor::send_closure(db_, &Db::update_destroyed_validator_sessions, gc_list_, std::move(P));
 
-        // Save new block for external liteserver
-        auto P2 =
-            td::PromiseCreator::lambda([SelfId = actor_id(this), gc = std::move(gc),
-                                        block_id = last_masterchain_block_id_](td::Result<td::Unit> R) { R.ensure(); });
-        td::actor::send_closure(db_, &Db::update_init_masterchain_block, last_masterchain_block_id_, std::move(P2));
+    // Save new block for external liteserver
+    auto P2 =
+        td::PromiseCreator::lambda([SelfId = actor_id(this), gc = std::move(gc),
+                                    block_id = last_masterchain_block_id_](td::Result<td::Unit> R) { R.ensure(); });
+    td::actor::send_closure(db_, &Db::update_init_masterchain_block, last_masterchain_block_id_, std::move(P2));
   }
 }  // namespace validator
 
