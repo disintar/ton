@@ -29,6 +29,7 @@ std::string ipv4_int_to_str(int ipv4);
 
 using PubKeyHex = std::string;
 using ShortKeyHex = std::string;
+void throw_lite_error(td::BufferSlice b);
 
 class ResponseObj {
  public:
@@ -183,15 +184,20 @@ class PyLiteClient {
     }
   }
 
-  std::string send_message(PyCell& cell) {
+  int send_message(PyCell& cell) {
     scheduler_.run_in_context_external(
         [&] { send_closure(engine, &LiteClientActorEngine::send_message, std::move(cell.my_cell)); });
     auto response = wait_response();
-    ResponseObj* time = dynamic_cast<ResponseObj*>(response.get());
-    if (time->success) {
-      return "good";
+    if (response->success) {
+      SuccessBufferSlice* answer = dynamic_cast<SuccessBufferSlice*>(response.get());
+      auto R = ton::fetch_tl_object<ton::lite_api::liteServer_sendMsgStatus>(std::move(answer->obj->clone()), true);
+      if (R.is_error()) {
+        throw_lite_error(answer->obj->clone());
+      } else {
+        return R.move_as_ok()->status_;
+      }
     } else {
-      return time->error_message;
+      throw std::logic_error(response->error_message);
     }
   }
 
