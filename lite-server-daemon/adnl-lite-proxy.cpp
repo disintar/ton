@@ -89,6 +89,7 @@ class LiteProxy : public td::actor::Actor {
       td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(local_id_full), ton::adnl::AdnlAddressList{},
                               static_cast<td::uint8>(255));
 
+      LOG(INFO) << "Start dht with: " << dht.bits256_value().to_hex();
       auto D = ton::dht::Dht::create_client(ton::adnl::AdnlNodeIdShort{dht}, db_root_ + "/lite-proxy", dht_config,
                                             keyring_.get(), adnl_.get());
       D.ensure();
