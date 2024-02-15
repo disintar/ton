@@ -105,6 +105,7 @@ class LiteProxy : public td::actor::Actor {
   }
 
   void init_network() {
+    init_dht().ensure();
     td::actor::send_closure(adnl_, &ton::adnl::Adnl::register_dht_node, dht_nodes_[default_dht_node_].get());
 
     start_server();
