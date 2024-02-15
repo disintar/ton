@@ -14,6 +14,7 @@
 #include "tl/tlblib.hpp"
 #include "block/block.h"
 #include "block/block-parse.h"
+#include "common/delay.h"
 #include "block/block-auto.h"
 #include "vm/dict.h"
 #include "vm/cells/MerkleProof.h"
@@ -74,37 +75,71 @@ std::string time_to_human(unsigned ts) {  // todo: move from explorer
 namespace ton::liteserver {
 class LiteClientFire : public td::actor::Actor {
  public:
-  LiteClientFire(int to_wait, td::Promise<td::BufferSlice> promise) {
+  class Callback {
+   public:
+    virtual void refire(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
+                        td::Promise<td::BufferSlice> promise) = 0;
+    virtual ~Callback() = default;
+  };
+
+  LiteClientFire(int to_wait, adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice req,
+                 td::Promise<td::BufferSlice> promise, std::unique_ptr<LiteClientFire::Callback> callback) {
     to_wait_ = to_wait;
+    src_ = std::move(src);
+    dst_ = std::move(dst);
+    request_ = std::move(req);
     promise_ = std::move(promise);
+    callback_ = std::move(callback);
   }
 
   void start_up() override {
   }
 
-  void receive_answer(td::Result<td::BufferSlice> res) {
+  void receive_answer(td::Result<td::BufferSlice> res, adnl::AdnlNodeIdShort server) {
     to_wait_ -= 1;
-
     if ((to_wait_ == 0 || res.is_ok()) && !done) {
       if (res.is_ok()) {
         auto data = res.move_as_ok();
+
         auto E = fetch_tl_object<lite_api::liteServer_error>(data.clone(), true);
         if (E.is_ok() && to_wait_ > 0) {
-          LOG(ERROR) << "LiteServer got error, wait other: " << to_wait_;
+          LOG(INFO) << "Receive answer from: " << server.bits256_value().to_hex() << " adnl ok: " << res.is_ok()
+                    << " error: true, to_wait: " << to_wait_;
+
           prev_success_ = std::move(data);
           has_prev = true;
           return;
-        } else if (to_wait_ == 0) {
-          LOG(ERROR) << "LiteServer " << (E.is_ok() ? "got error" : "got success") << " to wait: " << to_wait_;
+        } else if (E.is_error()) {
+          LOG(INFO) << "Receive answer from: " << server.bits256_value().to_hex() << " adnl ok: " << res.is_ok()
+                    << " error: false, to_wait: " << to_wait_;
           promise_.set_value(std::move(data));
           done = true;
-          return;
+        } else {
+          if (E.is_ok()) {
+            auto x = E.move_as_ok()->message_;
+            // readonly have problems on sync cells, this is govnokod, sorry.
+            // I have not much time and knowledge to fix it other way.
+            std::vector<std::string> whitelist_for_refire{"not found", "get account state"};
+            for (auto &s : whitelist_for_refire) {
+              if (x.find(s) != std::string::npos) {
+                // allow refire
+                LOG(INFO) << "Refire with: " << s;
+                callback_->refire(std::move(src_), std::move(dst_), std::move(request_), std::move(promise_));
+                stop();
+                return;
+              }
+            }
+          }
+          res = td::Result<td::BufferSlice>{std::move(data)};
         }
       }
+    } else {
+      LOG(INFO) << "Receive answer from: " << server.bits256_value().to_hex() << " adnl ok: " << res.is_ok();
     }
 
     if (to_wait_ == 0) {
       LOG(ERROR) << "Got last answer, stop, done: " << done;
+
       if (!done) {
         if (res.is_error() && has_prev) {
           LOG(INFO) << "Send prev error";
@@ -123,7 +158,11 @@ class LiteClientFire : public td::actor::Actor {
   bool done{false};
   bool has_prev{false};
   td::BufferSlice prev_success_;
+  adnl::AdnlNodeIdShort src_;
+  adnl::AdnlNodeIdShort dst_;
+  td::BufferSlice request_;
   td::Promise<td::BufferSlice> promise_;
+  std::unique_ptr<LiteClientFire::Callback> callback_;
 };
 
 class LiteServerClient : public td::actor::Actor {
@@ -137,9 +176,8 @@ class LiteServerClient : public td::actor::Actor {
   }
 
   void send_raw(td::BufferSlice q, td::Promise<td::BufferSlice> promise) {
-    LOG(INFO) << id_.compute_short_id().bits256_value().to_hex() << " send query";
     td::actor::send_closure(client_, &ton::adnl::AdnlExtClient::send_query, "query", std::move(q),
-                            td::Timestamp::in(10.0), std::move(promise));
+                            td::Timestamp::in(2.0), std::move(promise));
   }
 
   void fire(ton::adnl::AdnlNodeIdFull key, td::BufferSlice q, td::Promise<td::BufferSlice> promise) {
@@ -284,9 +322,6 @@ class LiteProxy : public td::actor::Actor {
     cat_mask[0] = true;
     td::actor::send_closure(adnl_network_manager_, &adnl::AdnlNetworkManager::add_self_addr, adnl_address_,
                             std::move(cat_mask), 0);
-
-    ratelimitdb = std::make_shared<td::RocksDb>(
-        td::RocksDb::open(db_root_ + "/" + config_.overlay_prefix + "rate-limits/", true).move_as_ok());
 
     load_config();
   }
@@ -440,8 +475,40 @@ class LiteProxy : public td::actor::Actor {
     }
   }
 
+  std::unique_ptr<LiteClientFire::Callback> make_refire_callback(int refire) {
+    class Callback : public LiteClientFire::Callback {
+     public:
+      void refire(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
+                  td::Promise<td::BufferSlice> promise) override {
+        delay_action(
+            [ProxyId = id_, src = std::move(src), dst = std::move(dst), data = std::move(data),
+             promise = std::move(promise), refire = refire_]() mutable {
+              td::actor::send_closure(ProxyId, &LiteProxy::check_ext_query, std::move(src), std::move(dst),
+                                      std::move(data), std::move(promise), refire + 1);
+            },
+            td::Timestamp::in(0.1));
+      }
+
+      Callback(td::actor::ActorId<LiteProxy> id, int refire) : id_(std::move(id)), refire_(refire) {
+      }
+
+     private:
+      td::actor::ActorId<LiteProxy> id_;
+      adnl::AdnlNodeIdShort server_;
+      int refire_;
+    };
+
+    return std::make_unique<Callback>(actor_id(this), refire);
+  }
+
   void check_ext_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
-                       td::Promise<td::BufferSlice> promise) {
+                       td::Promise<td::BufferSlice> promise, int refire = 0) {
+    if (refire > 10) {
+      LOG(ERROR) << "Too deep refire";
+      promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Too deep refire"));
+      return;
+    }
+
     LOG(INFO) << "Got query to: " << dst;
 
     if (inited) {
@@ -477,29 +544,31 @@ class LiteProxy : public td::actor::Actor {
       } else {
         if (uptodate_private_ls.size() > 0) {
           auto waiter = td::actor::create_actor<ton::liteserver::LiteClientFire>(
-                            "LSC::Fire", uptodate_private_ls.size(), std::move(promise))
+                            "LSC::Fire", uptodate_private_ls.size(), src, dst, data.clone(), std::move(promise),
+                            make_refire_callback(refire))
                             .release();
           for (auto &s : uptodate_private_ls) {
             LOG(INFO) << "[uptodate] Send to: " << dst << " to " << s.bits256_value().to_hex();
-            auto P = td::PromiseCreator::lambda([WaiterId = waiter](td::Result<td::BufferSlice> R) mutable {
-              td::actor::send_closure(WaiterId, &LiteClientFire::receive_answer, std::move(R));
+            auto P = td::PromiseCreator::lambda([WaiterId = waiter, s](td::Result<td::BufferSlice> R) mutable {
+              td::actor::send_closure(WaiterId, &LiteClientFire::receive_answer, std::move(R), s);
             });
 
-            td::actor::send_closure(private_servers_[s].get(), &LiteServerClient::send_raw, std::move(data),
-                                    std::move(P));
+            td::actor::send_closure(private_servers_[s].get(), &LiteServerClient::send_raw, data.clone(), std::move(P));
           }
         } else {
-          auto waiter = td::actor::create_actor<ton::liteserver::LiteClientFire>("LSC::Fire", private_servers_.size(),
-                                                                                 std::move(promise))
+          auto waiter = td::actor::create_actor<ton::liteserver::LiteClientFire>(
+                            "LSC::Fire", private_servers_.size(), src, dst, data.clone(), std::move(promise),
+                            make_refire_callback(refire))
                             .release();
 
           for (auto &s : private_servers_) {
             LOG(INFO) << "[all] Send: " << dst << " to " << s.first.bits256_value().to_hex();
-            auto P = td::PromiseCreator::lambda([WaiterId = waiter](td::Result<td::BufferSlice> R) mutable {
-              td::actor::send_closure(WaiterId, &LiteClientFire::receive_answer, std::move(R));
-            });
+            auto P =
+                td::PromiseCreator::lambda([WaiterId = waiter, s = s.first](td::Result<td::BufferSlice> R) mutable {
+                  td::actor::send_closure(WaiterId, &LiteClientFire::receive_answer, std::move(R), s);
+                });
 
-            td::actor::send_closure(s.second, &LiteServerClient::send_raw, std::move(data), std::move(P));
+            td::actor::send_closure(s.second, &LiteServerClient::send_raw, data.clone(), std::move(P));
           }
         }
       }
@@ -510,7 +579,7 @@ class LiteProxy : public td::actor::Actor {
   }
 
   void alarm() override {
-    alarm_timestamp() = td::Timestamp::in(10.0);
+    alarm_timestamp() = td::Timestamp::in(1.0);
     usage.clear();
     init_users();  // update users if needed
     update_server_stats();
@@ -539,7 +608,7 @@ class LiteProxy : public td::actor::Actor {
       }
       void receive_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
                          td::Promise<td::BufferSlice> promise) override {
-        td::actor::send_closure(id_, &LiteProxy::check_ext_query, src, dst, std::move(data), std::move(promise));
+        td::actor::send_closure(id_, &LiteProxy::check_ext_query, src, dst, std::move(data), std::move(promise), 0);
       }
 
      public:
@@ -596,6 +665,9 @@ class LiteProxy : public td::actor::Actor {
     }
 
     config_ = ton::liteserver::Config{conf};
+
+    ratelimitdb = std::make_shared<td::RocksDb>(
+        td::RocksDb::open(db_root_ + "/" + config_.overlay_prefix + "rate-limits/", true).move_as_ok());
 
     for (auto &key : config_.keys_refcnt) {
       to_load_keys++;
