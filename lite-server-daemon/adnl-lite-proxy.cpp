@@ -84,13 +84,8 @@ class LiteProxy : public td::actor::Actor {
 
     // Start DHT
     for (auto &dht : config_.dht_ids) {
-      adnl::AdnlNodeIdFull local_id_full = adnl::AdnlNodeIdFull::create(keys_[dht].tl()).move_as_ok();
-
-      td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(local_id_full), ton::adnl::AdnlAddressList{},
-                              static_cast<td::uint8>(255));
-
-      auto D = ton::dht::Dht::create(ton::adnl::AdnlNodeIdShort{dht}, db_root_ + "/lite-proxy", dht_config,
-                                     keyring_.get(), adnl_.get());
+      auto D = ton::dht::Dht::create_client(ton::adnl::AdnlNodeIdShort{dht}, db_root_ + "/lite-proxy", dht_config,
+                                            keyring_.get(), adnl_.get());
       D.ensure();
 
       dht_nodes_[dht] = D.move_as_ok();
