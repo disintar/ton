@@ -45,7 +45,9 @@ class LiteProxy : public td::actor::Actor {
   void start_up() override {
     LOG(INFO) << "Start LiteProxy";
     load_config();
+  }
 
+  void init_network() {
     LOG(INFO) << "Start ADNL";
     adnl_network_manager_ = adnl::AdnlNetworkManager::create(static_cast<td::uint16>(address_.get_port()));
     keyring_ = ton::keyring::Keyring::create(db_root_ + "/keyring");
@@ -72,6 +74,9 @@ class LiteProxy : public td::actor::Actor {
       auto D =
           ton::dht::Dht::create(ton::adnl::AdnlNodeIdShort{dht}, db_root_, dht_config, keyring_.get(), adnl_.get());
       D.ensure();
+      adnl::AdnlNodeIdFull local_id_full = adnl::AdnlNodeIdFull::create(keys_[dht].tl()).move_as_ok();
+      td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(local_id_full), ton::adnl::AdnlAddressList{},
+                              static_cast<td::uint8>(255));
 
       dht_nodes_[dht] = D.move_as_ok();
       if (default_dht_node_.is_zero()) {
@@ -184,6 +189,21 @@ class LiteProxy : public td::actor::Actor {
     alarm_timestamp() = td::Timestamp::in(5.0);
   }
 
+  void got_key(ton::PublicKey key) {
+    to_load_keys--;
+    keys_[key.compute_short_id()] = std::move(key);
+
+    if (to_load_keys == 0) {
+      LOG(WARNING) << "ADNL available on: " << config_.addr_;
+
+      for (auto &t : config_.adnl_ids) {
+        LOG(WARNING) << "ADNL pub: " << keys_[t.first].ed25519_value().raw().to_hex();
+      }
+
+      td::actor::send_closure(actor_id(this), &LiteProxy::init_network);
+    }
+  }
+
   void load_config() {
     auto conf_data_R = td::read_file(config_path_);
     if (conf_data_R.is_error()) {
@@ -206,12 +226,29 @@ class LiteProxy : public td::actor::Actor {
     }
 
     config_ = ton::liteserver::Config{conf};
+
+    for (auto &key : config_.keys_refcnt) {
+      to_load_keys++;
+
+      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ton::PublicKey> R) mutable {
+        if (R.is_error()) {
+          LOG(ERROR) << R.move_as_error();
+          std::_Exit(2);
+        } else {
+          td::actor::send_closure(SelfId, &LiteProxy::got_key, R.move_as_ok());
+        }
+      });
+
+      td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key_short, key.first, std::move(P));
+    }
   }
 
  private:
   std::string db_root_;
   std::string config_path_;
   ton::liteserver::Config config_;
+  int to_load_keys;
+  std::map<ton::PublicKeyHash, ton::PublicKey> keys_;
   td::actor::ActorOwn<keyring::Keyring> keyring_;
   std::vector<adnl::AdnlNodeIdShort> existing;
   td::actor::ActorOwn<adnl::Adnl> adnl_;
