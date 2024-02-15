@@ -43,7 +43,10 @@ class LiteProxy : public td::actor::Actor {
   }
 
   void start_up() override {
+    LOG(INFO) << "Start LiteProxy";
     load_config();
+
+    LOG(INFO) << "Start ADNL";
     adnl_network_manager_ = adnl::AdnlNetworkManager::create(static_cast<td::uint16>(address_.get_port()));
     keyring_ = ton::keyring::Keyring::create(db_root_ + "/keyring");
     adnl_ = adnl::Adnl::create("", keyring_.get());
@@ -65,16 +68,20 @@ class LiteProxy : public td::actor::Actor {
           R.ensure();
           td::actor::send_closure(SelfId, &LiteProxy::created_ext_server, R.move_as_ok());
         });
+
+    LOG(INFO) << "Start server";
     td::actor::send_closure(adnl_, &adnl::Adnl::create_ext_server, std::vector<adnl::AdnlNodeIdShort>{},
                             std::vector<td::uint16>{}, std::move(Q));
   }
 
   void created_ext_server(td::actor::ActorOwn<adnl::AdnlExtServer> server) {
+    LOG(INFO) << "Server started";
     lite_proxy_ = std::move(server);
     init_users();
   }
 
   void init_users() {
+    LOG(INFO) << "Init users";
     if (ratelimitdb->count("users").move_as_ok() > 0) {
       std::string utmp;
       ratelimitdb->get("users", utmp);
