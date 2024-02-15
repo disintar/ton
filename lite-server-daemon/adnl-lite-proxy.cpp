@@ -1,0 +1,252 @@
+#include <cstdlib>
+#include "td/utils/logging.h"
+#include "td/actor/actor.h"
+#include "td/utils/Time.h"
+#include "td/utils/filesystem.h"
+#include "td/utils/JsonBuilder.h"
+#include "auto/tl/ton_api_json.h"
+#include "crypto/vm/cp0.h"
+#include "validator/validator.h"
+#include "validator/manager-disk.h"
+#include "ton/ton-types.h"
+#include "ton/ton-tl.hpp"
+#include "tl/tlblib.hpp"
+#include "block/block.h"
+#include "block/block-parse.h"
+#include "block/block-auto.h"
+#include "vm/dict.h"
+#include "vm/cells/MerkleProof.h"
+#include "vm/vm.h"
+#include "td/utils/Slice.h"
+#include "td/utils/common.h"
+#include "td/utils/OptionParser.h"
+#include "td/utils/port/user.h"
+#include <utility>
+#include <fstream>
+#include "auto/tl/lite_api.h"
+#include "adnl/utils.hpp"
+#include "tuple"
+#include "crypto/block/mc-config.h"
+#include "lite-server-config.hpp"
+#include <algorithm>
+#include <queue>
+#include <chrono>
+#include <thread>
+
+namespace ton::liteserver {
+class LiteProxy : public td::actor::Actor {
+ public:
+  LiteProxy(std::string config_path, std::string db_path, std::string address) {
+    config_path_ = std::move(config_path);
+    db_root_ = std::move(db_path);
+    address_ = td::IPAddress::get_ip_address(std::move(address)).move_as_ok();
+  }
+
+  void start_up() override {
+    load_config();
+    adnl_network_manager_ = adnl::AdnlNetworkManager::create(static_cast<td::uint16>(address_.get_port()));
+    keyring_ = ton::keyring::Keyring::create(db_root_ + "/keyring");
+    adnl_ = adnl::Adnl::create("", keyring_.get());
+
+    td::actor::send_closure(adnl_, &adnl::Adnl::register_network_manager, adnl_network_manager_.get());
+    adnl::AdnlCategoryMask cat_mask;
+    cat_mask[0] = true;
+    td::actor::send_closure(adnl_network_manager_, &adnl::AdnlNetworkManager::add_self_addr, address_,
+                            std::move(cat_mask), 0);
+
+    ratelimitdb = std::make_shared<td::RocksDb>(
+        td::RocksDb::open(db_root_ + "/" + config_.overlay_prefix + "rate-limits/", true).move_as_ok());
+    start_server();
+  }
+
+  void start_server() {
+    auto Q =
+        td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::actor::ActorOwn<adnl::AdnlExtServer>> R) {
+          R.ensure();
+          td::actor::send_closure(SelfId, &LiteProxy::created_ext_server, R.move_as_ok());
+        });
+    td::actor::send_closure(adnl_, &adnl::Adnl::create_ext_server, std::vector<adnl::AdnlNodeIdShort>{},
+                            std::vector<td::uint16>{}, std::move(Q));
+  }
+
+  void created_ext_server(td::actor::ActorOwn<adnl::AdnlExtServer> server) {
+    lite_proxy_ = std::move(server);
+    init_users();
+  }
+
+  void init_users() {
+    if (ratelimitdb->count("users").move_as_ok() > 0) {
+      std::string utmp;
+      ratelimitdb->get("users", utmp);
+
+      auto t = std::time(nullptr);
+
+      auto users = fetch_tl_object<ton::ton_api::storage_liteserver_users>(td::Slice{utmp}, true).move_as_ok();
+      LOG(INFO) << "Known users: " << users->values_.size();
+
+      for (td::Bits256 pubkey : users->values_) {
+        std::string tmp;
+        ratelimitdb->get(pubkey.as_slice(), tmp);
+
+        auto f = fetch_tl_object<ton::ton_api::storage_liteserver_user>(td::Slice{tmp}, true);
+        if (f.is_error()) {
+          LOG(ERROR) << "Broken db on user: " << pubkey;
+          continue;
+        } else {
+          auto user_data = f.move_as_ok();
+          auto key = adnl::AdnlNodeIdFull{ton::pubkeys::Ed25519(pubkey)};
+
+          if (t <= user_data->valid_until_) {
+            if (std::find(existing.begin(), existing.end(), key.compute_short_id()) == existing.end()) {
+              LOG(INFO) << "Add key from DB: " << key.pubkey().ed25519_value().raw().to_hex()
+                        << ", valid until: " << user_data->valid_until_ << ", ratelimit " << user_data->ratelimit_;
+
+              existing.push_back(key.compute_short_id());
+              td::actor::send_closure(actor_id(this), &LiteProxy::add_ext_server_id, key.compute_short_id());
+              td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(key), ton::adnl::AdnlAddressList{},
+                                      static_cast<td::uint8>(255));
+            }
+          }
+        }
+      }
+    }
+  }
+
+  void check_ext_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
+                       td::Promise<td::BufferSlice> promise) {
+    LOG(WARNING) << "New proxy query: " << dst.bits256_value().to_hex() << " size: " << data.size();
+    promise.set_error(td::Status::Error("Ok"));
+  }
+
+  void alarm() override {
+    alarm_timestamp() = td::Timestamp::in(5.0);
+    init_users();  // update users if needed
+  }
+
+  void add_ext_server_id(adnl::AdnlNodeIdShort id) {
+    class Cb : public adnl::Adnl::Callback {
+     private:
+      td::actor::ActorId<LiteProxy> id_;
+
+      void receive_message(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data) override {
+      }
+      void receive_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
+                         td::Promise<td::BufferSlice> promise) override {
+        td::actor::send_closure(id_, &LiteProxy::check_ext_query, src, dst, std::move(data), std::move(promise));
+      }
+
+     public:
+      Cb(td::actor::ActorId<LiteProxy> id) : id_(std::move(id)) {
+      }
+    };
+
+    td::actor::send_closure(adnl_, &adnl::Adnl::subscribe, id,
+                            adnl::Adnl::int_to_bytestring(lite_api::liteServer_query::ID),
+                            std::make_unique<Cb>(actor_id(this)));
+
+    td::actor::send_closure(adnl_, &adnl::Adnl::subscribe, id,
+                            adnl::Adnl::int_to_bytestring(lite_api::liteServer_adminQuery::ID),
+                            std::make_unique<Cb>(actor_id(this)));
+
+    td::actor::send_closure(lite_proxy_, &adnl::AdnlExtServer::add_local_id, id);
+    alarm_timestamp() = td::Timestamp::in(5.0);
+  }
+
+  void load_config() {
+    auto conf_data_R = td::read_file(config_path_);
+    if (conf_data_R.is_error()) {
+      LOG(ERROR) << "Can't read file: " << config_path_;
+      std::_Exit(2);
+    }
+    auto conf_data = conf_data_R.move_as_ok();
+    auto conf_json_R = td::json_decode(conf_data.as_slice());
+    if (conf_json_R.is_error()) {
+      LOG(ERROR) << "Failed to parse json";
+      std::_Exit(2);
+    }
+    auto conf_json = conf_json_R.move_as_ok();
+
+    ton::ton_api::engine_liteserver_config conf;
+    auto S = ton::ton_api::from_json(conf, conf_json.get_object());
+    if (S.is_error()) {
+      LOG(ERROR) << "Json does not fit TL scheme";
+      std::_Exit(2);
+    }
+
+    config_ = ton::liteserver::Config{conf};
+  }
+
+ private:
+  std::string db_root_;
+  std::string config_path_;
+  ton::liteserver::Config config_;
+  td::actor::ActorOwn<keyring::Keyring> keyring_;
+  std::vector<adnl::AdnlNodeIdShort> existing;
+  td::actor::ActorOwn<adnl::Adnl> adnl_;
+  td::actor::ActorOwn<adnl::AdnlNetworkManager> adnl_network_manager_;
+  td::IPAddress address_;
+  std::shared_ptr<td::RocksDb> ratelimitdb;
+  td::actor::ActorOwn<adnl::AdnlExtServer> lite_proxy_;
+};
+}  // namespace ton::liteserver
+
+int main(int argc, char **argv) {
+  SET_VERBOSITY_LEVEL(verbosity_DEBUG);
+
+  td::OptionParser p;
+  std::string config_path;
+  std::string db_path;
+  std::string address;
+  td::uint32 threads = 7;
+  int verbosity = 0;
+
+  p.set_description("lite-proxy");
+  p.add_option('h', "help", "prints_help", [&]() {
+    char b[10240];
+    td::StringBuilder sb(td::MutableSlice{b, 10000});
+    sb << p;
+    std::cout << sb.as_cslice().c_str();
+    std::exit(2);
+  });
+  p.add_checked_option(
+      't', "threads", PSTRING() << "number of threads (default=" << threads << ")", [&](td::Slice arg) {
+        td::uint32 v;
+        try {
+          v = std::stoi(arg.str());
+        } catch (...) {
+          return td::Status::Error(ton::ErrorCode::error, "bad value for --threads: not a number");
+        }
+        if (v < 1 || v > 256) {
+          return td::Status::Error(ton::ErrorCode::error, "bad value for --threads: should be in range [1..256]");
+        }
+        threads = v;
+
+        return td::Status::OK();
+      });
+  p.add_checked_option('v', "verbosity", "set verbosity level", [&](td::Slice arg) {
+    verbosity = td::to_integer<int>(arg);
+    SET_VERBOSITY_LEVEL(VERBOSITY_NAME(FATAL) + verbosity);
+    return (verbosity >= 0 && verbosity <= 9) ? td::Status::OK() : td::Status::Error("verbosity must be 0..9");
+  });
+  p.add_option('S', "server-config", "liteserver config path", [&](td::Slice fname) { config_path = fname.str(); });
+  p.add_option('D', "db", "db path (for keyring)", [&](td::Slice fname) { db_path = fname.str(); });
+  p.add_option('A', "address", "ip address and port to start on", [&](td::Slice fname) { address = fname.str(); });
+
+  auto S = p.run(argc, argv);
+  if (S.is_error()) {
+    std::cerr << S.move_as_error().message().str() << std::endl;
+    std::_Exit(2);
+  }
+
+  td::actor::set_debug(true);
+  td::actor::Scheduler scheduler({threads});
+  scheduler.run_in_context([&] {
+    td::actor::create_actor<ton::liteserver::LiteProxy>("LiteProxy", std::move(config_path), std::move(db_path),
+                                                        std::move(address))
+        .release();
+    return td::Status::OK();
+  });
+
+  scheduler.run();
+  return 0;
+}
