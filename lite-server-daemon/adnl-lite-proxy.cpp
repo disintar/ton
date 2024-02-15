@@ -37,10 +37,11 @@
 namespace ton::liteserver {
 class LiteProxy : public td::actor::Actor {
  public:
-  LiteProxy(std::string config_path, std::string db_path, std::string address) {
+  LiteProxy(std::string config_path, std::string db_path, std::string address, std::string global_config) {
     config_path_ = std::move(config_path);
     db_root_ = std::move(db_path);
     address_.init_host_port(std::move(address)).ensure();
+    global_config_ = std::move(global_config);
   }
 
   void start_up() override {
@@ -60,27 +61,22 @@ class LiteProxy : public td::actor::Actor {
     load_config();
   }
 
-  void init_network() {
-    auto pk1 = ton::PrivateKey{ton::privkeys::Ed25519::random()};
-    auto pub1 = pk1.compute_public_key();
-    auto src = ton::adnl::AdnlNodeIdShort{pub1.compute_short_id()};
-    auto obj = ton::create_tl_object<ton::ton_api::adnl_address_udp>(1, 1);
-    auto objv = std::vector<ton::tl_object_ptr<ton::ton_api::adnl_Address>>();
-    objv.push_back(std::move(obj));
-    td::uint32 now = Adnl::adnl_start_time();
-    auto addrR = ton::adnl::AdnlAddressList::create(
-        ton::create_tl_object<ton::ton_api::adnl_addressList>(std::move(objv), now, now, 0, 0));
-    auto dhtobj =
-        ton::create_tl_object<ton::ton_api::dht_node>(pub1.tl(), addrR.move_as_ok().tl(), -1, td::BufferSlice());
+  td::Status init_dht() {
+    TRY_RESULT_PREFIX(conf_data, td::read_file(global_config_), "failed to read: ");
+    TRY_RESULT_PREFIX(conf_json, td::json_decode(conf_data.as_slice()), "failed to parse json: ");
 
-    std::vector<ton::tl_object_ptr<ton::ton_api::dht_node>> vec;
-    vec.push_back(std::move(dhtobj));
+    ton::ton_api::config_global conf;
+    TRY_STATUS_PREFIX(ton::ton_api::from_json(conf, conf_json.get_object()), "json does not fit TL scheme: ");
 
-    auto nodes = ton::create_tl_object<ton::ton_api::dht_nodes>(std::move(vec));
-    auto conf = ton::create_tl_object<ton::ton_api::dht_config_global>(std::move(nodes), 6, 3);
-    auto dht_configR = ton::dht::Dht::create_global_config(std::move(conf));
-    dht_configR.ensure();
-    auto dht_config = dht_configR.move_as_ok();
+    if (conf.adnl_) {
+      if (conf.adnl_->static_nodes_) {
+        TRY_RESULT_PREFIX_ASSIGN(adnl_static_nodes_, ton::adnl::AdnlNodesList::create(conf.adnl_->static_nodes_),
+                                 "bad static adnl nodes: ");
+      }
+    }
+    TRY_RESULT_PREFIX(dht, ton::dht::Dht::create_global_config(std::move(conf.dht_)), "bad [dht] section: ");
+
+    auto dht_config = std::move(dht);
 
     td::mkdir(db_root_ + "/lite-proxy").ensure();
 
@@ -104,6 +100,11 @@ class LiteProxy : public td::actor::Actor {
       std::_Exit(2);
     }
 
+    td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_static_nodes_from_config, std::move(adnl_static_nodes_));
+    return td::Status::OK();
+  }
+
+  void init_network() {
     td::actor::send_closure(adnl_, &ton::adnl::Adnl::register_dht_node, dht_nodes_[default_dht_node_].get());
 
     start_server();
@@ -261,6 +262,8 @@ class LiteProxy : public td::actor::Actor {
  private:
   std::string db_root_;
   std::string config_path_;
+  std::string global_config_;
+  ton::adnl::AdnlNodesList adnl_static_nodes_;
   ton::liteserver::Config config_;
   int to_load_keys;
   std::map<ton::PublicKeyHash, ton::PublicKey> keys_;
@@ -282,6 +285,7 @@ int main(int argc, char **argv) {
   td::OptionParser p;
   std::string config_path;
   std::string db_path;
+  std::string global_config;
   std::string address;
   td::uint32 threads = 7;
   int verbosity = 0;
@@ -316,6 +320,7 @@ int main(int argc, char **argv) {
   });
   p.add_option('S', "server-config", "liteserver config path", [&](td::Slice fname) { config_path = fname.str(); });
   p.add_option('D', "db", "db path (for keyring)", [&](td::Slice fname) { db_path = fname.str(); });
+  p.add_option('C', "config", "global config", [&](td::Slice fname) { global_config = fname.str(); });
   p.add_option('A', "address", "ip address and port to start on", [&](td::Slice fname) { address = fname.str(); });
 
   auto S = p.run(argc, argv);
@@ -328,7 +333,7 @@ int main(int argc, char **argv) {
   td::actor::Scheduler scheduler({threads});
   scheduler.run_in_context([&] {
     td::actor::create_actor<ton::liteserver::LiteProxy>("LiteProxy", std::move(config_path), std::move(db_path),
-                                                        std::move(address))
+                                                        std::move(address), std::move(global_config))
         .release();
     return td::Status::OK();
   });
