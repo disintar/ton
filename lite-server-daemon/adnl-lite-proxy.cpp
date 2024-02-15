@@ -70,7 +70,7 @@ class LiteProxy : public td::actor::Actor {
     // Start DHT
     for (auto &dht : config_.dht_ids) {
       auto D =
-          ton::dht::Dht::create(ton::adnl::AdnlNodeIdShort{dht}, db_root_, dht_config, keyring_.get(), adnl_.get());
+          ton::dht::Dht::create(ton::adnl::AdnlNodeIdShort{dht}, db_root_ + "/lite-proxy", dht_config, keyring_.get(), adnl_.get());
       D.ensure();
       adnl::AdnlNodeIdFull local_id_full = adnl::AdnlNodeIdFull::create(keys_[dht].tl()).move_as_ok();
       td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(local_id_full), ton::adnl::AdnlAddressList{},
