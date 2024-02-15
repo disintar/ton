@@ -221,9 +221,19 @@ class LiteProxy : public td::actor::Actor {
           best = s.first;
         }
 
+        auto pos = std::find(uptodate_private_ls.begin(), uptodate_private_ls.end(), s.first);
+
         if (t - s.second > 30) {
           outdated += 1;
+
+          if (pos != uptodate_private_ls.end()) {
+            uptodate_private_ls.erase(pos);
+          }
         } else {
+          if (pos == uptodate_private_ls.end()) {
+            uptodate_private_ls.push_back(s.first);
+          }
+
           uptodate.push_back(s.first);
         }
       }
@@ -457,7 +467,7 @@ class LiteProxy : public td::actor::Actor {
       td::actor::send_closure(s.second, &LiteServerClient::get_max_time, std::move(P));
     }
 
-    if (!inited){
+    if (!inited) {
       inited = true;
     }
   }
@@ -564,7 +574,7 @@ class LiteProxy : public td::actor::Actor {
   ton::adnl::AdnlNodesList adnl_static_nodes_;
   td::actor::ActorOwn<adnl::AdnlExtServer> lite_proxy_;
   std::map<ton::PublicKeyHash, td::actor::ActorOwn<ton::dht::Dht>> dht_nodes_;
-  std::vector<adnl::AdnlNodeIdShort> uptodate_private_ls;
+  std::vector<adnl::AdnlNodeIdShort> uptodate_private_ls{};
   ton::PublicKeyHash default_dht_node_ = ton::PublicKeyHash::zero();
 };
 }  // namespace ton::liteserver
