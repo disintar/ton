@@ -415,26 +415,31 @@ class LiteProxy : public td::actor::Actor {
 
   void check_ext_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
                        td::Promise<td::BufferSlice> promise) {
-    LOG(WARNING) << "New proxy query: " << dst.bits256_value().to_hex() << " size: " << data.size();
+    if (inited) {
+      LOG(WARNING) << "New proxy query: " << dst.bits256_value().to_hex() << " size: " << data.size();
 
-    td::actor::ActorId<LiteServerClient> server;
-    if (uptodate_private_ls.size() > 0) {
-      auto adnl = uptodate_private_ls[td::Random::fast(0, td::narrow_cast<td::uint32>(uptodate_private_ls.size() - 1))];
-      server = private_servers_[std::move(adnl)];
-    } else {
-      auto s = td::Random::fast(0, td::narrow_cast<td::uint32>(private_servers_.size() - 1));
-      int a{0};
-      for (auto &x : private_servers_) {
-        a += 1;
-        if (a == s) {
-          server = x.second;
-          break;
+      td::actor::ActorId<LiteServerClient> server;
+      if (uptodate_private_ls.size() > 0) {
+        auto adnl =
+            uptodate_private_ls[td::Random::fast(0, td::narrow_cast<td::uint32>(uptodate_private_ls.size() - 1))];
+        server = private_servers_[std::move(adnl)];
+      } else {
+        auto s = td::Random::fast(0, td::narrow_cast<td::uint32>(private_servers_.size() - 1));
+        int a{0};
+        for (auto &x : private_servers_) {
+          a += 1;
+          if (a == s) {
+            server = x.second;
+            break;
+          }
         }
       }
-    }
 
-    td::actor::send_closure(server, &LiteServerClient::fire, adnl::AdnlNodeIdFull{keys_[dst.pubkey_hash()]}, std::move(data),
-                            std::move(promise));
+      td::actor::send_closure(server, &LiteServerClient::fire, adnl::AdnlNodeIdFull{keys_[dst.pubkey_hash()]},
+                              std::move(data), std::move(promise));
+    } else {
+      promise.set_error(td::Status::Error("not ready"));
+    }
   }
 
   void alarm() override {
@@ -450,6 +455,10 @@ class LiteProxy : public td::actor::Actor {
       });
 
       td::actor::send_closure(s.second, &LiteServerClient::get_max_time, std::move(P));
+    }
+
+    if (!inited){
+      inited = true;
     }
   }
 
@@ -540,6 +549,7 @@ class LiteProxy : public td::actor::Actor {
   std::string global_config_;
   ton::liteserver::Config config_;
   int to_load_keys;
+  bool inited{false};
   int private_time_updated;
   std::map<ton::PublicKeyHash, ton::PublicKey> keys_;
   td::actor::ActorOwn<keyring::Keyring> keyring_;
