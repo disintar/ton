@@ -90,7 +90,7 @@ class LiteProxy : public td::actor::Actor {
                               static_cast<td::uint8>(0));
 
       LOG(INFO) << "Start dht with: " << local_id_full.compute_short_id().bits256_value().to_hex();
-      auto D = ton::dht::Dht::create_client(local_id_full.compute_short_id(), db_root_ + "/lite-proxy", dht_config,
+      auto D = ton::dht::Dht::create(local_id_full.compute_short_id(), db_root_ + "/lite-proxy", dht_config,
                                             keyring_.get(), adnl_.get());
       D.ensure();
 
