@@ -71,51 +71,29 @@ std::string time_to_human(unsigned ts) {  // todo: move from explorer
 namespace ton::liteserver {
 class LiteClientFire : public td::actor::Actor {
  public:
-  LiteClientFire(td::IPAddress address, ton::adnl::AdnlNodeIdFull id, td::BufferSlice req,
-                 td::Promise<td::BufferSlice> promise) {
-    address_ = std::move(address);
-    id_ = std::move(id);
+  LiteClientFire(int to_wait, td::Promise<td::BufferSlice> promise) {
+    to_wait_ = to_wait;
     promise_ = std::move(promise);
   }
 
   void start_up() override {
-    class Callback : public ton::adnl::AdnlExtClient::Callback {
-     public:
-      void on_ready() override {
-        td::actor::send_closure(id_, &LiteClientFire::conn_ready);
-      }
-      void on_stop_ready() override {
-      }
-      Callback(td::actor::ActorId<LiteClientFire> id) : id_(std::move(id)) {
-      }
-
-     private:
-      td::actor::ActorId<LiteClientFire> id_;
-    };
-
-    client_ = ton::adnl::AdnlExtClient::create(id_, address_, std::make_unique<Callback>(actor_id(this)));
-  }
-
-  void conn_ready() {
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::BufferSlice> R) {
-      td::actor::send_closure(SelfId, &LiteClientFire::receive_answer, std::move(R));
-    });
-
-    td::actor::send_closure(client_, &ton::adnl::AdnlExtClient::send_query, "query", std::move(request_),
-                            td::Timestamp::in(10.0), std::move(P));
   }
 
   void receive_answer(td::Result<td::BufferSlice> res) {
-    promise_.set_result(std::move(res));
-    stop();
+    to_wait_ -= 1;
+    if ((to_wait_ == 0 || res.is_ok()) && !done) {
+      promise_.set_result(std::move(res));
+      done = true;
+      stop();
+    } else if (to_wait_ == 0) {
+      stop();
+    }
   }
 
  private:
-  td::IPAddress address_;
-  ton::adnl::AdnlNodeIdFull id_;
-  td::actor::ActorOwn<ton::adnl::AdnlExtClient> client_;
+  int to_wait_;
+  bool done{false};
   td::Promise<td::BufferSlice> promise_;
-  td::BufferSlice request_;
 };
 
 class LiteServerClient : public td::actor::Actor {
@@ -133,9 +111,7 @@ class LiteServerClient : public td::actor::Actor {
   }
 
   void fire(ton::adnl::AdnlNodeIdFull key, td::BufferSlice q, td::Promise<td::BufferSlice> promise) {
-    td::actor::create_actor<ton::liteserver::LiteClientFire>("LSC::Fire", address_, std::move(key), std::move(q),
-                                                             std::move(promise))
-        .release();
+    send_raw(std::move(q), std::move(promise));
   }
 
   void get_max_time(td::Promise<int> promise) {
@@ -175,12 +151,13 @@ class LiteServerClient : public td::actor::Actor {
 class LiteProxy : public td::actor::Actor {
  public:
   LiteProxy(std::string config_path, std::string db_path, std::string address, td::uint32 lite_port,
-            td::uint32 adnl_port, std::string global_config) {
+            td::uint32 adnl_port, std::string global_config, int mode) {
     config_path_ = std::move(config_path);
     db_root_ = std::move(db_path);
     address_.init_host_port(address, lite_port).ensure();
     adnl_address_.init_host_port(std::move(address), adnl_port).ensure();
     global_config_ = std::move(global_config);
+    mode_ = mode;
   }
 
   std::unique_ptr<ton::adnl::AdnlExtClient::Callback> make_callback(adnl::AdnlNodeIdShort server) {
@@ -438,27 +415,48 @@ class LiteProxy : public td::actor::Actor {
   void check_ext_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
                        td::Promise<td::BufferSlice> promise) {
     if (inited) {
-      LOG(WARNING) << "New proxy query: " << dst.bits256_value().to_hex() << " size: " << data.size();
+      if (mode_ == 0) {
+        td::actor::ActorId<LiteServerClient> server;
+        if (uptodate_private_ls.size() > 0) {
+          auto adnl =
+              uptodate_private_ls[td::Random::fast(0, td::narrow_cast<td::uint32>(uptodate_private_ls.size() - 1))];
+          server = private_servers_[std::move(adnl)];
+        } else {
+          auto s = td::Random::fast(0, td::narrow_cast<td::uint32>(private_servers_.size() - 1));
+          int a{0};
+          for (auto &x : private_servers_) {
+            a += 1;
+            if (a == s) {
+              server = x.second;
+              break;
+            }
+          }
+        }
 
-      td::actor::ActorId<LiteServerClient> server;
-      if (uptodate_private_ls.size() > 0) {
-        auto adnl =
-            uptodate_private_ls[td::Random::fast(0, td::narrow_cast<td::uint32>(uptodate_private_ls.size() - 1))];
-        server = private_servers_[std::move(adnl)];
+        td::actor::send_closure(server, &LiteServerClient::fire, adnl::AdnlNodeIdFull{keys_[dst.pubkey_hash()]},
+                                std::move(data), std::move(promise));
       } else {
-        auto s = td::Random::fast(0, td::narrow_cast<td::uint32>(private_servers_.size() - 1));
-        int a{0};
-        for (auto &x : private_servers_) {
-          a += 1;
-          if (a == s) {
-            server = x.second;
-            break;
+        if (uptodate_private_ls.size() > 0) {
+          auto waiter = td::actor::create_actor<ton::liteserver::LiteClientFire>(
+                            "LSC::Fire", uptodate_private_ls.size(), std::move(promise))
+                            .release();
+          for (auto &s : uptodate_private_ls) {
+            td::actor::send_closure(private_servers_[s], &LiteServerClient::fire,
+                                    adnl::AdnlNodeIdFull{keys_[dst.pubkey_hash()]}, std::move(data),
+                                    std::move(promise));
+          }
+        } else {
+          auto waiter = td::actor::create_actor<ton::liteserver::LiteClientFire>("LSC::Fire", private_servers_.size(),
+                                                                                 std::move(promise))
+                            .release();
+
+          for (auto &s : private_servers_) {
+            td::actor::send_closure(s.second, &LiteServerClient::fire, adnl::AdnlNodeIdFull{keys_[dst.pubkey_hash()]},
+                                    std::move(data), std::move(promise));
           }
         }
       }
 
-      td::actor::send_closure(server, &LiteServerClient::fire, adnl::AdnlNodeIdFull{keys_[dst.pubkey_hash()]},
-                              std::move(data), std::move(promise));
     } else {
       promise.set_error(td::Status::Error("not ready"));
     }
@@ -568,6 +566,9 @@ class LiteProxy : public td::actor::Actor {
   }
 
  private:
+  // 0 - random LS
+  // 1 - fire to all return 1 success
+  int mode_;
   std::string db_root_;
   std::string config_path_;
   std::string global_config_;
@@ -603,6 +604,7 @@ int main(int argc, char **argv) {
   std::string address;
   td::uint32 threads = 7;
   int verbosity = 0;
+  int mode = 1;
   td::uint32 lite_port = 0;
   td::uint32 adnl_port = 0;
 
@@ -634,6 +636,7 @@ int main(int argc, char **argv) {
     SET_VERBOSITY_LEVEL(VERBOSITY_NAME(FATAL) + verbosity);
     return (verbosity >= 0 && verbosity <= 9) ? td::Status::OK() : td::Status::Error("verbosity must be 0..9");
   });
+  p.add_option('m', "mode", "set mode", [&](td::Slice arg) { mode = td::to_integer<int>(arg); });
   p.add_option('S', "server-config", "liteserver config path", [&](td::Slice fname) { config_path = fname.str(); });
   p.add_option('D', "db", "db path (for keyring)", [&](td::Slice fname) { db_path = fname.str(); });
   p.add_option('C', "config", "global config", [&](td::Slice fname) { global_config = fname.str(); });
@@ -652,7 +655,7 @@ int main(int argc, char **argv) {
   scheduler.run_in_context([&] {
     td::actor::create_actor<ton::liteserver::LiteProxy>("LiteProxy", std::move(config_path), std::move(db_path),
                                                         std::move(address), lite_port, adnl_port,
-                                                        std::move(global_config))
+                                                        std::move(global_config), mode)
         .release();
     return td::Status::OK();
   });
