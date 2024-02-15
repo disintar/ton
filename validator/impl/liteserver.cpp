@@ -323,10 +323,8 @@ void LiteQuery::perform_getMasterchainInfo(int mode) {
     fatal_error("unsupported getMasterchainInfo mode");
     return;
   }
-  auto top_block_f = bool(acc_state_promise_) ? &ton::validator::ValidatorManager::get_last_liteserver_state_block
-                                              : &ton::validator::ValidatorManager::get_top_masterchain_state_block;
 
-  td::actor::send_closure_later(manager_, top_block_f,
+  td::actor::send_closure_later(manager_, &ton::validator::ValidatorManager::get_last_liteserver_state_block,
                                 [Self = actor_id(this), return_state = bool(acc_state_promise_),
                                  mode](td::Result<std::pair<Ref<ton::validator::MasterchainState>, BlockIdExt>> res) {
                                   if (res.is_error()) {

@@ -40,6 +40,9 @@
 #include <chrono>
 #include <thread>
 
+using ValidUntil = td::int64;
+using RateLimit = td::int32;
+
 std::string time_to_human(unsigned ts) {  // todo: move from explorer
   td::StringBuilder sb;
   sb << date::format("%F %T",
@@ -82,11 +85,30 @@ class LiteClientFire : public td::actor::Actor {
   void receive_answer(td::Result<td::BufferSlice> res) {
     to_wait_ -= 1;
     if ((to_wait_ == 0 || res.is_ok()) && !done) {
-      promise_.set_result(std::move(res));
-      done = true;
-      stop();
+      if (res.is_ok()) {
+        auto data = res.move_as_ok();
+
+        auto E = fetch_tl_prefix<lite_api::liteServer_error>(data, true);
+        if (E.is_ok() && to_wait_ > 0) {
+          LOG(ERROR) << "LiteServer got error, wait other: " << to_wait_;
+          return;
+        } else {
+          LOG(ERROR) << "LiteServer " << (E.is_ok() ? "got error" : "got success") << " to wait: " << to_wait_;
+          promise_.set_value(std::move(data));
+          done = true;
+        }
+      } else {
+        LOG(ERROR) << "LiteServer got adnl error to wait: " << to_wait_;
+
+        promise_.set_result(std::move(res));
+        done = true;
+        stop();
+      }
     } else if (to_wait_ == 0) {
+      LOG(ERROR) << "Got last answer, stop";
       stop();
+    } else {
+      to_wait_ -= 1;
     }
   }
 
@@ -234,7 +256,6 @@ class LiteProxy : public td::actor::Actor {
     LOG(INFO) << "Server: " << server.bits256_value().to_hex() << " disconnected";
     private_servers_status_.erase(server);
 
-    // remove if in uptodate
     auto pos = std::find(uptodate_private_ls.begin(), uptodate_private_ls.end(), server);
     if (pos != uptodate_private_ls.end()) {
       uptodate_private_ls.erase(pos);
@@ -401,6 +422,7 @@ class LiteProxy : public td::actor::Actor {
                         << ", valid until: " << user_data->valid_until_ << ", ratelimit " << user_data->ratelimit_;
 
               keys_[key.compute_short_id().pubkey_hash()] = key.pubkey();
+              limits[key.compute_short_id()] = std::make_tuple(user_data->valid_until_, user_data->ratelimit_);
               existing.push_back(key.compute_short_id());
               td::actor::send_closure(actor_id(this), &LiteProxy::add_ext_server_id, key.compute_short_id());
               td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(key), ton::adnl::AdnlAddressList{},
@@ -414,8 +436,20 @@ class LiteProxy : public td::actor::Actor {
 
   void check_ext_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
                        td::Promise<td::BufferSlice> promise) {
+    LOG(INFO) << "Got query to: " << dst;
+
     if (inited) {
+      usage[dst]++;
+      auto k = limits[dst];
+      if (usage[dst] > std::get<1>(k) || std::time(nullptr) > std::get<0>(k)) {
+        LOG(INFO) << "Drop to: " << dst << " because of ratelimit";
+        promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Ratelimit"));
+        return;
+      }
+
       if (mode_ == 0) {
+        LOG(WARNING) << "New proxy query: " << dst.bits256_value().to_hex() << " size: " << data.size();
+
         td::actor::ActorId<LiteServerClient> server;
         if (uptodate_private_ls.size() > 0) {
           auto adnl =
@@ -441,6 +475,7 @@ class LiteProxy : public td::actor::Actor {
                             "LSC::Fire", uptodate_private_ls.size(), std::move(promise))
                             .release();
           for (auto &s : uptodate_private_ls) {
+            LOG(INFO) << "Send to: " << dst << " to " << s.bits256_value().to_hex();
             auto P = td::PromiseCreator::lambda([WaiterId = waiter](td::Result<td::BufferSlice> R) mutable {
               td::actor::send_closure(WaiterId, &LiteClientFire::receive_answer, std::move(R));
             });
@@ -454,6 +489,7 @@ class LiteProxy : public td::actor::Actor {
                             .release();
 
           for (auto &s : private_servers_) {
+            LOG(INFO) << "Send: " << dst << " to " << s.first.bits256_value().to_hex();
             auto P = td::PromiseCreator::lambda([WaiterId = waiter](td::Result<td::BufferSlice> R) mutable {
               td::actor::send_closure(WaiterId, &LiteClientFire::receive_answer, std::move(R));
             });
@@ -465,12 +501,13 @@ class LiteProxy : public td::actor::Actor {
       }
 
     } else {
-      promise.set_error(td::Status::Error("not ready"));
+      promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Server not ready"));
     }
   }
 
   void alarm() override {
     alarm_timestamp() = td::Timestamp::in(1.0);
+    usage.clear();
     init_users();  // update users if needed
     update_server_stats();
   }
@@ -598,6 +635,8 @@ class LiteProxy : public td::actor::Actor {
   std::map<ton::PublicKeyHash, td::actor::ActorOwn<ton::dht::Dht>> dht_nodes_;
   std::vector<adnl::AdnlNodeIdShort> uptodate_private_ls{};
   ton::PublicKeyHash default_dht_node_ = ton::PublicKeyHash::zero();
+  std::map<ton::adnl::AdnlNodeIdShort, std::tuple<ValidUntil, RateLimit>> limits;
+  std::map<ton::adnl::AdnlNodeIdShort, int> usage;
 };
 }  // namespace ton::liteserver
 
