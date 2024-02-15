@@ -44,15 +44,9 @@ class LiteProxy : public td::actor::Actor {
 
   void start_up() override {
     LOG(INFO) << "Start LiteProxy";
-    load_config();
-  }
-
-  void init_network() {
-    LOG(INFO) << "Start ADNL";
     adnl_network_manager_ = adnl::AdnlNetworkManager::create(static_cast<td::uint16>(address_.get_port()));
     keyring_ = ton::keyring::Keyring::create(db_root_ + "/keyring");
     adnl_ = adnl::Adnl::create("", keyring_.get());
-
     td::actor::send_closure(adnl_, &adnl::Adnl::register_network_manager, adnl_network_manager_.get());
     adnl::AdnlCategoryMask cat_mask;
     cat_mask[0] = true;
@@ -62,6 +56,10 @@ class LiteProxy : public td::actor::Actor {
     ratelimitdb = std::make_shared<td::RocksDb>(
         td::RocksDb::open(db_root_ + "/" + config_.overlay_prefix + "rate-limits/", true).move_as_ok());
 
+    load_config();
+  }
+
+  void init_network() {
     std::vector<ton::tl_object_ptr<ton::ton_api::dht_node>> vec;
     auto nodes = ton::create_tl_object<ton::ton_api::dht_nodes>(std::move(vec));
     auto conf = ton::create_tl_object<ton::ton_api::dht_config_global>(std::move(nodes), 6, 3);
