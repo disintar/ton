@@ -29,6 +29,10 @@ class ExtClientLazyImp : public ExtClientLazy {
     CHECK(!servers_.empty());
   }
 
+  void set_next_alarm(int next_alarm) override {
+    UNREACHABLE();
+  }
+
   void start_up() override {
     td::Random::Fast rnd;
     td::random_shuffle(td::as_mutable_span(servers_), rnd);

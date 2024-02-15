@@ -73,6 +73,10 @@ class AdnlExtClientImpl : public AdnlExtClient {
       : dst_(std::move(dst_id)), local_id_(local_id), dst_addr_(dst_addr), callback_(std::move(callback)) {
   }
 
+  void set_next_alarm(int next_alarm) override {
+    next_alarm_ = next_alarm;
+  }
+
   void start_up() override {
     alarm();
   }
@@ -80,7 +84,7 @@ class AdnlExtClientImpl : public AdnlExtClient {
     if (!conn_.empty() && conn_.get() == conn) {
       callback_->on_stop_ready();
       conn_ = {};
-      for (auto& q : out_queries_) {
+      for (auto &q : out_queries_) {
         td::actor::send_closure(q.second, &AdnlQuery::set_error, td::Status::Error(ErrorCode::cancelled));
       }
       alarm_timestamp() = next_create_at_;
@@ -127,6 +131,7 @@ class AdnlExtClientImpl : public AdnlExtClient {
   }
 
  private:
+  int next_alarm_{10};
   AdnlNodeIdFull dst_;
   PrivateKey local_id_;
   td::IPAddress dst_addr_;
@@ -151,6 +156,9 @@ class AdnlExtMultiClientImpl : public AdnlExtMultiClient {
   }
 
   void start_up() override;
+  void set_next_alarm(int x) override {
+    UNREACHABLE();
+  }
 
   void add_server(AdnlNodeIdFull dst, td::IPAddress dst_addr, td::Promise<td::Unit> promise) override;
   void del_server(td::IPAddress dst_addr, td::Promise<td::Unit> promise) override;

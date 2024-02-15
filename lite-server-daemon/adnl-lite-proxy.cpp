@@ -84,37 +84,45 @@ class LiteClientFire : public td::actor::Actor {
 
   void receive_answer(td::Result<td::BufferSlice> res) {
     to_wait_ -= 1;
+
     if ((to_wait_ == 0 || res.is_ok()) && !done) {
       if (res.is_ok()) {
         auto data = res.move_as_ok();
-
-        auto E = fetch_tl_prefix<lite_api::liteServer_error>(data, true);
+        auto E = fetch_tl_object<lite_api::liteServer_error>(data.clone(), true);
         if (E.is_ok() && to_wait_ > 0) {
           LOG(ERROR) << "LiteServer got error, wait other: " << to_wait_;
+          prev_success_ = std::move(data);
+          has_prev = true;
           return;
-        } else {
+        } else if (to_wait_ == 0) {
           LOG(ERROR) << "LiteServer " << (E.is_ok() ? "got error" : "got success") << " to wait: " << to_wait_;
           promise_.set_value(std::move(data));
           done = true;
+          return;
         }
-      } else {
-        LOG(ERROR) << "LiteServer got adnl error to wait: " << to_wait_;
-
-        promise_.set_result(std::move(res));
-        done = true;
-        stop();
       }
-    } else if (to_wait_ == 0) {
-      LOG(ERROR) << "Got last answer, stop";
+    }
+
+    if (to_wait_ == 0) {
+      LOG(ERROR) << "Got last answer, stop, done: " << done;
+      if (!done) {
+        if (res.is_error() && has_prev) {
+          LOG(INFO) << "Send prev error";
+          promise_.set_result(std::move(prev_success_));
+        } else {
+          LOG(INFO) << "Send cur error";
+          promise_.set_result(std::move(res));
+        }
+      }
       stop();
-    } else {
-      to_wait_ -= 1;
     }
   }
 
  private:
   int to_wait_;
   bool done{false};
+  bool has_prev{false};
+  td::BufferSlice prev_success_;
   td::Promise<td::BufferSlice> promise_;
 };
 
@@ -125,9 +133,11 @@ class LiteServerClient : public td::actor::Actor {
     address_ = std::move(address);
     id_ = std::move(id);
     client_ = ton::adnl::AdnlExtClient::create(id_, address_, std::move(callback));
+    td::actor::send_closure(client_, &ton::adnl::AdnlExtClient::set_next_alarm, 1);
   }
 
   void send_raw(td::BufferSlice q, td::Promise<td::BufferSlice> promise) {
+    LOG(INFO) << id_.compute_short_id().bits256_value().to_hex() << " send query";
     td::actor::send_closure(client_, &ton::adnl::AdnlExtClient::send_query, "query", std::move(q),
                             td::Timestamp::in(10.0), std::move(promise));
   }
@@ -208,7 +218,7 @@ class LiteProxy : public td::actor::Actor {
       td::actor::send_closure(SelfId, &LiteProxy::server_update_time, server, std::move(R.move_as_ok()));
     });
 
-    td::actor::send_closure(private_servers_[server], &LiteServerClient::get_max_time, std::move(P));
+    td::actor::send_closure(private_servers_[server].get(), &LiteServerClient::get_max_time, std::move(P));
   }
 
   void server_update_time(adnl::AdnlNodeIdShort server, int time) {
@@ -374,11 +384,9 @@ class LiteProxy : public td::actor::Actor {
         td::IPAddress lc_address;
         lc_address.init_host_port(td::IPAddress::ipv4_to_str(my_address.get_ipv4()), s.first).ensure();
 
-        private_servers_[key.compute_short_id()] =
-            td::actor::create_actor<ton::liteserver::LiteServerClient>(
-                "LSC " + key.compute_short_id().bits256_value().to_hex(), std::move(lc_address), std::move(key),
-                make_callback(key.compute_short_id()))
-                .release();
+        private_servers_[key.compute_short_id()] = td::actor::create_actor<ton::liteserver::LiteServerClient>(
+            "LSC " + key.compute_short_id().bits256_value().to_hex(), std::move(lc_address), std::move(key),
+            make_callback(key.compute_short_id()));
       }
     }
 
@@ -387,11 +395,9 @@ class LiteProxy : public td::actor::Actor {
       auto key = adnl::AdnlNodeIdFull{std::move(s.key)};
       td::IPAddress lc_address = s.addr;
 
-      private_servers_[key.compute_short_id()] =
-          td::actor::create_actor<ton::liteserver::LiteServerClient>(
-              "LSC " + key.compute_short_id().bits256_value().to_hex(), std::move(lc_address), std::move(key),
-              make_callback(key.compute_short_id()))
-              .release();
+      private_servers_[key.compute_short_id()] = td::actor::create_actor<ton::liteserver::LiteServerClient>(
+          "LSC " + key.compute_short_id().bits256_value().to_hex(), std::move(lc_address), std::move(key),
+          make_callback(key.compute_short_id()));
     }
   }
 
@@ -454,34 +460,33 @@ class LiteProxy : public td::actor::Actor {
         if (uptodate_private_ls.size() > 0) {
           auto adnl =
               uptodate_private_ls[td::Random::fast(0, td::narrow_cast<td::uint32>(uptodate_private_ls.size() - 1))];
-          server = private_servers_[std::move(adnl)];
+          server = private_servers_[std::move(adnl)].get();
         } else {
           auto s = td::Random::fast(0, td::narrow_cast<td::uint32>(private_servers_.size() - 1));
           int a{0};
           for (auto &x : private_servers_) {
             a += 1;
             if (a == s) {
-              server = x.second;
+              server = x.second.get();
               break;
             }
           }
         }
 
-        td::actor::send_closure(server, &LiteServerClient::fire, adnl::AdnlNodeIdFull{keys_[dst.pubkey_hash()]},
-                                std::move(data), std::move(promise));
+        td::actor::send_closure(server, &LiteServerClient::send_raw, std::move(data), std::move(promise));
       } else {
         if (uptodate_private_ls.size() > 0) {
           auto waiter = td::actor::create_actor<ton::liteserver::LiteClientFire>(
                             "LSC::Fire", uptodate_private_ls.size(), std::move(promise))
                             .release();
           for (auto &s : uptodate_private_ls) {
-            LOG(INFO) << "Send to: " << dst << " to " << s.bits256_value().to_hex();
+            LOG(INFO) << "[uptodate] Send to: " << dst << " to " << s.bits256_value().to_hex();
             auto P = td::PromiseCreator::lambda([WaiterId = waiter](td::Result<td::BufferSlice> R) mutable {
               td::actor::send_closure(WaiterId, &LiteClientFire::receive_answer, std::move(R));
             });
 
-            td::actor::send_closure(private_servers_[s], &LiteServerClient::fire,
-                                    adnl::AdnlNodeIdFull{keys_[dst.pubkey_hash()]}, std::move(data), std::move(P));
+            td::actor::send_closure(private_servers_[s].get(), &LiteServerClient::send_raw, std::move(data),
+                                    std::move(P));
           }
         } else {
           auto waiter = td::actor::create_actor<ton::liteserver::LiteClientFire>("LSC::Fire", private_servers_.size(),
@@ -489,13 +494,12 @@ class LiteProxy : public td::actor::Actor {
                             .release();
 
           for (auto &s : private_servers_) {
-            LOG(INFO) << "Send: " << dst << " to " << s.first.bits256_value().to_hex();
+            LOG(INFO) << "[all] Send: " << dst << " to " << s.first.bits256_value().to_hex();
             auto P = td::PromiseCreator::lambda([WaiterId = waiter](td::Result<td::BufferSlice> R) mutable {
               td::actor::send_closure(WaiterId, &LiteClientFire::receive_answer, std::move(R));
             });
 
-            td::actor::send_closure(s.second, &LiteServerClient::fire, adnl::AdnlNodeIdFull{keys_[dst.pubkey_hash()]},
-                                    std::move(data), std::move(P));
+            td::actor::send_closure(s.second, &LiteServerClient::send_raw, std::move(data), std::move(P));
           }
         }
       }
@@ -506,7 +510,7 @@ class LiteProxy : public td::actor::Actor {
   }
 
   void alarm() override {
-    alarm_timestamp() = td::Timestamp::in(1.0);
+    alarm_timestamp() = td::Timestamp::in(10.0);
     usage.clear();
     init_users();  // update users if needed
     update_server_stats();
@@ -626,7 +630,7 @@ class LiteProxy : public td::actor::Actor {
   td::actor::ActorOwn<adnl::Adnl> adnl_;
   td::actor::ActorOwn<adnl::AdnlNetworkManager> adnl_network_manager_;
   std::map<adnl::AdnlNodeIdShort, int> private_servers_status_;
-  std::map<adnl::AdnlNodeIdShort, td::actor::ActorId<LiteServerClient>> private_servers_;
+  std::map<adnl::AdnlNodeIdShort, td::actor::ActorOwn<LiteServerClient>> private_servers_;
   td::IPAddress address_;
   td::IPAddress adnl_address_;
   std::shared_ptr<td::RocksDb> ratelimitdb;
@@ -648,7 +652,7 @@ int main(int argc, char **argv) {
   std::string db_path;
   std::string global_config;
   std::string address;
-  td::uint32 threads = 7;
+  td::uint32 threads = 20;
   int verbosity = 0;
   int mode = 1;
   td::uint32 lite_port = 0;
