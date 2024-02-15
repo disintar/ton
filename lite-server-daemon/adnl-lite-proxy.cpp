@@ -75,6 +75,7 @@ class LiteClientFire : public td::actor::Actor {
                  td::Promise<td::BufferSlice> promise) {
     address_ = std::move(address);
     id_ = std::move(id);
+    promise_ = std::move(promise);
   }
 
   void start_up() override {
