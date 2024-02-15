@@ -37,16 +37,20 @@
 namespace ton::liteserver {
 class LiteProxy : public td::actor::Actor {
  public:
-  LiteProxy(std::string config_path, std::string db_path, std::string address, std::string global_config) {
+  LiteProxy(std::string config_path, std::string db_path, std::string address, td::uint32 lite_port,
+            td::uint32 adnl_port, std::string global_config) {
     config_path_ = std::move(config_path);
     db_root_ = std::move(db_path);
-    address_.init_host_port(std::move(address)).ensure();
+    address_.init_host_port(address, lite_port).ensure();
+    adnl_address_.init_host_port(std::move(address), adnl_port).ensure();
     global_config_ = std::move(global_config);
   }
 
   void start_up() override {
-    LOG(INFO) << "Start LiteProxy";
-    adnl_network_manager_ = adnl::AdnlNetworkManager::create(static_cast<td::uint16>(address_.get_port()));
+    LOG(INFO) << "Start LiteProxy: " << address_;
+    LOG(INFO) << "Start ADNL: " << adnl_address_;
+
+    adnl_network_manager_ = adnl::AdnlNetworkManager::create((td::uint16)adnl_address_.get_port());
     keyring_ = ton::keyring::Keyring::create(db_root_ + "/keyring");
     adnl_ = adnl::Adnl::create("", keyring_.get());
     td::actor::send_closure(adnl_, &adnl::Adnl::register_network_manager, adnl_network_manager_.get());
@@ -82,16 +86,21 @@ class LiteProxy : public td::actor::Actor {
 
     td::mkdir(db_root_ + "/lite-proxy").ensure();
 
+    adnl::AdnlAddressList addr_list;
+    addr_list.add_udp_address(adnl_address_).ensure();
+    addr_list.set_version(static_cast<td::int32>(td::Clocks::system()));
+    addr_list.set_reinit_date(adnl::Adnl::adnl_start_time());
+
     // Start DHT
     for (auto &dht : config_.dht_ids) {
       adnl::AdnlNodeIdFull local_id_full = adnl::AdnlNodeIdFull::create(keys_[dht].tl()).move_as_ok();
 
-      td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(local_id_full), ton::adnl::AdnlAddressList{},
+      td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(local_id_full), addr_list,
                               static_cast<td::uint8>(0));
 
       LOG(INFO) << "Start dht with: " << local_id_full.compute_short_id().bits256_value().to_hex();
-      auto D = ton::dht::Dht::create_client(local_id_full.compute_short_id(), db_root_ + "/lite-proxy", dht_config,
-                                            keyring_.get(), adnl_.get());
+      auto D = ton::dht::Dht::create(local_id_full.compute_short_id(), db_root_ + "/lite-proxy", dht_config,
+                                     keyring_.get(), adnl_.get());
       D.ensure();
 
       dht_nodes_[dht] = D.move_as_ok();
@@ -276,6 +285,7 @@ class LiteProxy : public td::actor::Actor {
   td::actor::ActorOwn<adnl::Adnl> adnl_;
   td::actor::ActorOwn<adnl::AdnlNetworkManager> adnl_network_manager_;
   td::IPAddress address_;
+  td::IPAddress adnl_address_;
   std::shared_ptr<td::RocksDb> ratelimitdb;
   ton::adnl::AdnlNodesList adnl_static_nodes_;
   td::actor::ActorOwn<adnl::AdnlExtServer> lite_proxy_;
@@ -294,6 +304,8 @@ int main(int argc, char **argv) {
   std::string address;
   td::uint32 threads = 7;
   int verbosity = 0;
+  td::uint32 lite_port = 0;
+  td::uint32 adnl_port = 0;
 
   p.set_description("lite-proxy");
   p.add_option('h', "help", "prints_help", [&]() {
@@ -326,7 +338,9 @@ int main(int argc, char **argv) {
   p.add_option('S', "server-config", "liteserver config path", [&](td::Slice fname) { config_path = fname.str(); });
   p.add_option('D', "db", "db path (for keyring)", [&](td::Slice fname) { db_path = fname.str(); });
   p.add_option('C', "config", "global config", [&](td::Slice fname) { global_config = fname.str(); });
-  p.add_option('A', "address", "ip address and port to start on", [&](td::Slice fname) { address = fname.str(); });
+  p.add_option('I', "ip", "ip address to start on", [&](td::Slice fname) { address = fname.str(); });
+  p.add_option('L', "lite-port", "lite-proxy port", [&](td::Slice arg) { lite_port = td::to_integer<int>(arg); });
+  p.add_option('A', "adnl-port", "adnl port", [&](td::Slice arg) { adnl_port = td::to_integer<int>(arg); });
 
   auto S = p.run(argc, argv);
   if (S.is_error()) {
@@ -338,7 +352,8 @@ int main(int argc, char **argv) {
   td::actor::Scheduler scheduler({threads});
   scheduler.run_in_context([&] {
     td::actor::create_actor<ton::liteserver::LiteProxy>("LiteProxy", std::move(config_path), std::move(db_path),
-                                                        std::move(address), std::move(global_config))
+                                                        std::move(address), lite_port, adnl_port,
+                                                        std::move(global_config))
         .release();
     return td::Status::OK();
   });
