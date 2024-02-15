@@ -34,10 +34,16 @@ class Config {
     td::IPAddress addr;
   };
 
+  struct LiteSlave {
+    ton::PublicKey key;
+    td::IPAddress addr;
+  };
+
  public:
   td::IPAddress addr_;
   std::map<ton::PublicKeyHash, AdnlCategory> adnl_ids;
   std::map<td::int32, ton::PublicKeyHash> liteservers;
+  std::vector<LiteSlave> liteslaves;
   std::map<ton::PublicKeyHash, td::uint32> keys_refcnt;
   std::vector<FullNodeSlave> full_node_slaves;
   std::set<ton::PublicKeyHash> dht_ids;
@@ -71,6 +77,12 @@ class Config {
       config_add_full_node_slave(ip, ton::PublicKey{s->adnl_}).ensure();
     }
 
+    for (auto &s : config.liteslaves_){
+      td::IPAddress ip;
+      ip.init_ipv4_port(td::IPAddress::ipv4_to_str(s->ip_), static_cast<td::uint16>(s->port_)).ensure();
+      liteslaves.push_back(LiteSlave{ton::PublicKey{s->id_}, ip});
+    }
+
     overlay_prefix = config.overlay_prefix_;
   }
 
@@ -99,6 +111,15 @@ class Config {
       liteservers.emplace(port, keyhash);
       return true;
     }
+  };
+
+  td::Result<bool> config_add_lite_slave(ton::PublicKey key, td::uint32 ip_int, td::int32 port) {
+    td::IPAddress ip;
+    if (ip.init_host_port(td::IPAddress::ipv4_to_str(ip_int), port).is_error()) {
+      return false;
+    }
+    liteslaves.push_back(LiteSlave{std::move(key), ip});
+    return true;
   };
 
   td::Result<bool> set_addr(const std::string &addr) {
@@ -168,9 +189,15 @@ class Config {
           x.addr.get_ipv4(), x.addr.get_port(), x.key.tl()));
     }
 
+    std::vector<ton::tl_object_ptr<ton::ton_api::liteserver_desc>> lite_slaves_vec;
+    for (auto &x : liteslaves) {
+      lite_slaves_vec.push_back(
+          ton::create_tl_object<ton::ton_api::liteserver_desc>(x.key.tl(), x.addr.get_ipv4(), x.addr.get_port()));
+    }
+
     return ton::create_tl_object<ton::ton_api::engine_liteserver_config>(
         addr_.get_ipv4(), addr_.get_port(), std::move(adnl_vec), std::move(liteserver_vec), std::move(dht_vec),
-        std::move(full_node_slaves_vec), overlay_prefix);
+        std::move(full_node_slaves_vec), overlay_prefix, std::move(lite_slaves_vec));
   };
 };
-}  // namespace ton
+}  // namespace ton::liteserver

@@ -161,7 +161,7 @@ class LiteProxy : public td::actor::Actor {
     private_time_updated++;
     private_servers_status_[std::move(server)] = time;
 
-    if (private_time_updated >= (int)private_servers_status_.size() * 10) { // every 10sec
+    if (private_time_updated >= (int)private_servers_status_.size() * 10) {  // every 10sec
       auto t = std::time(nullptr);
       int uptodate{0};
       int outdated{0};
@@ -294,12 +294,23 @@ class LiteProxy : public td::actor::Actor {
     LOG(INFO) << "Start init private servers";
 
     // get current lc
-    // Start LightServers
     auto my_address = config_.addr_;
     for (auto &s : config_.liteservers) {
       auto key = ton::adnl::AdnlNodeIdFull{keys_[s.second]};
       td::IPAddress lc_address;
       lc_address.init_host_port(td::IPAddress::ipv4_to_str(my_address.get_ipv4()), s.first).ensure();
+
+      private_servers_[key.compute_short_id()] =
+          td::actor::create_actor<ton::liteserver::LiteServerClient>(
+              "LSC " + key.compute_short_id().bits256_value().to_hex(), std::move(lc_address), std::move(key),
+              make_callback(key.compute_short_id()))
+              .release();
+    }
+
+    // get slaves
+    for (auto &s : config_.liteslaves) {
+      auto key = adnl::AdnlNodeIdFull{std::move(s.key)};
+      td::IPAddress lc_address = s.addr;
 
       private_servers_[key.compute_short_id()] =
           td::actor::create_actor<ton::liteserver::LiteServerClient>(
