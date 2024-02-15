@@ -161,7 +161,7 @@ class LiteProxy : public td::actor::Actor {
     private_time_updated++;
     private_servers_status_[std::move(server)] = time;
 
-    if (private_time_updated >= (int)private_servers_status_.size()) {
+    if (private_time_updated >= (int)private_servers_status_.size() * 10) { // every 10sec
       auto t = std::time(nullptr);
       int uptodate{0};
       int outdated{0};
@@ -183,6 +183,7 @@ class LiteProxy : public td::actor::Actor {
 
       LOG(INFO) << "Private LiteServers stats: uptodate: " << uptodate << " outdated: " << outdated
                 << " best time: " << time_to_human(best_time) << ", best server: " << best.bits256_value().to_hex();
+      private_time_updated = 0;
     }
   }
 
