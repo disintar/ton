@@ -56,7 +56,7 @@ class LiteProxy : public td::actor::Actor {
     td::actor::send_closure(adnl_, &adnl::Adnl::register_network_manager, adnl_network_manager_.get());
     adnl::AdnlCategoryMask cat_mask;
     cat_mask[0] = true;
-    td::actor::send_closure(adnl_network_manager_, &adnl::AdnlNetworkManager::add_self_addr, address_,
+    td::actor::send_closure(adnl_network_manager_, &adnl::AdnlNetworkManager::add_self_addr, adnl_address_,
                             std::move(cat_mask), 0);
 
     ratelimitdb = std::make_shared<td::RocksDb>(
@@ -99,7 +99,7 @@ class LiteProxy : public td::actor::Actor {
                               static_cast<td::uint8>(0));
 
       LOG(INFO) << "Start dht with: " << local_id_full.compute_short_id().bits256_value().to_hex();
-      auto D = ton::dht::Dht::create(local_id_full.compute_short_id(), db_root_ + "/lite-proxy", dht_config,
+      auto D = ton::dht::Dht::create_client(local_id_full.compute_short_id(), db_root_ + "/lite-proxy", dht_config,
                                      keyring_.get(), adnl_.get());
       D.ensure();
 
