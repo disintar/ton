@@ -564,7 +564,7 @@ class LiteProxy : public td::actor::Actor {
   std::string config_path_;
   std::string global_config_;
   ton::liteserver::Config config_;
-  int to_load_keys;
+  int to_load_keys{0};
   bool inited{false};
   int private_time_updated;
   std::map<ton::PublicKeyHash, ton::PublicKey> keys_;
