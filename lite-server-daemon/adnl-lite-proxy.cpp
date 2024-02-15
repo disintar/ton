@@ -62,6 +62,7 @@ class LiteProxy : public td::actor::Actor {
   }
 
   td::Status init_dht() {
+    LOG(INFO) << "Init dht";
     TRY_RESULT_PREFIX(conf_data, td::read_file(global_config_), "failed to read: ");
     TRY_RESULT_PREFIX(conf_json, td::json_decode(conf_data.as_slice()), "failed to parse json: ");
 
@@ -100,12 +101,13 @@ class LiteProxy : public td::actor::Actor {
       std::_Exit(2);
     }
 
-    td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_static_nodes_from_config, std::move(adnl_static_nodes_));
     return td::Status::OK();
   }
 
   void init_network() {
     init_dht().ensure();
+
+    LOG(INFO) << "Add dht node";
     td::actor::send_closure(adnl_, &ton::adnl::Adnl::register_dht_node, dht_nodes_[default_dht_node_].get());
 
     start_server();
@@ -211,8 +213,6 @@ class LiteProxy : public td::actor::Actor {
     keys_[key.compute_short_id()] = std::move(key);
 
     if (to_load_keys == 0) {
-      LOG(WARNING) << "ADNL available on: " << config_.addr_;
-
       for (auto &t : config_.adnl_ids) {
         LOG(WARNING) << "ADNL pub: " << keys_[t.first].ed25519_value().raw().to_hex();
       }
