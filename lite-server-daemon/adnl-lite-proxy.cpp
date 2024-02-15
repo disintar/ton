@@ -22,6 +22,11 @@
 #include "td/utils/common.h"
 #include "td/utils/OptionParser.h"
 #include "td/utils/port/user.h"
+#include "auto/tl/lite_api.h"
+#include "auto/tl/ton_api.h"
+#include "auto/tl/lite_api.hpp"
+#include "tl-utils/lite-utils.hpp"
+#include "td/utils/date.h"
 #include <utility>
 #include <fstream>
 #include "auto/tl/lite_api.h"
@@ -34,6 +39,34 @@
 #include <chrono>
 #include <thread>
 
+std::string time_to_human(unsigned ts) {  // todo: move from explorer
+  td::StringBuilder sb;
+  sb << date::format("%F %T",
+                     std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds>{std::chrono::seconds(ts)})
+     << ", ";
+  auto now = (unsigned)td::Clocks::system();
+  bool past = now >= ts;
+  unsigned x = past ? now - ts : ts - now;
+  if (!past) {
+    sb << "in ";
+  }
+  if (x < 60) {
+    sb << x << "s";
+  } else if (x < 3600) {
+    sb << x / 60 << "m " << x % 60 << "s";
+  } else if (x < 3600 * 24) {
+    x /= 60;
+    sb << x / 60 << "h " << x % 60 << "m";
+  } else {
+    x /= 3600;
+    sb << x / 24 << "d " << x % 24 << "h";
+  }
+  if (past) {
+    sb << " ago";
+  }
+  return sb.as_cslice().str();
+}
+
 namespace ton::liteserver {
 
 class LiteServerClient : public td::actor::Actor {
@@ -45,7 +78,40 @@ class LiteServerClient : public td::actor::Actor {
     client_ = ton::adnl::AdnlExtClient::create(id_, address_, std::move(callback));
   }
 
+  void send_raw(td::BufferSlice q, td::Promise<td::BufferSlice> promise) {
+    td::actor::send_closure(client_, &ton::adnl::AdnlExtClient::send_query, "query", std::move(q),
+                            td::Timestamp::in(10.0), std::move(promise));
+  }
+
+  void get_max_time(td::Promise<int> promise) {
+    auto P = td::PromiseCreator::lambda([Pp = std::move(promise)](td::Result<td::BufferSlice> R) mutable {
+      if (R.is_ok()) {
+        auto answer = ton::fetch_tl_object<ton::lite_api::liteServer_masterchainInfoExt>(R.move_as_ok(), true);
+
+        if (answer.is_error()) {
+          Pp.set_value(0);
+          return;
+        }
+
+        auto x = answer.move_as_ok();
+        Pp.set_value((int)x->last_utime_);
+      } else {
+        Pp.set_value(0);
+      }
+    });
+
+    qprocess(ton::serialize_tl_object(ton::create_tl_object<ton::lite_api::liteServer_getMasterchainInfoExt>(0), true),
+             std::move(P));
+  }
+
  private:
+  void qprocess(td::BufferSlice q, td::Promise<td::BufferSlice> promise) {
+    auto P = td::PromiseCreator::lambda(
+        [Pp = std::move(promise)](td::Result<td::BufferSlice> R) mutable { Pp.set_result(std::move(R)); });
+
+    send_raw(ton::serialize_tl_object(ton::create_tl_object<ton::lite_api::liteServer_query>(std::move(q)), true),
+             std::move(P));
+  }
   td::IPAddress address_;
   ton::adnl::AdnlNodeIdFull id_;
   td::actor::ActorOwn<ton::adnl::AdnlExtClient> client_;
@@ -84,6 +150,40 @@ class LiteProxy : public td::actor::Actor {
 
   void conn_ready(adnl::AdnlNodeIdShort server) {
     LOG(INFO) << "Server: " << server.bits256_value().to_hex() << " now available";
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), server](td::Result<int> R) mutable {
+      td::actor::send_closure(SelfId, &LiteProxy::server_update_time, server, std::move(R.move_as_ok()));
+    });
+
+    td::actor::send_closure(private_servers_[server], &LiteServerClient::get_max_time, std::move(P));
+  }
+
+  void server_update_time(adnl::AdnlNodeIdShort server, int time) {
+    private_time_updated++;
+    private_servers_status_[std::move(server)] = time;
+
+    if (private_time_updated >= (int)private_servers_status_.size()) {
+      auto t = std::time(nullptr);
+      int uptodate{0};
+      int outdated{0};
+      int best_time{0};
+      adnl::AdnlNodeIdShort best;
+
+      for (auto &s : private_servers_status_) {
+        if (s.second > best_time) {
+          best_time = s.second;
+          best = s.first;
+        }
+
+        if (t - s.second > 30) {
+          outdated += 1;
+        } else {
+          uptodate += 1;
+        }
+      }
+
+      LOG(INFO) << "Private LiteServers stats: uptodate: " << uptodate << " outdated: " << outdated
+                << " best time: " << time_to_human(best_time) << ", best server: " << best.bits256_value().to_hex();
+    }
   }
 
   void conn_closed(adnl::AdnlNodeIdShort server) {
@@ -252,8 +352,19 @@ class LiteProxy : public td::actor::Actor {
   }
 
   void alarm() override {
-    alarm_timestamp() = td::Timestamp::in(5.0);
+    alarm_timestamp() = td::Timestamp::in(1.0);
     init_users();  // update users if needed
+    update_server_stats();
+  }
+
+  void update_server_stats() {
+    for (auto &s : private_servers_) {
+      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), server = s.first](td::Result<int> R) mutable {
+        td::actor::send_closure(SelfId, &LiteProxy::server_update_time, server, std::move(R.move_as_ok()));
+      });
+
+      td::actor::send_closure(s.second, &LiteServerClient::get_max_time, std::move(P));
+    }
   }
 
   void add_ext_server_id(adnl::AdnlNodeIdShort id) {
@@ -343,6 +454,7 @@ class LiteProxy : public td::actor::Actor {
   std::string global_config_;
   ton::liteserver::Config config_;
   int to_load_keys;
+  int private_time_updated;
   std::map<ton::PublicKeyHash, ton::PublicKey> keys_;
   td::actor::ActorOwn<keyring::Keyring> keyring_;
   std::vector<adnl::AdnlNodeIdShort> existing;
