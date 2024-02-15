@@ -73,6 +73,11 @@ class LiteClientFire : public td::actor::Actor {
  public:
   LiteClientFire(td::IPAddress address, ton::adnl::AdnlNodeIdFull id, td::BufferSlice req,
                  td::Promise<td::BufferSlice> promise) {
+    address_ = std::move(address);
+    id_ = std::move(id);
+  }
+
+  void start_up() override {
     class Callback : public ton::adnl::AdnlExtClient::Callback {
      public:
       void on_ready() override {
@@ -87,7 +92,7 @@ class LiteClientFire : public td::actor::Actor {
       td::actor::ActorId<LiteClientFire> id_;
     };
 
-    client_ = ton::adnl::AdnlExtClient::create(id, address, std::make_unique<Callback>(actor_id(this)));
+    client_ = ton::adnl::AdnlExtClient::create(id_, address_, std::make_unique<Callback>(actor_id(this)));
   }
 
   void conn_ready() {
@@ -105,6 +110,8 @@ class LiteClientFire : public td::actor::Actor {
   }
 
  private:
+  td::IPAddress address_;
+  ton::adnl::AdnlNodeIdFull id_;
   td::actor::ActorOwn<ton::adnl::AdnlExtClient> client_;
   td::Promise<td::BufferSlice> promise_;
   td::BufferSlice request_;
