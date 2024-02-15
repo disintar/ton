@@ -68,6 +68,15 @@ class LiteProxy : public td::actor::Actor {
 
     ton::ton_api::config_global conf;
     TRY_STATUS_PREFIX(ton::ton_api::from_json(conf, conf_json.get_object()), "json does not fit TL scheme: ");
+
+    if (conf.adnl_) {
+      if (conf.adnl_->static_nodes_) {
+        TRY_RESULT_PREFIX_ASSIGN(adnl_static_nodes_, ton::adnl::AdnlNodesList::create(conf.adnl_->static_nodes_),
+                                 "bad static adnl nodes: ");
+      }
+    }
+    td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_static_nodes_from_config, std::move(adnl_static_nodes_));
+
     TRY_RESULT_PREFIX(dht, ton::dht::Dht::create_global_config(std::move(conf.dht_)), "bad [dht] section: ");
     auto dht_config = std::move(dht);
 
@@ -80,7 +89,6 @@ class LiteProxy : public td::actor::Actor {
       D.ensure();
       adnl::AdnlNodeIdFull local_id_full = adnl::AdnlNodeIdFull::create(keys_[dht].tl()).move_as_ok();
 
-      LOG(INFO) << "Add key: " << local_id_full.compute_short_id().bits256_value().to_hex();
       td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(local_id_full), ton::adnl::AdnlAddressList{},
                               static_cast<td::uint8>(255));
 
@@ -267,6 +275,7 @@ class LiteProxy : public td::actor::Actor {
   td::actor::ActorOwn<adnl::AdnlNetworkManager> adnl_network_manager_;
   td::IPAddress address_;
   std::shared_ptr<td::RocksDb> ratelimitdb;
+  ton::adnl::AdnlNodesList adnl_static_nodes_;
   td::actor::ActorOwn<adnl::AdnlExtServer> lite_proxy_;
   std::map<ton::PublicKeyHash, td::actor::ActorOwn<ton::dht::Dht>> dht_nodes_;
   ton::PublicKeyHash default_dht_node_ = ton::PublicKeyHash::zero();
