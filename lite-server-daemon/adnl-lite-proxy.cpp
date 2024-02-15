@@ -441,9 +441,12 @@ class LiteProxy : public td::actor::Actor {
                             "LSC::Fire", uptodate_private_ls.size(), std::move(promise))
                             .release();
           for (auto &s : uptodate_private_ls) {
+            auto P = td::PromiseCreator::lambda([WaiterId = waiter](td::Result<td::BufferSlice> R) mutable {
+              td::actor::send_closure(WaiterId, &LiteClientFire::receive_answer, std::move(R));
+            });
+
             td::actor::send_closure(private_servers_[s], &LiteServerClient::fire,
-                                    adnl::AdnlNodeIdFull{keys_[dst.pubkey_hash()]}, std::move(data),
-                                    std::move(promise));
+                                    adnl::AdnlNodeIdFull{keys_[dst.pubkey_hash()]}, std::move(data), std::move(P));
           }
         } else {
           auto waiter = td::actor::create_actor<ton::liteserver::LiteClientFire>("LSC::Fire", private_servers_.size(),
@@ -451,8 +454,12 @@ class LiteProxy : public td::actor::Actor {
                             .release();
 
           for (auto &s : private_servers_) {
+            auto P = td::PromiseCreator::lambda([WaiterId = waiter](td::Result<td::BufferSlice> R) mutable {
+              td::actor::send_closure(WaiterId, &LiteClientFire::receive_answer, std::move(R));
+            });
+
             td::actor::send_closure(s.second, &LiteServerClient::fire, adnl::AdnlNodeIdFull{keys_[dst.pubkey_hash()]},
-                                    std::move(data), std::move(promise));
+                                    std::move(data), std::move(P));
           }
         }
       }
