@@ -88,6 +88,7 @@ class LiteServerDaemon : public td::actor::Actor {
 
   ton::adnl::AdnlNodesList adnl_static_nodes_;
   std::map<ton::PublicKeyHash, td::actor::ActorOwn<ton::dht::Dht>> dht_nodes_;
+  ton::PublicKeyHash default_dht_node_ = ton::PublicKeyHash::zero();
   td::actor::ActorOwn<adnl::AdnlExtClient> full_node_client_;
   std::shared_ptr<ton::dht::DhtGlobalConfig> dht_config_;
   std::map<ton::PublicKeyHash, ton::PublicKey> keys_;
@@ -101,7 +102,6 @@ class LiteServerDaemon : public td::actor::Actor {
   td::actor::ActorOwn<ton::rldp::Rldp> rldp_;
   td::actor::ActorOwn<ton::rldp2::Rldp> rldp2_;
   td::actor::ActorOwn<ton::liteserver::LiteServerLimiter> lslimiter_;
-  ton::PublicKeyHash default_dht_node_ = ton::PublicKeyHash::zero();
 
   int to_load_keys = 0;
 

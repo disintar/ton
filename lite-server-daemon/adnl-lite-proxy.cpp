@@ -59,6 +59,33 @@ class LiteProxy : public td::actor::Actor {
 
     ratelimitdb = std::make_shared<td::RocksDb>(
         td::RocksDb::open(db_root_ + "/" + config_.overlay_prefix + "rate-limits/", true).move_as_ok());
+
+    std::vector<ton::tl_object_ptr<ton::ton_api::dht_node>> vec;
+    auto nodes = ton::create_tl_object<ton::ton_api::dht_nodes>(std::move(vec));
+    auto conf = ton::create_tl_object<ton::ton_api::dht_config_global>(std::move(nodes), 6, 3);
+    auto dht_configR = ton::dht::Dht::create_global_config(std::move(conf));
+    dht_configR.ensure();
+    auto dht_config = dht_configR.move_as_ok();
+
+    // Start DHT
+    for (auto &dht : config_.dht_ids) {
+      auto D =
+          ton::dht::Dht::create(ton::adnl::AdnlNodeIdShort{dht}, db_root_, dht_config, keyring_.get(), adnl_.get());
+      D.ensure();
+
+      dht_nodes_[dht] = D.move_as_ok();
+      if (default_dht_node_.is_zero()) {
+        default_dht_node_ = dht;
+      }
+    }
+
+    if (default_dht_node_.is_zero()) {
+      LOG(ERROR) << "Config broken, no DHT";
+      std::_Exit(2);
+    }
+
+    td::actor::send_closure(adnl_, &ton::adnl::Adnl::register_dht_node, dht_nodes_[default_dht_node_].get());
+
     start_server();
   }
 
@@ -81,7 +108,6 @@ class LiteProxy : public td::actor::Actor {
   }
 
   void init_users() {
-    LOG(INFO) << "Init users";
     if (ratelimitdb->count("users").move_as_ok() > 0) {
       std::string utmp;
       ratelimitdb->get("users", utmp);
@@ -89,7 +115,6 @@ class LiteProxy : public td::actor::Actor {
       auto t = std::time(nullptr);
 
       auto users = fetch_tl_object<ton::ton_api::storage_liteserver_users>(td::Slice{utmp}, true).move_as_ok();
-      LOG(INFO) << "Known users: " << users->values_.size();
 
       for (td::Bits256 pubkey : users->values_) {
         std::string tmp;
@@ -194,6 +219,8 @@ class LiteProxy : public td::actor::Actor {
   td::IPAddress address_;
   std::shared_ptr<td::RocksDb> ratelimitdb;
   td::actor::ActorOwn<adnl::AdnlExtServer> lite_proxy_;
+  std::map<ton::PublicKeyHash, td::actor::ActorOwn<ton::dht::Dht>> dht_nodes_;
+  ton::PublicKeyHash default_dht_node_ = ton::PublicKeyHash::zero();
 };
 }  // namespace ton::liteserver
 
