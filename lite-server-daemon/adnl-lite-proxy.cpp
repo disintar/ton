@@ -61,7 +61,21 @@ class LiteProxy : public td::actor::Actor {
   }
 
   void init_network() {
+    auto pk1 = ton::PrivateKey{ton::privkeys::Ed25519::random()};
+    auto pub1 = pk1.compute_public_key();
+    auto src = ton::adnl::AdnlNodeIdShort{pub1.compute_short_id()};
+    auto obj = ton::create_tl_object<ton::ton_api::adnl_address_udp>(1, 1);
+    auto objv = std::vector<ton::tl_object_ptr<ton::ton_api::adnl_Address>>();
+    objv.push_back(std::move(obj));
+    td::uint32 now = Adnl::adnl_start_time();
+    auto addrR = ton::adnl::AdnlAddressList::create(
+        ton::create_tl_object<ton::ton_api::adnl_addressList>(std::move(objv), now, now, 0, 0));
+    auto dhtobj =
+        ton::create_tl_object<ton::ton_api::dht_node>(pub1.tl(), addrR.move_as_ok().tl(), -1, td::BufferSlice());
+
     std::vector<ton::tl_object_ptr<ton::ton_api::dht_node>> vec;
+    vec.push_back(std::move(dhtobj));
+
     auto nodes = ton::create_tl_object<ton::ton_api::dht_nodes>(std::move(vec));
     auto conf = ton::create_tl_object<ton::ton_api::dht_config_global>(std::move(nodes), 6, 3);
     auto dht_configR = ton::dht::Dht::create_global_config(std::move(conf));
@@ -72,8 +86,8 @@ class LiteProxy : public td::actor::Actor {
 
     // Start DHT
     for (auto &dht : config_.dht_ids) {
-      auto D =
-          ton::dht::Dht::create(ton::adnl::AdnlNodeIdShort{dht}, db_root_ + "/lite-proxy", dht_config, keyring_.get(), adnl_.get());
+      auto D = ton::dht::Dht::create(ton::adnl::AdnlNodeIdShort{dht}, db_root_ + "/lite-proxy", dht_config,
+                                     keyring_.get(), adnl_.get());
       D.ensure();
       adnl::AdnlNodeIdFull local_id_full = adnl::AdnlNodeIdFull::create(keys_[dht].tl()).move_as_ok();
       td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(local_id_full), ton::adnl::AdnlAddressList{},
