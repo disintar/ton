@@ -35,6 +35,22 @@
 #include <thread>
 
 namespace ton::liteserver {
+
+class LiteServerClient : public td::actor::Actor {
+ public:
+  LiteServerClient(td::IPAddress address, ton::adnl::AdnlNodeIdFull id,
+                   std::unique_ptr<ton::adnl::AdnlExtClient::Callback> callback) {
+    address_ = std::move(address);
+    id_ = std::move(id);
+    client_ = ton::adnl::AdnlExtClient::create(id_, address_, std::move(callback));
+  }
+
+ private:
+  td::IPAddress address_;
+  ton::adnl::AdnlNodeIdFull id_;
+  td::actor::ActorOwn<ton::adnl::AdnlExtClient> client_;
+};
+
 class LiteProxy : public td::actor::Actor {
  public:
   LiteProxy(std::string config_path, std::string db_path, std::string address, td::uint32 lite_port,
@@ -44,6 +60,34 @@ class LiteProxy : public td::actor::Actor {
     address_.init_host_port(address, lite_port).ensure();
     adnl_address_.init_host_port(std::move(address), adnl_port).ensure();
     global_config_ = std::move(global_config);
+  }
+
+  std::unique_ptr<ton::adnl::AdnlExtClient::Callback> make_callback(adnl::AdnlNodeIdShort server) {
+    class Callback : public ton::adnl::AdnlExtClient::Callback {
+     public:
+      void on_ready() override {
+        td::actor::send_closure(id_, &LiteProxy::conn_ready, server_);
+      }
+      void on_stop_ready() override {
+        td::actor::send_closure(id_, &LiteProxy::conn_closed, server_);
+      }
+      Callback(td::actor::ActorId<LiteProxy> id, adnl::AdnlNodeIdShort server)
+          : id_(std::move(id)), server_(std::move(server)) {
+      }
+
+     private:
+      td::actor::ActorId<LiteProxy> id_;
+      adnl::AdnlNodeIdShort server_;
+    };
+    return std::make_unique<Callback>(actor_id(this), std::move(server));
+  }
+
+  void conn_ready(adnl::AdnlNodeIdShort server) {
+    LOG(INFO) << "Server: " << server.bits256_value().to_hex() << " now available";
+  }
+
+  void conn_closed(adnl::AdnlNodeIdShort server) {
+    LOG(INFO) << "Server: " << server.bits256_value().to_hex() << " disconnected";
   }
 
   void start_up() override {
@@ -99,7 +143,7 @@ class LiteProxy : public td::actor::Actor {
                               static_cast<td::uint8>(0));
 
       LOG(INFO) << "Start dht with: " << local_id_full.compute_short_id().bits256_value().to_hex();
-      auto D = ton::dht::Dht::create_client(local_id_full.compute_short_id(), db_root_ + "/lite-proxy", dht_config,
+      auto D = ton::dht::Dht::create(local_id_full.compute_short_id(), db_root_ + "/lite-proxy", dht_config,
                                      keyring_.get(), adnl_.get());
       D.ensure();
 
@@ -135,13 +179,33 @@ class LiteProxy : public td::actor::Actor {
 
     LOG(INFO) << "Start server";
     td::actor::send_closure(adnl_, &adnl::Adnl::create_ext_server, std::vector<adnl::AdnlNodeIdShort>{},
-                            std::vector<td::uint16>{}, std::move(Q));
+                            std::vector<td::uint16>{(td::uint16)address_.get_port()}, std::move(Q));
   }
 
   void created_ext_server(td::actor::ActorOwn<adnl::AdnlExtServer> server) {
     LOG(INFO) << "Server started";
     lite_proxy_ = std::move(server);
-    init_users();
+    td::actor::send_closure(actor_id(this), &LiteProxy::init_users);
+    td::actor::send_closure(actor_id(this), &LiteProxy::init_private_servers);
+  }
+
+  void init_private_servers() {
+    LOG(INFO) << "Start init private servers";
+
+    // get current lc
+    // Start LightServers
+    auto my_address = config_.addr_;
+    for (auto &s : config_.liteservers) {
+      auto key = ton::adnl::AdnlNodeIdFull{keys_[s.second]};
+      td::IPAddress lc_address;
+      lc_address.init_host_port(td::IPAddress::ipv4_to_str(my_address.get_ipv4()), s.first).ensure();
+
+      private_servers_[key.compute_short_id()] =
+          td::actor::create_actor<ton::liteserver::LiteServerClient>(
+              "LSC " + key.compute_short_id().bits256_value().to_hex(), std::move(lc_address), std::move(key),
+              make_callback(key.compute_short_id()))
+              .release();
+    }
   }
 
   void init_users() {
@@ -284,6 +348,8 @@ class LiteProxy : public td::actor::Actor {
   std::vector<adnl::AdnlNodeIdShort> existing;
   td::actor::ActorOwn<adnl::Adnl> adnl_;
   td::actor::ActorOwn<adnl::AdnlNetworkManager> adnl_network_manager_;
+  std::map<adnl::AdnlNodeIdShort, int> private_servers_status_;
+  std::map<adnl::AdnlNodeIdShort, td::actor::ActorId<LiteServerClient>> private_servers_;
   td::IPAddress address_;
   td::IPAddress adnl_address_;
   std::shared_ptr<td::RocksDb> ratelimitdb;
