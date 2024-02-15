@@ -361,15 +361,19 @@ class LiteProxy : public td::actor::Actor {
     // get current lc
     auto my_address = config_.addr_;
     for (auto &s : config_.liteservers) {
-      auto key = ton::adnl::AdnlNodeIdFull{keys_[s.second]};
-      td::IPAddress lc_address;
-      lc_address.init_host_port(td::IPAddress::ipv4_to_str(my_address.get_ipv4()), s.first).ensure();
+      if (keys_.find(s.second) == keys_.end()) {
+        LOG(ERROR) << "Can't find key: " << s.second.bits256_value().to_hex();
+      } else {
+        auto key = ton::adnl::AdnlNodeIdFull{keys_[s.second]};
+        td::IPAddress lc_address;
+        lc_address.init_host_port(td::IPAddress::ipv4_to_str(my_address.get_ipv4()), s.first).ensure();
 
-      private_servers_[key.compute_short_id()] =
-          td::actor::create_actor<ton::liteserver::LiteServerClient>(
-              "LSC " + key.compute_short_id().bits256_value().to_hex(), std::move(lc_address), std::move(key),
-              make_callback(key.compute_short_id()))
-              .release();
+        private_servers_[key.compute_short_id()] =
+            td::actor::create_actor<ton::liteserver::LiteServerClient>(
+                "LSC " + key.compute_short_id().bits256_value().to_hex(), std::move(lc_address), std::move(key),
+                make_callback(key.compute_short_id()))
+                .release();
+      }
     }
 
     // get slaves
@@ -405,13 +409,13 @@ class LiteProxy : public td::actor::Actor {
         } else {
           auto user_data = f.move_as_ok();
           auto key = adnl::AdnlNodeIdFull{ton::pubkeys::Ed25519(pubkey)};
-          keys_[key.compute_short_id().pubkey_hash()] = key.pubkey();
 
           if (t <= user_data->valid_until_) {
             if (std::find(existing.begin(), existing.end(), key.compute_short_id()) == existing.end()) {
               LOG(INFO) << "Add key from DB: " << key.pubkey().ed25519_value().raw().to_hex()
                         << ", valid until: " << user_data->valid_until_ << ", ratelimit " << user_data->ratelimit_;
 
+              keys_[key.compute_short_id().pubkey_hash()] = key.pubkey();
               existing.push_back(key.compute_short_id());
               td::actor::send_closure(actor_id(this), &LiteProxy::add_ext_server_id, key.compute_short_id());
               td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(key), ton::adnl::AdnlAddressList{},
@@ -515,6 +519,8 @@ class LiteProxy : public td::actor::Actor {
   }
 
   void load_config() {
+    LOG(INFO) << "Load config";
+
     auto conf_data_R = td::read_file(config_path_);
     if (conf_data_R.is_error()) {
       LOG(ERROR) << "Can't read file: " << config_path_;
