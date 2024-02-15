@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include "td/utils/logging.h"
+#include "td/utils/port/path.h"
 #include "td/actor/actor.h"
 #include "td/utils/Time.h"
 #include "td/utils/filesystem.h"
@@ -66,6 +67,8 @@ class LiteProxy : public td::actor::Actor {
     auto dht_configR = ton::dht::Dht::create_global_config(std::move(conf));
     dht_configR.ensure();
     auto dht_config = dht_configR.move_as_ok();
+
+    td::mkdir(db_root_ + "/lite-proxy").ensure();
 
     // Start DHT
     for (auto &dht : config_.dht_ids) {
