@@ -126,7 +126,7 @@ void AdnlExtConnection::loop() {
     return td::Status::OK();
   }();
   if (status.is_error()) {
-    LOG(ERROR) << "Client got error " << status;
+    // LOG(ERROR) << "Client got error " << status;
     stop();
   } else {
     send_ready();
