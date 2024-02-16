@@ -131,7 +131,7 @@ class AdnlExtClientImpl : public AdnlExtClient {
   }
 
  private:
-  int next_alarm_{10};
+  int next_alarm_{1};
   AdnlNodeIdFull dst_;
   PrivateKey local_id_;
   td::IPAddress dst_addr_;
