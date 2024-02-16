@@ -459,6 +459,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def(py::init<std::string, int, PyPublicKey, double, int>(), py::arg("host"), py::arg("port"),
            py::arg("public_key"), py::arg("timeout"), py::arg("threads"))
       .def("get_connected", &pylite::PyLiteClient::get_connected)
+      .def("wait_connected", &pylite::PyLiteClient::wait_connected)
       .def("get_time", &pylite::PyLiteClient::get_time)
       .def("send_message", &pylite::PyLiteClient::send_message, py::arg("cell"))
       .def("get_ConfigAll", &pylite::PyLiteClient::get_ConfigAll, py::arg("mode"), py::arg("req_blkid"),

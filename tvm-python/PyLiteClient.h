@@ -101,6 +101,8 @@ class LiteClientActorEngine : public td::actor::Actor {
   void send_message(vm::Ref<vm::Cell> message);
   void lookupBlock(int mode, ton::BlockId block, long long lt, long long time);
 
+  void ready();
+  void wait_connected(double wait);
   void get_time();
   void get_MasterchainInfoExt(int mode);
   void get_AccountState(int workchain, td::Bits256 address, ton::BlockIdExt blkid);
@@ -134,6 +136,7 @@ class LiteClientActorEngine : public td::actor::Actor {
   std::unique_ptr<ton::adnl::AdnlExtClient::Callback> make_callback();
   void qprocess(td::BufferSlice q);
   void admin_qprocess(td::BufferSlice q);
+  td::Timestamp wait_timeout_;
   double timeout;
 };
 
@@ -217,6 +220,7 @@ class PyLiteClient {
       ton::BlockIdExt blkid, int mode, int count, std::optional<td::string> account = std::optional<std::string>(),
       std::optional<unsigned long long> lt = std::optional<unsigned long long>());
   std::vector<ton::BlockId> get_AllShardsInfo(ton::BlockIdExt req_blkid);
+  bool wait_connected(double wait);
 
   // Admin functions
   std::tuple<PubKeyHex, ShortKeyHex> admin_AddUser(std::string pubkey, td::int64 valid_until, td::int32 ratelimit);

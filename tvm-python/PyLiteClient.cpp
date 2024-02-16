@@ -3,6 +3,8 @@
 #include "PyLiteClient.h"
 #include "vm/boc.h"
 #include "lite-client/lite-client.h"
+#include "common/delay.h"
+#include "tdutils/td/utils/Time.h"
 #include "terminal/terminal.h"
 #include "crypto/vm/cells/MerkleProof.h"
 
@@ -58,6 +60,34 @@ ResponseWrapper PyLiteClient::receive_unlocked() {
   }
 
   throw std::logic_error("Timeout on receive request");
+}
+
+void LiteClientActorEngine::wait_connected(double wait) {
+  if (!wait_timeout_) {
+    wait_timeout_ = td::Timestamp::at(wait);
+  }
+
+  if (wait_timeout_ && wait_timeout_.is_in_past()) {
+    output_queue->writer_put(ResponseWrapper(std::make_unique<ResponseObj>(ResponseObj(false, "Not ready"))));
+    return;
+  }
+
+  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), wait](td::Result<td::Unit> R) mutable {
+    if (R.is_ok()) {
+      td::actor::send_closure(SelfId, &LiteClientActorEngine::ready);
+    } else {
+      ton::delay_action(
+          [SelfId, wait]() { td::actor::send_closure(SelfId, &LiteClientActorEngine::wait_connected, wait); },
+          td::Timestamp::in(0.5));
+    }
+  });
+
+  td::actor::send_closure(client, &ton::adnl::AdnlExtClient::check_ready, std::move(P));
+}
+
+void LiteClientActorEngine::ready() {
+  wait_timeout_ = td::Timestamp::never();
+  output_queue->writer_put(ResponseWrapper(std::make_unique<ResponseObj>(ResponseObj(true))));
 }
 
 void LiteClientActorEngine::get_time() {
@@ -787,6 +817,17 @@ PyDict PyLiteClient::get_Libraries(std::vector<std::string> libs) {
     return PyDict(libraries_dict);
   } else {
     throw std::logic_error(response->error_message);
+  }
+}
+
+bool PyLiteClient::wait_connected(double wait) {
+  scheduler_.run_in_context_external([&, wait] { send_closure(engine, &LiteClientActorEngine::wait_connected, wait); });
+
+  auto response = wait_response();
+  if (response->success) {
+    return true;
+  } else {
+    throw std::logic_error("not ready");
   }
 }
 
