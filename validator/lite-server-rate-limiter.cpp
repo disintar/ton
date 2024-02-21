@@ -110,6 +110,9 @@ void LiteServerLimiter::process_add_user(td::Bits256 private_key, td::int64 vali
   LOG(WARNING) << "Add user: " << pubk.to_hex() << " valid until: " << valid_until << " ratelimit: " << ratelimit;
   limits[adnlkey.compute_short_id()] = std::make_tuple(valid_until, ratelimit);
 
+  auto k = adnlkey.pubkey().ed25519_value().raw();
+  auto k_short = adnlkey.compute_short_id().bits256_value();
+
   if (!(limits.find(adnlkey.compute_short_id()) != limits.end())) {
     // if not extending existing user
     td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false, [](td::Unit) {});
@@ -117,10 +120,6 @@ void LiteServerLimiter::process_add_user(td::Bits256 private_key, td::int64 vali
 
     std::vector<td::Bits256> users(users_);
     ratelimitdb->set("users", create_serialize_tl_object<ton::ton_api::storage_liteserver_users>(std::move(users)));
-
-    auto k = adnlkey.pubkey().ed25519_value().raw();
-    auto k_short = adnlkey.compute_short_id().bits256_value();
-
     td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::add_ext_server_id,
                             adnlkey.compute_short_id());
     td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, std::move(adnlkey), ton::adnl::AdnlAddressList{},
