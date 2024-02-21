@@ -107,23 +107,19 @@ void LiteServerLimiter::process_add_user(td::Bits256 private_key, td::int64 vali
   auto adnlkey = adnl::AdnlNodeIdFull{pk.compute_public_key()};
   auto pubk = adnlkey.pubkey().ed25519_value().raw();
 
-  if (limits.find(adnlkey.compute_short_id()) != limits.end()) {
-    promise.set_error(td::Status::Error("Account already exist"));
-    return;
-  }
-
-  LOG(WARNING) << "Add user: " << pubk.to_hex() << " valid until: " << valid_until
-               << " ratelimit: " << ratelimit;
-
+  LOG(WARNING) << "Add user: " << pubk.to_hex() << " valid until: " << valid_until << " ratelimit: " << ratelimit;
   limits[adnlkey.compute_short_id()] = std::make_tuple(valid_until, ratelimit);
 
-  td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false, [](td::Unit) {});
-  users_.push_back(pubk);
+  if (!(limits.find(adnlkey.compute_short_id()) != limits.end())) {
+    td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false, [](td::Unit) {});
+    users_.push_back(pubk);
+
+    std::vector<td::Bits256> users(users_);
+    ratelimitdb->set("users", create_serialize_tl_object<ton::ton_api::storage_liteserver_users>(std::move(users)));
+  }
+
   ratelimitdb->set(pubk.as_slice(),
                    create_serialize_tl_object<ton::ton_api::storage_liteserver_user>(valid_until, ratelimit));
-
-  std::vector<td::Bits256> users(users_);
-  ratelimitdb->set("users", create_serialize_tl_object<ton::ton_api::storage_liteserver_users>(std::move(users)));
   ratelimitdb->flush();
 
   auto k = adnlkey.pubkey().ed25519_value().raw();
