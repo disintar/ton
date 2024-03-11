@@ -106,14 +106,16 @@ void LiteServerLimiter::process_add_user(td::Bits256 private_key, td::int64 vali
   auto id = pk.compute_short_id();
   auto adnlkey = adnl::AdnlNodeIdFull{pk.compute_public_key()};
   auto pubk = adnlkey.pubkey().ed25519_value().raw();
+  auto short_id = adnlkey.compute_short_id();
 
-  LOG(WARNING) << "Add user: " << pubk.to_hex() << " valid until: " << valid_until << " ratelimit: " << ratelimit;
-  limits[adnlkey.compute_short_id()] = std::make_tuple(valid_until, ratelimit);
+  LOG(WARNING) << "Add user: " << pubk.to_hex() << " short id: " << short_id << " valid until: " << valid_until
+               << " ratelimit: " << ratelimit;
 
   auto k = adnlkey.pubkey().ed25519_value().raw();
   auto k_short = adnlkey.compute_short_id().bits256_value();
 
   if (!(limits.find(adnlkey.compute_short_id()) != limits.end())) {
+    LOG(WARNING) << "User " << pubk.to_hex() << " is new, process add to users";
     // if not extending existing user
     td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false, [](td::Unit) {});
     users_.push_back(pubk);
@@ -126,6 +128,7 @@ void LiteServerLimiter::process_add_user(td::Bits256 private_key, td::int64 vali
                             static_cast<td::uint8>(255));
   }
 
+  limits[short_id] = std::make_tuple(valid_until, ratelimit);
   ratelimitdb->set(pubk.as_slice(),
                    create_serialize_tl_object<ton::ton_api::storage_liteserver_user>(valid_until, ratelimit));
   ratelimitdb->flush();
