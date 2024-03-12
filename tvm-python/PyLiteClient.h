@@ -119,6 +119,7 @@ class LiteClientActorEngine : public td::actor::Actor {
 
   void admin_AddUser(td::Bits256 pubkey, td::int64 valid_until, td::int32 ratelimit);
   void admin_GetStatData();
+  void wait_masterchain_seqno(int seqno, int tm);
 
   void run();
 
@@ -221,6 +222,7 @@ class PyLiteClient {
       std::optional<unsigned long long> lt = std::optional<unsigned long long>());
   std::vector<ton::BlockId> get_AllShardsInfo(ton::BlockIdExt req_blkid);
   bool wait_connected(double wait);
+  std::unique_ptr<ton::lite_api::liteServer_masterchainInfoExt> wait_masterchain_seqno(int seqno, int tm);
 
   // Admin functions
   std::tuple<PubKeyHex, ShortKeyHex> admin_AddUser(std::string pubkey, td::int64 valid_until, td::int32 ratelimit);

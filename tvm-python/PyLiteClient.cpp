@@ -229,6 +229,15 @@ void LiteClientActorEngine::get_AllShardsInfo(ton::BlockIdExt blkid) {
   qprocess(std::move(q));
 }
 
+void LiteClientActorEngine::wait_masterchain_seqno(int seqno, int tm) {
+  auto wait = ton::lite_api::liteServer_waitMasterchainSeqno(seqno, tm);
+  auto prefix = ton::serialize_tl_object(&wait, true);
+  auto q = ton::serialize_tl_object(ton::create_tl_object<ton::lite_api::liteServer_getMasterchainInfoExt>(0), true);
+  auto raw_query = td::BufferSlice(PSLICE() << prefix.as_slice() << q.as_slice());
+
+  qprocess(std::move(raw_query));
+}
+
 void LiteClientActorEngine::get_listBlockTransactionsExt(ton::BlockIdExt blkid, int mode, int count,
                                                          std::optional<td::Bits256> account,
                                                          std::optional<unsigned long long> lt) {
@@ -828,6 +837,27 @@ bool PyLiteClient::wait_connected(double wait) {
     return true;
   } else {
     throw std::logic_error("not ready");
+  }
+}
+
+std::unique_ptr<ton::lite_api::liteServer_masterchainInfoExt> PyLiteClient::wait_masterchain_seqno(int seqno, int tm) {
+  scheduler_.run_in_context_external(
+      [&] { send_closure(engine, &LiteClientActorEngine::wait_masterchain_seqno, seqno, tm); });
+
+  auto response = wait_response();
+  if (response->success) {
+    SuccessBufferSlice* data = dynamic_cast<SuccessBufferSlice*>(response.get());
+    auto R = ton::fetch_tl_object<ton::lite_api::liteServer_masterchainInfoExt>(std::move(data->obj->clone()), true);
+
+    if (R.is_error()) {
+      throw_lite_error(data->obj->clone());
+    }
+
+    auto x = R.move_as_ok();
+
+    return std::move(x);
+  } else {
+    throw std::logic_error(response->error_message);
   }
 }
 

@@ -481,6 +481,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("admin_getStatData", &pylite::PyLiteClient::admin_getStatData)
       .def("get_Libraries", &pylite::PyLiteClient::get_Libraries, py::arg("libs"))
       .def("get_AllShardsInfo", &pylite::PyLiteClient::get_AllShardsInfo, py::arg("blkid"))
+      .def("wait_masterchain_seqno", &pylite::PyLiteClient::wait_masterchain_seqno, py::arg("seqno"), py::arg("timeout"))
       .def("get_listBlockTransactionsExt", &pylite::PyLiteClient::get_listBlockTransactionsExt, py::arg("blkid"),
            py::arg("mode"), py::arg("count"), py::arg("account"), py::arg("lt"));
 
