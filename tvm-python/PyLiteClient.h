@@ -229,7 +229,6 @@ class PyLiteClient {
   std::vector<std::tuple<ShortKeyHex, int, td::int64, td::int64, bool>> admin_getStatData();
 
   void stop() {
-    scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::exit); });
     scheduler_.run_in_context_external([&] { engine.reset(); });
     scheduler_.run_in_context_external([] { td::actor::SchedulerContext::get()->stop(); });
     scheduler_thread_.join();
