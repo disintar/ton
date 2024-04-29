@@ -882,6 +882,7 @@ void BlockParserAsync::saveStateData(std::string tmp_state) {
 void BlockParserAsync::finalize() {
   LOG(DEBUG) << "Send: " << id.to_str() << " success";
   P.set_value(std::make_tuple(parsed_data, parsed_state));
+  stop();
 }
 
 void StartupBlockParser::end_with_error(td::Status err) {
