@@ -18,6 +18,7 @@
 */
 #pragma once
 #include <vector>
+#include <map>
 #include <string>
 #include <set>
 #include <stack>
@@ -888,8 +889,12 @@ public:
 bool parse_source(std::istream* is, const src::FileDescr* fdescr);
 bool parse_source_file(const char* filename, src::Lexem lex = {}, bool is_main = false);
 bool parse_source_stdin();
+bool parse_source_string(const std::string &source);
 
+extern std::vector<const src::FileDescr*> source_fdescr;
+extern std::map<std::string, src::FileDescr*> source_files;
 extern std::stack<src::SrcLocation> inclusion_locations;
+
 
 /*
  * 
@@ -1738,7 +1743,7 @@ void define_builtins();
 
 
 extern int verbosity, indent, opt_level;
-extern bool stack_layout_comments, op_rewrite_comments, program_envelope, asm_preamble, interactive;
+extern bool stack_layout_comments, op_rewrite_comments, program_envelope, asm_preamble, interactive, interactive_from_string;
 extern std::string generated_from, boc_output_filename;
 extern ReadCallback::Callback read_callback;
 
@@ -1786,6 +1791,7 @@ extern GlobalPragma pragma_allow_post_modification, pragma_compute_asm_ltr;
  */
 
 int func_proceed(const std::vector<std::string> &sources, std::ostream &outs, std::ostream &errs);
+int func_proceed_from_string(const std::string &source, std::ostream &outs, std::ostream &errs);
 
 }  // namespace funC
 
