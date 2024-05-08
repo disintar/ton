@@ -1791,7 +1791,6 @@ extern GlobalPragma pragma_allow_post_modification, pragma_compute_asm_ltr;
  */
 
 int func_proceed(const std::vector<std::string> &sources, std::ostream &outs, std::ostream &errs);
-int func_proceed_from_string(const std::string &source, std::ostream &outs, std::ostream &errs);
 
 }  // namespace funC
 
