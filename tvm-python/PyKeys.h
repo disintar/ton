@@ -1,8 +1,11 @@
 // Copyright 2023 Disintar LLP / andrey@head-labs.com
 
+#include "third-party/pybind11/include/pybind11/pybind11.h"
 #include <vector>
 #include <string.h>
 #include "tonlib/tonlib/keys/Mnemonic.h"
+
+namespace py = pybind11;
 
 #ifndef TON_PYKEYS_H
 #define TON_PYKEYS_H
@@ -13,6 +16,7 @@ class PyPublicKey {
   PyPublicKey(std::string key_int);
   PyPublicKey(td::Ed25519::PublicKey key_) : key(std::move(key_)){};
   std::string get_public_key_hex();
+  std::tuple<bool, std::string> verify_signature(char *data, char *signature);
 
   PyPublicKey(const PyPublicKey& other) : key(td::Ed25519::PublicKey(other.key.as_octet_string())){};
 };
@@ -25,6 +29,7 @@ class PyPrivateKey {
   PyPrivateKey(td::Ed25519::PrivateKey key_) : key(td::Ed25519::PrivateKey(key_.as_octet_string())){};
   std::string get_private_key_hex();
   PyPublicKey get_public_key();
+  py::bytes sign(char* data);
 };
 
 class PyMnemonic {

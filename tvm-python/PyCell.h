@@ -1,7 +1,10 @@
 // Copyright 2023 Disintar LLP / andrey@head-labs.com
 
-
+#include "third-party/pybind11/include/pybind11/pybind11.h"
 #include "vm/vm.h"
+
+namespace py = pybind11;
+
 
 #ifndef TON_PYCELL_H
 #define TON_PYCELL_H
@@ -22,6 +25,7 @@ class PyCell {
   std::string dump() const;
   std::string dump_as_tlb(std::string tlb_type) const;
   std::string to_boc() const;
+  py::bytes to_slice() const;
   PyCell copy() const;
   bool is_null() const;
 

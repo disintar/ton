@@ -33,6 +33,10 @@ std::string PyCell::toString() const {
   }
 }
 
+py::bytes PyCell::to_slice() const {
+  return std_boc_serialize(my_cell, 31).move_as_ok().data();
+}
+
 std::string PyCell::dump() const {
   if (my_cell.is_null()) {
     throw std::invalid_argument("Cell is null");
