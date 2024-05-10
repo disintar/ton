@@ -65,8 +65,8 @@ std::string public_buffer_to_hex(td::Slice buffer) {
 PyPublicKey::PyPublicKey(std::string key_int) : key(td::Ed25519::PublicKey{td::SecureString{hex_to_bytes(key_int)}}) {
 }
 
-std::tuple<bool, std::string> PyPublicKey::verify_signature(char *data, char *signature) {
-  auto R = key.verify_signature(td::Slice(data), td::Slice(signature));
+std::tuple<bool, std::string> PyPublicKey::verify_signature(const char *data, const char *signature) {
+  auto R = key.verify_signature(td::Slice(std::move(data)), td::Slice(std::move(signature)));
   std::string err_msg;
   bool valid = true;
 
@@ -90,8 +90,8 @@ std::string PyPrivateKey::get_private_key_hex() {
   return to_hex(key.as_octet_string());
 }
 
-py::bytes PyPrivateKey::sign(char *data) {
-  auto R = key.sign(td::Slice(data));
+py::bytes PyPrivateKey::sign(const char *data) {
+  auto R = key.sign(td::Slice(std::move(data)));
   if (R.is_error()) {
     throw std::invalid_argument(R.move_as_error().to_string());
   }
