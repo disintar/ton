@@ -16,7 +16,7 @@ add_library(combined INTERFACE)
 target_link_libraries(combined INTERFACE
         tonlib overlay tdutils tdactor adnl tl_api dht terminal
         rldp catchain validatorsession full-node emulator emulator_static validator-disk validator-hardfork ton_validator
-        validator-hardfork fift-lib memprof)
+        validator-hardfork fift-lib func-lib memprof)
 bundle_static_library_deps(combined combined_bundled)
 
 get_target_property(deps combined INTERFACE_LINK_LIBRARIES)
@@ -48,6 +48,8 @@ set(PYTHON_EMULATOR_SOURCE
         PyTVM.h
         PyFift.cpp
         PyFift.h
+        PyFunc.cpp
+        PyFunc.h
         PyStack.h
         PyStack.cpp
         PyEmulator.cpp
@@ -68,6 +70,8 @@ target_link_libraries(python_ton PRIVATE -static-libstdc++
         tlbc-lib ton_crypto_core rocksdb # XXX
         ${BLST_LIB} ${SECP256K1_LIBRARY} ${JEMALLOC_LIBRARIES}
         OpenSSL::Crypto ${SODIUM_LIBRARY_RELEASE})
+
+target_link_libraries(python_ton PUBLIC func-lib git)
 
 target_include_directories(python_ton PRIVATE ${include_dirs})
 
