@@ -190,7 +190,7 @@ class PyLiteClient {
 
   int send_message(PyCell& cell) {
     scheduler_.run_in_context_external(
-        [&] { send_closure(engine, &LiteClientActorEngine::send_message, std::move(cell.my_cell)); });
+        [&] { send_closure(engine, &LiteClientActorEngine::send_message, cell.my_cell); });
     auto response = wait_response();
     if (response->success) {
       SuccessBufferSlice* answer = dynamic_cast<SuccessBufferSlice*>(response.get());
