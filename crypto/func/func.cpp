@@ -38,7 +38,6 @@ namespace funC {
 int verbosity, indent, opt_level = 2;
 bool stack_layout_comments, op_rewrite_comments, program_envelope, asm_preamble;
 bool interactive = false;
-bool interactive_from_string = false;
 GlobalPragma pragma_allow_post_modification{"allow-post-modification"};
 GlobalPragma pragma_compute_asm_ltr{"compute-asm-ltr"};
 std::string generated_from, boc_output_filename;
@@ -218,47 +217,18 @@ int func_proceed(const std::vector<std::string> &sources, std::ostream &outs, st
     funC::indent = 1;
   }
 
-  sym::symbols.clear();
-  for(int i = 0; i < sym::symbols.hprime; i++){
-    sym::sym_def[i] = nullptr;
-    sym::global_sym_def[i] = nullptr;
-  }
-  sym::symbol_stack.clear();
-  sym::scope_opened_at.clear();
-  sym::scope_level = 0;
-
-  while(!funC::inclusion_locations.empty()){
-    funC::inclusion_locations.pop();
-  }
-  funC::source_files.clear();
-  funC::source_fdescr.clear();
-
-  funC::glob_func_cnt = 0;
-  funC::undef_func_cnt = 0;
-  funC::glob_var_cnt = 0;
-  funC::glob_func.clear();
-  funC::glob_func.clear();
-  funC::generated_from = "";
-
   funC::define_keywords();
   funC::define_builtins();
 
   int ok = 0, proc = 0;
   try {
-    if (!funC::interactive_from_string) {
-        for (auto src : sources) {
-        ok += funC::parse_source_file(src.c_str(), {}, true);
-        proc++;
-        }
+    for (auto src : sources) {
+      ok += funC::parse_source_file(src.c_str(), {}, true);
+      proc++;
     }
     if (funC::interactive) {
       funC::generated_from += "stdin ";
       ok += funC::parse_source_stdin();
-      proc++;
-    }
-    if (funC::interactive_from_string) {
-      funC::generated_from += "string ";
-      ok = funC::parse_source_string(sources[0]);
       proc++;
     }
     if (ok < proc) {

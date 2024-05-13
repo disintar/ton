@@ -1765,7 +1765,6 @@ bool parse_source_file(const char* filename, src::Lexem lex, bool is_main) {
   }
 
   auto path_res = read_callback(ReadCallback::Kind::Realpath, filename);
-  
   if (path_res.is_error()) {
     auto error = path_res.move_as_error();
     lex.error(error.message().c_str());
@@ -1815,15 +1814,5 @@ bool parse_source_stdin() {
   source_fdescr.push_back(cur_source);
   return parse_source(&std::cin, cur_source);
 }
-
-bool parse_source_string(const std::string &source) {
-    src::FileDescr* cur_source = new src::FileDescr{"string"};
-    cur_source->is_main = true;
-    source_fdescr.push_back(cur_source);
-
-    std::stringstream stream{source};
-    return parse_source(&stream, cur_source);
-}
-
 
 }  // namespace funC
