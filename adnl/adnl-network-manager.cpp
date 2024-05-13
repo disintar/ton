@@ -223,7 +223,8 @@ void AdnlNetworkManagerImpl::send_udp_packet(AdnlNodeIdShort src_id, AdnlNodeIdS
                                              td::uint32 priority, td::BufferSlice data) {
   auto it = adnl_id_2_cat_.find(src_id);
   if (it == adnl_id_2_cat_.end()) {
-    VLOG(ADNL_WARNING) << this << ": dropping OUT message [" << src_id << "->" << dst_id << "]: unknown src";
+    VLOG(ADNL_WARNING) << this << ": dropping OUT message [" << src_id << "->" << dst_id
+                       << "]: unknown src: " << src_id.bits256_value().to_hex();
     return;
   }
 

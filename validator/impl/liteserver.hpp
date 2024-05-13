@@ -39,9 +39,12 @@ class LiteQuery : public td::actor::Actor {
   td::actor::ActorId<ton::validator::ValidatorManager> manager_;
   td::actor::ActorId<LiteServerCache> cache_;
   td::Timestamp timeout_;
+  long started_at_;
   td::Promise<td::BufferSlice> promise_;
+  adnl::AdnlNodeIdShort dst_ = adnl::AdnlNodeIdShort::zero();
 
-  td::Promise<std::tuple<td::Ref<vm::CellSlice>,UnixTime,LogicalTime,std::unique_ptr<block::ConfigInfo>>> acc_state_promise_;
+  td::Promise<std::tuple<td::Ref<vm::CellSlice>, UnixTime, LogicalTime, std::unique_ptr<block::ConfigInfo>>>
+      acc_state_promise_;
 
   tl_object_ptr<ton::lite_api::Function> query_obj_;
   bool use_cache_{false};
@@ -81,19 +84,28 @@ class LiteQuery : public td::actor::Actor {
   };  // version 1.1; +1 = build block proof chains, +2 = masterchainInfoExt, +4 = runSmcMethod
   LiteQuery(td::BufferSlice data, td::actor::ActorId<ton::validator::ValidatorManager> manager,
             td::actor::ActorId<LiteServerCache> cache, td::Promise<td::BufferSlice> promise);
-  LiteQuery(WorkchainId wc, StdSmcAddress  acc_addr, td::actor::ActorId<ton::validator::ValidatorManager> manager,
-            td::Promise<std::tuple<td::Ref<vm::CellSlice>,UnixTime,LogicalTime,std::unique_ptr<block::ConfigInfo>>> promise);
+  LiteQuery(td::BufferSlice data, td::actor::ActorId<ton::validator::ValidatorManager> manager,
+            td::actor::ActorId<LiteServerCache> cache, td::Promise<td::BufferSlice> promise, adnl::AdnlNodeIdShort dst);
+  LiteQuery(WorkchainId wc, StdSmcAddress acc_addr, td::actor::ActorId<ton::validator::ValidatorManager> manager,
+            td::Promise<std::tuple<td::Ref<vm::CellSlice>, UnixTime, LogicalTime, std::unique_ptr<block::ConfigInfo>>>
+                promise);
   static void run_query(td::BufferSlice data, td::actor::ActorId<ton::validator::ValidatorManager> manager,
                         td::actor::ActorId<LiteServerCache> cache, td::Promise<td::BufferSlice> promise);
+  static void run_query(td::BufferSlice data, td::actor::ActorId<ton::validator::ValidatorManager> manager,
+                        td::actor::ActorId<LiteServerCache> cache, td::Promise<td::BufferSlice> promise,
+                        adnl::AdnlNodeIdShort dst);
 
-  static void fetch_account_state(WorkchainId wc, StdSmcAddress  acc_addr, td::actor::ActorId<ton::validator::ValidatorManager> manager,
-                                  td::Promise<std::tuple<td::Ref<vm::CellSlice>,UnixTime,LogicalTime,std::unique_ptr<block::ConfigInfo>>> promise);
+  static void fetch_account_state(
+      WorkchainId wc, StdSmcAddress acc_addr, td::actor::ActorId<ton::validator::ValidatorManager> manager,
+      td::Promise<std::tuple<td::Ref<vm::CellSlice>, UnixTime, LogicalTime, std::unique_ptr<block::ConfigInfo>>>
+          promise);
 
  private:
   bool fatal_error(td::Status error);
   bool fatal_error(std::string err_msg, int err_code = -400);
   bool fatal_error(int err_code, std::string err_msg = "");
   void abort_query(td::Status reason);
+  void abort_query_ext(td::Status reason, bool unknown);
   void abort_query_ext(td::Status reason, std::string err_msg);
   bool finish_query(td::BufferSlice result, bool skip_cache_update = false);
   void alarm() override;

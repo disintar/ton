@@ -37,11 +37,13 @@ class CellDbAsyncExecutor : public vm::DynamicBagOfCellsDb::AsyncExecutor {
   void execute_async(std::function<void()> f) override {
     class Runner : public td::actor::Actor {
      public:
-      explicit Runner(std::function<void()> f) : f_(std::move(f)) {}
+      explicit Runner(std::function<void()> f) : f_(std::move(f)) {
+      }
       void start_up() override {
         f_();
         stop();
       }
+
      private:
       std::function<void()> f_;
     };
@@ -51,6 +53,7 @@ class CellDbAsyncExecutor : public vm::DynamicBagOfCellsDb::AsyncExecutor {
   void execute_sync(std::function<void()> f) override {
     td::actor::send_closure(cell_db_, &CellDbBase::execute_sync, std::move(f));
   }
+
  private:
   td::actor::ActorId<CellDbBase> cell_db_;
 };
@@ -64,8 +67,8 @@ void CellDbBase::execute_sync(std::function<void()> f) {
 }
 
 CellDbIn::CellDbIn(td::actor::ActorId<RootDb> root_db, td::actor::ActorId<CellDb> parent, std::string path,
-                   td::Ref<ValidatorManagerOptions> opts)
-    : root_db_(root_db), parent_(parent), path_(std::move(path)), opts_(opts) {
+                   td::Ref<ValidatorManagerOptions> opts, bool read_only)
+    : root_db_(root_db), parent_(parent), path_(std::move(path)), opts_(opts), read_only_(read_only) {
 }
 
 void CellDbIn::start_up() {
@@ -83,13 +86,12 @@ void CellDbIn::start_up() {
   };
 
   CellDbBase::start_up();
-  cell_db_ = std::make_shared<td::RocksDb>(td::RocksDb::open(path_).move_as_ok());
+  cell_db_ = std::make_shared<td::RocksDb>(td::RocksDb::open(path_, read_only_).move_as_ok());
 
   boc_ = vm::DynamicBagOfCellsDb::create();
   boc_->set_celldb_compress_depth(opts_->get_celldb_compress_depth());
   boc_->set_loader(std::make_unique<vm::CellLoader>(cell_db_->snapshot(), on_load_callback_)).ensure();
   td::actor::send_closure(parent_, &CellDb::update_snapshot, cell_db_->snapshot());
-
   alarm_timestamp() = td::Timestamp::in(10.0);
 
   auto empty = get_empty_key_hash();
@@ -167,7 +169,13 @@ void CellDbIn::alarm() {
     migration_stats_ = {};
   }
   auto E = get_block(get_empty_key_hash()).move_as_ok();
-  auto N = get_block(E.next).move_as_ok();
+  auto x = get_block(E.next);
+  if (x.is_error()) {
+    alarm_timestamp() = td::Timestamp::in(0.1);
+    return;
+  }
+
+  auto N = x.move_as_ok();
   if (N.is_empty()) {
     alarm_timestamp() = td::Timestamp::in(0.1);
     return;
@@ -187,6 +195,11 @@ void CellDbIn::alarm() {
     }
   });
   td::actor::send_closure(root_db_, &RootDb::allow_state_gc, block_id, std::move(P));
+}
+
+void CellDbIn::reinit() {
+  boc_->set_loader(std::make_unique<vm::CellLoader>(cell_db_->snapshot(), on_load_callback_)).ensure();
+  td::actor::send_closure(parent_, &CellDb::update_snapshot, cell_db_->snapshot());
 }
 
 void CellDbIn::gc(BlockIdExt block_id) {
@@ -322,7 +335,7 @@ void CellDbIn::migrate_cells() {
   boc_->set_loader(std::make_unique<vm::CellLoader>(*loader)).ensure();
   cell_db_->begin_write_batch().ensure();
   td::uint32 checked = 0, migrated = 0;
-  for (auto it = cells_to_migrate_.begin(); it != cells_to_migrate_.end() && checked < 128; ) {
+  for (auto it = cells_to_migrate_.begin(); it != cells_to_migrate_.end() && checked < 128;) {
     ++checked;
     td::Bits256 hash = *it;
     it = cells_to_migrate_.erase(it);
@@ -387,7 +400,7 @@ void CellDb::start_up() {
   CellDbBase::start_up();
   boc_ = vm::DynamicBagOfCellsDb::create();
   boc_->set_celldb_compress_depth(opts_->get_celldb_compress_depth());
-  cell_db_ = td::actor::create_actor<CellDbIn>("celldbin", root_db_, actor_id(this), path_, opts_);
+  cell_db_ = td::actor::create_actor<CellDbIn>("celldbin", root_db_, actor_id(this), path_, opts_, read_only_);
   on_load_callback_ = [actor = std::make_shared<td::actor::ActorOwn<CellDbIn::MigrationProxy>>(
                            td::actor::create_actor<CellDbIn::MigrationProxy>("celldbmigration", cell_db_.get())),
                        compress_depth = opts_->get_celldb_compress_depth()](const vm::CellLoader::LoadResult& res) {

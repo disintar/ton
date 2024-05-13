@@ -22,6 +22,7 @@
 #error "RocksDb is not supported"
 #endif
 
+#include "td/utils/Time.h"
 #include "td/db/KeyValue.h"
 #include "td/utils/Status.h"
 
@@ -38,7 +39,7 @@ class RocksDb : public KeyValue {
  public:
   static Status destroy(Slice path);
   RocksDb clone() const;
-  static Result<RocksDb> open(std::string path);
+  static Result<RocksDb> open(std::string path, bool read_only = false);
 
   Result<GetStatus> get(Slice key, std::string &value) override;
   Status set(Slice key, Slice value) override;
@@ -74,6 +75,9 @@ class RocksDb : public KeyValue {
 
   std::unique_ptr<rocksdb::Transaction> transaction_;
   std::unique_ptr<rocksdb::WriteBatch> write_batch_;
+  bool read_only_ = false;
+  td::Timestamp last_catch_timeout_;
+
   class UnreachableDeleter {
    public:
     template <class T>
@@ -84,6 +88,6 @@ class RocksDb : public KeyValue {
   std::unique_ptr<const rocksdb::Snapshot, UnreachableDeleter> snapshot_;
 
   explicit RocksDb(std::shared_ptr<rocksdb::OptimisticTransactionDB> db,
-                   std::shared_ptr<rocksdb::Statistics> statistics);
+                   std::shared_ptr<rocksdb::Statistics> statistics, bool read_only = false);
 };
 }  // namespace td

@@ -28,7 +28,8 @@ class RootDb;
 
 class ArchiveManager : public td::actor::Actor {
  public:
-  ArchiveManager(td::actor::ActorId<RootDb> root, std::string db_root, td::Ref<ValidatorManagerOptions> opts);
+  ArchiveManager(td::actor::ActorId<RootDb> root, std::string db_root, td::Ref<ValidatorManagerOptions> opts,
+                 bool read_only = false);
 
   void add_handle(BlockHandle handle, td::Promise<td::Unit> promise);
   void update_handle(BlockHandle handle, td::Promise<td::Unit> promise);
@@ -46,8 +47,7 @@ class ArchiveManager : public td::actor::Actor {
   void add_persistent_state(BlockIdExt block_id, BlockIdExt masterchain_block_id, td::BufferSlice data,
                             td::Promise<td::Unit> promise);
   void add_persistent_state_gen(BlockIdExt block_id, BlockIdExt masterchain_block_id,
-                                std::function<td::Status(td::FileFd&)> write_state,
-                                td::Promise<td::Unit> promise);
+                                std::function<td::Status(td::FileFd &)> write_state, td::Promise<td::Unit> promise);
   void get_zero_state(BlockIdExt block_id, td::Promise<td::BufferSlice> promise);
   void get_persistent_state(BlockIdExt block_id, BlockIdExt masterchain_block_id, td::Promise<td::BufferSlice> promise);
   void get_persistent_state_slice(BlockIdExt block_id, BlockIdExt masterchain_block_id, td::int64 offset,
@@ -72,6 +72,7 @@ class ArchiveManager : public td::actor::Actor {
   void start_up() override;
 
   void commit_transaction();
+  void reinit();
   void set_async_mode(bool mode, td::Promise<td::Unit> promise);
 
   static constexpr td::uint32 archive_size() {
@@ -211,6 +212,7 @@ class ArchiveManager : public td::actor::Actor {
 
   std::string db_root_;
   td::Ref<ValidatorManagerOptions> opts_;
+  bool read_only_;
 
   std::shared_ptr<td::KeyValue> index_;
 

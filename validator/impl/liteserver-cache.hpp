@@ -77,12 +77,12 @@ class LiteServerCacheImpl : public LiteServerCache {
   }
 
   void process_send_message(td::Bits256 key, td::Promise<td::Unit> promise) override {
-    if (send_message_cache_.insert(key).second) {
-      promise.set_result(td::Unit());
-    } else {
-      ++send_message_error_cnt_;
-      promise.set_error(td::Status::Error("duplicate message"));
-    }
+    //    if (send_message_cache_.insert(key).second) {
+    promise.set_result(td::Unit());
+    //    } else {
+    //      ++send_message_error_cnt_;
+    //      promise.set_error(td::Status::Error("duplicate message"));
+    //    }
   }
 
  private:

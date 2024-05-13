@@ -121,8 +121,12 @@ void AdnlLocalId::update_address_list(AdnlAddressList addr_list) {
 }
 
 void AdnlLocalId::publish_address_list() {
-  if (dht_node_.empty() || addr_list_.empty() || (addr_list_.size() == 0 && !addr_list_.has_reverse())) {
-    VLOG(ADNL_NOTICE) << this << ": skipping public addr list, because localid (or dht node) not fully initialized";
+  if (addr_list_.empty() || (addr_list_.size() == 0 && !addr_list_.has_reverse())) {
+    VLOG(ADNL_NOTICE) << this << ": skipping public addr list, because localid not fully initialized";
+    return;
+  }
+  if (dht_node_.empty()) {
+    VLOG(ADNL_NOTICE) << this << ": skipping public addr list, because DHT not fully initialized";
     return;
   }
 

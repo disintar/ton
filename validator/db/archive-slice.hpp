@@ -81,7 +81,7 @@ class ArchiveLru;
 class ArchiveSlice : public td::actor::Actor {
  public:
   ArchiveSlice(td::uint32 archive_id, bool key_blocks_only, bool temp, bool finalized, std::string db_root,
-               td::actor::ActorId<ArchiveLru> archive_lru);
+               td::actor::ActorId<ArchiveLru> archive_lru, bool read_only=false);
 
   void get_archive_id(BlockSeqno masterchain_seqno, td::Promise<td::uint64> promise);
 
@@ -91,6 +91,8 @@ class ArchiveSlice : public td::actor::Actor {
   void get_handle(BlockIdExt block_id, td::Promise<BlockHandle> promise);
   void get_temp_handle(BlockIdExt block_id, td::Promise<ConstBlockHandle> promise);
   void get_file(ConstBlockHandle handle, FileReference ref_id, td::Promise<td::BufferSlice> promise);
+  void try_get_file(ConstBlockHandle handle, FileReference ref_id,
+                    td::Promise<std::pair<std::string, td::BufferSlice>> promise);
 
   /* from LTDB */
   void get_block_by_unix_time(AccountIdPrefixFull account_id, UnixTime ts, td::Promise<ConstBlockHandle> promise);
@@ -106,6 +108,9 @@ class ArchiveSlice : public td::actor::Actor {
   void destroy(td::Promise<td::Unit> promise);
   void truncate(BlockSeqno masterchain_seqno, ConstBlockHandle handle, td::Promise<td::Unit> promise);
 
+  void reinit();
+  void begin_transaction();
+  void commit_transaction();
   void set_async_mode(bool mode, td::Promise<td::Unit> promise);
 
   void close_files();
@@ -116,10 +121,6 @@ class ArchiveSlice : public td::actor::Actor {
   template<typename T>
   td::Promise<T> begin_async_query(td::Promise<T> promise);
   void end_async_query();
-
-  void begin_transaction();
-  void commit_transaction();
-
   void add_file_cont(size_t idx, FileReference ref_id, td::uint64 offset, td::uint64 size,
                      td::Promise<td::Unit> promise);
 
@@ -139,6 +140,7 @@ class ArchiveSlice : public td::actor::Actor {
   bool destroyed_ = false;
   bool async_mode_ = false;
   bool huge_transaction_started_ = false;
+  bool read_only_ = false;
   bool sliced_mode_{false};
   td::uint32 huge_transaction_size_ = 0;
   td::uint32 slice_size_{100};

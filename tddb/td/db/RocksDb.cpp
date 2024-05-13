@@ -59,7 +59,7 @@ RocksDb RocksDb::clone() const {
   return RocksDb{db_, statistics_};
 }
 
-Result<RocksDb> RocksDb::open(std::string path) {
+Result<RocksDb> RocksDb::open(std::string path, bool read_only) {
   rocksdb::OptimisticTransactionDB *db;
   auto statistics = rocksdb::CreateDBStatistics();
   {
@@ -84,17 +84,25 @@ Result<RocksDb> RocksDb::open(std::string path) {
     std::vector<rocksdb::ColumnFamilyDescriptor> column_families;
     column_families.push_back(rocksdb::ColumnFamilyDescriptor(rocksdb::kDefaultColumnFamilyName, cf_options));
     std::vector<rocksdb::ColumnFamilyHandle *> handles;
-    TRY_STATUS(from_rocksdb(
-        rocksdb::OptimisticTransactionDB::Open(options, occ_options, std::move(path), column_families, &handles, &db)));
+    if (read_only) {
+      const std::string kSecondaryPath = "/tmp/rocksdb_secondary/";
+      TRY_STATUS(from_rocksdb(rocksdb::OptimisticTransactionDB::OpenAsSecondary(
+          options, path, kSecondaryPath, column_families, &handles, reinterpret_cast<rocksdb::DB **>(&db))));
+    } else {
+      TRY_STATUS(from_rocksdb(rocksdb::OptimisticTransactionDB::Open(options, occ_options, std::move(path),
+                                                                     column_families, &handles, &db)));
+    }
+
     CHECK(handles.size() == 1);
     // i can delete the handle since DBImpl is always holding a reference to
     // default column family
     delete handles[0];
   }
-  return RocksDb(std::shared_ptr<rocksdb::OptimisticTransactionDB>(db), std::move(statistics));
+  return RocksDb(std::shared_ptr<rocksdb::OptimisticTransactionDB>(db), std::move(statistics), read_only);
 }
 
 std::unique_ptr<KeyValueReader> RocksDb::snapshot() {
+  db_->TryCatchUpWithPrimary();
   auto res = std::make_unique<RocksDb>(clone());
   res->begin_snapshot().ensure();
   return std::move(res);
@@ -109,7 +117,12 @@ std::string RocksDb::stats() const {
 }
 
 Result<RocksDb::GetStatus> RocksDb::get(Slice key, std::string &value) {
-  //LOG(ERROR) << "GET";
+  if (read_only_) {
+    if (!last_catch_timeout_ || last_catch_timeout_.is_in_past()) {
+      db_->TryCatchUpWithPrimary();
+      last_catch_timeout_ = td::Timestamp::at(0.1);
+    }
+  }
   rocksdb::Status status;
   if (snapshot_) {
     rocksdb::ReadOptions options;
@@ -228,7 +241,8 @@ Status RocksDb::end_snapshot() {
   return td::Status::OK();
 }
 
-RocksDb::RocksDb(std::shared_ptr<rocksdb::OptimisticTransactionDB> db, std::shared_ptr<rocksdb::Statistics> statistics)
-    : db_(std::move(db)), statistics_(std::move(statistics)) {
+RocksDb::RocksDb(std::shared_ptr<rocksdb::OptimisticTransactionDB> db, std::shared_ptr<rocksdb::Statistics> statistics,
+                 bool read_only)
+    : db_(std::move(db)), statistics_(std::move(statistics)), read_only_(read_only) {
 }
 }  // namespace td
