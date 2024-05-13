@@ -95,8 +95,7 @@ py::bytes PyPrivateKey::sign(const char *data) {
   if (R.is_error()) {
     throw std::invalid_argument(R.move_as_error().to_string());
   }
-
-  return py::bytes(std::move(R.move_as_ok().as_slice().data()));
+  return std::move(R.move_as_ok().as_slice().str());
 };
 
 PyPublicKey PyPrivateKey::get_public_key() {
