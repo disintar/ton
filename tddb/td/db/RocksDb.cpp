@@ -60,6 +60,8 @@ RocksDb RocksDb::clone() const {
 }
 
 Result<RocksDb> RocksDb::open(std::string path, bool read_only, std::shared_ptr<rocksdb::Statistics> statistics) {
+  LOG(ERROR) << "Open rocksdb: " << path;
+
   rocksdb::OptimisticTransactionDB *db;
   {
     rocksdb::Options options;
@@ -85,13 +87,12 @@ Result<RocksDb> RocksDb::open(std::string path, bool read_only, std::shared_ptr<
     std::vector<rocksdb::ColumnFamilyHandle *> handles;
 
     if (read_only) {
-      TRY_STATUS(from_rocksdb(
-          rocksdb::OptimisticTransactionDB::OpenForReadOnly(options, std::move(path), column_families, &handles, reinterpret_cast<rocksdb::DB **>(&db))));
+      TRY_STATUS(from_rocksdb(rocksdb::OptimisticTransactionDB::OpenForReadOnly(
+          options, std::move(path), column_families, &handles, reinterpret_cast<rocksdb::DB **>(&db))));
     } else {
-      TRY_STATUS(from_rocksdb(
-          rocksdb::OptimisticTransactionDB::Open(options, occ_options, std::move(path), column_families, &handles, &db)));
+      TRY_STATUS(from_rocksdb(rocksdb::OptimisticTransactionDB::Open(options, occ_options, std::move(path),
+                                                                     column_families, &handles, &db)));
     }
-
 
     CHECK(handles.size() == 1);
     // i can delete the handle since DBImpl is always holding a reference to
