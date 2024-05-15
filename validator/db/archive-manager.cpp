@@ -55,8 +55,9 @@ std::string PackageId::name() const {
   }
 }
 
-ArchiveManager::ArchiveManager(td::actor::ActorId<RootDb> root, std::string db_root, bool read_only)
-    : db_root_(db_root), read_only_(read_only) {
+ArchiveManager::ArchiveManager(td::actor::ActorId<RootDb> root, std::string db_root,
+                               td::Ref<ValidatorManagerOptions> opts, bool read_only)
+    : db_root_(db_root), opts_(opts), read_only_(read_only) {
 }
 
 void ArchiveManager::add_handle(BlockHandle handle, td::Promise<td::Unit> promise) {
@@ -603,9 +604,11 @@ void ArchiveManager::load_package(PackageId id) {
     }
   }
 
-  desc.file = td::actor::create_actor<ArchiveSlice>("slice", id.id, id.key, id.temp, false, db_root_, read_only_);
+  desc.file =
+      td::actor::create_actor<ArchiveSlice>("slice", id.id, id.key, id.temp, false, db_root_, archive_lru_.get(), read_only_, statistics_);
 
   m.emplace(id, std::move(desc));
+  update_permanent_slices();
 }
 
 const ArchiveManager::FileDescription *ArchiveManager::get_file_desc(ShardIdFull shard, PackageId id, BlockSeqno seqno,
@@ -636,7 +639,9 @@ const ArchiveManager::FileDescription *ArchiveManager::add_file_desc(ShardIdFull
   FileDescription new_desc{id, false};
   td::mkdir(db_root_ + id.path()).ensure();
   std::string prefix = PSTRING() << db_root_ << id.path() << id.name();
-  new_desc.file = td::actor::create_actor<ArchiveSlice>("slice", id.id, id.key, id.temp, false, db_root_, read_only_);
+  new_desc.file =
+      td::actor::create_actor<ArchiveSlice>("slice", id.id, id.key, id.temp, false, db_root_, archive_lru_.get(),
+                                            read_only_, statistics_);
   const FileDescription &desc = f.emplace(id, std::move(new_desc));
   if (!id.temp) {
     update_desc(f, desc, shard, seqno, ts, lt);
@@ -678,6 +683,7 @@ const ArchiveManager::FileDescription *ArchiveManager::add_file_desc(ShardIdFull
         .ensure();
   }
   index_->commit_transaction().ensure();
+  update_permanent_slices();
   return &desc;
 }
 
@@ -825,7 +831,13 @@ void ArchiveManager::start_up() {
   td::mkdir(db_root_ + "/archive/states/").ensure();
   td::mkdir(db_root_ + "/files/").ensure();
   td::mkdir(db_root_ + "/files/packages/").ensure();
-  index_ = std::make_shared<td::RocksDb>(td::RocksDb::open(db_root_ + "/files/globalindex", read_only_).move_as_ok());
+  if (opts_->get_max_open_archive_files() > 0) {
+    archive_lru_ = td::actor::create_actor<ArchiveLru>("archive_lru", opts_->get_max_open_archive_files());
+  }
+  if (!opts_->get_disable_rocksdb_stats()) {
+    statistics_.init();
+  }
+  index_ = std::make_shared<td::RocksDb>(td::RocksDb::open(db_root_ + "/files/globalindex", read_only_, statistics_.rocksdb_statistics).move_as_ok());
   std::string value;
   auto v = index_->get(create_serialize_tl_object<ton_api::db_files_index_key>().as_slice(), value);
   v.ensure();
@@ -888,13 +900,49 @@ void ArchiveManager::start_up() {
 
   LOG(DEBUG) << "Done loading";
   persistent_state_gc(FileHash::zero());
-  LOG(DEBUG) << "Done";
+
+  double open_since = td::Clocks::system() - opts_->get_archive_preload_period();
+  for (auto it = files_.rbegin(); it != files_.rend(); ++it) {
+    if (it->second.file_actor_id().empty()) {
+      continue;
+    }
+    td::actor::send_closure(it->second.file_actor_id(), &ArchiveSlice::open_files);
+    bool stop = true;
+    for (const auto &first_block : it->second.first_blocks) {
+      if ((double)first_block.second.ts >= open_since) {
+        stop = false;
+        break;
+      }
+    }
+    if (stop) {
+      break;
+    }
+  }
+
+  if (!opts_->get_disable_rocksdb_stats()) {
+    alarm_timestamp() = td::Timestamp::in(60.0);
+  }
 }
 
-void ArchiveManager::run_gc(UnixTime ts, UnixTime archive_ttl) {
-  LOG(DEBUG) << "Run garbage collector";
+void ArchiveManager::alarm() {
+  alarm_timestamp() = td::Timestamp::in(60.0);
+  auto stats = statistics_.to_string_and_reset();
+  auto to_file_r = td::FileFd::open(db_root_ + "/db_stats.txt", td::FileFd::Truncate | td::FileFd::Create | td::FileFd::Write, 0644);
+  if (to_file_r.is_error()) {
+    LOG(ERROR) << "Failed to open db_stats.txt: " << to_file_r.move_as_error();
+    return;
+  }
+  auto to_file = to_file_r.move_as_ok();
+  auto res = to_file.write(stats);
+  to_file.close();
+  if (res.is_error()) {
+    LOG(ERROR) << "Failed to write to db_stats.txt: " << res.move_as_error();
+    return;
+  }
+}
 
-  auto p = get_temp_package_id_by_unixtime(ts);
+void ArchiveManager::run_gc(UnixTime mc_ts, UnixTime gc_ts, UnixTime archive_ttl) {
+  auto p = get_temp_package_id_by_unixtime(mc_ts - TEMP_PACKAGES_TTL);
   std::vector<PackageId> vec;
   for (auto &x : temp_files_) {
     if (x.first < p) {
@@ -922,7 +970,7 @@ void ArchiveManager::run_gc(UnixTime ts, UnixTime archive_ttl) {
       if (it == desc.first_blocks.end()) {
         continue;
       }
-      if (it->second.ts < ts - archive_ttl) {
+      if (it->second.ts < gc_ts - archive_ttl) {
         vec.push_back(f.first);
       }
     }
@@ -1215,6 +1263,7 @@ void ArchiveManager::truncate(BlockSeqno masterchain_seqno, ConstBlockHandle han
       }
     }
   }
+  update_permanent_slices();
 }
 
 void ArchiveManager::FileMap::shard_index_add(const FileDescription &desc) {
@@ -1313,7 +1362,22 @@ const ArchiveManager::FileDescription *ArchiveManager::FileMap::get_next_file_de
   return it2->second->deleted ? nullptr : it2->second;
 }
 
-
+void ArchiveManager::update_permanent_slices() {
+  if (archive_lru_.empty()) {
+    return;
+  }
+  std::vector<PackageId> ids;
+  if (!files_.empty()) {
+    ids.push_back(files_.rbegin()->first);
+  }
+  if (!key_files_.empty()) {
+    ids.push_back(key_files_.rbegin()->first);
+  }
+  if (!temp_files_.empty()) {
+    ids.push_back(temp_files_.rbegin()->first);
+  }
+  td::actor::send_closure(archive_lru_, &ArchiveLru::set_permanent_slices, std::move(ids));
+}
 
 }  // namespace validator
 

@@ -35,19 +35,18 @@ td::Result<std::unique_ptr<TransactionEmulator::EmulationResult>> TransactionEmu
 
     TRY_STATUS(vm::init_vm(debug_enabled_));
 
-  if (!lt) {
-    lt = lt_;
-  }
-  if (!lt) {
-    lt = (account.last_trans_lt_ / block::ConfigInfo::get_lt_align() + 1) *
-         block::ConfigInfo::get_lt_align();  // next block after account_.last_trans_lt_
-  }
+    if (!lt) {
+      lt = lt_;
+    }
+    if (!lt) {
+      lt = (account.last_trans_lt_ / block::ConfigInfo::get_lt_align() + 1) * block::ConfigInfo::get_lt_align(); // next block after account_.last_trans_lt_
+    }
+    account.block_lt = lt - lt % block::ConfigInfo::get_lt_align();
 
   compute_phase_cfg.libraries = std::make_unique<vm::Dictionary>(libraries_);
   compute_phase_cfg.ignore_chksig = ignore_chksig_;
   compute_phase_cfg.with_vm_log = true;
   compute_phase_cfg.vm_log_verbosity = vm_log_verbosity_;
-  compute_phase_cfg.vm_ver = vm_ver;
 
   double start_time = td::Time::now();
   auto res = create_transaction(msg_root, &account, utime, lt, trans_type, &storage_phase_cfg, &compute_phase_cfg,

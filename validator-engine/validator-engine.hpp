@@ -1,4 +1,4 @@
-/* 
+/*
     This file is part of TON Blockchain source code.
 
     TON Blockchain is free software; you can redistribute it and/or
@@ -155,6 +155,9 @@ class ValidatorEngine : public td::actor::Actor {
   std::string local_config_ = "";
   std::string global_config_ = "ton-global.config";
   std::string config_file_;
+  std::string temp_config_file() const {
+    return config_file_ + ".tmp";
+  }
 
   std::string fift_dir_ = "";
 
@@ -167,6 +170,7 @@ class ValidatorEngine : public td::actor::Actor {
   std::shared_ptr<ton::dht::DhtGlobalConfig> dht_config_;
   td::Ref<ton::validator::ValidatorManagerOptions> validator_options_;
   Config config_;
+  ton::tl_object_ptr<ton::ton_api::engine_validator_customOverlaysConfig> custom_overlays_config_;
 
   std::set<ton::PublicKeyHash> running_gc_;
 
@@ -204,6 +208,10 @@ class ValidatorEngine : public td::actor::Actor {
   double archive_ttl_ = 0;
   double key_proof_ttl_ = 0;
   td::uint32 celldb_compress_depth_ = 0;
+  size_t max_open_archive_files_ = 0;
+  double archive_preload_period_ = 0.0;
+  bool disable_rocksdb_stats_ = false;
+  bool nonfinal_ls_queries_enabled_ = false;
   bool read_config_ = false;
   bool started_keyring_ = false;
   bool started_ = false;
@@ -263,6 +271,18 @@ class ValidatorEngine : public td::actor::Actor {
   void schedule_shutdown(double at);
   void set_celldb_compress_depth(td::uint32 value) {
     celldb_compress_depth_ = value;
+  }
+  void set_max_open_archive_files(size_t value) {
+    max_open_archive_files_ = value;
+  }
+  void set_archive_preload_period(double value) {
+    archive_preload_period_ = value;
+  }
+  void set_disable_rocksdb_stats(bool value) {
+    disable_rocksdb_stats_ = value;
+  }
+  void set_nonfinal_ls_queries_enabled() {
+    nonfinal_ls_queries_enabled_ = true;
   }
   void set_block_publisher(std::unique_ptr<ton::validator::BlockParser> publisher) {
     publisher_temp_ = std::move(publisher);
@@ -350,6 +370,16 @@ class ValidatorEngine : public td::actor::Actor {
   void try_del_proxy(td::uint32 ip, td::int32 port, std::vector<AdnlCategory> cats, std::vector<AdnlCategory> prio_cats,
                      td::Promise<td::Unit> promise);
 
+  std::string custom_overlays_config_file() const {
+    return db_root_ + "/custom-overlays.json";
+  }
+
+  void load_custom_overlays_config();
+  td::Status write_custom_overlays_config();
+  void add_custom_overlay_to_config(
+      ton::tl_object_ptr<ton::ton_api::engine_validator_customOverlay> overlay, td::Promise<td::Unit> promise);
+  void del_custom_overlay_from_config(std::string name, td::Promise<td::Unit> promise);
+
   void check_key(ton::PublicKeyHash id, td::Promise<td::Unit> promise);
 
   static td::BufferSlice create_control_query_error(td::Status error);
@@ -427,6 +457,12 @@ class ValidatorEngine : public td::actor::Actor {
   void run_control_query(ton::ton_api::engine_validator_getShardOutQueueSize &query, td::BufferSlice data,
                          ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
   void run_control_query(ton::ton_api::engine_validator_setExtMessagesBroadcastDisabled &query, td::BufferSlice data,
+                         ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
+  void run_control_query(ton::ton_api::engine_validator_addCustomOverlay &query, td::BufferSlice data,
+                         ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
+  void run_control_query(ton::ton_api::engine_validator_delCustomOverlay &query, td::BufferSlice data,
+                         ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
+  void run_control_query(ton::ton_api::engine_validator_showCustomOverlays &query, td::BufferSlice data,
                          ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
   template <class T>
   void run_control_query(T &query, td::BufferSlice data, ton::PublicKeyHash src, td::uint32 perm,

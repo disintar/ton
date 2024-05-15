@@ -287,7 +287,9 @@ void CatChainReceiverImpl::add_block_cont_3(tl_object_ptr<ton_api::catchain_bloc
 
   run_scheduler();
   if (!intentional_fork_) {
-    CHECK(last_sent_block_->delivered());
+    LOG_CHECK(last_sent_block_->delivered())
+        << "source=" << last_sent_block_->get_source_id() << " ill=" << last_sent_block_->is_ill()
+        << " height=" << last_sent_block_->get_height();
   }
 
   active_send_ = false;
@@ -518,7 +520,8 @@ void CatChainReceiverImpl::start_up() {
   }
   td::actor::send_closure(overlay_manager_, &overlay::Overlays::create_private_overlay,
                           get_source(local_idx_)->get_adnl_id(), overlay_full_id_.clone(), std::move(ids),
-                          make_callback(), overlay::OverlayPrivacyRules{0, 0, std::move(root_keys)});
+                          make_callback(), overlay::OverlayPrivacyRules{0, 0, std::move(root_keys)},
+                          R"({ "type": "catchain" })");
 
   CHECK(root_block_);
 

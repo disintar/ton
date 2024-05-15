@@ -27,6 +27,10 @@
 #include "auto/tl/ton_api.h"
 #include "validator.h"
 
+namespace rocksdb {
+class Statistics;
+}
+
 namespace ton {
 
 namespace validator {
@@ -55,6 +59,8 @@ class CellDbIn : public CellDbBase {
   void get_cell_db_reader(td::Promise<std::shared_ptr<vm::CellDbReader>> promise);
 
   void migrate_cell(td::Bits256 hash);
+
+  void flush_db_stats();
 
   CellDbIn(td::actor::ActorId<RootDb> root_db, td::actor::ActorId<CellDb> parent, std::string path,
            td::Ref<ValidatorManagerOptions> opts, bool read_only=false);
@@ -104,10 +110,36 @@ class CellDbIn : public CellDbBase {
 
   std::unique_ptr<vm::DynamicBagOfCellsDb> boc_;
   std::shared_ptr<vm::KeyValue> cell_db_;
+  std::shared_ptr<rocksdb::Statistics> statistics_;
+  td::Timestamp statistics_flush_at_ = td::Timestamp::never();
 
   std::function<void(const vm::CellLoader::LoadResult&)> on_load_callback_;
   std::set<td::Bits256> cells_to_migrate_;
   td::Timestamp migrate_after_ = td::Timestamp::never();
+  bool migration_active_ = false;
+
+  struct MigrationStats {
+    td::Timer start_;
+    td::Timestamp end_at_ = td::Timestamp::in(60.0);
+    size_t batches_ = 0;
+    size_t migrated_cells_ = 0;
+    size_t checked_cells_ = 0;
+    double total_time_ = 0.0;
+  };
+  std::unique_ptr<MigrationStats> migration_stats_;
+
+ public:
+  class MigrationProxy : public td::actor::Actor {
+   public:
+    explicit MigrationProxy(td::actor::ActorId<CellDbIn> cell_db) : cell_db_(cell_db) {
+    }
+    void migrate_cell(td::Bits256 hash) {
+      td::actor::send_closure(cell_db_, &CellDbIn::migrate_cell, hash);
+    }
+
+   private:
+    td::actor::ActorId<CellDbIn> cell_db_;
+  };
 };
 
 class CellDb : public CellDbBase {

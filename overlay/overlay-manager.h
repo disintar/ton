@@ -54,10 +54,10 @@ class OverlayManager : public Overlays {
                              std::unique_ptr<Callback> callback, OverlayPrivacyRules rules, td::string scope) override;
   void create_public_overlay_ex(adnl::AdnlNodeIdShort local_id, OverlayIdFull overlay_id,
                                  std::unique_ptr<Callback> callback, OverlayPrivacyRules rules, td::string scope,
-                                 bool announce_self) override;
+                                 OverlayOptions opts) override;
   void create_private_overlay(adnl::AdnlNodeIdShort local_id, OverlayIdFull overlay_id,
                               std::vector<adnl::AdnlNodeIdShort> nodes, std::unique_ptr<Callback> callback,
-                              OverlayPrivacyRules rules) override;
+                              OverlayPrivacyRules rules, std::string scope) override;
   void delete_overlay(adnl::AdnlNodeIdShort local_id, OverlayIdShort overlay_id) override;
   void send_query(adnl::AdnlNodeIdShort dst, adnl::AdnlNodeIdShort src, OverlayIdShort overlay_id, std::string name,
                   td::Promise<td::BufferSlice> promise, td::Timestamp timeout, td::BufferSlice query) override {

@@ -100,6 +100,7 @@ class VmState final : public VmStateInterface {
   int stack_trace{0}, debug_off{0};
   int vm_ver{1};
   bool chksig_always_succeed{false};
+  bool stop_on_accept_message{false};
   td::optional<td::Bits256> missing_library;
   td::uint16 max_data_depth = 512; // Default value
   int global_version{0};
@@ -363,7 +364,7 @@ class VmState final : public VmStateInterface {
   void preclear_cr(const ControlRegs& save) {
     cr &= save;
   }
-  int get_global_version() const {
+  int get_global_version() const override {
     return global_version;
   }
   void set_global_version(int version) {
@@ -404,6 +405,12 @@ class VmState final : public VmStateInterface {
   }
   bool get_chksig_always_succeed() const {
     return chksig_always_succeed;
+  }
+  void set_stop_on_accept_message(bool flag) {
+    stop_on_accept_message = flag;
+  }
+  bool get_stop_on_accept_message() const {
+    return stop_on_accept_message;
   }
   Ref<OrdCont> ref_to_cont(Ref<Cell> cell) const {
     return td::make_ref<OrdCont>(load_cell_slice_ref(std::move(cell)), get_cp());

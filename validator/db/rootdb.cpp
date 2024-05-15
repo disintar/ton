@@ -526,7 +526,7 @@ void RootDb::start_up() {
   cell_db_ = td::actor::create_actor<CellDb>("celldb", actor_id(this), root_path_ + "/celldb/", opts_, read_only_);
   state_db_ = td::actor::create_actor<StateDb>("statedb", actor_id(this), root_path_ + "/state/", read_only_);
   static_files_db_ = td::actor::create_actor<StaticFilesDb>("staticfilesdb", actor_id(this), root_path_ + "/static/", read_only_);
-  archive_db_ = td::actor::create_actor<ArchiveManager>("archive", actor_id(this), root_path_, read_only_);
+  archive_db_ = td::actor::create_actor<ArchiveManager>("archive", actor_id(this), root_path_, opts_, read_only_);
 }
 
 void RootDb::archive(BlockHandle handle, td::Promise<td::Unit> promise) {
@@ -623,8 +623,8 @@ void RootDb::set_async_mode(bool mode, td::Promise<td::Unit> promise) {
   td::actor::send_closure(archive_db_, &ArchiveManager::set_async_mode, mode, std::move(promise));
 }
 
-void RootDb::run_gc(UnixTime ts, UnixTime archive_ttl) {
-  td::actor::send_closure(archive_db_, &ArchiveManager::run_gc, ts, archive_ttl);
+void RootDb::run_gc(UnixTime mc_ts, UnixTime gc_ts, UnixTime archive_ttl) {
+  td::actor::send_closure(archive_db_, &ArchiveManager::run_gc, mc_ts, gc_ts, archive_ttl);
 }
 
 }  // namespace validator

@@ -59,9 +59,8 @@ RocksDb RocksDb::clone() const {
   return RocksDb{db_, statistics_};
 }
 
-Result<RocksDb> RocksDb::open(std::string path, bool read_only) {
+Result<RocksDb> RocksDb::open(std::string path, bool read_only, std::shared_ptr<rocksdb::Statistics> statistics) {
   rocksdb::OptimisticTransactionDB *db;
-  auto statistics = rocksdb::CreateDBStatistics();
   {
     rocksdb::Options options;
 
@@ -100,6 +99,18 @@ Result<RocksDb> RocksDb::open(std::string path, bool read_only) {
     delete handles[0];
   }
   return RocksDb(std::shared_ptr<rocksdb::OptimisticTransactionDB>(db), std::move(statistics));
+}
+
+std::shared_ptr<rocksdb::Statistics> RocksDb::create_statistics() {
+  return rocksdb::CreateDBStatistics();
+}
+
+std::string RocksDb::statistics_to_string(const std::shared_ptr<rocksdb::Statistics> statistics) {
+  return statistics->ToString();
+}
+
+void RocksDb::reset_statistics(const std::shared_ptr<rocksdb::Statistics> statistics) {
+  statistics->Reset();
 }
 
 std::unique_ptr<KeyValueReader> RocksDb::snapshot() {

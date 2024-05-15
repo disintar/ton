@@ -1,10 +1,13 @@
-##2023.11 Update
+## 2024.04 Update
 
-1. New TVM Functionality. (Disabled by default)
-2. A series of emulator improvements: libraries support, higher max stack size, etc
-3. A series of tonlib and tonlib-cli improvements: wallet-v4 support, getconfig, showtransactions, etc
-4. Changes to public libraries: now contract can not publish more than 256 libraries (config parameter) and contracts can not be deployed with public libraries in initstate (instead contracts need explicitly publish all libraries)
-5. Changes to storage due payment: now due payment is collected in Storage Phase, however for bouncable messages fee amount can not exceed balance of account prior to message.
+1. Emulator: Single call optimized runGetMethod added
+2. Tonlib: a series of proof improvements, also breaking Change in `liteServer.getAllShardsInfo` method (see below)
+3. DB: usage statistics now collected, outdated persistent states are not serialized
+4. LS: fast `getOutMsgQueueSizes` added, preliminary support of non-final block requests
+5. Network: lz4 compression of block candidates (disabled by default).
+6. Overlays: add custom overlays
+7. Transaction Executor: fixed issue with due_payment collection
 
+* `liteServer.getAllShardsInfo` method was updated for better efficiency. Previously, field proof contained BoC with two roots: one for BlockState from block's root and another for ShardHashes from BlockState. Now, it returns a single-root proof BoC, specifically the merkle proof of ShardHashes directly from the block's root, streamlining data access and integrity. Checking of the proof requires to check that ShardHashes in the `data` correspond to ShardHashes from the block.
 
-Besides the work of the core team, this update is based on the efforts of @aleksej-paschenko (emulator improvements), @akifoq (security improvements), Trail of Bits auditor as well as all participants of [TEP-88 discussion](https://github.com/ton-blockchain/TEPs/pull/88).
+Besides the work of the core team, this update is based on the efforts of @akifoq (due_payment issue).

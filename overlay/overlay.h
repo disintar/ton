@@ -42,13 +42,14 @@ class Overlay : public td::actor::Actor {
                                              td::actor::ActorId<OverlayManager> manager,
                                              td::actor::ActorId<dht::Dht> dht_node, adnl::AdnlNodeIdShort local_id,
                                              OverlayIdFull overlay_id, std::unique_ptr<Overlays::Callback> callback,
-                                             OverlayPrivacyRules rules, td::string scope, bool announce_self = true);
+                                             OverlayPrivacyRules rules, td::string scope, OverlayOptions opts = {});
   static td::actor::ActorOwn<Overlay> create(td::actor::ActorId<keyring::Keyring> keyring,
                                              td::actor::ActorId<adnl::Adnl> adnl,
                                              td::actor::ActorId<OverlayManager> manager,
                                              td::actor::ActorId<dht::Dht> dht_node, adnl::AdnlNodeIdShort local_id,
                                              OverlayIdFull overlay_id, std::vector<adnl::AdnlNodeIdShort> nodes,
-                                             std::unique_ptr<Overlays::Callback> callback, OverlayPrivacyRules rules);
+                                             std::unique_ptr<Overlays::Callback> callback, OverlayPrivacyRules rules,
+                                             std::string scope);
 
   virtual void update_dht_node(td::actor::ActorId<dht::Dht> dht) = 0;
 
