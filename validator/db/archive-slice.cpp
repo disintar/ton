@@ -32,7 +32,7 @@ namespace ton {
 namespace validator {
 
 class PackageStatistics {
-  public:
+ public:
   void record_open(uint64_t count = 1) {
     open_count.fetch_add(count, std::memory_order_relaxed);
   }
@@ -76,12 +76,9 @@ class PackageStatistics {
       read_time_sum = 0;
     }
     auto read_stats = calculate_statistics(temp_read_time);
-    ss << "ton.pack.read.micros P50 : " << read_stats[0] <<
-                              " P95 : " << read_stats[1] <<
-                              " P99 : " << read_stats[2] <<
-                              " P100 : " << read_stats[3] <<
-                              " COUNT : " << temp_read_time.size() <<
-                              " SUM : " << temp_read_time_sum << "\n";
+    ss << "ton.pack.read.micros P50 : " << read_stats[0] << " P95 : " << read_stats[1] << " P99 : " << read_stats[2]
+       << " P100 : " << read_stats[3] << " COUNT : " << temp_read_time.size() << " SUM : " << temp_read_time_sum
+       << "\n";
 
     std::multiset<double> temp_write_time;
     double temp_write_time_sum;
@@ -93,17 +90,14 @@ class PackageStatistics {
       write_time_sum = 0;
     }
     auto write_stats = calculate_statistics(temp_write_time);
-    ss << "ton.pack.write.micros P50 : " << write_stats[0] <<
-                               " P95 : " << write_stats[1] <<
-                               " P99 : " << write_stats[2] <<
-                               " P100 : " << write_stats[3] <<
-                               " COUNT : " << temp_write_time.size() <<
-                               " SUM : " << temp_write_time_sum << "\n";
+    ss << "ton.pack.write.micros P50 : " << write_stats[0] << " P95 : " << write_stats[1] << " P99 : " << write_stats[2]
+       << " P100 : " << write_stats[3] << " COUNT : " << temp_write_time.size() << " SUM : " << temp_write_time_sum
+       << "\n";
 
     return ss.str();
   }
 
-  private:
+ private:
   std::atomic_uint64_t open_count;
   std::atomic_uint64_t close_count;
   std::multiset<double> read_time;
@@ -116,8 +110,9 @@ class PackageStatistics {
   mutable std::mutex read_mutex;
   mutable std::mutex write_mutex;
 
-  std::vector<double> calculate_statistics(const std::multiset<double>& data) const {
-    if (data.empty()) return {0, 0, 0, 0};
+  std::vector<double> calculate_statistics(const std::multiset<double> &data) const {
+    if (data.empty())
+      return {0, 0, 0, 0};
 
     auto size = data.size();
     auto calc_percentile = [&](double p) -> double {
@@ -167,8 +162,12 @@ void PackageWriter::append(std::string filename, td::BufferSlice data,
 class PackageReader : public td::actor::Actor {
  public:
   PackageReader(std::shared_ptr<Package> package, td::uint64 offset,
-                td::Promise<std::pair<std::string, td::BufferSlice>> promise, std::shared_ptr<PackageStatistics> statistics)
-      : package_(std::move(package)), offset_(offset), promise_(std::move(promise)), statistics_(std::move(statistics)) {
+                td::Promise<std::pair<std::string, td::BufferSlice>> promise,
+                std::shared_ptr<PackageStatistics> statistics)
+      : package_(std::move(package))
+      , offset_(offset)
+      , promise_(std::move(promise))
+      , statistics_(std::move(statistics)) {
   }
   void start_up() override {
     auto start = td::Timestamp::now();
@@ -422,7 +421,8 @@ void ArchiveSlice::get_file(ConstBlockHandle handle, FileReference ref_id, td::P
           promise.set_value(std::move(R.move_as_ok().second));
         }
       });
-  td::actor::create_actor<PackageReader>("reader", p->package, offset, std::move(P), statistics_.pack_statistics).release();
+  td::actor::create_actor<PackageReader>("reader", p->package, offset, std::move(P), statistics_.pack_statistics)
+      .release();
 }
 
 void ArchiveSlice::get_block_common(AccountIdPrefixFull account_id,
@@ -527,14 +527,14 @@ void ArchiveSlice::get_block_by_seqno(AccountIdPrefixFull account_id, BlockSeqno
   return get_block_common(
       account_id,
       [seqno](ton_api::db_lt_desc_value &w) {
-        return seqno > static_cast<BlockSeqno>(w.last_seqno_)
-                   ? 1
-                   : seqno == static_cast<BlockSeqno>(w.last_seqno_) ? 0 : -1;
+        return seqno > static_cast<BlockSeqno>(w.last_seqno_)    ? 1
+               : seqno == static_cast<BlockSeqno>(w.last_seqno_) ? 0
+                                                                 : -1;
       },
       [seqno](ton_api::db_lt_el_value &w) {
-        return seqno > static_cast<BlockSeqno>(w.id_->seqno_)
-                   ? 1
-                   : seqno == static_cast<BlockSeqno>(w.id_->seqno_) ? 0 : -1;
+        return seqno > static_cast<BlockSeqno>(w.id_->seqno_)    ? 1
+               : seqno == static_cast<BlockSeqno>(w.id_->seqno_) ? 0
+                                                                 : -1;
       },
       true, std::move(promise));
 }
@@ -590,7 +590,8 @@ void ArchiveSlice::get_archive_id(BlockSeqno masterchain_seqno, td::Promise<td::
 void ArchiveSlice::before_query() {
   if (status_ == st_closed) {
     LOG(DEBUG) << "Opening archive slice " << db_path_;
-    kv_ = std::make_unique<td::RocksDb>(td::RocksDb::open(db_path_, read_only_, statistics_.rocksdb_statistics).move_as_ok());
+    kv_ = std::make_unique<td::RocksDb>(
+        td::RocksDb::open(db_path_, read_only_, statistics_.rocksdb_statistics).move_as_ok());
     std::string value;
     auto R2 = kv_->get("status", value);
     R2.ensure();
@@ -678,7 +679,7 @@ void ArchiveSlice::do_close() {
   packages_.clear();
 }
 
-template<typename T>
+template <typename T>
 td::Promise<T> ArchiveSlice::begin_async_query(td::Promise<T> promise) {
   ++active_queries_;
   return [SelfId = actor_id(this), promise = std::move(promise)](td::Result<T> R) mutable {
@@ -742,6 +743,7 @@ ArchiveSlice::ArchiveSlice(td::uint32 archive_id, bool key_blocks_only, bool tem
     , archive_lru_(std::move(archive_lru))
     , statistics_(std::move(statistics))
     , read_only_(read_only) {
+  db_path_ = PSTRING() << db_root_ << p_id_.path() << p_id_.name() << ".index";
 }
 
 td::Result<ArchiveSlice::PackageInfo *> ArchiveSlice::choose_package(BlockSeqno masterchain_seqno, bool force) {
