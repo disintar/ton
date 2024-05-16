@@ -249,23 +249,6 @@ PYBIND11_MODULE(python_ton, m) {
   m.def("deserialize_stack_entry", deserialize_stack_entry, py::arg("cell_slice"));
   m.def("deserialize_stack", deserialize_stack, py::arg("cell_slice"));
 
-  m.def("func_to_asm", func_to_asm, py::arg("source_files: list[str]"),
-                                    py::arg("preamble") = false,
-                                    py::arg("indent") = 0,
-                                    py::arg("verbosity") = false,
-                                    py::arg("optimization") = 2,
-                                    py::arg("envelope") = true,
-                                    py::arg("stack_comments") = false,
-                                    py::arg("op_comments") = false);
-  m.def("func_string_to_asm", func_string_to_asm, py::arg("source_string: str"),
-                                                  py::arg("preamble") = false,
-                                                  py::arg("indent") = 0,
-                                                  py::arg("verbosity") = false,
-                                                  py::arg("optimization") = 2,
-                                                  py::arg("envelope") = true,
-                                                  py::arg("stack_comments") = false,
-                                                  py::arg("op_comments") = false);
-
   py::class_<PyStackInfo>(m, "PyStackInfo", py::module_local())
       .def_readwrite("stack", &PyStackInfo::stack)
       .def_readwrite("gas_consumed", &PyStackInfo::gas_consumed)

@@ -54,7 +54,7 @@ jobs:
 
     - name: Simple binaries test
       run: nix develop .#packages.x86_64-linux.ton-python-${{ matrix.python }}
-           -c bash -c "cd artifacts; python3 -c 'import python_ton'"
+           -c bash -c "cd artifacts; python3 -c 'import python_ton;import python_func'"
 
     - name: Upload artifacts
       uses: actions/upload-artifact@master
