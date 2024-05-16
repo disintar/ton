@@ -82,6 +82,38 @@ class StartupBlockParser : public td::actor::Actor {
     last_masterchain_block_handle = std::move(h);
     manager = std::move(validator_id);
     P_final = std::move(P_);
+
+    const char *env_var_value = std::getenv("STARTUP_BLOCKS_DOWNLOAD_BEFORE");
+    if (env_var_value == nullptr) {
+      LOG(WARNING) << "Environment variable " << "STARTUP_BLOCKS_DOWNLOAD_BEFORE" << " is not set.";
+      k = 1;
+    } else {
+      try {
+        k = std::stoi(env_var_value);
+      } catch (const std::invalid_argument &e) {
+        LOG(WARNING) << "Invalid value for environment variable" << "STARTUP_BLOCKS_DOWNLOAD_BEFORE" << ": not an integer.";
+        k = 1;
+      } catch (const std::out_of_range &e) {
+        LOG(WARNING) << "Invalid value for environment variable " << "STARTUP_BLOCKS_DOWNLOAD_BEFORE" << ": out of range.";
+        k = 1;
+      }
+    }
+
+    const char *env_var_value_2 = std::getenv("STARTUP_BLOCKS_DOWNLOAD_AFTER");
+    if (env_var_value_2 == nullptr) {
+      LOG(WARNING) << "Environment variable " << "STARTUP_BLOCKS_DOWNLOAD_AFTER" << " is not set.";
+      next_download = 1;
+    } else {
+      try {
+        next_download = std::stoi(env_var_value_2);
+      } catch (const std::invalid_argument &e) {
+        LOG(WARNING) << "Invalid value for environment variable" << "STARTUP_BLOCKS_DOWNLOAD_AFTER" << ": not an integer.";
+        next_download = 1;
+      } catch (const std::out_of_range &e) {
+        LOG(WARNING) << "Invalid value for environment variable " << "STARTUP_BLOCKS_DOWNLOAD_AFTER" << ": out of range.";
+        next_download = 1;
+      }
+    }
   }
 
   void start_up() override {
@@ -134,8 +166,8 @@ class StartupBlockParser : public td::actor::Actor {
   std::vector<td::Ref<vm::Cell>> prev_states;
   std::vector<std::string> parsed_shards;
   int padding = 0;
-  const int k = 1;
-  int next_download = 1;
+  int k;
+  int next_download;
 };
 
 }  // namespace ton::validator
