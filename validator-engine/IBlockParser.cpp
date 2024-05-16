@@ -21,6 +21,12 @@ BlockParser::~BlockParser() {
 
 void BlockParser::storeBlockApplied(BlockIdExt id, td::Promise<std::tuple<td::string, td::string>> P) {
   std::lock_guard<std::mutex> lock(maps_mtx_);
+  if (!check_allowed_shard_parse(id.id.workchain, id.id.shard)) {
+    LOG(WARNING) << "Skip applied: " << id.id.to_str();
+    P.set_value(std::make_tuple("", ""));
+    return;
+  }
+
   LOG(DEBUG) << "Store applied: " << id.to_str();
   const std::string key =
       std::to_string(id.id.workchain) + ":" + std::to_string(id.id.shard) + ":" + std::to_string(id.id.seqno);
@@ -30,6 +36,12 @@ void BlockParser::storeBlockApplied(BlockIdExt id, td::Promise<std::tuple<td::st
 
 void BlockParser::storeBlockData(ConstBlockHandle handle, td::Ref<BlockData> block,
                                  td::Promise<std::tuple<td::string, td::string>> P) {
+  if (!check_allowed_shard_parse(handle->id().id.workchain, handle->id().id.shard)) {
+    LOG(WARNING) << "Skip block data: " << handle->id().id.to_str();
+    P.set_value(std::make_tuple("", ""));
+    return;
+  }
+
   std::lock_guard<std::mutex> lock(maps_mtx_);
   LOG(DEBUG) << "Store block: " << block->block_id().to_str();
   const std::string key = std::to_string(handle->id().id.workchain) + ":" + std::to_string(handle->id().id.shard) +
@@ -49,6 +61,12 @@ void BlockParser::storeBlockData(ConstBlockHandle handle, td::Ref<BlockData> blo
 
 void BlockParser::storeBlockState(const ConstBlockHandle& handle, td::Ref<vm::Cell> state,
                                   td::Promise<std::tuple<td::string, td::string>> P) {
+  if (!check_allowed_shard_parse(handle->id().id.workchain, handle->id().id.shard)) {
+    LOG(WARNING) << "Skip state data: " << handle->id().id.to_str();
+    P.set_value(std::make_tuple("", ""));
+    return;
+  }
+
   std::lock_guard<std::mutex> lock(maps_mtx_);
   LOG(DEBUG) << "Store state: " << handle->id().to_str();
   const std::string key = std::to_string(handle->id().id.workchain) + ":" + std::to_string(handle->id().id.shard) +
@@ -68,6 +86,12 @@ void BlockParser::storeBlockState(const ConstBlockHandle& handle, td::Ref<vm::Ce
 
 void BlockParser::storeBlockStateWithPrev(const ConstBlockHandle& handle, td::Ref<vm::Cell> prev_state,
                                           td::Ref<vm::Cell> state, td::Promise<std::tuple<td::string, td::string>> P) {
+  if (!check_allowed_shard_parse(handle->id().id.workchain, handle->id().id.shard)) {
+    LOG(WARNING) << "Skip state data with prev: " << handle->id().id.to_str();
+    P.set_value(std::make_tuple("", ""));
+    return;
+  }
+
   std::lock_guard<std::mutex> lock(maps_mtx_);
   LOG(DEBUG) << "Store prev state: " << handle->id().to_str();
   const std::string key = std::to_string(handle->id().id.workchain) + ":" + std::to_string(handle->id().id.shard) +
