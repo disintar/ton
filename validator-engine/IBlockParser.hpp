@@ -62,7 +62,7 @@ class BlockParser {
     std::string env_var_name = "PARSE_SHARDE_" + std::to_string(p);
     const char* env_var_name_cstr = env_var_name.c_str();
     bool allow;
-    const char* env_var_value = std::getenv("STARTUP_BLOCKS_DOWNLOAD_BEFORE");
+    const char* env_var_value = std::getenv(env_var_name_cstr);
     if (env_var_value == nullptr) {
       LOG(ERROR) << "Environment variable " << env_var_name << " is not set. Allow shard.";
       allow = true;
