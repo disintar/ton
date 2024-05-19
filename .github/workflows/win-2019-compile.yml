@@ -109,7 +109,7 @@ jobs:
             "-DCMAKE_CXX_FLAGS=`"/DTD_WINDOWS=1 /EHsc /bigobj /W0`""
           )
           cmake -S . -B build $cmakeArgs
-          cmake --build build --config Release -j $env:NUMBER_OF_PROCESSORS --target python_ton python_func
+          cmake --build build --config Release -j $env:NUMBER_OF_PROCESSORS --target python_ton
 
       - name: Find & copy binaries
         run: |
@@ -119,7 +119,7 @@ jobs:
       - name: Simple binary test
         run: |
           cd artifacts
-          python -c 'import python_ton;import python_func'
+          python -c 'import python_ton'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@master

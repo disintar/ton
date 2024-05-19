@@ -42,7 +42,7 @@
 
           doCheck = false;
 
-          ninjaFlags = "python_ton python_func";
+          ninjaFlags = "python_ton";
 
           installPhase = ''
             runHook preInstall

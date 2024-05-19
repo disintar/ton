@@ -113,7 +113,7 @@ IF errorlevel 1 (
   exit /b %errorlevel%
 )
 
-cmake --build . --config Release -j %NUMBER_OF_PROCESSORS% --target python_ton python_func
+cmake --build . --config Release -j %NUMBER_OF_PROCESSORS% --target python_ton
 IF errorlevel 1 (
   echo Can't compile TON
   exit /b %errorlevel%
