@@ -169,8 +169,8 @@ void LiteClientActorEngine::lookupBlock(int mode, ton::BlockId block, long long 
 void LiteClientActorEngine::get_AccountState(int workchain, td::Bits256 address_bits, ton::BlockIdExt blkid) {
   auto q = ton::serialize_tl_object(
       ton::create_tl_object<ton::lite_api::liteServer_getAccountState>(
-          ton::create_tl_lite_block_id(blkid), std::move(ton::create_tl_object<ton::lite_api::liteServer_accountId>(
-                                                   std::move(workchain), std::move(address_bits)))),
+          ton::create_tl_lite_block_id(blkid), ton::create_tl_object<ton::lite_api::liteServer_accountId>(
+                                                   std::move(workchain), std::move(address_bits))),
       true);
   qprocess(std::move(q));
 }
@@ -357,7 +357,7 @@ std::unique_ptr<ton::lite_api::liteServer_masterchainInfoExt> PyLiteClient::get_
 
     auto x = R.move_as_ok();
 
-    return std::move(x);
+    return x;
   } else {
     throw std::logic_error(response->error_message);
   }
@@ -645,6 +645,7 @@ PyCell PyLiteClient::get_OneTransaction(ton::BlockIdExt req_blkid, int workchain
   } else {
     throw std::logic_error(response->error_message);
   }
+  return PyCell();
 }
 
 std::tuple<PubKeyHex, ShortKeyHex> PyLiteClient::admin_AddUser(std::string privkey, td::int64 valid_until,
@@ -855,7 +856,7 @@ std::unique_ptr<ton::lite_api::liteServer_masterchainInfoExt> PyLiteClient::wait
 
     auto x = R.move_as_ok();
 
-    return std::move(x);
+    return x;
   } else {
     throw std::logic_error(response->error_message);
   }

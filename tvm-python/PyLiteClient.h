@@ -203,6 +203,7 @@ class PyLiteClient {
     } else {
       throw std::logic_error(response->error_message);
     }
+    return 0;
   }
 
   std::unique_ptr<ton::lite_api::liteServer_masterchainInfoExt> get_MasterchainInfoExt();
