@@ -38,7 +38,7 @@ int CodeBlob::split_vars(bool strict) {
   for (int j = 0; j < var_cnt; j++) {
     TmpVar& var = vars[j];
     if (strict && var.v_type->minw != var.v_type->maxw) {
-      throw src::ParseError{var.where.get(), "variable does not have fixed width, cannot manipulate it"};
+      throw src_func::ParseError{var.where.get(), "variable does not have fixed width, cannot manipulate it"};
     }
     std::vector<TypeExpr*> comp_types;
     int k = var.v_type->extract_components(comp_types);
@@ -56,7 +56,7 @@ int CodeBlob::split_vars(bool strict) {
       n += k;
       ++changes;
     } else if (strict && var.v_type->minw != 1) {
-      throw src::ParseError{var.where.get(),
+      throw src_func::ParseError{var.where.get(),
                             "cannot work with variable or variable component of width greater than one"};
     }
   }
@@ -535,7 +535,7 @@ bool Op::compute_used_vars(const CodeBlob& code, bool edit) {
     }
     default:
       std::cerr << "fatal: unknown operation <??" << cl << "> in compute_used_vars()\n";
-      throw src::ParseError{where, "unknown operation"};
+      throw src_func::ParseError{where, "unknown operation"};
   }
 }
 
@@ -664,7 +664,7 @@ bool prune_unreachable(std::unique_ptr<Op>& ops) {
     }
     default:
       std::cerr << "fatal: unknown operation <??" << op.cl << ">\n";
-      throw src::ParseError{op.where, "unknown operation in prune_unreachable()"};
+      throw src_func::ParseError{op.where, "unknown operation in prune_unreachable()"};
   }
   if (reach) {
     return prune_unreachable(op.next);
@@ -678,7 +678,7 @@ bool prune_unreachable(std::unique_ptr<Op>& ops) {
 
 void CodeBlob::prune_unreachable_code() {
   if (prune_unreachable(ops)) {
-    throw src::ParseError{loc, "control reaches end of function"};
+    throw src_func::ParseError{loc, "control reaches end of function"};
   }
 }
 
@@ -851,7 +851,7 @@ VarDescrList Op::fwd_analyze(VarDescrList values) {
     }
     default:
       std::cerr << "fatal: unknown operation <??" << cl << ">\n";
-      throw src::ParseError{where, "unknown operation in fwd_analyze()"};
+      throw src_func::ParseError{where, "unknown operation in fwd_analyze()"};
   }
   if (next) {
     return next->fwd_analyze(std::move(values));
@@ -905,7 +905,7 @@ bool Op::mark_noreturn() {
       return set_noreturn(next->mark_noreturn());
     default:
       std::cerr << "fatal: unknown operation <??" << cl << ">\n";
-      throw src::ParseError{where, "unknown operation in mark_noreturn()"};
+      throw src_func::ParseError{where, "unknown operation in mark_noreturn()"};
   }
 }
 

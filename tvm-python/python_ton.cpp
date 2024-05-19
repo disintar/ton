@@ -166,7 +166,6 @@ PYBIND11_MODULE(python_ton, m) {
       .def("to_boc", &PyCell::to_boc)
       .def("__repr__", &PyCell::toString)
       .def("copy", &PyCell::copy)
-      .def("to_slice", &PyCell::to_slice)
       .def("is_null", &PyCell::is_null);
 
   py::class_<PyCellBuilder>(m, "PyCellBuilder", py::module_local())
@@ -248,6 +247,23 @@ PYBIND11_MODULE(python_ton, m) {
   m.def("make_tuple", make_tuple, py::arg("items"));
   m.def("deserialize_stack_entry", deserialize_stack_entry, py::arg("cell_slice"));
   m.def("deserialize_stack", deserialize_stack, py::arg("cell_slice"));
+
+  m.def("func_to_asm", func_to_asm, py::arg("source_files: list[str]"),
+                                    py::arg("preamble") = false,
+                                    py::arg("indent") = 0,
+                                    py::arg("verbosity") = false,
+                                    py::arg("optimization") = 2,
+                                    py::arg("envelope") = true,
+                                    py::arg("stack_comments") = false,
+                                    py::arg("op_comments") = false);
+  m.def("func_string_to_asm", func_string_to_asm, py::arg("source_string: str"),
+                                                  py::arg("preamble") = false,
+                                                  py::arg("indent") = 0,
+                                                  py::arg("verbosity") = false,
+                                                  py::arg("optimization") = 2,
+                                                  py::arg("envelope") = true,
+                                                  py::arg("stack_comments") = false,
+                                                  py::arg("op_comments") = false);
 
   py::class_<PyStackInfo>(m, "PyStackInfo", py::module_local())
       .def_readwrite("stack", &PyStackInfo::stack)
@@ -352,15 +368,13 @@ PYBIND11_MODULE(python_ton, m) {
 
   py::class_<PyPublicKey>(m, "PyPublicKey", py::module_local())
       .def(py::init<std::string>(), py::arg("key_hex"))
-      .def("get_public_key_hex", &PyPublicKey::get_public_key_hex)
-      .def("verify_signature", &PyPublicKey::verify_signature);
+      .def("get_public_key_hex", &PyPublicKey::get_public_key_hex);
 
   py::class_<PyPrivateKey>(m, "PyPrivateKey", py::module_local())
       .def(py::init<>())
       .def(py::init<std::string>(), py::arg("key_hex"))
       .def("get_private_key_hex", &PyPrivateKey::get_private_key_hex)
-      .def("get_public_key", &PyPrivateKey::get_public_key)
-      .def("sign", &PyPrivateKey::sign);
+      .def("get_public_key", &PyPrivateKey::get_public_key);
 
   py::class_<PyMnemonic>(m, "PyMnemonic", py::module_local())
       .def(py::init<std::vector<std::string>, std::string>(), py::arg("mnemonic"), py::arg("mnemonic_password"))

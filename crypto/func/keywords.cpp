@@ -18,7 +18,7 @@
 */
 #include "func.h"
 
-namespace src {
+namespace src_func {
 
 int lexem_is_special(std::string str) {
   return 0;  // no special lexems
@@ -35,7 +35,7 @@ namespace funC {
  */
 
 void define_keywords() {
-  sym::symbols.add_kw_char('+')
+  sym_func::symbols.add_kw_char('+')
       .add_kw_char('-')
       .add_kw_char('*')
       .add_kw_char('/')
@@ -60,7 +60,7 @@ void define_keywords() {
       .add_kw_char('~');
 
   using Kw = funC::Keyword;
-  sym::symbols.add_keyword("==", Kw::_Eq)
+  sym_func::symbols.add_keyword("==", Kw::_Eq)
       .add_keyword("!=", Kw::_Neq)
       .add_keyword("<=", Kw::_Leq)
       .add_keyword(">=", Kw::_Geq)
@@ -91,7 +91,7 @@ void define_keywords() {
       .add_keyword("|=", Kw::_OrLet)
       .add_keyword("^=", Kw::_XorLet);
 
-  sym::symbols.add_keyword("return", Kw::_Return)
+  sym_func::symbols.add_keyword("return", Kw::_Return)
       .add_keyword("var", Kw::_Var)
       .add_keyword("repeat", Kw::_Repeat)
       .add_keyword("do", Kw::_Do)
@@ -106,7 +106,7 @@ void define_keywords() {
       .add_keyword("elseif", Kw::_Elseif)
       .add_keyword("elseifnot", Kw::_Elseifnot);
 
-  sym::symbols.add_keyword("int", Kw::_Int)
+  sym_func::symbols.add_keyword("int", Kw::_Int)
       .add_keyword("cell", Kw::_Cell)
       .add_keyword("slice", Kw::_Slice)
       .add_keyword("builder", Kw::_Builder)
@@ -116,7 +116,7 @@ void define_keywords() {
       .add_keyword("->", Kw::_Mapsto)
       .add_keyword("forall", Kw::_Forall);
 
-  sym::symbols.add_keyword("extern", Kw::_Extern)
+  sym_func::symbols.add_keyword("extern", Kw::_Extern)
       .add_keyword("global", Kw::_Global)
       .add_keyword("asm", Kw::_Asm)
       .add_keyword("impure", Kw::_Impure)
@@ -130,7 +130,7 @@ void define_keywords() {
       .add_keyword("infixr", Kw::_Infixr)
       .add_keyword("const", Kw::_Const);
 
-  sym::symbols.add_keyword("#pragma", Kw::_PragmaHashtag)
+  sym_func::symbols.add_keyword("#pragma", Kw::_PragmaHashtag)
       .add_keyword("#include", Kw::_IncludeHashtag);
 }
 

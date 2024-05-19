@@ -26,8 +26,8 @@
     Copyright 2017-2020 Telegram Systems LLP
 */
 #include "func.h"
-#include "parser/srcread.h"
-#include "parser/lexer.h"
+#include "parser_func/srcread_func.h"
+#include "parser_func/lexer_func.h"
 #include <getopt.h>
 #include "git.h"
 #include <fstream>
@@ -74,13 +74,13 @@ td::Result<std::string> fs_read_callback(ReadCallback::Kind kind, const char* qu
 void generate_output_func(SymDef* func_sym, std::ostream &outs, std::ostream &errs) {
   SymValCodeFunc* func_val = dynamic_cast<SymValCodeFunc*>(func_sym->value);
   func_assert(func_val);
-  std::string name = sym::symbols.get_name(func_sym->sym_idx);
+  std::string name = sym_func::symbols.get_name(func_sym->sym_idx);
   if (verbosity >= 2) {
     errs << "\n\n=========================\nfunction " << name << " : " << func_val->get_type() << std::endl;
   }
   if (!func_val->code) {
     errs << "( function `" << name << "` undefined )\n";
-    throw src::ParseError(func_sym->loc, name);
+    throw src_func::ParseError(func_sym->loc, name);
   } else {
     CodeBlob& code = *(func_val->code);
     if (verbosity >= 3) {
@@ -168,7 +168,7 @@ int generate_output(std::ostream &outs, std::ostream &errs) {
   for (SymDef* func_sym : glob_func) {
     SymValCodeFunc* func_val = dynamic_cast<SymValCodeFunc*>(func_sym->value);
     func_assert(func_val);
-    std::string name = sym::symbols.get_name(func_sym->sym_idx);
+    std::string name = sym_func::symbols.get_name(func_sym->sym_idx);
     outs << std::string(indent * 2, ' ');
     if (func_val->method_id.is_null()) {
       outs << "DECLPROC " << name << "\n";
@@ -178,15 +178,15 @@ int generate_output(std::ostream &outs, std::ostream &errs) {
   }
   for (SymDef* gvar_sym : glob_vars) {
     func_assert(dynamic_cast<SymValGlobVar*>(gvar_sym->value));
-    std::string name = sym::symbols.get_name(gvar_sym->sym_idx);
+    std::string name = sym_func::symbols.get_name(gvar_sym->sym_idx);
     outs << std::string(indent * 2, ' ') << "DECLGLOBVAR " << name << "\n";
   }
   int errors = 0;
   for (SymDef* func_sym : glob_func) {
     try {
       generate_output_func(func_sym, outs, errs);
-    } catch (src::Error& err) {
-      errs << "cannot generate code for function `" << sym::symbols.get_name(func_sym->sym_idx) << "`:\n"
+    } catch (src_func::Error& err) {
+      errs << "cannot generate code for function `" << sym_func::symbols.get_name(func_sym->sym_idx) << "`:\n"
                 << err << std::endl;
       ++errors;
     }
@@ -202,7 +202,7 @@ int generate_output(std::ostream &outs, std::ostream &errs) {
 
 void output_inclusion_stack(std::ostream &errs) {
   while (!funC::inclusion_locations.empty()) {
-    src::SrcLocation loc = funC::inclusion_locations.top();
+    src_func::SrcLocation loc = funC::inclusion_locations.top();
     funC::inclusion_locations.pop();
     if (loc.fdescr) {
       errs << "note: included from ";
@@ -218,14 +218,14 @@ int func_proceed(const std::vector<std::string> &sources, std::ostream &outs, st
     funC::indent = 1;
   }
 
-  sym::symbols.clear();
-  for(int i = 0; i < sym::symbols.hprime; i++){
-    sym::sym_def[i] = nullptr;
-    sym::global_sym_def[i] = nullptr;
+  sym_func::symbols.clear();
+  for(int i = 0; i < sym_func::symbols.hprime; i++){
+    sym_func::sym_def[i] = nullptr;
+    sym_func::global_sym_def[i] = nullptr;
   }
-  sym::symbol_stack.clear();
-  sym::scope_opened_at.clear();
-  sym::scope_level = 0;
+  sym_func::symbol_stack.clear();
+  sym_func::scope_opened_at.clear();
+  sym_func::scope_level = 0;
 
   while(!funC::inclusion_locations.empty()){
     funC::inclusion_locations.pop();
@@ -262,19 +262,19 @@ int func_proceed(const std::vector<std::string> &sources, std::ostream &outs, st
       proc++;
     }
     if (ok < proc) {
-      throw src::Fatal{"output code generation omitted because of errors"};
+      throw src_func::Fatal{"output code generation omitted because of errors"};
     }
     if (!proc) {
-      throw src::Fatal{"no source files, no output"};
+      throw src_func::Fatal{"no source files, no output"};
     }
     pragma_allow_post_modification.check_enable_in_libs();
     pragma_compute_asm_ltr.check_enable_in_libs();
     return funC::generate_output(outs, errs);
-  } catch (src::Fatal& fatal) {
+  } catch (src_func::Fatal& fatal) {
     errs << "fatal: " << fatal << std::endl;
     output_inclusion_stack(errs);
     return 2;
-  } catch (src::Error& error) {
+  } catch (src_func::Error& error) {
     errs << error << std::endl;
     output_inclusion_stack(errs);
     return 2;

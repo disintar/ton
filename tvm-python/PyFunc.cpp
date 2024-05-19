@@ -18,6 +18,7 @@ std::string compile_from_sources(const std::vector<std::string>& sources) {
     return output.str();
 }
 
+
 std::string func_to_asm(const std::vector<std::string>& sources,
                         bool preamble,
                         int indent,
@@ -34,8 +35,8 @@ std::string func_to_asm(const std::vector<std::string>& sources,
     funC::program_envelope = envelope;
     funC::stack_layout_comments = stack_comments;
     funC::op_rewrite_comments = op_comments;
+    funC::interactive_from_string = false;
 
-    std::ostringstream err;
     std::string res = compile_from_sources(sources);
     return res;
 }
@@ -57,6 +58,7 @@ std::string func_string_to_asm(const std::string& source,
     funC::stack_layout_comments = stack_comments;
     funC::op_rewrite_comments = op_comments;
     funC::interactive_from_string = true;
+
     std::string res = compile_from_sources(std::vector<std::string>{source});
     return res;
 }
