@@ -35,11 +35,11 @@ SymDef* predefine_builtin_func(std::string name, TypeExpr* func_type) {
   if (name.back() == '_') {
     prohibited_var_names.insert(name);
   }
-  sym_idx_t name_idx = sym::symbols.lookup(name, 1);
-  if (sym::symbols.is_keyword(name_idx)) {
+  sym_idx_t name_idx = sym_func::symbols.lookup(name, 1);
+  if (sym_func::symbols.is_keyword(name_idx)) {
     std::cerr << "fatal: global function `" << name << "` already defined as a keyword" << std::endl;
   }
-  SymDef* def = sym::define_global_symbol(name_idx, true);
+  SymDef* def = sym_func::define_global_symbol(name_idx, true);
   if (!def) {
     std::cerr << "fatal: global function `" << name << "` already defined" << std::endl;
     std::exit(1);
@@ -434,7 +434,7 @@ AsmOp compile_add(std::vector<VarDescr>& res, std::vector<VarDescr>& args, const
   if (x.is_int_const() && y.is_int_const()) {
     r.set_const(x.int_const + y.int_const);
     if (!r.int_const->is_valid()) {
-      throw src::ParseError(where, "integer overflow");
+      throw src_func::ParseError(where, "integer overflow");
     }
     x.unused();
     y.unused();
@@ -476,7 +476,7 @@ AsmOp compile_sub(std::vector<VarDescr>& res, std::vector<VarDescr>& args, const
   if (x.is_int_const() && y.is_int_const()) {
     r.set_const(x.int_const - y.int_const);
     if (!r.int_const->is_valid()) {
-      throw src::ParseError(where, "integer overflow");
+      throw src_func::ParseError(where, "integer overflow");
     }
     x.unused();
     y.unused();
@@ -509,7 +509,7 @@ AsmOp compile_negate(std::vector<VarDescr>& res, std::vector<VarDescr>& args, co
   if (x.is_int_const()) {
     r.set_const(-x.int_const);
     if (!r.int_const->is_valid()) {
-      throw src::ParseError(where, "integer overflow");
+      throw src_func::ParseError(where, "integer overflow");
     }
     x.unused();
     return push_const(r.int_const);
@@ -573,7 +573,7 @@ AsmOp compile_mul_internal(VarDescr& r, VarDescr& x, VarDescr& y, const SrcLocat
   if (x.is_int_const() && y.is_int_const()) {
     r.set_const(x.int_const * y.int_const);
     if (!r.int_const->is_valid()) {
-      throw src::ParseError(where, "integer overflow");
+      throw src_func::ParseError(where, "integer overflow");
     }
     x.unused();
     y.unused();
@@ -648,11 +648,11 @@ AsmOp compile_lshift(std::vector<VarDescr>& res, std::vector<VarDescr>& args, co
   if (y.is_int_const()) {
     auto yv = y.int_const->to_long();
     if (yv < 0 || yv > 256) {
-      throw src::ParseError(where, "lshift argument is out of range");
+      throw src_func::ParseError(where, "lshift argument is out of range");
     } else if (x.is_int_const()) {
       r.set_const(x.int_const << (int)yv);
       if (!r.int_const->is_valid()) {
-        throw src::ParseError(where, "integer overflow");
+        throw src_func::ParseError(where, "integer overflow");
       }
       x.unused();
       y.unused();
@@ -691,7 +691,7 @@ AsmOp compile_rshift(std::vector<VarDescr>& res, std::vector<VarDescr>& args, co
   if (y.is_int_const()) {
     auto yv = y.int_const->to_long();
     if (yv < 0 || yv > 256) {
-      throw src::ParseError(where, "rshift argument is out of range");
+      throw src_func::ParseError(where, "rshift argument is out of range");
     } else if (x.is_int_const()) {
       r.set_const(td::rshift(x.int_const, (int)yv, round_mode));
       x.unused();
@@ -718,7 +718,7 @@ AsmOp compile_div_internal(VarDescr& r, VarDescr& x, VarDescr& y, const SrcLocat
   if (x.is_int_const() && y.is_int_const()) {
     r.set_const(div(x.int_const, y.int_const, round_mode));
     if (!r.int_const->is_valid()) {
-      throw src::ParseError(where, *y.int_const == 0 ? "division by zero" : "integer overflow");
+      throw src_func::ParseError(where, *y.int_const == 0 ? "division by zero" : "integer overflow");
     }
     x.unused();
     y.unused();
@@ -727,7 +727,7 @@ AsmOp compile_div_internal(VarDescr& r, VarDescr& x, VarDescr& y, const SrcLocat
   r.val = emulate_div(x.val, y.val);
   if (y.is_int_const()) {
     if (*y.int_const == 0) {
-      throw src::ParseError(where, "division by zero");
+      throw src_func::ParseError(where, "division by zero");
     }
     if (*y.int_const == 1 && x.always_finite()) {
       y.unused();
@@ -759,14 +759,14 @@ AsmOp compile_div(std::vector<VarDescr>& res, std::vector<VarDescr>& args, const
   return compile_div_internal(res[0], args[0], args[1], where, round_mode);
 }
 
-AsmOp compile_mod(std::vector<VarDescr>& res, std::vector<VarDescr>& args, const src::SrcLocation& where,
+AsmOp compile_mod(std::vector<VarDescr>& res, std::vector<VarDescr>& args, const src_func::SrcLocation& where,
                   int round_mode) {
   func_assert(res.size() == 1 && args.size() == 2);
   VarDescr &r = res[0], &x = args[0], &y = args[1];
   if (x.is_int_const() && y.is_int_const()) {
     r.set_const(mod(x.int_const, y.int_const, round_mode));
     if (!r.int_const->is_valid()) {
-      throw src::ParseError(where, *y.int_const == 0 ? "division by zero" : "integer overflow");
+      throw src_func::ParseError(where, *y.int_const == 0 ? "division by zero" : "integer overflow");
     }
     x.unused();
     y.unused();
@@ -775,7 +775,7 @@ AsmOp compile_mod(std::vector<VarDescr>& res, std::vector<VarDescr>& args, const
   r.val = emulate_mod(x.val, y.val);
   if (y.is_int_const()) {
     if (*y.int_const == 0) {
-      throw src::ParseError(where, "division by zero");
+      throw src_func::ParseError(where, "division by zero");
     }
     if ((*y.int_const == 1 || *y.int_const == -1) && x.always_finite()) {
       x.unused();
@@ -807,7 +807,7 @@ AsmOp compile_muldiv(std::vector<VarDescr>& res, std::vector<VarDescr>& args, co
   if (x.is_int_const() && y.is_int_const() && z.is_int_const()) {
     r.set_const(muldiv(x.int_const, y.int_const, z.int_const, round_mode));
     if (!r.int_const->is_valid()) {
-      throw src::ParseError(where, *z.int_const == 0 ? "division by zero" : "integer overflow");
+      throw src_func::ParseError(where, *z.int_const == 0 ? "division by zero" : "integer overflow");
     }
     x.unused();
     y.unused();
@@ -826,7 +826,7 @@ AsmOp compile_muldiv(std::vector<VarDescr>& res, std::vector<VarDescr>& args, co
   r.val = emulate_div(emulate_mul(x.val, y.val), z.val);
   if (z.is_int_const()) {
     if (*z.int_const == 0) {
-      throw src::ParseError(where, "division by zero");
+      throw src_func::ParseError(where, "division by zero");
     }
     if (*z.int_const == 1) {
       z.unused();

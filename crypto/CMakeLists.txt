@@ -184,6 +184,16 @@ set(PARSER_SOURCE
   parser/symtable.h
 )
 
+set(PARSER_FUNC_SOURCE
+  parser_func/srcread_func.cpp
+  parser_func/lexer_func.cpp
+  parser_func/symtable_func.cpp
+
+  parser_func/srcread_func.h
+  parser_func/lexer_func.h
+  parser_func/symtable_func.h
+)
+
 set(FUNC_LIB_SOURCE
   func/keywords.cpp
   func/unify-types.cpp
@@ -373,14 +383,26 @@ add_library(src_parser OBJECT ${PARSER_SOURCE})
 target_include_directories(src_parser PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 target_link_libraries(src_parser PUBLIC ton_crypto_core)
 
+add_library(src_func_parser OBJECT ${PARSER_FUNC_SOURCE})
+target_include_directories(src_func_parser PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+target_link_libraries(src_func_parser PUBLIC ton_crypto_core)
+
 add_library(ton_block STATIC ${BLOCK_SOURCE})
 target_include_directories(ton_block PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/block> $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)
 target_link_libraries(ton_block PUBLIC ton_crypto tdutils tdactor tl_api)
 
-add_executable(func func/func-main.cpp ${FUNC_LIB_SOURCE})
-target_include_directories(func PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
-target_link_libraries(func PUBLIC ton_crypto src_parser git ton_block)
+add_library(func-lib STATIC ${FUNC_LIB_SOURCE})
+target_include_directories(func-lib PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+target_link_libraries(func-lib PUBLIC ton_crypto src_func_parser ton_block)
+if (USE_EMSCRIPTEN)
+  target_link_options(func-lib PRIVATE -fexceptions)
+  target_compile_options(func-lib PRIVATE -fexceptions)
+endif()
+set_target_properties(func-lib PROPERTIES OUTPUT_NAME func)
+
+add_executable(func func/func-main.cpp)
+target_link_libraries(func PUBLIC func-lib git)
 if (WINGETOPT_FOUND)
   target_link_libraries_system(func wingetopt)
 endif()
@@ -388,7 +410,7 @@ endif()
 if (USE_EMSCRIPTEN)
   add_executable(funcfiftlib funcfiftlib/funcfiftlib.cpp ${FUNC_LIB_SOURCE})
   target_include_directories(funcfiftlib PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
-  target_link_libraries(funcfiftlib PUBLIC fift-lib src_parser git)
+  target_link_libraries(funcfiftlib PUBLIC fift-lib src_func_parser git)
   target_link_options(funcfiftlib PRIVATE -sEXPORTED_RUNTIME_METHODS=FS,ccall,cwrap,UTF8ToString,stringToUTF8,lengthBytesUTF8,addFunction,removeFunction,setValue)
   target_link_options(funcfiftlib PRIVATE -sEXPORTED_FUNCTIONS=_func_compile,_version,_malloc,_free,_setThrew)
   target_link_options(funcfiftlib PRIVATE -sEXPORT_NAME=CompilerModule)

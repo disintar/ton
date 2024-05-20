@@ -38,7 +38,7 @@ Expr* Expr::copy() const {
 }
 
 Expr::Expr(int c, sym_idx_t name_idx, std::initializer_list<Expr*> _arglist) : cls(c), args(std::move(_arglist)) {
-  sym = sym::lookup_symbol(name_idx);
+  sym = sym_func::lookup_symbol(name_idx);
   if (!sym) {
   }
 }
@@ -130,7 +130,7 @@ bool Expr::deduce_type(const Lexem& lem) {
       } catch (UnifyError& ue) {
         std::ostringstream os;
         os << "cannot implicitly assign an expression of type " << args[1]->e_type
-           << " to a variable or pattern of type " << rhs_type << " in modifying method `" << sym::symbols.get_name(val)
+           << " to a variable or pattern of type " << rhs_type << " in modifying method `" << sym_func::symbols.get_name(val)
            << "` : " << ue;
         lem.error(os.str());
       }
@@ -205,14 +205,14 @@ int Expr::predefine_vars() {
     case _Var:
       if (!sym) {
         func_assert(val < 0 && here.defined());
-        if (prohibited_var_names.count(sym::symbols.get_name(~val))) {
-          throw src::ParseError{
-              here, PSTRING() << "symbol `" << sym::symbols.get_name(~val) << "` cannot be redefined as a variable"};
+        if (prohibited_var_names.count(sym_func::symbols.get_name(~val))) {
+          throw src_func::ParseError{
+              here, PSTRING() << "symbol `" << sym_func::symbols.get_name(~val) << "` cannot be redefined as a variable"};
         }
-        sym = sym::define_symbol(~val, false, here);
-        // std::cerr << "predefining variable " << sym::symbols.get_name(~val) << std::endl;
+        sym = sym_func::define_symbol(~val, false, here);
+        // std::cerr << "predefining variable " << sym_func::symbols.get_name(~val) << std::endl;
         if (!sym) {
-          throw src::ParseError{here, std::string{"redefined variable `"} + sym::symbols.get_name(~val) + "`"};
+          throw src_func::ParseError{here, std::string{"redefined variable `"} + sym_func::symbols.get_name(~val) + "`"};
         }
         sym->value = new SymVal{SymVal::_Var, -1, e_type};
         return 1;
@@ -302,7 +302,7 @@ std::vector<var_idx_t> pre_compile_tensor(const std::vector<Expr *> args, CodeBl
         }
       } else {
         var.on_modification.push_back([name = var.to_string()](const SrcLocation &here) {
-            throw src::ParseError{here, PSTRING() << "Modifying local variable " << name
+            throw src_func::ParseError{here, PSTRING() << "Modifying local variable " << name
                                                   << " after using it in the same expression"};
         });
       }
@@ -332,7 +332,7 @@ std::vector<var_idx_t> pre_compile_tensor(const std::vector<Expr *> args, CodeBl
 std::vector<var_idx_t> Expr::pre_compile(CodeBlob& code, std::vector<std::pair<SymDef*, var_idx_t>>* lval_globs) const {
   if (lval_globs && !(cls == _Tensor || cls == _Var || cls == _Hole || cls == _TypeApply || cls == _GlobVar)) {
     std::cerr << "lvalue expression constructor is " << cls << std::endl;
-    throw src::Fatal{"cannot compile lvalue expression with unknown constructor"};
+    throw src_func::Fatal{"cannot compile lvalue expression with unknown constructor"};
   }
   switch (cls) {
     case _Tensor: {
@@ -360,7 +360,7 @@ std::vector<var_idx_t> Expr::pre_compile(CodeBlob& code, std::vector<std::pair<S
     case _Var:
     case _Hole:
       if (val < 0) {
-        throw src::ParseError{here, "unexpected variable definition"};
+        throw src_func::ParseError{here, "unexpected variable definition"};
       }
       return {val};
     case _VarApply:
@@ -376,7 +376,7 @@ std::vector<var_idx_t> Expr::pre_compile(CodeBlob& code, std::vector<std::pair<S
         auto res = args[1]->pre_compile(code);
         auto tfunc = args[0]->pre_compile(code);
         if (tfunc.size() != 1) {
-          throw src::Fatal{"stack tuple used as a function"};
+          throw src_func::Fatal{"stack tuple used as a function"};
         }
         res.push_back(tfunc[0]);
         auto rvect = new_tmp_vect(code);
@@ -444,7 +444,7 @@ std::vector<var_idx_t> Expr::pre_compile(CodeBlob& code, std::vector<std::pair<S
     }
     default:
       std::cerr << "expression constructor is " << cls << std::endl;
-      throw src::Fatal{"cannot compile expression with unknown constructor"};
+      throw src_func::Fatal{"cannot compile expression with unknown constructor"};
   }
 }
 

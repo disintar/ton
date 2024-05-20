@@ -18,6 +18,7 @@
 */
 #pragma once
 #include <vector>
+#include <map>
 #include <string>
 #include <set>
 #include <stack>
@@ -28,14 +29,14 @@
 #include "common/refcnt.hpp"
 #include "common/bigint.hpp"
 #include "common/refint.h"
-#include "parser/srcread.h"
-#include "parser/lexer.h"
-#include "parser/symtable.h"
+#include "parser_func/srcread_func.h"
+#include "parser_func/lexer_func.h"
+#include "parser_func/symtable_func.h"
 #include "td/utils/Status.h"
 
 #define func_assert(expr) \
   (bool(expr) ? void(0)   \
-              : throw src::Fatal(PSTRING() << "Assertion failed at " << __FILE__ << ":" << __LINE__ << ": " << #expr))
+              : throw src_func::Fatal(PSTRING() << "Assertion failed at " << __FILE__ << ":" << __LINE__ << ": " << #expr))
 
 namespace funC {
 
@@ -298,11 +299,11 @@ void unify(TypeExpr*& te1, TypeExpr*& te2);
  * 
  */
 
-using src::Lexem;
-using src::SrcLocation;
-using sym::SymDef;
-using sym::sym_idx_t;
-using sym::var_idx_t;
+using src_func::Lexem;
+using src_func::SrcLocation;
+using sym_func::SymDef;
+using sym_func::sym_idx_t;
+using sym_func::var_idx_t;
 using const_idx_t = int;
 
 struct TmpVar {
@@ -753,14 +754,14 @@ struct CodeBlob {
  * 
  */
 
-struct SymVal : sym::SymValBase {
+struct SymVal : sym_func::SymValBase {
   TypeExpr* sym_type;
   td::RefInt256 method_id;
   bool impure;
   bool auto_apply{false};
   short flags;  // +1 = inline, +2 = inline_ref
   SymVal(int _type, int _idx, TypeExpr* _stype = nullptr, bool _impure = false)
-      : sym::SymValBase(_type, _idx), sym_type(_stype), impure(_impure), flags(0) {
+      : sym_func::SymValBase(_type, _idx), sym_type(_stype), impure(_impure), flags(0) {
   }
   ~SymVal() override = default;
   TypeExpr* get_type() const {
@@ -799,9 +800,9 @@ struct SymValCodeFunc : SymValFunc {
   }
 };
 
-struct SymValType : sym::SymValBase {
+struct SymValType : sym_func::SymValBase {
   TypeExpr* sym_type;
-  SymValType(int _type, int _idx, TypeExpr* _stype = nullptr) : sym::SymValBase(_type, _idx), sym_type(_stype) {
+  SymValType(int _type, int _idx, TypeExpr* _stype = nullptr) : sym_func::SymValBase(_type, _idx), sym_type(_stype) {
   }
   ~SymValType() override = default;
   TypeExpr* get_type() const {
@@ -809,11 +810,11 @@ struct SymValType : sym::SymValBase {
   }
 };
 
-struct SymValGlobVar : sym::SymValBase {
+struct SymValGlobVar : sym_func::SymValBase {
   TypeExpr* sym_type;
   int out_idx{0};
   SymValGlobVar(int val, TypeExpr* gvtype, int oidx = 0)
-      : sym::SymValBase(_GlobVar, val), sym_type(gvtype), out_idx(oidx) {
+      : sym_func::SymValBase(_GlobVar, val), sym_type(gvtype), out_idx(oidx) {
   }
   ~SymValGlobVar() override = default;
   TypeExpr* get_type() const {
@@ -821,16 +822,16 @@ struct SymValGlobVar : sym::SymValBase {
   }
 };
 
-struct SymValConst : sym::SymValBase {
+struct SymValConst : sym_func::SymValBase {
   td::RefInt256 intval;
   std::string strval;
   Keyword type;
   SymValConst(int idx, td::RefInt256 value)
-      : sym::SymValBase(_Const, idx), intval(value) {
+      : sym_func::SymValBase(_Const, idx), intval(value) {
     type = _Int;
   }
   SymValConst(int idx, std::string value)
-      : sym::SymValBase(_Const, idx), strval(value) {
+      : sym_func::SymValBase(_Const, idx), strval(value) {
     type = _Slice;
   }
   ~SymValConst() override = default;
@@ -885,11 +886,15 @@ public:
 };
 
 // defined in parse-func.cpp
-bool parse_source(std::istream* is, const src::FileDescr* fdescr);
-bool parse_source_file(const char* filename, src::Lexem lex = {}, bool is_main = false);
+bool parse_source(std::istream* is, const src_func::FileDescr* fdescr);
+bool parse_source_file(const char* filename, src_func::Lexem lex = {}, bool is_main = false);
 bool parse_source_stdin();
+bool parse_source_string(const std::string &source);
 
-extern std::stack<src::SrcLocation> inclusion_locations;
+extern std::vector<const src_func::FileDescr*> source_fdescr;
+extern std::map<std::string, src_func::FileDescr*> source_files;
+extern std::stack<src_func::SrcLocation> inclusion_locations;
+
 
 /*
  * 
@@ -1616,7 +1621,7 @@ struct Stack {
   void forget_const();
   void validate(int i) const {
     if (i > 255) {
-      throw src::Fatal{"Too deep stack"};
+      throw src_func::Fatal{"Too deep stack"};
     }
     func_assert(i >= 0 && i < depth() && "invalid stack reference");
   }
@@ -1738,7 +1743,7 @@ void define_builtins();
 
 
 extern int verbosity, indent, opt_level;
-extern bool stack_layout_comments, op_rewrite_comments, program_envelope, asm_preamble, interactive;
+extern bool stack_layout_comments, op_rewrite_comments, program_envelope, asm_preamble, interactive, interactive_from_string;
 extern std::string generated_from, boc_output_filename;
 extern ReadCallback::Callback read_callback;
 

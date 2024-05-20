@@ -326,7 +326,7 @@ bool Op::generate_code_step(Stack& stack) {
         if (!used || disabled()) {
           return true;
         }
-        std::string name = sym::symbols.get_name(fun_ref->sym_idx);
+        std::string name = sym_func::symbols.get_name(fun_ref->sym_idx);
         stack.o << AsmOp::Custom(name + " GETGLOB", 0, 1);
         if (left.size() != 1) {
           func_assert(left.size() <= 15);
@@ -361,7 +361,7 @@ bool Op::generate_code_step(Stack& stack) {
           }
           func->compile(stack.o, res, args0, where);  // compile res := f (args0)
         } else {
-          std::string name = sym::symbols.get_name(fun_ref->sym_idx);
+          std::string name = sym_func::symbols.get_name(fun_ref->sym_idx);
           stack.o << AsmOp::Custom(name + " CALLDICT", (int)right.size(), (int)left.size());
         }
         stack.o.undent();
@@ -499,7 +499,7 @@ bool Op::generate_code_step(Stack& stack) {
           func->compile(stack.o, res, args, where);  // compile res := f (args)
         } else {
           auto fv = dynamic_cast<const SymValCodeFunc*>(fun_ref->value);
-          std::string name = sym::symbols.get_name(fun_ref->sym_idx);
+          std::string name = sym_func::symbols.get_name(fun_ref->sym_idx);
           bool is_inline = (fv && (fv->flags & 3));
           if (is_inline) {
             stack.o << AsmOp::Custom(name + " INLINECALLDICT", (int)right.size(), (int)left.size());
@@ -538,7 +538,7 @@ bool Op::generate_code_step(Stack& stack) {
         stack.o << AsmOp::Tuple((int)right.size());
       }
       if (!right.empty()) {
-        std::string name = sym::symbols.get_name(fun_ref->sym_idx);
+        std::string name = sym_func::symbols.get_name(fun_ref->sym_idx);
         stack.o << AsmOp::Custom(name + " SETGLOB", 1, 0);
       }
       stack.s.resize(k);
@@ -876,7 +876,7 @@ bool Op::generate_code_step(Stack& stack) {
     }
     default:
       std::cerr << "fatal: unknown operation <??" << cl << ">\n";
-      throw src::ParseError{where, "unknown operation in generate_code()"};
+      throw src_func::ParseError{where, "unknown operation in generate_code()"};
   }
 }
 

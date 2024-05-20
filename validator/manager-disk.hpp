@@ -24,9 +24,12 @@
 #include "manager-init.h"
 #include "manager-disk.h"
 #include "queue-size-counter.hpp"
+#include "auto/tl/lite_api.h"
+#include "lite-server-rate-limiter.h"
 
 #include <map>
 #include <set>
+#include <utility>
 
 namespace ton {
 
@@ -36,6 +39,25 @@ class WaitBlockState;
 class WaitZeroState;
 class WaitShardState;
 class WaitBlockDataDisk;
+
+class ShardClientDetector : public td::actor::Actor {
+ public:
+  ShardClientDetector(td::actor::ActorId<ValidatorManager> manager) {
+    manager_ = std::move(manager);
+  }
+  void start_up() override;
+  void alarm() override;
+  void init_wait(BlockIdExt blkid, td::Ref<MasterchainState> mcs);
+  void increase_wait(BlockIdExt blkid);
+  void receive_result(BlockIdExt mc_blkid, BlockIdExt shard_blkid, td::Result<td::Ref<ShardState>> R);
+
+ private:
+  std::map<BlockIdExt, int> mc_shards_waits_;
+  std::map<BlockIdExt, td::Ref<MasterchainState>> mc_states_;
+  std::vector<std::tuple<BlockIdExt, BlockIdExt>> shard_waiters;
+  td::actor::ActorId<ValidatorManager> manager_;
+  unsigned long allow_degrade{30};
+};
 
 class ValidatorManagerImpl : public ValidatorManager {
  private:
@@ -67,6 +89,8 @@ class ValidatorManagerImpl : public ValidatorManager {
   BlockSeqno last_masterchain_seqno_ = 0;
   bool started_ = false;
   td::Ref<MasterchainState> last_masterchain_state_;
+
+  unsigned int last_masterchain_time_;
   //BlockHandle last_masterchain_block_;
 
  public:
@@ -87,6 +111,7 @@ class ValidatorManagerImpl : public ValidatorManager {
     UNREACHABLE();
   }
 
+  void receiveLastBlock(td::Result<td::Ref<BlockData>> block_result, ValidatorManagerInitResult init_result);
   void validate_block_is_next_proof(BlockIdExt prev_block_id, BlockIdExt next_block_id, td::BufferSlice proof,
                                     td::Promise<td::Unit> promise) override;
   void validate_block_proof(BlockIdExt block_id, td::BufferSlice proof, td::Promise<td::Unit> promise) override;
@@ -96,6 +121,8 @@ class ValidatorManagerImpl : public ValidatorManager {
     UNREACHABLE();
   }
   void validate_block(ReceivedBlock block, td::Promise<BlockHandle> promise) override;
+  void update_lite_server_state(BlockIdExt shard_client, td::Ref<MasterchainState> state) override;
+  void update_lite_server_state_final(BlockIdExt shard_client, td::Ref<MasterchainState> state);
   void prevalidate_block(BlockBroadcast broadcast, td::Promise<td::Unit> promise) override;
 
   //void create_validate_block(BlockId block, td::BufferSlice data, td::Promise<Block> promise) = 0;
@@ -125,28 +152,23 @@ class ValidatorManagerImpl : public ValidatorManager {
   //void get_block_description(BlockIdExt block_id, td::Promise<BlockDescription> promise) override;
 
   void new_external_message(td::BufferSlice data) override;
-  void check_external_message(td::BufferSlice data, td::Promise<td::Ref<ExtMessage>> promise) override {
-    UNREACHABLE();
-  }
+  void check_external_message(td::BufferSlice data, td::Promise<td::Ref<ExtMessage>> promise) override;
   void new_ihr_message(td::BufferSlice data) override;
   void new_shard_block(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) override;
 
-  void add_ext_server_id(adnl::AdnlNodeIdShort id) override {
-    UNREACHABLE();
-  }
-  void add_ext_server_port(td::uint16 port) override {
-    UNREACHABLE();
-  }
+  void add_ext_server_id(adnl::AdnlNodeIdShort id) override;
+  void add_ext_server_port(td::uint16 port) override;
 
   void get_block_handle(BlockIdExt id, bool force, td::Promise<BlockHandle> promise) override;
-
+  void check_ext_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
+                       td::Promise<td::BufferSlice> promise);
   void set_block_state(BlockHandle handle, td::Ref<ShardState> state,
                        td::Promise<td::Ref<ShardState>> promise) override;
   void get_cell_db_reader(td::Promise<std::shared_ptr<vm::CellDbReader>> promise) override;
   void store_persistent_state_file(BlockIdExt block_id, BlockIdExt masterchain_block_id, td::BufferSlice state,
                                    td::Promise<td::Unit> promise) override;
   void store_persistent_state_file_gen(BlockIdExt block_id, BlockIdExt masterchain_block_id,
-                                       std::function<td::Status(td::FileFd&)> write_data,
+                                       std::function<td::Status(td::FileFd &)> write_data,
                                        td::Promise<td::Unit> promise) override;
   void store_zero_state_file(BlockIdExt block_id, td::BufferSlice state, td::Promise<td::Unit> promise) override;
   void wait_block_state(BlockHandle handle, td::uint32 priority, td::Timestamp timeout,
@@ -244,7 +266,11 @@ class ValidatorManagerImpl : public ValidatorManager {
     UNREACHABLE();
   }
   void send_external_message(td::Ref<ExtMessage> message) override {
-    new_external_message(message->serialize());
+    if (offline_) {
+      new_external_message(message->serialize());
+    } else {
+      callback_->send_ext_message(message->shard(), message->serialize());
+    }
   }
   void send_ihr_message(td::Ref<IhrMessage> message) override {
     new_ihr_message(message->serialize());
@@ -288,7 +314,8 @@ class ValidatorManagerImpl : public ValidatorManager {
   void finished_wait_data(BlockIdExt id, td::Result<td::Ref<BlockData>> R);
 
   void start_up() override;
-  void started(ValidatorManagerInitResult result);
+  void started(ValidatorManagerInitResult result, bool reinited = false);
+  void started_final(ValidatorManagerInitResult result);
 
   void write_fake(BlockCandidate candidate, std::vector<BlockIdExt> prev, BlockIdExt last,
                   td::Ref<ValidatorSet> val_set);
@@ -303,15 +330,38 @@ class ValidatorManagerImpl : public ValidatorManager {
   void get_vertical_seqno(BlockSeqno seqno, td::Promise<td::uint32> promise) override {
     promise.set_result(opts_->get_vertical_seqno(seqno));
   }
+  void run_ext_query_extended(td::BufferSlice data, adnl::AdnlNodeIdShort dst, td::Promise<td::BufferSlice> promise);
   void run_ext_query(td::BufferSlice data, td::Promise<td::BufferSlice> promise) override {
     UNREACHABLE();
+  };
+  void add_lite_query_stats_extended(int lite_query_id, adnl::AdnlNodeIdShort dst, long start_at, long end_at,
+                                     bool success) override;
+
+  ValidatorManagerImpl(PublicKeyHash local_id, td::Ref<ValidatorManagerOptions> opts, ShardIdFull shard_id,
+                       BlockIdExt shard_to_block_id, std::string db_root, bool read_only = false)
+      : local_id_(local_id)
+      , opts_(std::move(opts))
+      , read_only_(read_only)
+      , db_root_(std::move(db_root))
+      , shard_to_generate_(shard_id)
+      , block_to_generate_(shard_to_block_id) {
   }
 
   ValidatorManagerImpl(PublicKeyHash local_id, td::Ref<ValidatorManagerOptions> opts, ShardIdFull shard_id,
-                       BlockIdExt shard_to_block_id, std::string db_root)
+                       BlockIdExt shard_to_block_id, std::string db_root, td::actor::ActorId<keyring::Keyring> keyring,
+                       td::actor::ActorId<adnl::Adnl> adnl, td::actor::ActorId<rldp::Rldp> rldp,
+                       td::actor::ActorId<overlay::Overlays> overlays,
+                       td::actor::ActorId<liteserver::LiteServerLimiter> lslimiter, bool read_only = false)
       : local_id_(local_id)
       , opts_(std::move(opts))
-      , db_root_(db_root)
+      , read_only_(read_only)
+      , offline_(false)
+      , keyring_(std::move(keyring))
+      , adnl_(std::move(adnl))
+      , rldp_(std::move(rldp))
+      , overlays_(std::move(overlays))
+      , lslimiter_(lslimiter)
+      , db_root_(std::move(db_root))
       , shard_to_generate_(shard_id)
       , block_to_generate_(shard_to_block_id) {
   }
@@ -371,9 +421,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   void truncate(BlockSeqno seqno, ConstBlockHandle handle, td::Promise<td::Unit> promise) override {
     UNREACHABLE();
   }
-  void wait_shard_client_state(BlockSeqno seqno, td::Timestamp timeout, td::Promise<td::Unit> promise) override {
-    UNREACHABLE();
-  }
+  void wait_shard_client_state(BlockSeqno seqno, td::Timestamp timeout, td::Promise<td::Unit> promise) override;
   void log_validator_session_stats(BlockIdExt block_id, validatorsession::ValidatorSessionStats stats) override {
     UNREACHABLE();
   }
@@ -407,8 +455,81 @@ class ValidatorManagerImpl : public ValidatorManager {
   td::Ref<ValidatorManagerOptions> opts_;
 
  private:
+  // todo: separate from manager.hpp
+  template <typename ResType>
+  struct Waiter {
+    td::Timestamp timeout;
+    td::uint32 priority;
+    td::Promise<ResType> promise;
+
+    Waiter() {
+    }
+    Waiter(td::Timestamp timeout, td::uint32 priority, td::Promise<ResType> promise)
+        : timeout(timeout), priority(priority), promise(std::move(promise)) {
+    }
+  };
+
+  template <typename ActorT, typename ResType>
+  struct WaitList {
+    std::vector<Waiter<ResType>> waiting_;
+    td::actor::ActorId<ActorT> actor_;
+
+    WaitList() = default;
+
+    std::pair<td::Timestamp, td::uint32> get_timeout() const {
+      td::Timestamp t = td::Timestamp::now();
+      td::uint32 prio = 0;
+      for (auto &v : waiting_) {
+        if (v.timeout.at() > t.at()) {
+          t = v.timeout;
+        }
+        if (v.priority > prio) {
+          prio = v.priority;
+        }
+      }
+      return {td::Timestamp::at(t.at() + 10.0), prio};
+    }
+    void check_timers() {
+      td::uint32 j = 0;
+      auto f = waiting_.begin();
+      auto t = waiting_.end();
+      while (f < t) {
+        if (f->timeout.is_in_past()) {
+          f->promise.set_error(td::Status::Error(ErrorCode::timeout, "timeout"));
+          t--;
+          std::swap(*f, *t);
+        } else {
+          f++;
+          j++;
+        }
+      }
+      waiting_.resize(j);
+    }
+  };
+
+  std::map<BlockSeqno, WaitList<td::actor::Actor, td::Unit>> shard_client_waiters_;
   BlockIdExt last_masterchain_block_id_;
   BlockHandle last_masterchain_block_handle_;
+
+  BlockIdExt last_liteserver_block_id_;
+  td::Ref<MasterchainState> last_liteserver_state_;
+
+  bool read_only_ = false;
+  bool offline_ = true;
+
+  void created_ext_server(td::actor::ActorOwn<adnl::AdnlExtServer> lite_server);
+
+  td::actor::ActorOwn<adnl::AdnlExtServer> lite_server_;
+  td::actor::ActorOwn<LiteServerCache> lite_server_cache_;
+  std::vector<td::uint16> pending_ext_ports_;
+  std::vector<adnl::AdnlNodeIdShort> pending_ext_ids_;
+
+  td::actor::ActorId<keyring::Keyring> keyring_;
+  td::actor::ActorId<adnl::Adnl> adnl_;
+  td::actor::ActorId<rldp::Rldp> rldp_;
+  td::actor::ActorId<overlay::Overlays> overlays_;
+  td::actor::ActorId<liteserver::LiteServerLimiter> lslimiter_;
+  td::actor::ActorId<ShardClientDetector> shardclientdetector_;
 
   std::string db_root_;
   ShardIdFull shard_to_generate_;
@@ -420,6 +541,7 @@ class ValidatorManagerImpl : public ValidatorManager {
 
   void update_shards();
   void update_shard_blocks();
+  void reinit();
   void dec_pending_new_blocks();
   ValidatorSessionId get_validator_set_id(ShardIdFull shard, td::Ref<ValidatorSet> val_set);
 };

@@ -16,7 +16,7 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "parser/srcread.h"
+#include "parser_func/srcread_func.h"
 #include "func.h"
 #include <iostream>
 
@@ -250,7 +250,7 @@ void AsmOp::out(std::ostream& os) const {
       os << SReg(a) << " POP";
       break;
     default:
-      throw src::Fatal{"unknown assembler operation"};
+      throw src_func::Fatal{"unknown assembler operation"};
   }
 }
 

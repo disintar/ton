@@ -19,18 +19,23 @@
 #pragma once
 #include "validator/validator.h"
 #include "adnl/adnl.h"
+#include "rldp/rldp.h"
+#include "lite-server-rate-limiter.h"
 
-namespace ton {
-
-namespace validator {
+namespace ton::validator {
 
 class ValidatorManagerDiskFactory {
  public:
   static td::actor::ActorOwn<ValidatorManagerInterface> create(PublicKeyHash local_id,
                                                                td::Ref<ValidatorManagerOptions> opts, ShardIdFull shard,
-                                                               BlockIdExt shard_top_block_id, std::string db_root);
+                                                               BlockIdExt shard_top_block_id, std::string db_root,
+                                                               bool read_only_ = false);
+
+  static td::actor::ActorOwn<ValidatorManagerInterface> create(
+      PublicKeyHash id, td::Ref<ValidatorManagerOptions> opts, ShardIdFull shard, BlockIdExt shard_top_block_id,
+      std::string db_root, td::actor::ActorId<keyring::Keyring> keyring, td::actor::ActorId<adnl::Adnl> adnl,
+      td::actor::ActorId<rldp::Rldp> rldp, td::actor::ActorId<overlay::Overlays> overlays,
+      td::actor::ActorId<ton::liteserver::LiteServerLimiter> lslimiter, bool read_only_ = false);
 };
 
-}  // namespace validator
-
-}  // namespace ton
+}  // namespace ton::validator

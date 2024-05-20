@@ -1,11 +1,7 @@
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 
-# C++17 requires macOS 10.14+
-# https://bugs.chromium.org/p/chromium/issues/detail?id=1274388
-if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum OS X deployment target")
-endif()
 
+#set(ENV{LDFLAGS} "-static-libgcc -static-libstdc++ -static")
 project(TON VERSION 0.5 LANGUAGES C CXX)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 #set(OPENSSL_USE_STATIC_LIBS TRUE)
@@ -443,6 +439,7 @@ add_subdirectory(dht-server)
 add_subdirectory(utils)
 add_subdirectory(http)
 add_subdirectory(rldp-http-proxy)
+add_subdirectory(lite-server-daemon)
 endif()
 #END internal
 

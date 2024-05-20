@@ -26,9 +26,9 @@
     Copyright 2017-2020 Telegram Systems LLP
 */
 #include "func.h"
-#include "parser/srcread.h"
-#include "parser/lexer.h"
-#include "parser/symtable.h"
+#include "parser_func/srcread_func.h"
+#include "parser_func/lexer_func.h"
+#include "parser_func/symtable_func.h"
 #include <getopt.h>
 #include <fstream>
 #include "git.h"

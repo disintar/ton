@@ -47,11 +47,36 @@ void PackageWriter::append(std::string filename, td::BufferSlice data,
 class PackageReader : public td::actor::Actor {
  public:
   PackageReader(std::shared_ptr<Package> package, td::uint64 offset,
-                td::Promise<std::pair<std::string, td::BufferSlice>> promise)
-      : package_(std::move(package)), offset_(offset), promise_(std::move(promise)) {
+                td::Promise<std::pair<std::string, td::BufferSlice>> promise, bool read_only = false)
+      : package_(std::move(package)), read_only_(read_only), offset_(offset), promise_(std::move(promise)) {
+  }
+
+  PackageReader(std::shared_ptr<Package> package, td::uint64 offset,
+                td::Promise<std::pair<std::string, td::BufferSlice>> promise,
+                td::Promise<td::Promise<std::pair<std::string, td::BufferSlice>>> on_fail, bool read_only = false)
+      : package_(std::move(package))
+      , read_only_(read_only)
+      , offset_(offset)
+      , on_fail_(std::move(on_fail))
+      , promise_(std::move(promise)) {
+    raise_on_fail = true;
   }
   void start_up() override {
+    if (read_only_) {
+      auto s = package_->try_sync();
+      if (s.is_error()) {
+        promise_.set_error(td::Status::Error(ErrorCode::notready));
+        return;
+      }
+    }
     auto result = package_->read(offset_);
+
+    if (result.is_error() and raise_on_fail) {
+      on_fail_.set_value(std::move(promise_));
+      return;
+    }
+    on_fail_.set_error(td::Status::Error(0));
+
     package_ = {};
     promise_.set_result(std::move(result));
     stop();
@@ -59,7 +84,10 @@ class PackageReader : public td::actor::Actor {
 
  private:
   std::shared_ptr<Package> package_;
+  bool read_only_;
   td::uint64 offset_;
+  td::Promise<td::Promise<std::pair<std::string, td::BufferSlice>>> on_fail_;
+  bool raise_on_fail{false};
   td::Promise<std::pair<std::string, td::BufferSlice>> promise_;
 };
 
@@ -297,7 +325,50 @@ void ArchiveSlice::get_file(ConstBlockHandle handle, FileReference ref_id, td::P
           promise.set_value(std::move(R.move_as_ok().second));
         }
       });
-  td::actor::create_actor<PackageReader>("reader", p->package, offset, std::move(P)).release();
+
+  if (!read_only_) {
+    td::actor::create_actor<PackageReader>("reader", p->package, offset, std::move(P), read_only_).release();
+  } else {
+    auto on_fail =
+        td::PromiseCreator::lambda([SelfId = actor_id(this), handle, ref_id](
+                                       td::Result<td::Promise<std::pair<std::string, td::BufferSlice>>> R) mutable {
+          if (R.is_error()) {
+            return;
+          } else {
+            LOG(ERROR) << "Try read package one more time";
+            td::actor::send_closure(SelfId, &ArchiveSlice::try_get_file, handle, ref_id, R.move_as_ok());
+          }
+        });
+
+    td::actor::create_actor<PackageReader>("reader", p->package, offset, std::move(P), std::move(on_fail), read_only_)
+        .release();
+  }
+}
+
+void ArchiveSlice::try_get_file(ConstBlockHandle handle, FileReference ref_id,
+                                td::Promise<std::pair<std::string, td::BufferSlice>> promise) {
+  if (destroyed_) {
+    promise.set_error(td::Status::Error(ErrorCode::notready, "package already gc'd"));
+    return;
+  }
+  status_ = st_closed;
+  before_query();
+  std::string value;
+  auto R = kv_->get(ref_id.hash().to_hex(), value);
+  R.ensure();
+  if (R.move_as_ok() == td::KeyValue::GetStatus::NotFound) {
+    promise.set_error(td::Status::Error(ErrorCode::notready, "file not in archive slice"));
+    return;
+  }
+  auto offset = td::to_integer<td::uint64>(value);
+  TRY_RESULT_PROMISE(
+      promise, p,
+      choose_package(
+          handle ? handle->id().is_masterchain() ? handle->id().seqno() : handle->masterchain_ref_block() : 0, false));
+
+  LOG(INFO) << "Package: " << p->idx << " " << p->path << " " << offset;
+
+  td::actor::create_actor<PackageReader>("reader", p->package, offset, std::move(promise)).release();
 }
 
 void ArchiveSlice::get_block_common(AccountIdPrefixFull account_id,
@@ -402,14 +473,14 @@ void ArchiveSlice::get_block_by_seqno(AccountIdPrefixFull account_id, BlockSeqno
   return get_block_common(
       account_id,
       [seqno](ton_api::db_lt_desc_value &w) {
-        return seqno > static_cast<BlockSeqno>(w.last_seqno_)
-                   ? 1
-                   : seqno == static_cast<BlockSeqno>(w.last_seqno_) ? 0 : -1;
+        return seqno > static_cast<BlockSeqno>(w.last_seqno_)    ? 1
+               : seqno == static_cast<BlockSeqno>(w.last_seqno_) ? 0
+                                                                 : -1;
       },
       [seqno](ton_api::db_lt_el_value &w) {
-        return seqno > static_cast<BlockSeqno>(w.id_->seqno_)
-                   ? 1
-                   : seqno == static_cast<BlockSeqno>(w.id_->seqno_) ? 0 : -1;
+        return seqno > static_cast<BlockSeqno>(w.id_->seqno_)    ? 1
+               : seqno == static_cast<BlockSeqno>(w.id_->seqno_) ? 0
+                                                                 : -1;
       },
       true, std::move(promise));
 }
@@ -462,61 +533,67 @@ void ArchiveSlice::get_archive_id(BlockSeqno masterchain_seqno, td::Promise<td::
   }
 }
 
+void ArchiveSlice::reinit() {
+  packages_.clear();
+
+  std::string value;
+  auto R2 = kv_->get("status", value);
+  R2.ensure();
+  sliced_mode_ = false;
+  slice_size_ = 100;
+
+  if (R2.move_as_ok() == td::KeyValue::GetStatus::Ok) {
+    if (value == "sliced") {
+      sliced_mode_ = true;
+      R2 = kv_->get("slices", value);
+      R2.ensure();
+      auto tot = td::to_integer<td::uint32>(value);
+      R2 = kv_->get("slice_size", value);
+      R2.ensure();
+      slice_size_ = td::to_integer<td::uint32>(value);
+      CHECK(slice_size_ > 0);
+      for (td::uint32 i = 0; i < tot; i++) {
+        R2 = kv_->get(PSTRING() << "status." << i, value);
+        R2.ensure();
+        auto len = td::to_integer<td::uint64>(value);
+        R2 = kv_->get(PSTRING() << "version." << i, value);
+        R2.ensure();
+        td::uint32 ver = 0;
+        if (R2.move_as_ok() == td::KeyValue::GetStatus::Ok) {
+          ver = td::to_integer<td::uint32>(value);
+        }
+        auto v = archive_id_ + slice_size_ * i;
+        add_package(v, len, ver);
+      }
+    } else {
+      auto len = td::to_integer<td::uint64>(value);
+      add_package(archive_id_, len, 0);
+    }
+  } else {
+    if (!temp_ && !key_blocks_only_) {
+      sliced_mode_ = true;
+      kv_->begin_transaction().ensure();
+      kv_->set("status", "sliced").ensure();
+      kv_->set("slices", "1").ensure();
+      kv_->set("slice_size", td::to_string(slice_size_)).ensure();
+      kv_->set("status.0", "0").ensure();
+      kv_->set("version.0", td::to_string(default_package_version())).ensure();
+      kv_->commit_transaction().ensure();
+      add_package(archive_id_, 0, default_package_version());
+    } else {
+      kv_->begin_transaction().ensure();
+      kv_->set("status", "0").ensure();
+      kv_->commit_transaction().ensure();
+      add_package(archive_id_, 0, 0);
+    }
+  }
+}
+
 void ArchiveSlice::before_query() {
   if (status_ == st_closed) {
     LOG(DEBUG) << "Opening archive slice " << db_path_;
-    kv_ = std::make_unique<td::RocksDb>(td::RocksDb::open(db_path_).move_as_ok());
-    std::string value;
-    auto R2 = kv_->get("status", value);
-    R2.ensure();
-    sliced_mode_ = false;
-    slice_size_ = 100;
-
-    if (R2.move_as_ok() == td::KeyValue::GetStatus::Ok) {
-      if (value == "sliced") {
-        sliced_mode_ = true;
-        R2 = kv_->get("slices", value);
-        R2.ensure();
-        auto tot = td::to_integer<td::uint32>(value);
-        R2 = kv_->get("slice_size", value);
-        R2.ensure();
-        slice_size_ = td::to_integer<td::uint32>(value);
-        CHECK(slice_size_ > 0);
-        for (td::uint32 i = 0; i < tot; i++) {
-          R2 = kv_->get(PSTRING() << "status." << i, value);
-          R2.ensure();
-          auto len = td::to_integer<td::uint64>(value);
-          R2 = kv_->get(PSTRING() << "version." << i, value);
-          R2.ensure();
-          td::uint32 ver = 0;
-          if (R2.move_as_ok() == td::KeyValue::GetStatus::Ok) {
-            ver = td::to_integer<td::uint32>(value);
-          }
-          auto v = archive_id_ + slice_size_ * i;
-          add_package(v, len, ver);
-        }
-      } else {
-        auto len = td::to_integer<td::uint64>(value);
-        add_package(archive_id_, len, 0);
-      }
-    } else {
-      if (!temp_ && !key_blocks_only_) {
-        sliced_mode_ = true;
-        kv_->begin_transaction().ensure();
-        kv_->set("status", "sliced").ensure();
-        kv_->set("slices", "1").ensure();
-        kv_->set("slice_size", td::to_string(slice_size_)).ensure();
-        kv_->set("status.0", "0").ensure();
-        kv_->set("version.0", td::to_string(default_package_version())).ensure();
-        kv_->commit_transaction().ensure();
-        add_package(archive_id_, 0, default_package_version());
-      } else {
-        kv_->begin_transaction().ensure();
-        kv_->set("status", "0").ensure();
-        kv_->commit_transaction().ensure();
-        add_package(archive_id_, 0, 0);
-      }
-    }
+    kv_ = std::make_unique<td::RocksDb>(td::RocksDb::open(db_path_, read_only_).move_as_ok());
+    reinit();
   }
   status_ = st_open;
   if (!archive_lru_.empty()) {
@@ -546,7 +623,7 @@ void ArchiveSlice::do_close() {
   packages_.clear();
 }
 
-template<typename T>
+template <typename T>
 td::Promise<T> ArchiveSlice::begin_async_query(td::Promise<T> promise) {
   ++active_queries_;
   return [SelfId = actor_id(this), promise = std::move(promise)](td::Result<T> R) mutable {
@@ -600,12 +677,13 @@ void ArchiveSlice::set_async_mode(bool mode, td::Promise<td::Unit> promise) {
 }
 
 ArchiveSlice::ArchiveSlice(td::uint32 archive_id, bool key_blocks_only, bool temp, bool finalized, std::string db_root,
-                           td::actor::ActorId<ArchiveLru> archive_lru)
+                           td::actor::ActorId<ArchiveLru> archive_lru, bool read_only)
     : archive_id_(archive_id)
     , key_blocks_only_(key_blocks_only)
     , temp_(temp)
     , finalized_(finalized)
     , p_id_(archive_id_, key_blocks_only_, temp_)
+    , read_only_(read_only)
     , db_root_(std::move(db_root))
     , archive_lru_(std::move(archive_lru)) {
   db_path_ = PSTRING() << db_root_ << p_id_.path() << p_id_.name() << ".index";
@@ -620,17 +698,44 @@ td::Result<ArchiveSlice::PackageInfo *> ArchiveSlice::choose_package(BlockSeqno 
   }
   auto v = (masterchain_seqno - archive_id_) / slice_size_;
   if (v >= packages_.size()) {
-    if (!force) {
-      return td::Status::Error(ErrorCode::notready, "too big masterchain seqno");
+    if (!read_only_) {
+      if (!force) {
+        return td::Status::Error(ErrorCode::notready, "too big masterchain seqno");
+      }
+      CHECK(v == packages_.size());
+      begin_transaction();
+      kv_->set("slices", td::to_string(v + 1)).ensure();
+      kv_->set(PSTRING() << "status." << v, "0").ensure();
+      kv_->set(PSTRING() << "version." << v, td::to_string(default_package_version())).ensure();
+      commit_transaction();
+
+      CHECK((masterchain_seqno - archive_id_) % slice_size_ == 0);
+      add_package(masterchain_seqno, 0, default_package_version());
+
+      return &packages_[v];
+    } else {
+      LOG(ERROR) << "Force adding package files!";
+      auto max_val = masterchain_seqno - archive_id_ - (masterchain_seqno % slice_size_);
+      max_val /= slice_size_;
+      std::string value;
+
+      for (auto i = (unsigned int)packages_.size(); i <= max_val; i++) {
+        auto R2 = kv_->get(PSTRING() << "status." << i, value);
+        R2.ensure();
+        auto len = td::to_integer<td::uint64>(value);
+        R2 = kv_->get(PSTRING() << "version." << i, value);
+        R2.ensure();
+        td::uint32 ver = 0;
+        if (R2.move_as_ok() == td::KeyValue::GetStatus::Ok) {
+          ver = td::to_integer<td::uint32>(value);
+        }
+        auto packid = archive_id_ + slice_size_ * i;
+        LOG(ERROR) << "Force add: " << packid << " " << len << " " << ver;
+        add_package(packid, len, ver);
+      }
+
+      return &packages_[max_val];
     }
-    CHECK(v == packages_.size());
-    begin_transaction();
-    kv_->set("slices", td::to_string(v + 1)).ensure();
-    kv_->set(PSTRING() << "status." << v, "0").ensure();
-    kv_->set(PSTRING() << "version." << v, td::to_string(default_package_version())).ensure();
-    commit_transaction();
-    CHECK((masterchain_seqno - archive_id_) % slice_size_ == 0);
-    add_package(masterchain_seqno, 0, default_package_version());
     return &packages_[v];
   } else {
     return &packages_[v];
@@ -640,7 +745,7 @@ td::Result<ArchiveSlice::PackageInfo *> ArchiveSlice::choose_package(BlockSeqno 
 void ArchiveSlice::add_package(td::uint32 seqno, td::uint64 size, td::uint32 version) {
   PackageId p_id{seqno, key_blocks_only_, temp_};
   std::string path = PSTRING() << db_root_ << p_id.path() << p_id.name() << ".pack";
-  auto R = Package::open(path, false, true);
+  auto R = Package::open(path, read_only_, true);
   if (R.is_error()) {
     LOG(FATAL) << "failed to open/create archive '" << path << "': " << R.move_as_error();
     return;
@@ -651,7 +756,7 @@ void ArchiveSlice::add_package(td::uint32 seqno, td::uint64 size, td::uint32 ver
     return;
   }
   auto pack = std::make_shared<Package>(R.move_as_ok());
-  if (version >= 1) {
+  if (version >= 1 && !read_only_) {
     pack->truncate(size).ensure();
   }
   auto writer = td::actor::create_actor<PackageWriter>("writer", pack, async_mode_);
@@ -844,7 +949,7 @@ void ArchiveSlice::truncate(BlockSeqno masterchain_seqno, ConstBlockHandle handl
   auto pack = cutoff.move_as_ok();
   CHECK(pack);
 
-  auto pack_r = Package::open(pack->path + ".new", false, true);
+  auto pack_r = Package::open(pack->path + ".new", read_only_, true);
   pack_r.ensure();
   auto new_package = std::make_shared<Package>(pack_r.move_as_ok());
   new_package->truncate(0).ensure();

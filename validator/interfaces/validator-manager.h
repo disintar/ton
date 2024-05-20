@@ -177,8 +177,12 @@ class ValidatorManager : public ValidatorManagerInterface {
                                                             td::Promise<ConstBlockHandle> promise) = 0;
   virtual void get_block_by_seqno_from_db_for_litequery(AccountIdPrefixFull account, BlockSeqno seqno,
                                                         td::Promise<ConstBlockHandle> promise) = 0;
+  virtual void update_lite_server_state(BlockIdExt shard_client, td::Ref<MasterchainState> state) = 0;
 
   virtual void add_lite_query_stats(int lite_query_id) {
+  }
+  virtual void add_lite_query_stats_extended(int lite_query_id, adnl::AdnlNodeIdShort dst, long start_at, long end_at,
+                                             bool success) {
   }
 
   static bool is_persistent_state(UnixTime ts, UnixTime prev_ts) {

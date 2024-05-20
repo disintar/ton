@@ -71,7 +71,7 @@ void TmpVar::dump(std::ostream& os) const {
 
 void TmpVar::show(std::ostream& os, int omit_idx) const {
   if (cls & _Named) {
-    os << sym::symbols.get_name(name);
+    os << sym_func::symbols.get_name(name);
     if (omit_idx && (omit_idx >= 2 || (cls & _UniqueName))) {
       return;
     }

@@ -27,6 +27,10 @@ class ExtClientOutboundImp : public ExtClientOutbound {
   ExtClientOutboundImp(td::unique_ptr<ExtClientOutbound::Callback> callback) : callback_(std::move(callback)) {
   }
 
+  void set_next_alarm(int next_alarm) override {
+    UNREACHABLE();
+  }
+
   void check_ready(td::Promise<td::Unit> promise) override {
     promise.set_error(td::Status::Error("Not supported"));
   }

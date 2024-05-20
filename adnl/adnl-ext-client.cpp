@@ -28,7 +28,7 @@ void AdnlExtClientImpl::alarm() {
     return;
   }
   if (conn_.empty() || !conn_.is_alive()) {
-    next_create_at_ = td::Timestamp::in(1.0);
+    next_create_at_ = td::Timestamp::in(next_alarm_);
     alarm_timestamp() = next_create_at_;
 
     auto fd = td::SocketFd::open(dst_addr_);

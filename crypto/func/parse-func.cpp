@@ -23,7 +23,7 @@
 #include "block/block.h"
 #include "block-parse.h"
 
-namespace sym {
+namespace sym_func {
 
 int compute_symbol_subclass(std::string str) {
   using funC::IdSc;
@@ -42,8 +42,8 @@ int compute_symbol_subclass(std::string str) {
 
 namespace funC {
 using namespace std::literals::string_literals;
-using src::Lexer;
-using sym::symbols;
+using src_func::Lexer;
+using sym_func::symbols;
 using td::Ref;
 
 inline bool is_dot_ident(sym_idx_t idx) {
@@ -93,7 +93,7 @@ TypeExpr* parse_type1(Lexer& lex) {
       lex.next();
       return TypeExpr::new_hole();
     case _Ident: {
-      auto sym = sym::lookup_symbol(lex.cur().val);
+      auto sym = sym_func::lookup_symbol(lex.cur().val);
       if (sym && dynamic_cast<SymValType*>(sym->value)) {
         auto val = dynamic_cast<SymValType*>(sym->value);
         lex.next();
@@ -152,7 +152,7 @@ FormalArg parse_formal_arg(Lexer& lex, int fa_idx) {
   } else if (lex.tp() != _Ident) {
     arg_type = parse_type(lex);
   } else {
-    auto sym = sym::lookup_symbol(lex.cur().val);
+    auto sym = sym_func::lookup_symbol(lex.cur().val);
     if (sym && dynamic_cast<SymValType*>(sym->value)) {
       auto val = dynamic_cast<SymValType*>(sym->value);
       lex.next();
@@ -172,11 +172,11 @@ FormalArg parse_formal_arg(Lexer& lex, int fa_idx) {
     lex.expect(_Ident, "formal parameter name");
   }
   loc = lex.cur().loc;
-  if (prohibited_var_names.count(sym::symbols.get_name(lex.cur().val))) {
-    throw src::ParseError{
-        loc, PSTRING() << "symbol `" << sym::symbols.get_name(lex.cur().val) << "` cannot be redefined as a variable"};
+  if (prohibited_var_names.count(sym_func::symbols.get_name(lex.cur().val))) {
+    throw src_func::ParseError{
+        loc, PSTRING() << "symbol `" << sym_func::symbols.get_name(lex.cur().val) << "` cannot be redefined as a variable"};
   }
-  SymDef* new_sym_def = sym::define_symbol(lex.cur().val, true, loc);
+  SymDef* new_sym_def = sym_func::define_symbol(lex.cur().val, true, loc);
   if (!new_sym_def) {
     lex.cur().error_at("cannot define symbol `", "`");
   }
@@ -198,7 +198,7 @@ void parse_global_var_decl(Lexer& lex) {
   } else if (lex.tp() != _Ident) {
     var_type = parse_type(lex);
   } else {
-    auto sym = sym::lookup_symbol(lex.cur().val);
+    auto sym = sym_func::lookup_symbol(lex.cur().val);
     if (sym && dynamic_cast<SymValType*>(sym->value)) {
       auto val = dynamic_cast<SymValType*>(sym->value);
       lex.next();
@@ -211,7 +211,7 @@ void parse_global_var_decl(Lexer& lex) {
     lex.expect(_Ident, "global variable name");
   }
   loc = lex.cur().loc;
-  SymDef* sym_def = sym::define_global_symbol(lex.cur().val, false, loc);
+  SymDef* sym_def = sym_func::define_global_symbol(lex.cur().val, false, loc);
   if (!sym_def) {
     lex.cur().error_at("cannot define global symbol `", "`");
   }
@@ -252,7 +252,7 @@ void parse_const_decl(Lexer& lex) {
     lex.expect(_Ident, "constant name");
   }
   loc = lex.cur().loc;
-  SymDef* sym_def = sym::define_global_symbol(lex.cur().val, false, loc);
+  SymDef* sym_def = sym_func::define_global_symbol(lex.cur().val, false, loc);
   if (!sym_def) {
     lex.cur().error_at("cannot define global symbol `", "`");
   }
@@ -394,11 +394,11 @@ bool check_global_func(const Lexem& cur, sym_idx_t func_name = 0) {
   if (!func_name) {
     func_name = cur.val;
   }
-  SymDef* def = sym::lookup_symbol(func_name);
+  SymDef* def = sym_func::lookup_symbol(func_name);
   if (!def) {
     cur.loc.show_error(std::string{"undefined function `"} + symbols.get_name(func_name) +
                        "`, defining a global function of unknown type");
-    def = sym::define_global_symbol(func_name, 0, cur.loc);
+    def = sym_func::define_global_symbol(func_name, 0, cur.loc);
     func_assert(def && "cannot define global function");
     ++undef_func_cnt;
     make_new_glob_func(def, TypeExpr::new_func());  // was: ... ::new_func()
@@ -600,7 +600,7 @@ Expr* parse_expr100(Lexer& lex, CodeBlob& code, bool nv) {
     return res;
   }
   if (t == _Ident) {
-    auto sym = sym::lookup_symbol(lex.cur().val);
+    auto sym = sym_func::lookup_symbol(lex.cur().val);
     if (sym && dynamic_cast<SymValType*>(sym->value)) {
       auto val = dynamic_cast<SymValType*>(sym->value);
       Expr* res = new Expr{Expr::_Type, lex.cur().loc};
@@ -647,7 +647,7 @@ Expr* parse_expr100(Lexer& lex, CodeBlob& code, bool nv) {
     } else {
       if (!sym) {
         check_global_func(lex.cur());
-        sym = sym::lookup_symbol(lex.cur().val);
+        sym = sym_func::lookup_symbol(lex.cur().val);
       }
       res->sym = sym;
       SymVal* val = nullptr;
@@ -729,11 +729,11 @@ Expr* parse_expr80(Lexer& lex, CodeBlob& code, bool nv) {
     }
     auto loc = lex.cur().loc;
     auto name = lex.cur().val;
-    auto sym = sym::lookup_symbol(name);
+    auto sym = sym_func::lookup_symbol(name);
     if (!sym || !dynamic_cast<SymValFunc*>(sym->value)) {
       auto name1 = symbols.lookup(lex.cur().str.substr(1));
       if (name1) {
-        auto sym1 = sym::lookup_symbol(name1);
+        auto sym1 = sym_func::lookup_symbol(name1);
         if (sym1 && dynamic_cast<SymValFunc*>(sym1->value)) {
           name = name1;
           sym = sym1;
@@ -744,7 +744,7 @@ Expr* parse_expr80(Lexer& lex, CodeBlob& code, bool nv) {
     if (verbosity >= 2) {
       std::cerr << "using symbol `" << symbols.get_name(name) << "` for method call of " << lex.cur().str << std::endl;
     }
-    sym = sym::lookup_symbol(name);
+    sym = sym_func::lookup_symbol(name);
     SymValFunc* val = sym ? dynamic_cast<SymValFunc*>(sym->value) : nullptr;
     if (!val) {
       lex.cur().error_at("undefined method identifier `", "`");
@@ -1016,7 +1016,7 @@ blk_fl::val parse_stmt(Lexer& lex, CodeBlob& code);
 blk_fl::val parse_block_stmt(Lexer& lex, CodeBlob& code, bool no_new_scope = false) {
   lex.expect('{');
   if (!no_new_scope) {
-    sym::open_scope(lex);
+    sym_func::open_scope(lex);
   }
   blk_fl::val res = blk_fl::init;
   bool warned = false;
@@ -1028,7 +1028,7 @@ blk_fl::val parse_block_stmt(Lexer& lex, CodeBlob& code, bool no_new_scope = fal
     blk_fl::combine(res, parse_stmt(lex, code));
   }
   if (!no_new_scope) {
-    sym::close_scope(lex);
+    sym_func::close_scope(lex);
   }
   lex.expect('}');
   return res;
@@ -1088,12 +1088,12 @@ blk_fl::val parse_do_stmt(Lexer& lex, CodeBlob& code) {
   Op& while_op = code.emplace_back(lex.cur().loc, Op::_Until);
   lex.expect(_Do);
   code.push_set_cur(while_op.block0);
-  sym::open_scope(lex);
+  sym_func::open_scope(lex);
   blk_fl::val res = parse_block_stmt(lex, code, true);
   lex.expect(_Until);
   auto expr = parse_expr(lex, code);
   expr->chk_rvalue(lex.cur());
-  sym::close_scope(lex);
+  sym_func::close_scope(lex);
   auto cnt_type = TypeExpr::new_atomic(_Int);
   try {
     unify(expr->e_type, cnt_type);
@@ -1119,7 +1119,7 @@ blk_fl::val parse_try_catch_stmt(Lexer& lex, CodeBlob& code) {
   code.close_pop_cur(lex.cur().loc);
   lex.expect(_Catch);
   code.push_set_cur(try_catch_op.block1);
-  sym::open_scope(lex);
+  sym_func::open_scope(lex);
   Expr* expr = parse_expr(lex, code, true);
   expr->chk_lvalue(lex.cur());
   TypeExpr* tvm_error_type = TypeExpr::new_tensor(TypeExpr::new_var(), TypeExpr::new_atomic(_Int));
@@ -1135,7 +1135,7 @@ blk_fl::val parse_try_catch_stmt(Lexer& lex, CodeBlob& code) {
   try_catch_op.left = expr->pre_compile(code);
   func_assert(try_catch_op.left.size() == 2 || try_catch_op.left.size() == 1);
   blk_fl::val res1 = parse_block_stmt(lex, code);
-  sym::close_scope(lex);
+  sym_func::close_scope(lex);
   code.close_pop_cur(lex.cur().loc);
   blk_fl::combine_parallel(res0, res1);
   return res0;
@@ -1250,10 +1250,10 @@ SymValAsmFunc* parse_asm_func_body(Lexer& lex, TypeExpr* func_type, const Formal
   int cnt = (int)arg_list.size();
   int width = ret_type->get_width();
   if (width < 0 || width > 16) {
-    throw src::ParseError{loc, "return type of an assembler built-in function must have a well-defined fixed width"};
+    throw src_func::ParseError{loc, "return type of an assembler built-in function must have a well-defined fixed width"};
   }
   if (arg_list.size() > 16) {
-    throw src::ParseError{loc, "assembler built-in function must have at most 16 arguments"};
+    throw src_func::ParseError{loc, "assembler built-in function must have at most 16 arguments"};
   }
   std::vector<int> cum_arg_width;
   cum_arg_width.push_back(0);
@@ -1261,7 +1261,7 @@ SymValAsmFunc* parse_asm_func_body(Lexer& lex, TypeExpr* func_type, const Formal
   for (auto& arg : arg_list) {
     int arg_width = std::get<TypeExpr*>(arg)->get_width();
     if (arg_width < 0 || arg_width > 16) {
-      throw src::ParseError{std::get<SrcLocation>(arg),
+      throw src_func::ParseError{std::get<SrcLocation>(arg),
                             "parameters of an assembler built-in function must have a well-defined fixed width"};
     }
     cum_arg_width.push_back(tot_width += arg_width);
@@ -1276,7 +1276,7 @@ SymValAsmFunc* parse_asm_func_body(Lexer& lex, TypeExpr* func_type, const Formal
         if (lex.tp() != _Ident) {
           lex.expect(_Ident);
         }
-        auto sym = sym::lookup_symbol(lex.cur().val);
+        auto sym = sym_func::lookup_symbol(lex.cur().val);
         int j;
         for (j = 0; j < cnt; j++) {
           if (std::get<SymDef*>(arg_list[j]) == sym) {
@@ -1341,7 +1341,7 @@ SymValAsmFunc* parse_asm_func_body(Lexer& lex, TypeExpr* func_type, const Formal
     lex.next();
   }
   if (asm_ops.empty()) {
-    throw src::ParseError{lex.cur().loc, "string with assembler instruction expected"};
+    throw src_func::ParseError{lex.cur().loc, "string with assembler instruction expected"};
   }
   lex.expect(';');
   std::string crc_s;
@@ -1371,14 +1371,14 @@ std::vector<TypeExpr*> parse_type_var_list(Lexer& lex) {
       lex.next();
     }
     if (lex.tp() != _Ident) {
-      throw src::ParseError{lex.cur().loc, "free type identifier expected"};
+      throw src_func::ParseError{lex.cur().loc, "free type identifier expected"};
     }
     auto loc = lex.cur().loc;
-    if (prohibited_var_names.count(sym::symbols.get_name(lex.cur().val))) {
-      throw src::ParseError{loc, PSTRING() << "symbol `" << sym::symbols.get_name(lex.cur().val)
+    if (prohibited_var_names.count(sym_func::symbols.get_name(lex.cur().val))) {
+      throw src_func::ParseError{loc, PSTRING() << "symbol `" << sym_func::symbols.get_name(lex.cur().val)
                                            << "` cannot be redefined as a variable"};
     }
-    SymDef* new_sym_def = sym::define_symbol(lex.cur().val, true, loc);
+    SymDef* new_sym_def = sym_func::define_symbol(lex.cur().val, true, loc);
     if (!new_sym_def || new_sym_def->value) {
       lex.cur().error_at("redefined type variable `", "`");
     }
@@ -1431,14 +1431,14 @@ TypeExpr* compute_type_closure(TypeExpr* expr, const std::vector<TypeExpr*>& typ
 
 void parse_func_def(Lexer& lex) {
   SrcLocation loc{lex.cur().loc};
-  sym::open_scope(lex);
+  sym_func::open_scope(lex);
   std::vector<TypeExpr*> type_vars;
   if (lex.tp() == _Forall) {
     type_vars = parse_type_var_list(lex);
   }
   auto ret_type = parse_type(lex);
   if (lex.tp() != _Ident) {
-    throw src::ParseError{lex.cur().loc, "function name identifier expected"};
+    throw src_func::ParseError{lex.cur().loc, "function name identifier expected"};
   }
   Lexem func_name = lex.cur();
   lex.next();
@@ -1467,7 +1467,7 @@ void parse_func_def(Lexer& lex) {
           lex.cur().error_at("invalid integer constant `", "`");
         }
       } else {
-        throw src::ParseError{lex.cur().loc, "integer or string method identifier expected"};
+        throw src_func::ParseError{lex.cur().loc, "integer or string method identifier expected"};
       }
       lex.next();
       lex.expect(')');
@@ -1487,7 +1487,7 @@ void parse_func_def(Lexer& lex) {
   if (verbosity >= 1) {
     std::cerr << "function " << func_name.str << " : " << func_type << std::endl;
   }
-  SymDef* func_sym = sym::define_global_symbol(func_name.val, 0, loc);
+  SymDef* func_sym = sym_func::define_global_symbol(func_name.val, 0, loc);
   func_assert(func_sym);
   SymValFunc* func_sym_val = dynamic_cast<SymValFunc*>(func_sym->value);
   if (func_sym->value) {
@@ -1571,7 +1571,7 @@ void parse_func_def(Lexer& lex) {
   if (verbosity >= 1) {
     std::cerr << "new type of function " << func_name.str << " : " << func_type << std::endl;
   }
-  sym::close_scope(lex);
+  sym_func::close_scope(lex);
 }
 
 std::string func_ver_test = func_version;
@@ -1712,12 +1712,12 @@ void parse_pragma(Lexer& lex) {
   lex.expect(';');
 }
 
-std::vector<const src::FileDescr*> source_fdescr;
+std::vector<const src_func::FileDescr*> source_fdescr;
 
-std::map<std::string, src::FileDescr*> source_files;
-std::stack<src::SrcLocation> inclusion_locations;
+std::map<std::string, src_func::FileDescr*> source_files;
+std::stack<src_func::SrcLocation> inclusion_locations;
 
-void parse_include(Lexer& lex, const src::FileDescr* fdescr) {
+void parse_include(Lexer& lex, const src_func::FileDescr* fdescr) {
   auto include = lex.cur();
   lex.expect(_IncludeHashtag);
   if (lex.tp() != _String) {
@@ -1735,8 +1735,8 @@ void parse_include(Lexer& lex, const src::FileDescr* fdescr) {
   }
 }
 
-bool parse_source(std::istream* is, src::FileDescr* fdescr) {
-  src::SourceReader reader{is, fdescr};
+bool parse_source(std::istream* is, src_func::FileDescr* fdescr) {
+  src_func::SourceReader reader{is, fdescr};
   Lexer lex{reader, true, ";,()[] ~."};
   while (lex.tp() != _Eof) {
     if (lex.tp() == _PragmaHashtag) {
@@ -1754,17 +1754,18 @@ bool parse_source(std::istream* is, src::FileDescr* fdescr) {
   return true;
 }
 
-bool parse_source_file(const char* filename, src::Lexem lex, bool is_main) {
+bool parse_source_file(const char* filename, src_func::Lexem lex, bool is_main) {
   if (!filename || !*filename) {
     auto msg = "source file name is an empty string";
     if (lex.tp) {
       lex.error(msg);
     } else {
-      throw src::Fatal{msg};
+      throw src_func::Fatal{msg};
     }
   }
 
   auto path_res = read_callback(ReadCallback::Kind::Realpath, filename);
+  
   if (path_res.is_error()) {
     auto error = path_res.move_as_error();
     lex.error(error.message().c_str());
@@ -1787,7 +1788,7 @@ bool parse_source_file(const char* filename, src::Lexem lex, bool is_main) {
     funC::generated_from += std::string{"incl:"};
   }
   funC::generated_from += std::string{"`"} + filename + "` ";
-  src::FileDescr* cur_source = new src::FileDescr{filename};
+  src_func::FileDescr* cur_source = new src_func::FileDescr{filename};
   source_files[real_filename] = cur_source;
   cur_source->is_main = is_main;
   source_fdescr.push_back(cur_source);
@@ -1797,7 +1798,7 @@ bool parse_source_file(const char* filename, src::Lexem lex, bool is_main) {
     if (lex.tp) {
       lex.error(msg);
     } else {
-      throw src::Fatal{msg};
+      throw src_func::Fatal{msg};
     }
   }
   auto file_str = file_res.move_as_ok();
@@ -1809,10 +1810,20 @@ bool parse_source_file(const char* filename, src::Lexem lex, bool is_main) {
 }
 
 bool parse_source_stdin() {
-  src::FileDescr* cur_source = new src::FileDescr{"stdin", true};
+  src_func::FileDescr* cur_source = new src_func::FileDescr{"stdin", true};
   cur_source->is_main = true;
   source_fdescr.push_back(cur_source);
   return parse_source(&std::cin, cur_source);
 }
+
+bool parse_source_string(const std::string &source) {
+    src_func::FileDescr* cur_source = new src_func::FileDescr{"string"};
+    cur_source->is_main = true;
+    source_fdescr.push_back(cur_source);
+
+    std::stringstream stream{source};
+    return parse_source(&stream, cur_source);
+}
+
 
 }  // namespace funC

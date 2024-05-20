@@ -34,6 +34,7 @@ class AdnlExtClient : public td::actor::Actor {
     virtual void on_stop_ready() = 0;
   };
   virtual ~AdnlExtClient() = default;
+  virtual void set_next_alarm(int next_alarm) = 0;
   virtual void check_ready(td::Promise<td::Unit> promise) = 0;
   virtual void send_query(std::string name, td::BufferSlice data, td::Timestamp timeout,
                           td::Promise<td::BufferSlice> promise) = 0;
