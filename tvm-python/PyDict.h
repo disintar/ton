@@ -92,8 +92,13 @@ class PyDict {
   PyDict* set_ref(const std::string& key, PyCell& value, const std::string& mode, int key_len_ = 0, int sgnd_ = -1);
   PyDict* set_builder(const std::string& key, PyCellBuilder& value, const std::string& mode, int key_len_ = 0,
                       int sgnd_ = -1);
+  PyDict* set_keycs(PyCellSlice& key, PyCellSlice& value, const std::string& mode, int key_len_ = 0);
+  PyDict* set_keycs_ref(PyCellSlice& key, PyCell& value, const std::string& mode, int key_len_ = 0);
+  PyDict* set_keycs_builder(PyCellSlice& key, PyCellBuilder& value, const std::string& mode, int key_len_ = 0);
   PyCellSlice lookup(const std::string& key, int key_len_ = 0, int sgnd_ = -1) const;
   PyCellSlice lookup_delete(const std::string& key, int key_len_ = 0, int sgnd_ = -1) const;
+  PyCellSlice lookup_keycs(PyCellSlice& key, int key_len_ = 0, int sgnd_ = -1) const;
+  PyCellSlice lookup_keycs_delete(PyCellSlice& key, int key_len_ = 0, int sgnd_ = -1) const;
   std::tuple<std::string, PyCellSlice> get_minmax_key(bool fetch_max = false, bool inver_first = false,
                                                       int key_len_ = 0, int sgnd_ = -1) const;
   std::tuple<std::string, PyCell> get_minmax_key_ref(bool fetch_max = false, bool inver_first = false, int key_len_ = 0,

@@ -167,6 +167,43 @@ PyDict* PyDict::set_builder(const std::string& key, PyCellBuilder& value, const 
   return this;
 }
 
+//  bool set(td::ConstBitPtr key, int key_len, Ref<CellSlice> value, SetMode mode = SetMode::Set);
+PyDict* PyDict::set_keycs(PyCellSlice& key, PyCellSlice& value, const std::string& mode, int key_len_) {
+  if (key_len_ == 0) {
+    key_len_ = key_len;
+  }
+
+  const auto mdict = my_dict.get();
+  mdict->set(key.my_cell_slice.prefetch_bits(key_len_).bits(), key_len_,
+             td::make_ref<vm::CellSlice>(value.my_cell_slice.clone()), get_mode(mode));
+  return this;
+}
+
+//  bool Dictionary::set_ref(td::ConstBitPtr key, int key_len, Ref<Cell> val_ref, SetMode mode)
+PyDict* PyDict::set_keycs_ref(PyCellSlice& key, PyCell& value, const std::string& mode, int key_len_) {
+
+  if (key_len_ == 0) {
+    key_len_ = key_len;
+  }
+
+  const auto mdict = my_dict.get();
+
+  mdict->set_ref(key.my_cell_slice.prefetch_bits(key_len_).bits(), key_len_, value.my_cell, get_mode(mode));
+  return this;
+}
+
+// bool Dictionary::set_builder(td::ConstBitPtr key, int key_len, Ref<CellBuilder> val_b, SetMode mode) {
+PyDict* PyDict::set_keycs_builder(PyCellSlice& key, PyCellBuilder& value, const std::string& mode, int key_len_) {
+  if (key_len_ == 0) {
+    key_len_ = key_len;
+  }
+
+  const auto mdict = my_dict.get();
+
+  mdict->set_builder(key.my_cell_slice.prefetch_bits(key_len_).bits(), key_len_, value.my_builder, get_mode(mode));
+  return this;
+}
+
 PyCellSlice PyDict::lookup(const std::string& key, int key_len_, int sgnd_) const {
   if (sgnd_ == -1) {
     sgnd_ = sgnd;
@@ -204,6 +241,33 @@ PyCellSlice PyDict::lookup_delete(const std::string& key, int key_len_, int sgnd
   const auto mdict = my_dict.get();
 
   auto cs = mdict->lookup_delete(td::BitPtr{tmp}, key_len_);
+  vm::CellBuilder cb;
+  cb.append_cellslice(cs);
+
+  return PyCellSlice(cb.finalize(), true);
+}
+
+PyCellSlice PyDict::lookup_keycs(PyCellSlice& key, int key_len_) const {
+  if (key_len_ == 0) {
+    key_len_ = key_len;
+  }
+
+  const auto mdict = my_dict.get();
+  auto cs = mdict->lookup(key.my_cell_slice.prefetch_bits(key_len_).bits(), key_len_);
+  vm::CellBuilder cb;
+  cb.append_cellslice(cs);
+
+  return PyCellSlice(cb.finalize(), true);
+}
+
+PyCellSlice PyDict::lookup_keycs_delete(PyCellSlice& key, int key_len_) const {
+  if (key_len_ == 0) {
+    key_len_ = key_len;
+  }
+
+  const auto mdict = my_dict.get();
+
+  auto cs = mdict->lookup_delete(key.my_cell_slice.prefetch_bits(key_len_).bits(), key_len_);
   vm::CellBuilder cb;
   cb.append_cellslice(cs);
 

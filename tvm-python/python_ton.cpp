@@ -39,7 +39,7 @@ std::string codeget_python_tlb(std::string tlb_code) {
   return tlbc::codegen_python_tlb(tlb_code);
 }
 
-unsigned long long shard_parent(unsigned long long s){
+unsigned long long shard_parent(unsigned long long s) {
   return ton::shard_parent(s);
 }
 
@@ -216,6 +216,12 @@ PYBIND11_MODULE(python_ton, m) {
            py::arg("key_len") = 0, py::arg("signed") = false)
       .def("set_builder_str", &PyDict::set_builder, py::arg("key"), py::arg("value"), py::arg("mode") = "set",
            py::arg("key_len") = 0, py::arg("signed") = false)
+      .def("set_keycs", &PyDict::set_keycs, py::arg("key"), py::arg("value"), py::arg("mode") = "set",
+           py::arg("key_len") = 0)
+      .def("set_ref_keycs", &PyDict::set_keycs_ref, py::arg("key"), py::arg("value"), py::arg("mode") = "set",
+           py::arg("key_len") = 0)
+      .def("set_builder_keycs", &PyDict::set_keycs_builder, py::arg("key"), py::arg("value"), py::arg("mode") = "set",
+           py::arg("key_len") = 0)
       .def("lookup_str", &PyDict::lookup, py::arg("key"), py::arg("key_len") = 0, py::arg("signed") = false)
       .def("lookup_nearest_key", &PyDict::lookup_nearest_key, py::arg("key"), py::arg("fetch_next") = true,
            py::arg("allow_eq") = false, py::arg("inver_first") = false, py::arg("key_len") = 0,
@@ -248,23 +254,12 @@ PYBIND11_MODULE(python_ton, m) {
   m.def("deserialize_stack_entry", deserialize_stack_entry, py::arg("cell_slice"));
   m.def("deserialize_stack", deserialize_stack, py::arg("cell_slice"));
 
-  m.def("func_to_asm", func_to_asm, py::arg("source_files: list[str]"),
-                                    py::arg("preamble") = false,
-                                    py::arg("indent") = 0,
-                                    py::arg("verbosity") = false,
-                                    py::arg("optimization") = 2,
-                                    py::arg("envelope") = true,
-                                    py::arg("stack_comments") = false,
-                                    py::arg("op_comments") = false);
-  m.def("func_string_to_asm", func_string_to_asm, py::arg("source_string: str"),
-                                                  py::arg("preamble") = false,
-                                                  py::arg("indent") = 0,
-                                                  py::arg("verbosity") = false,
-                                                  py::arg("optimization") = 2,
-                                                  py::arg("envelope") = true,
-                                                  py::arg("stack_comments") = false,
-                                                  py::arg("op_comments") = false);
- 
+  m.def("func_to_asm", func_to_asm, py::arg("source_files: list[str]"), py::arg("preamble") = false,
+        py::arg("indent") = 0, py::arg("verbosity") = false, py::arg("optimization") = 2, py::arg("envelope") = true,
+        py::arg("stack_comments") = false, py::arg("op_comments") = false);
+  m.def("func_string_to_asm", func_string_to_asm, py::arg("source_string: str"), py::arg("preamble") = false,
+        py::arg("indent") = 0, py::arg("verbosity") = false, py::arg("optimization") = 2, py::arg("envelope") = true,
+        py::arg("stack_comments") = false, py::arg("op_comments") = false);
 
   py::class_<PyStackInfo>(m, "PyStackInfo", py::module_local())
       .def_readwrite("stack", &PyStackInfo::stack)
@@ -503,7 +498,8 @@ PYBIND11_MODULE(python_ton, m) {
       .def("admin_getStatData", &pylite::PyLiteClient::admin_getStatData)
       .def("get_Libraries", &pylite::PyLiteClient::get_Libraries, py::arg("libs"))
       .def("get_AllShardsInfo", &pylite::PyLiteClient::get_AllShardsInfo, py::arg("blkid"))
-      .def("wait_masterchain_seqno", &pylite::PyLiteClient::wait_masterchain_seqno, py::arg("seqno"), py::arg("timeout"))
+      .def("wait_masterchain_seqno", &pylite::PyLiteClient::wait_masterchain_seqno, py::arg("seqno"),
+           py::arg("timeout"))
       .def("get_listBlockTransactionsExt", &pylite::PyLiteClient::get_listBlockTransactionsExt, py::arg("blkid"),
            py::arg("mode"), py::arg("count"), py::arg("account"), py::arg("lt"));
 
