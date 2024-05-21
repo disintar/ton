@@ -11,11 +11,13 @@
 #include "tvm-python/PyTools.h"
 #include "tvm-python/PyTVM.h"
 #include "tvm-python/PyFift.h"
+#include "tvm-python/PyFunc.h"
 #include "tvm-python/PyStack.h"
 #include "tvm-python/PySmcAddress.h"
 #include "tvm-python/PyKeys.h"
 #include "tvm-python/PyLiteClient.h"
 #include "crypto/tl/tlbc-data.h"
+#include "crypto/func/func.h"
 #include "td/utils/optional.h"
 #include "tl/generate/auto/tl/tonlib_api.h"
 
@@ -246,6 +248,24 @@ PYBIND11_MODULE(python_ton, m) {
   m.def("deserialize_stack_entry", deserialize_stack_entry, py::arg("cell_slice"));
   m.def("deserialize_stack", deserialize_stack, py::arg("cell_slice"));
 
+  m.def("func_to_asm", func_to_asm, py::arg("source_files: list[str]"),
+                                    py::arg("preamble") = false,
+                                    py::arg("indent") = 0,
+                                    py::arg("verbosity") = false,
+                                    py::arg("optimization") = 2,
+                                    py::arg("envelope") = true,
+                                    py::arg("stack_comments") = false,
+                                    py::arg("op_comments") = false);
+  m.def("func_string_to_asm", func_string_to_asm, py::arg("source_string: str"),
+                                                  py::arg("preamble") = false,
+                                                  py::arg("indent") = 0,
+                                                  py::arg("verbosity") = false,
+                                                  py::arg("optimization") = 2,
+                                                  py::arg("envelope") = true,
+                                                  py::arg("stack_comments") = false,
+                                                  py::arg("op_comments") = false);
+ 
+
   py::class_<PyStackInfo>(m, "PyStackInfo", py::module_local())
       .def_readwrite("stack", &PyStackInfo::stack)
       .def_readwrite("gas_consumed", &PyStackInfo::gas_consumed)
@@ -416,7 +436,7 @@ PYBIND11_MODULE(python_ton, m) {
                              })
       .def_property_readonly("last",
                              [](const ton::lite_api::liteServer_masterchainInfoExt& obj) -> const ton::BlockIdExt {
-                               return std::move(ton::create_block_id(std::move(obj.last_)));
+                               return ton::create_block_id(std::move(obj.last_));
                              });
 
   py::class_<block::AccountState::Info>(m, "block_AccountState_Info", py::module_local())

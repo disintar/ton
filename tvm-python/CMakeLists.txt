@@ -48,6 +48,8 @@ set(PYTHON_EMULATOR_SOURCE
         PyTVM.h
         PyFift.cpp
         PyFift.h
+        PyFunc.cpp
+        PyFunc.h
         PyStack.h
         PyStack.cpp
         PyEmulator.cpp
