@@ -369,13 +369,15 @@ PYBIND11_MODULE(python_ton, m) {
 
   py::class_<PyPublicKey>(m, "PyPublicKey", py::module_local())
       .def(py::init<std::string>(), py::arg("key_hex"))
-      .def("get_public_key_hex", &PyPublicKey::get_public_key_hex);
+      .def("get_public_key_hex", &PyPublicKey::get_public_key_hex)
+      .def("verify_signature", &PyPublicKey::verify_signature);
 
   py::class_<PyPrivateKey>(m, "PyPrivateKey", py::module_local())
       .def(py::init<>())
       .def(py::init<std::string>(), py::arg("key_hex"))
       .def("get_private_key_hex", &PyPrivateKey::get_private_key_hex)
-      .def("get_public_key", &PyPrivateKey::get_public_key);
+      .def("get_public_key", &PyPrivateKey::get_public_key)
+      .def("sign", &PyPrivateKey::sign);
 
   py::class_<PyMnemonic>(m, "PyMnemonic", py::module_local())
       .def(py::init<std::vector<std::string>, std::string>(), py::arg("mnemonic"), py::arg("mnemonic_password"))
