@@ -92,13 +92,24 @@ class PyDict {
   PyDict* set_ref(const std::string& key, PyCell& value, const std::string& mode, int key_len_ = 0, int sgnd_ = -1);
   PyDict* set_builder(const std::string& key, PyCellBuilder& value, const std::string& mode, int key_len_ = 0,
                       int sgnd_ = -1);
+
+  PyCellSlice lookup(const std::string& key, int key_len_ = 0, int sgnd_ = -1) const;
+  PyCellSlice lookup_delete(const std::string& key, int key_len_ = 0, int sgnd_ = -1) const;
+
+  PyCell lookup_ref(const std::string& key, int key_len_ = 0, int sgnd_ = -1) const;
+  bool is_empty();
+  PyCell lookup_delete_ref(const std::string& key, int key_len_ = 0, int sgnd_ = -1) const;
+
+
+  PyCell lookup_keycs_delete_ref(PyCellSlice& key, int key_len_ = 0) const;
+  PyCell lookup_keycs_ref(PyCellSlice& key, int key_len_ = 0) const;
+  PyCellSlice lookup_keycs(PyCellSlice& key, int key_len_ = 0) const;
+  PyCellSlice lookup_keycs_delete(PyCellSlice& key, int key_len_ = 0) const;
+
   PyDict* set_keycs(PyCellSlice& key, PyCellSlice& value, const std::string& mode, int key_len_ = 0);
   PyDict* set_keycs_ref(PyCellSlice& key, PyCell& value, const std::string& mode, int key_len_ = 0);
   PyDict* set_keycs_builder(PyCellSlice& key, PyCellBuilder& value, const std::string& mode, int key_len_ = 0);
-  PyCellSlice lookup(const std::string& key, int key_len_ = 0, int sgnd_ = -1) const;
-  PyCellSlice lookup_delete(const std::string& key, int key_len_ = 0, int sgnd_ = -1) const;
-  PyCellSlice lookup_keycs(PyCellSlice& key, int key_len_ = 0) const;
-  PyCellSlice lookup_keycs_delete(PyCellSlice& key, int key_len_ = 0) const;
+
   std::tuple<std::string, PyCellSlice> get_minmax_key(bool fetch_max = false, bool inver_first = false,
                                                       int key_len_ = 0, int sgnd_ = -1) const;
   std::tuple<std::string, PyCell> get_minmax_key_ref(bool fetch_max = false, bool inver_first = false, int key_len_ = 0,
@@ -106,11 +117,7 @@ class PyDict {
   std::tuple<std::string, PyCellSlice> lookup_nearest_key(const std::string& key, bool fetch_next = true,
                                                           bool allow_eq = false, bool inver_first = false,
                                                           int key_len_ = 0, int sgnd_ = -1) const;
-  PyCell lookup_keycs_ref(PyCellSlice& key, int key_len_ = 0) const;
-  PyCell lookup_ref(const std::string& key, int key_len_ = 0, int sgnd_ = -1) const;
-  bool is_empty();
-  PyCell lookup_keycs_delete_ref(PyCellSlice& key, int key_len_ = 0) const;
-  PyCell lookup_delete_ref(const std::string& key, int key_len_ = 0, int sgnd_ = -1) const;
+
   std::string to_boc() const;
   std::string toString() const;
   std::string dump() const;

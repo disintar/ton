@@ -233,6 +233,8 @@ PYBIND11_MODULE(python_ton, m) {
       .def("lookup_delete_str", &PyDict::lookup_delete, py::arg("key"), py::arg("key_len") = 0,
            py::arg("signed") = false)
       .def("lookup_keycs_delete", &PyDict::lookup_keycs_delete, py::arg("key"), py::arg("key_len") = 0)
+      .def("lookup_keycs", &PyDict::lookup_keycs, py::arg("key"), py::arg("key_len") = 0)
+      .def("lookup_keycs_ref", &PyDict::lookup_keycs_ref, py::arg("key"), py::arg("key_len") = 0)
       .def("lookup_ref_str", &PyDict::lookup_ref, py::arg("key"), py::arg("key_len") = 0, py::arg("signed") = false)
       .def("lookup_delete_ref_str", &PyDict::lookup_delete_ref, py::arg("key"), py::arg("key_len") = 0,
            py::arg("signed") = false)
