@@ -375,6 +375,22 @@ PyCell PyDict::lookup_ref(const std::string& key, int key_len_, int sgnd_) const
   return PyCell(cr);
 }
 
+PyCell PyDict::lookup_keycs_ref(PyCellSlice& key, int key_len_) const {
+  if (key_len_ == 0) {
+    key_len_ = key_len;
+  }
+
+  const auto mdict = my_dict.get();
+
+  auto cr = mdict->lookup_ref(key.my_cell_slice.prefetch_bits(key_len_).bits(), key_len_);
+
+  if (cr.is_null()) {
+    throw vm::CellBuilder::CellCreateError();
+  }
+
+  return PyCell(cr);
+}
+
 PyCell PyDict::lookup_delete_ref(const std::string& key, int key_len_, int sgnd_) const {
   if (sgnd_ == -1) {
     sgnd_ = sgnd;
@@ -391,6 +407,21 @@ PyCell PyDict::lookup_delete_ref(const std::string& key, int key_len_, int sgnd_
   const auto mdict = my_dict.get();
 
   auto cr = mdict->lookup_delete_ref(td::BitPtr{tmp}, key_len_);
+
+  if (cr.is_null()) {
+    throw vm::CellBuilder::CellCreateError();
+  }
+
+  return PyCell(cr);
+}
+
+PyCell PyDict::lookup_keycs_delete_ref(PyCellSlice& key, int key_len_) const {
+  if (key_len_ == 0) {
+    key_len_ = key_len;
+  }
+  const auto mdict = my_dict.get();
+
+  auto cr = mdict->lookup_delete_ref(key.my_cell_slice.prefetch_bits(key_len_).bits(), key_len_);
 
   if (cr.is_null()) {
     throw vm::CellBuilder::CellCreateError();

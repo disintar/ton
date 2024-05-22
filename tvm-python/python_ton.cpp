@@ -232,9 +232,11 @@ PYBIND11_MODULE(python_ton, m) {
            py::arg("inver_first") = false, py::arg("key_len") = 0, py::arg("signed") = false)
       .def("lookup_delete_str", &PyDict::lookup_delete, py::arg("key"), py::arg("key_len") = 0,
            py::arg("signed") = false)
+      .def("lookup_keycs_delete", &PyDict::lookup_keycs_delete, py::arg("key"), py::arg("key_len") = 0)
       .def("lookup_ref_str", &PyDict::lookup_ref, py::arg("key"), py::arg("key_len") = 0, py::arg("signed") = false)
       .def("lookup_delete_ref_str", &PyDict::lookup_delete_ref, py::arg("key"), py::arg("key_len") = 0,
            py::arg("signed") = false)
+      .def("lookup_keycs_delete_ref", &PyDict::lookup_keycs_delete_ref, py::arg("key"), py::arg("key_len") = 0)
       .def("to_boc", &PyDict::to_boc)
       .def("map", &PyDict::map)
       .def("combine_with", &PyDict::combine_with, py::arg("dict2"))
