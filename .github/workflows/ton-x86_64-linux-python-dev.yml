@@ -54,7 +54,7 @@ jobs:
           sudo apt update -y
           sudo apt install -y git curl xz-utils
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: 'recursive'
 

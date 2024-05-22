@@ -26,12 +26,12 @@ jobs:
         run: Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion
 
       - name: Check out current repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
 
       - name: Check out zlib repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: desktop-app/zlib
           path: zlib
