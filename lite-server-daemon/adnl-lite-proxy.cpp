@@ -264,38 +264,38 @@ class LiteProxy : public td::actor::Actor {
     private_time_updated++;
     private_servers_status_[std::move(server)] = time;
 
-    if (private_time_updated >= (int)private_servers_status_.size()) {
-      auto t = std::time(nullptr);
-      std::vector<adnl::AdnlNodeIdShort> uptodate;
-      int outdated{0};
-      int best_time{0};
-      adnl::AdnlNodeIdShort best;
+    auto t = std::time(nullptr);
+    std::vector<adnl::AdnlNodeIdShort> uptodate;
+    int outdated{0};
+    int best_time{0};
+    adnl::AdnlNodeIdShort best;
 
-      for (auto &s : private_servers_status_) {
-        if (s.second > best_time) {
-          best_time = s.second;
-          best = s.first;
-        }
+    for (auto &s : private_servers_status_) {
+      if (s.second > best_time) {
+        best_time = s.second;
+        best = s.first;
       }
+    }
 
-      for (auto &s : private_servers_status_) {
-        auto pos = std::find(uptodate_private_ls.begin(), uptodate_private_ls.end(), s.first);
+    for (auto &s : private_servers_status_) {
+      auto pos = std::find(uptodate_private_ls.begin(), uptodate_private_ls.end(), s.first);
 
-        if (best_time - s.second > 5) {
-          outdated += 1;
+      if (best_time > s.second) {
+        outdated += 1;
 
-          if (pos != uptodate_private_ls.end()) {
-            uptodate_private_ls.erase(pos);
-          }
-        } else {
-          if (pos == uptodate_private_ls.end()) {
-            uptodate_private_ls.push_back(s.first);
-          }
-
-          uptodate.push_back(s.first);
+        if (pos != uptodate_private_ls.end()) {
+          uptodate_private_ls.erase(pos);
         }
-      }
+      } else {
+        if (pos == uptodate_private_ls.end()) {
+          uptodate_private_ls.push_back(s.first);
+        }
 
+        uptodate.push_back(s.first);
+      }
+    }
+
+    if (private_time_updated >= (int)private_servers_status_.size() * 10) {
       LOG(INFO) << "Private LiteServers stats: uptodate: " << uptodate.size() << " outdated: " << outdated
                 << " best time: " << time_to_human(best_time) << ", best server: " << best.bits256_value().to_hex();
       uptodate_private_ls = std::move(uptodate);
@@ -669,7 +669,7 @@ class LiteProxy : public td::actor::Actor {
     alarm_timestamp() = td::Timestamp::in(0.5);
     cur_alarm++;
     if (cur_alarm % 2 == 0) {
-      LOG(INFO) << "Clear usage";
+      //      LOG(INFO) << "Clear usage";
       usage.clear();
       cur_alarm = 0;
     }
