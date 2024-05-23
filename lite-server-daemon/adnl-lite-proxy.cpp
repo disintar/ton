@@ -264,7 +264,7 @@ class LiteProxy : public td::actor::Actor {
     private_time_updated++;
     private_servers_status_[std::move(server)] = time;
 
-    if (private_time_updated >= (int)private_servers_status_.size() * 10) {  // every 10sec
+    if (private_time_updated >= (int)private_servers_status_.size()) {
       auto t = std::time(nullptr);
       std::vector<adnl::AdnlNodeIdShort> uptodate;
       int outdated{0};
