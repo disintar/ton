@@ -409,22 +409,6 @@ class LiteProxy : public td::actor::Actor {
   void init_private_servers() {
     LOG(INFO) << "Start init private servers";
 
-    // get current lc
-    auto my_address = config_.addr_;
-    for (auto &s : config_.liteservers) {
-      if (keys_.find(s.second) == keys_.end()) {
-        LOG(ERROR) << "Can't find key: " << s.second.bits256_value().to_hex();
-      } else {
-        auto key = ton::adnl::AdnlNodeIdFull{keys_[s.second]};
-        td::IPAddress lc_address;
-        lc_address.init_host_port(td::IPAddress::ipv4_to_str(my_address.get_ipv4()), s.first).ensure();
-
-        private_servers_[key.compute_short_id()] = td::actor::create_actor<ton::liteserver::LiteServerClient>(
-            "LSC " + key.compute_short_id().bits256_value().to_hex(), std::move(lc_address), std::move(key),
-            make_callback(key.compute_short_id()));
-      }
-    }
-
     // get slaves
     for (auto &s : config_.liteslaves) {
       auto key = adnl::AdnlNodeIdFull{std::move(s.key)};
@@ -666,8 +650,7 @@ class LiteProxy : public td::actor::Actor {
 
     config_ = ton::liteserver::Config{conf};
 
-    ratelimitdb = std::make_shared<td::RocksDb>(
-        td::RocksDb::open(db_root_ + "/" + config_.overlay_prefix + "rate-limits/", true).move_as_ok());
+    ratelimitdb = std::make_shared<td::RocksDb>(td::RocksDb::open(db_root_ + "/" + config_.overlay_prefix + "rate-limits/").move_as_ok());
 
     for (auto &key : config_.keys_refcnt) {
       to_load_keys++;
