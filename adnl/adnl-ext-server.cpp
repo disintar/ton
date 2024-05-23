@@ -167,11 +167,12 @@ void AdnlExtServerImpl::decrypt_init_packet(AdnlNodeIdShort dst, td::BufferSlice
   if (it != local_ids_.end()) {
     td::actor::send_closure(peer_table_, &AdnlPeerTable::decrypt_message, dst, std::move(data), std::move(promise));
   } else {
-    for (auto &x : local_ids_) {
-      LOG(ERROR) << "Expected: " << x.bits256_value().to_hex();
+    if (local_ids_.size() < 20) {
+      for (auto &x : local_ids_) {
+        LOG(ERROR) << "Expected: " << x.bits256_value().to_hex();
+      }
+      LOG(ERROR) << "Got: " << dst.bits256_value().to_hex();
     }
-    LOG(ERROR) << "Got: " << dst.bits256_value().to_hex();
-
     promise.set_error(td::Status::Error());
   }
 }
