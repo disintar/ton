@@ -19,6 +19,14 @@ std::string PyCell::get_hash() const {
   }
 }
 
+int PyCell::get_depth() const {
+  if (my_cell.not_null()) {
+    return my_cell->get_depth();
+  } else {
+    throw std::invalid_argument("Cell is null");
+  }
+}
+
 std::string PyCell::toString() const {
   if (my_cell.not_null()) {
     std::stringstream os;
