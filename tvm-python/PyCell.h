@@ -18,6 +18,7 @@ class PyCell {
   explicit PyCell() = default;
   ~PyCell() = default;
   std::string get_hash() const;
+  int get_depth() const;
   std::string toString() const;
   std::string dump() const;
   std::string dump_as_tlb(std::string tlb_type) const;

@@ -144,6 +144,7 @@ PYBIND11_MODULE(python_ton, m) {
   py::class_<PyCell>(m, "PyCell", py::module_local())
       .def(py::init<>())
       .def("get_hash", &PyCell::get_hash)
+      .def("get_depth", &PyCell::get_depth)
       .def("dump", &PyCell::dump)
       .def("dump_as_tlb", &PyCell::dump_as_tlb, py::arg("tlb_type"))
       .def("to_boc", &PyCell::to_boc)
