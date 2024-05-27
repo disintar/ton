@@ -16,7 +16,7 @@ jobs:
   build39: # Fast deploy to dev
     strategy:
       matrix:
-        python: [ 39 ]
+        python: [39, 310]
     runs-on: linux
 
     steps:
