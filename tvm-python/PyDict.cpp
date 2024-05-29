@@ -99,8 +99,12 @@ bool PyAugmentationCheckData::eval_empty(vm::CellBuilder& cb) const {
 }
 
 PyCell PyDict::get_pycell() const {
-  td::Ref<vm::Cell> root = my_dict->get_root_cell();
-  return PyCell(root);
+    if (is_augmented) {
+        auto dict = static_cast<vm::AugmentedDictionary*>(my_dict.get());
+        return PyCell(dict->get_root()->get_base_cell());
+    }
+    td::Ref<vm::Cell> root = my_dict->get_root_cell();
+    return PyCell(root);
 }
 
 //  bool set(td::ConstBitPtr key, int key_len, Ref<CellSlice> value, SetMode mode = SetMode::Set);
@@ -440,11 +444,15 @@ void PyDict::map(py::function& f) {
     auto key_cs = PyCellSlice(cb.finalize(), false);
 
     vm::CellBuilder tmp_cb;
-    tmp_cb.append_cellslice(cs->clone());
-    td::Ref<vm::Cell> cell = tmp_cb.finalize(cs->is_special());
 
+    auto css = cs->clone();
+    tmp_cb.store_bits(css.fetch_bits(cs->size()));
+    for (unsigned i = 0; i < cs->size_refs(); i++) {
+        tmp_cb.store_ref(cs->prefetch_ref(i));
+    }
+
+    td::Ref<vm::Cell> cell = tmp_cb.finalize(cs->is_special());
     auto value_cs = PyCellSlice(std::move(cell));
-    value_cs.advance_bits_refs(cs->cur_pos(), cs->cur_ref());
     bool result_py = clear_f(key_cs, value_cs).cast<bool>();
 
     return result_py;
