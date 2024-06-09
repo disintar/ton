@@ -417,7 +417,6 @@ void ValidatorManagerImpl::check_external_message(td::BufferSlice data, td::Prom
     promise.set_error(td::Status::Error(ErrorCode::notready, "not ready"));
     return;
   }
-  run_check_external_message(std::move(data), state->get_ext_msg_limits(), actor_id(this), std::move(promise));
   auto R = create_ext_message(std::move(data), state->get_ext_msg_limits());
   if (R.is_error()) {
     promise.set_error(R.move_as_error_prefix("failed to parse external message: "));

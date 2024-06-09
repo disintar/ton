@@ -647,7 +647,7 @@ class StateIndexer : public td::actor::Actor {
           .release();
     } else {
       auto shard_id = ton::shard_prefix(account, 60);
-      if (ton::shard_is_ancestor(prev_accounts_left_shard, shard_id)){
+      if (ton::shard_is_ancestor(prev_accounts_left_shard, shard_id)) {
         td::actor::create_actor<AccountIndexer>("AccountIndexer", accounts, prev_accounts_left, account, tx_count,
                                                 block_id_string, block_id.id.workchain, std::move(P))
             .release();
@@ -894,8 +894,8 @@ class IndexerWorker : public td::actor::Actor {
                                          SelfId = actor_id(this), first = is_first](td::Result<ConstBlockHandle> R) {
       if (R.is_error()) {
         // sometimes when blocks merge it can be that we want to find not valid block
-        LOG(ERROR) << "ERROR IN BLOCK: "
-                   << "Seqno: " << seqno_shard << " Shard: " << shard_shard << " Worckchain: " << workchain_shard;
+        LOG(ERROR) << "ERROR IN BLOCK: " << "Seqno: " << seqno_shard << " Shard: " << shard_shard
+                   << " Worckchain: " << workchain_shard;
 
         LOG(ERROR) << R.move_as_error().to_string();
         td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
@@ -1700,17 +1700,17 @@ class IndexerWorker : public td::actor::Actor {
                              td::actor::ActorId<StateIndexer> state_indexer, bool after_merge) {
     auto prev_id = handle->one_prev(true);
 
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), state_indexer,
-                                         after_merge](td::Result<ConstBlockHandle> R) {
-      if (R.is_error()) {
-        // todo: process normally
-        LOG(ERROR) << R.move_as_error().to_string() << " state handle error fatal";
-        std::exit(2);
-      } else {
-        td::actor::send_closure(SelfId, &IndexerWorker::got_prev_block_handle, R.move_as_ok(), state_indexer, true,
-                                after_merge);
-      }
-    });
+    auto P = td::PromiseCreator::lambda(
+        [SelfId = actor_id(this), state_indexer, after_merge](td::Result<ConstBlockHandle> R) {
+          if (R.is_error()) {
+            // todo: process normally
+            LOG(ERROR) << R.move_as_error().to_string() << " state handle error fatal";
+            std::exit(2);
+          } else {
+            td::actor::send_closure(SelfId, &IndexerWorker::got_prev_block_handle, R.move_as_ok(), state_indexer, true,
+                                    after_merge);
+          }
+        });
 
     ton::AccountIdPrefixFull pfx{prev_id.id.workchain, prev_id.id.shard};
 
@@ -1868,6 +1868,13 @@ class Indexer : public td::actor::Actor {
         LOG(DEBUG) << "add_shard";
         //        td::actor::send_closure(id_, &FullNodeImpl::add_shard, shard);
       }
+
+      void send_block_candidate(BlockIdExt block_id, CatchainSeqno cc_seqno, td::uint32 validator_set_hash,
+                                td::BufferSlice data) override {
+        LOG(DEBUG) << "send_block_candidate";
+        //        td::actor::send_closure(id_, &FullNodeImpl::add_shard, shard);
+      };
+
       void del_shard(ShardIdFull shard) override {
         LOG(DEBUG) << "del_shard";
         //        td::actor::send_closure(id_, &FullNodeImpl::del_shard, shard);
@@ -1884,7 +1891,7 @@ class Indexer : public td::actor::Actor {
         LOG(DEBUG) << "send_shard_block_info";
         //        td::actor::send_closure(id_, &FullNodeImpl::send_shard_block_info, block_id, cc_seqno, std::move(data));
       }
-      void send_broadcast(BlockBroadcast broadcast) override {
+      void send_broadcast(BlockBroadcast broadcast, bool custom_overlays_only = false) override {
         LOG(DEBUG) << "send_broadcast";
         //        td::actor::send_closure(id_, &FullNodeImpl::send_broadcast, std::move(broadcast));
       }
@@ -2145,6 +2152,11 @@ class IndexerSimple : public td::actor::Actor {
         LOG(DEBUG) << "add_shard";
         //        td::actor::send_closure(id_, &FullNodeImpl::add_shard, shard);
       }
+      void send_block_candidate(BlockIdExt block_id, CatchainSeqno cc_seqno, td::uint32 validator_set_hash,
+                                td::BufferSlice data) override {
+        LOG(DEBUG) << "send_block_candidate";
+        //        td::actor::send_closure(id_, &FullNodeImpl::add_shard, shard);
+      };
       void del_shard(ShardIdFull shard) override {
         LOG(DEBUG) << "del_shard";
         //        td::actor::send_closure(id_, &FullNodeImpl::del_shard, shard);
@@ -2161,7 +2173,7 @@ class IndexerSimple : public td::actor::Actor {
         LOG(DEBUG) << "send_shard_block_info";
         //        td::actor::send_closure(id_, &FullNodeImpl::send_shard_block_info, block_id, cc_seqno, std::move(data));
       }
-      void send_broadcast(BlockBroadcast broadcast) override {
+      void send_broadcast(BlockBroadcast broadcast, bool custom_overlays_only = false) override {
         LOG(DEBUG) << "send_broadcast";
         //        td::actor::send_closure(id_, &FullNodeImpl::send_broadcast, std::move(broadcast));
       }
