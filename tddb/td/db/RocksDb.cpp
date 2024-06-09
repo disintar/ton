@@ -87,9 +87,6 @@ Result<RocksDb> RocksDb::open(std::string path, bool read_only, RocksDbOptions o
     std::vector<rocksdb::ColumnFamilyDescriptor> column_families;
     column_families.push_back(rocksdb::ColumnFamilyDescriptor(rocksdb::kDefaultColumnFamilyName, cf_options));
     std::vector<rocksdb::ColumnFamilyHandle *> handles;
-    TRY_STATUS(from_rocksdb(rocksdb::OptimisticTransactionDB::Open(db_options, occ_options, std::move(path),
-                                                                   column_families, &handles, &db)));
-
     if (read_only) {
       TRY_STATUS(from_rocksdb(rocksdb::OptimisticTransactionDB::OpenForReadOnly(
           db_options, std::move(path), column_families, &handles, reinterpret_cast<rocksdb::DB **>(&db))));
