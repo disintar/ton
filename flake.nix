@@ -21,6 +21,7 @@
               else throw "unsupported platform"
             else if p.isDarwin then "macos-${kind}.nix"
             else throw "unsupported platform";
+          _ = builtins.trace "Using package: ${pkgname}" null;
           pkg = ./assembly/nix/${pkgname};
         in
         import pkg {

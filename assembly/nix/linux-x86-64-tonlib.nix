@@ -34,7 +34,7 @@ stdenv227.mkDerivation {
 
   buildInputs = with pkgs;
     [
-      pkgsStatic.openssl pkgsStatic.zlib pkgsStatic.libmicrohttpd.dev pkgsStatic.secp256k1 pkgsStatic.boost
+      pkgsStatic.openssl pkgsStatic.zlib pkgsStatic.libmicrohttpd.dev pkgsStatic.secp256k1 pkgsStatic.boost pkgsStatic.librdkafka
       (pkgsStatic.libsodium.overrideAttrs (oldAttrs: {
         # https://github.com/jedisct1/libsodium/issues/292#issuecomment-137135369
         configureFlags = oldAttrs.configureFlags ++ [ " --disable-pie" ];

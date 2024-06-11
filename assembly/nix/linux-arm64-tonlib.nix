@@ -23,7 +23,7 @@ pkgs.llvmPackages_16.stdenv.mkDerivation {
 
   buildInputs = with pkgs;
     [
-      pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.secp256k1 staticBoost pkgsStatic.boost
+      pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.secp256k1 staticBoost pkgsStatic.boost pkgsStatic.librdkafka
       (pkgsStatic.libsodium.overrideAttrs (oldAttrs: {
         # https://github.com/jedisct1/libsodium/issues/292#issuecomment-137135369
         configureFlags = oldAttrs.configureFlags ++ [ " --disable-pie" ];
