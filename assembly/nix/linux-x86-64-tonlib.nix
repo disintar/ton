@@ -23,6 +23,13 @@ let
           in (pkgs.overrideCC pkgs.stdenv cc);
 
 in
+let
+  # Define pkgsStatic with a custom overlay
+  pkgsStatic = import <nixpkgs> {
+    inherit system;
+    overlays = [ (import ./static-overlay.nix) ];
+  };
+in
 stdenv227.mkDerivation {
   pname = "ton";
   version = "dev-lib";

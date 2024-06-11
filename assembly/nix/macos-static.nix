@@ -7,9 +7,10 @@
 , src ? ./.
 }:
 let
+  # Define pkgsStatic with a custom overlay
   pkgsStatic = import <nixpkgs> {
     inherit system;
-    overlays = [ (self: super: { inherit (pkgs) stdenv; }) ];
+    overlays = [ (import ./static-overlay.nix) ];
   };
 in
 pkgs.llvmPackages_14.stdenv.mkDerivation {
@@ -34,6 +35,7 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
       pkgsStatic.boost
       pkgsStatic.librdkafka
    ];
+
 
   dontAddStaticConfigureFlags = true;
   makeStatic = true;
@@ -77,7 +79,7 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
           install_name_tool -change "$(otool -L "$fn" | grep libc++.1 | cut -d' ' -f1 | xargs)" libc++.1.dylib "$fn"
           install_name_tool -change "$(otool -L "$fn" | grep libc++abi.1 | cut -d' ' -f1 | xargs)" libc++abi.dylib "$fn"
         done
-      fi
+        fi
   '';
   outputs = [ "bin" "out" ];
 }

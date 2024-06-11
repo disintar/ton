@@ -9,6 +9,13 @@
 let
   microhttpdmy = (import ./microhttpd.nix) { inherit pkgs; };
 in
+let
+  # Define pkgsStatic with a custom overlay
+  pkgsStatic = import <nixpkgs> {
+    inherit system;
+    overlays = [ (import ./static-overlay.nix) ];
+  };
+in
 with import microhttpdmy;
 pkgs.llvmPackages_16.stdenv.mkDerivation {
   pname = "ton";
