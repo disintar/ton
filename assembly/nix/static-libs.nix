@@ -1,6 +1,8 @@
-self: super: {
-  boost = super.boost.overrideAttrs (oldAttrs: {
-    buildInputs = (oldAttrs.buildInputs or []) ++ [ super.stdenv ];
+{ pkgs }:
+
+let
+  staticBoost = pkgs.boost.overrideAttrs (oldAttrs: {
+    buildInputs = (oldAttrs.buildInputs or []) ++ [ pkgs.stdenv ];
     doCheck = false;
     configurePhase = '' ''; # No configure phase
     buildPhase = ''
@@ -9,7 +11,13 @@ self: super: {
     '';
   });
 
-  librdkafka = super.librdkafka.overrideAttrs (oldAttrs: {
+  staticLibrdkafka = pkgs.librdkafka.overrideAttrs (oldAttrs: {
     configureFlags = (oldAttrs.configureFlags or []) ++ [ "--enable-static", "--disable-shared" ];
+    postInstall = ''
+      moveToOutput lib "$lib"
+    '';
   });
+in
+{
+  inherit staticBoost staticLibrdkafka;
 }

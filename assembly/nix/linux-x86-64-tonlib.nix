@@ -21,14 +21,9 @@ let
               bintools = pkgs.binutils.override { libc = glibc227; };
             };
           in (pkgs.overrideCC pkgs.stdenv cc);
-
-in
-let
-  # Define pkgsStatic with a custom overlay
-  pkgsStatic = import <nixpkgs> {
-    inherit system;
-    overlays = [ (import ./static-overlay.nix) ];
-  };
+  staticLibs = import ./static-libs.nix { inherit pkgs; };
+  staticBoost = staticLibs.staticBoost;
+  staticLibrdkafka = staticLibs.staticLibrdkafka;
 in
 stdenv227.mkDerivation {
   pname = "ton";
@@ -41,7 +36,9 @@ stdenv227.mkDerivation {
 
   buildInputs = with pkgs;
     [
-      pkgsStatic.openssl pkgsStatic.zlib pkgsStatic.libmicrohttpd.dev pkgsStatic.secp256k1 pkgsStatic.boost pkgsStatic.librdkafka
+      pkgsStatic.openssl pkgsStatic.zlib pkgsStatic.libmicrohttpd.dev pkgsStatic.secp256k1
+      staticBoost
+      staticLibrdkafka
       (pkgsStatic.libsodium.overrideAttrs (oldAttrs: {
         # https://github.com/jedisct1/libsodium/issues/292#issuecomment-137135369
         configureFlags = oldAttrs.configureFlags ++ [ " --disable-pie" ];

@@ -8,13 +8,9 @@
 }:
 let
   microhttpdmy = (import ./microhttpd.nix) { inherit pkgs; };
-in
-let
-  # Define pkgsStatic with a custom overlay
-  pkgsStatic = import <nixpkgs> {
-    inherit system;
-    overlays = [ (import ./static-overlay.nix) ];
-  };
+  staticLibs = import ./static-libs.nix { inherit pkgs; };
+  staticBoost = staticLibs.staticBoost;
+  staticLibrdkafka = staticLibs.staticLibrdkafka;
 in
 with import microhttpdmy;
 pkgs.llvmPackages_16.stdenv.mkDerivation {
@@ -30,7 +26,9 @@ pkgs.llvmPackages_16.stdenv.mkDerivation {
 
   buildInputs = with pkgs;
     [
-      pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.secp256k1 staticBoost pkgsStatic.boost pkgsStatic.librdkafka
+      pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.secp256k1 staticBoost
+      staticBoost
+      staticLibrdkafka
       (pkgsStatic.libsodium.overrideAttrs (oldAttrs: {
         # https://github.com/jedisct1/libsodium/issues/292#issuecomment-137135369
         configureFlags = oldAttrs.configureFlags ++ [ " --disable-pie" ];

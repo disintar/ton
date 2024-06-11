@@ -8,13 +8,9 @@
 }:
 let
   microhttpdmy = (import ./microhttpd.nix) { inherit pkgs; };
-in
-let
-  # Define pkgsStatic with a custom overlay
-  pkgsStatic = import <nixpkgs> {
-    inherit system;
-    overlays = [ (import ./static-overlay.nix) ];
-  };
+  staticLibs = import ./static-libs.nix { inherit pkgs; };
+  staticBoost = staticLibs.staticBoost;
+  staticLibrdkafka = staticLibs.staticLibrdkafka;
 in
 with import microhttpdmy;
 stdenv.mkDerivation {
@@ -30,7 +26,9 @@ stdenv.mkDerivation {
 
   buildInputs = with pkgs;
     [
-      pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.libsodium.dev pkgsStatic.secp256k1 glibc.static pkgsStatic.boost pkgsStatic.librdkafka
+      pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.libsodium.dev pkgsStatic.secp256k1 glibc.static
+      staticBoost
+      staticLibrdkafka
     ];
 
   makeStatic = true;

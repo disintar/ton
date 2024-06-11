@@ -6,6 +6,12 @@
 , system ? builtins.currentSystem
 , src ? ./.
 }:
+let
+  # Import custom static packages
+  staticLibs = import ./static-libs.nix { inherit pkgs; };
+  staticBoost = staticLibs.staticBoost;
+  staticLibrdkafka = staticLibs.staticLibrdkafka;
+in
 pkgs.llvmPackages_14.stdenv.mkDerivation {
   pname = "ton";
   version = "dev-lib";
@@ -24,6 +30,8 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
       (openssl.override { static = true; }).dev
       (zlib.override { shared = false; }).dev
       (libiconv.override { enableStatic = true; enableShared = false; })
+      staticBoost
+      staticLibrdkafka
     ];
 
   dontAddStaticConfigureFlags = true;

@@ -7,11 +7,9 @@
 , src ? ./.
 }:
 let
-  # Define pkgsStatic with a custom overlay
-  pkgsStatic = import <nixpkgs> {
-    inherit system;
-    overlays = [ (import ./static-overlay.nix) ];
-  };
+  staticLibs = import ./static-libs.nix { inherit pkgs; };
+  staticBoost = staticLibs.staticBoost;
+  staticLibrdkafka = staticLibs.staticLibrdkafka;
 in
 pkgs.llvmPackages_14.stdenv.mkDerivation {
   pname = "ton";
@@ -32,8 +30,8 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
       (openssl.override { static = true; }).dev
       (zlib.override { shared = false; }).dev
       (libiconv.override { enableStatic = true; enableShared = false; })
-      pkgsStatic.boost
-      pkgsStatic.librdkafka
+      staticBoost
+      staticLibrdkafka
    ];
 
 
