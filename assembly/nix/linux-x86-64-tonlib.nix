@@ -21,6 +21,7 @@ let
               bintools = pkgs.binutils.override { libc = glibc227; };
             };
           in (pkgs.overrideCC pkgs.stdenv cc);
+          staticBoost = import ./static-boost.nix { inherit pkgs; };
 
 in
 stdenv227.mkDerivation {
