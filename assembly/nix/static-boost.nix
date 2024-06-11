@@ -1,6 +1,6 @@
-{ staticPkgs }:
+{ pkgs }:
 
-staticPkgs.boost.overrideAttrs (oldAttrs: {
+pkgs.boost.overrideAttrs (oldAttrs: {
   buildInputs = (oldAttrs.buildInputs or []) ++ [ staticPkgs.stdenv ];
   doCheck = false;
   configureFlags = []; # Remove unrecognized flags
