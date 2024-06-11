@@ -294,12 +294,17 @@ void ValidatorManagerMasterchainReiniter::finish() {
 void ValidatorManagerMasterchainStarter::start_up() {
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<BlockIdExt> R) {
     if (R.is_error()) {
-      CHECK(R.error().code() == ErrorCode::notready);
+      if (R.error().code() == ErrorCode::notready) {
+        td::actor::send_closure(SelfId, &ValidatorManagerMasterchainStarter::failed_to_get_init_block_id);
+      } else {
+        LOG(FATAL) << R.error().to_string();
+      }
       td::actor::send_closure(SelfId, &ValidatorManagerMasterchainStarter::failed_to_get_init_block_id);
     } else {
       td::actor::send_closure(SelfId, &ValidatorManagerMasterchainStarter::got_init_block_id, R.move_as_ok());
     }
   });
+  LOG(DEBUG) << "Send get_init_masterchain_block";
   td::actor::send_closure(db_, &Db::get_init_masterchain_block, std::move(P));
 }
 
@@ -312,6 +317,8 @@ void ValidatorManagerMasterchainStarter::failed_to_get_init_block_id() {
 void ValidatorManagerMasterchainStarter::got_init_block_id(BlockIdExt block_id) {
   block_id_ = block_id;
 
+  LOG(DEBUG) << "Init block seqno: " << block_id.seqno();
+
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<BlockHandle> R) {
     R.ensure();
     td::actor::send_closure(SelfId, &ValidatorManagerMasterchainStarter::got_init_block_handle, R.move_as_ok());
@@ -321,6 +328,8 @@ void ValidatorManagerMasterchainStarter::got_init_block_id(BlockIdExt block_id) 
 }
 
 void ValidatorManagerMasterchainStarter::got_init_block_handle(BlockHandle handle) {
+  LOG(DEBUG) << "Got initial block data";
+
   handle_ = std::move(handle);
   if (!handle_->received_state()) {
     LOG(ERROR) << "db inconsistent: last state ( " << handle_->id() << " ) not received";
@@ -374,6 +383,8 @@ void ValidatorManagerMasterchainStarter::rerun_get_shard_state() {
   td::actor::send_closure(manager_, &ValidatorManager::get_shard_state_from_db, handle_, std::move(P));
 }
 void ValidatorManagerMasterchainStarter::got_init_block_state(td::Ref<MasterchainState> state) {
+  LOG(DEBUG) << "Got initial block state";
+
   state_ = std::move(state);
   CHECK(state_->get_block_id() == opts_->init_block_id() || state_->ancestor_is_valid(opts_->init_block_id()) ||
         state_->get_block_id().seqno() < opts_->get_last_fork_masterchain_seqno());
@@ -393,10 +404,13 @@ void ValidatorManagerMasterchainStarter::got_init_block_state(td::Ref<Masterchai
         }
       });
 
-  td::actor::send_closure(db_, &Db::get_gc_masterchain_block, std::move(P));
+    td::actor::send_closure(db_, &Db::get_gc_masterchain_block, std::move(P));
+  }
 }
 
 void ValidatorManagerMasterchainStarter::got_gc_block_id(BlockIdExt block_id) {
+  LOG(DEBUG) << "Got gc block id";
+
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<BlockHandle> R) {
     R.ensure();
     td::actor::send_closure(SelfId, &ValidatorManagerMasterchainStarter::got_gc_block_handle, R.move_as_ok());
@@ -406,6 +420,8 @@ void ValidatorManagerMasterchainStarter::got_gc_block_id(BlockIdExt block_id) {
 }
 
 void ValidatorManagerMasterchainStarter::got_gc_block_handle(BlockHandle handle) {
+  LOG(DEBUG) << "Got gc block data";
+
   gc_handle_ = std::move(handle);
 
   CHECK(gc_handle_->id().id.seqno <= handle_->id().id.seqno);
@@ -422,6 +438,8 @@ void ValidatorManagerMasterchainStarter::got_gc_block_handle(BlockHandle handle)
 }
 
 void ValidatorManagerMasterchainStarter::got_gc_block_state(td::Ref<MasterchainState> state) {
+  LOG(DEBUG) << "Got gc block state";
+
   gc_state_ = std::move(state);
 
   if (handle_->id().id.seqno == 0 || handle_->is_key_block()) {
@@ -447,6 +465,8 @@ void ValidatorManagerMasterchainStarter::got_gc_block_state(td::Ref<MasterchainS
 }
 
 void ValidatorManagerMasterchainStarter::got_key_block_handle(BlockHandle handle) {
+  LOG(DEBUG) << "Got key block handle";
+
   CHECK(handle);
   //CHECK(handle->id().id.seqno == 0 || handle->is_key_block());
   last_key_block_handle_ = std::move(handle);
@@ -460,6 +480,8 @@ void ValidatorManagerMasterchainStarter::got_key_block_handle(BlockHandle handle
 }
 
 void ValidatorManagerMasterchainStarter::got_shard_block_id(BlockIdExt block_id) {
+  LOG(DEBUG) << "Got shard block id";
+
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::vector<BlockIdExt>> R) {
     R.ensure();
     td::actor::send_closure(SelfId, &ValidatorManagerMasterchainStarter::got_hardforks, R.move_as_ok());
@@ -468,6 +490,8 @@ void ValidatorManagerMasterchainStarter::got_shard_block_id(BlockIdExt block_id)
 }
 
 void ValidatorManagerMasterchainStarter::got_hardforks(std::vector<BlockIdExt> vec) {
+  LOG(DEBUG) << "Got hardforks";
+
   auto h = opts_->get_hardforks();
   if (h.size() < vec.size()) {
     LOG(FATAL) << "cannot start: number of hardforks decreased";
@@ -528,6 +552,8 @@ void ValidatorManagerMasterchainStarter::got_truncate_block_seqno(BlockSeqno seq
 }
 
 void ValidatorManagerMasterchainStarter::got_truncate_block_id(BlockIdExt block_id) {
+  LOG(DEBUG) << "Got truncate block id";
+
   block_id_ = block_id;
 
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<BlockHandle> R) {
@@ -538,6 +564,8 @@ void ValidatorManagerMasterchainStarter::got_truncate_block_id(BlockIdExt block_
 }
 
 void ValidatorManagerMasterchainStarter::got_truncate_block_handle(BlockHandle handle) {
+  LOG(DEBUG) << "Got truncate block handle";
+
   handle_ = std::move(handle);
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
     R.ensure();
@@ -548,6 +576,8 @@ void ValidatorManagerMasterchainStarter::got_truncate_block_handle(BlockHandle h
 }
 
 void ValidatorManagerMasterchainStarter::got_truncate_state(td::Ref<MasterchainState> state) {
+  LOG(DEBUG) << "Got truncate state";
+
   state_ = std::move(state);
 
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<BlockHandle> R) {
@@ -622,8 +652,12 @@ void ValidatorManagerMasterchainStarter::written_next() {
 void ValidatorManagerMasterchainStarter::start_shard_client() {
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) {
     R.ensure();
+    LOG(DEBUG) << "Success";
+
     td::actor::send_closure(SelfId, &ValidatorManagerMasterchainStarter::finish);
   });
+  LOG(DEBUG) << "Start shard client";
+
   client_ = td::actor::create_actor<ShardClient>("shardclient", opts_, manager_, std::move(P));
 }
 

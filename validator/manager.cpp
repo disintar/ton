@@ -46,7 +46,7 @@
 #include "common/delay.h"
 
 #include "validator/stats-merger.h"
-
+#include "validator-engine/BlockParserAsync.hpp"
 #include <fstream>
 
 namespace ton {
@@ -217,8 +217,8 @@ void ValidatorManagerImpl::prevalidate_block(BlockBroadcast broadcast, td::Promi
     return;
   }
   td::actor::create_actor<ValidateBroadcast>("broadcast", std::move(broadcast), last_masterchain_block_handle_,
-                                             last_masterchain_state_, last_known_key_block_handle_, actor_id(this),
-                                             td::Timestamp::in(2.0), std::move(promise))
+                                             last_masterchain_state_, last_known_key_block_handle_, publisher_.get(),
+                                             actor_id(this), td::Timestamp::in(2.0), std::move(promise))
       .release();
 }
 
@@ -1007,6 +1007,11 @@ void ValidatorManagerImpl::get_block_data_from_db_short(BlockIdExt block_id, td:
 
 void ValidatorManagerImpl::get_shard_state_from_db(ConstBlockHandle handle, td::Promise<td::Ref<ShardState>> promise) {
   td::actor::send_closure(db_, &Db::get_block_state, handle, std::move(promise));
+}
+
+void ValidatorManagerImpl::get_shard_state_root_cell_from_db(ConstBlockHandle handle,
+                                                             td::Promise<td::Ref<vm::DataCell>> promise) {
+  td::actor::send_closure(db_, &Db::get_block_state_root_cell, handle, std::move(promise));
 }
 
 void ValidatorManagerImpl::get_shard_state_from_db_short(BlockIdExt block_id,
@@ -1893,6 +1898,112 @@ void ValidatorManagerImpl::completed_prestart_sync() {
 
   LOG(WARNING) << "initial read complete: " << last_masterchain_block_handle_->id() << " "
                << last_masterchain_block_id_;
+
+  if (publisher_ != nullptr) {
+    //new_masterchain_block();
+
+    LOG(WARNING) << "Start getting last blocks for sending them to kafka";
+    auto P = td::PromiseCreator::lambda(
+        [publisher = &publisher_](td::Result<std::tuple<std::vector<ConstBlockHandle>, std::vector<td::Ref<BlockData>>,
+                                                        std::vector<td::Ref<vm::Cell>>, std::vector<td::Ref<vm::Cell>>>>
+                                      R) {
+          if (R.is_error()) {
+            auto e = R.move_as_error();
+            LOG(ERROR) << "Failed to parse initial blocks: " << e;
+          } else {
+            auto item = R.move_as_ok();
+
+            auto handles = std::get<0>(item);
+            auto data = std::get<1>(item);
+            auto states = std::get<2>(item);
+            auto prev_states = std::get<3>(item);
+
+            while (!handles.empty()) {
+              auto last_handle = handles.back();
+              handles.pop_back();
+
+              auto last_data = data.back();
+              data.pop_back();
+
+              auto last_state = states.back();
+              states.pop_back();
+
+              auto last_prev_state = prev_states.back();
+              prev_states.pop_back();
+
+              const auto shard = last_handle->id().id.shard;
+              const auto wc = last_handle->id().id.workchain;
+
+              // TODO: store promises in BlockParserAsync
+              auto P = td::PromiseCreator::lambda(
+                  [publisher_ = publisher, shard, wc](td::Result<std::tuple<std::string, std::string>> R) {
+                    if (R.is_ok()) {
+                      const auto answer = R.move_as_ok();
+
+                      // skip
+                      if (!std::get<0>(answer).empty()) {
+                        const auto f = R.move_as_ok();
+                        auto publisher = publisher_->get();
+                        publisher->enqueuePublishBlockData(wc, shard, std::get<0>(answer));
+                        publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
+                      }
+                    } else {
+                      LOG(FATAL) << "Failed to parse!";
+                    }
+                  });
+
+              publisher->get()->storeBlockData(last_handle, last_data, std::move(P));
+
+              // TODO: store promises in BlockParserAsync
+              auto P2 = td::PromiseCreator::lambda(
+                  [publisher_ = publisher, shard, wc](td::Result<std::tuple<std::string, std::string>> R) {
+                    if (R.is_ok()) {
+                      const auto answer = R.move_as_ok();
+
+                      // skip
+                      if (!std::get<0>(answer).empty()) {
+                        const auto f = R.move_as_ok();
+                        auto publisher = publisher_->get();
+                        publisher->enqueuePublishBlockData(wc, shard, std::get<0>(answer));
+                        publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
+                      }
+                    } else {
+                      LOG(FATAL) << "Failed to parse!";
+                    }
+                  });
+
+              publisher->get()->storeBlockStateWithPrev(last_handle, last_prev_state, last_state, std::move(P2));
+
+              // TODO: store promises in BlockParserAsync
+              auto P3 = td::PromiseCreator::lambda(
+                  [publisher_ = publisher, shard, wc](td::Result<std::tuple<std::string, std::string>> R) {
+                    if (R.is_ok()) {
+                      const auto answer = R.move_as_ok();
+
+                      // skip
+                      if (!std::get<0>(answer).empty()) {
+                        const auto f = R.move_as_ok();
+                        auto publisher = publisher_->get();
+                        publisher->enqueuePublishBlockData(wc, shard, std::get<0>(answer));
+                        publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
+                      }
+                    } else {
+                      LOG(FATAL) << "Failed to parse!";
+                    }
+                  });
+
+              publisher->get()->storeBlockApplied(last_handle->id(), std::move(P3));
+            }
+          }
+        });
+
+    BlockHandle tmp(last_masterchain_block_handle_);
+    LOG(DEBUG) << "Start StartupBlockParser worker";
+    td::actor::create_actor<StartupBlockParser>("StartupBlockParser", actor_id(this), std::move(tmp), std::move(P))
+        .release();
+  } else {
+    LOG(WARNING) << "Skip read old blocks, publisher not set";
+  }
   callback_->initial_read_complete(last_masterchain_block_handle_);
 }
 

@@ -73,6 +73,7 @@ CellDbIn::CellDbIn(td::actor::ActorId<RootDb> root_db, td::actor::ActorId<CellDb
 }
 
 void CellDbIn::start_up() {
+  LOG(DEBUG) << "Open CellDbIn: " << path_;
   on_load_callback_ = [actor = std::make_shared<td::actor::ActorOwn<MigrationProxy>>(
                            td::actor::create_actor<MigrationProxy>("celldbmigration", actor_id(this))),
                        compress_depth = opts_->get_celldb_compress_depth()](const vm::CellLoader::LoadResult& res) {

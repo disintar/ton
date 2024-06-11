@@ -333,7 +333,7 @@ std::size_t malloc_usable_size(void *ptr) {
 }
 }
 
-// c++14 guarantees that it is enough to override these two operators.
+// c++17 guarantees that it is enough to override these two operators.
 void *operator new(std::size_t count) {
   return malloc_with_frame(count, get_backtrace());
 }

@@ -458,6 +458,11 @@ FullNodeMasterImpl::FullNodeMasterImpl(adnl::AdnlNodeIdShort adnl_id, td::uint16
     , keyring_(keyring)
     , adnl_(adnl)
     , validator_manager_(validator_manager) {
+  auto P = td::PromiseCreator::lambda([](td::Result<PublicKey> R) {
+    R.ensure();
+    LOG(WARNING) << "Start full node master with: " << R.move_as_ok().ed25519_value().raw().to_hex();
+  });
+  td::actor::send_closure(keyring_, &keyring::Keyring::get_public_key, adnl_id.pubkey_hash(), std::move(P));
 }
 
 td::actor::ActorOwn<FullNodeMaster> FullNodeMaster::create(

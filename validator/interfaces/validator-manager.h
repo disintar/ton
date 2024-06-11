@@ -196,6 +196,17 @@ class ValidatorManager : public ValidatorManagerInterface {
                                              bool success) {
   }
 
+  virtual void set_block_publisher(std::unique_ptr<BlockParser> publisher) override {
+//    LOG(ERROR) << "set_block_publisher";
+  } ///TODO: make it pure virtual
+
+  virtual BlockParser* get_block_publisher() {
+    // TODO: make it pure virtual
+  }
+
+  void set_async() override {
+  }  ///TODO: make it pure virtual
+
   static bool is_persistent_state(UnixTime ts, UnixTime prev_ts) {
     return ts / (1 << 17) != prev_ts / (1 << 17);
   }

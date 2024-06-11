@@ -1,20 +1,20 @@
 /*
-    This file is part of TON Blockchain Library.
+This file is part of TON Blockchain Library.
 
-    TON Blockchain Library is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation, either version 2 of the License, or
-    (at your option) any later version.
+TON Blockchain Library is free software: you can redistribute it and/or modify
+                                                                           it under the terms of the GNU Lesser General Public License as published by
+                                                                               the Free Software Foundation, either version 2 of the License, or
+                                     (at your option) any later version.
 
-    TON Blockchain Library is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
+                                     TON Blockchain Library is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
 
-    You should have received a copy of the GNU Lesser General Public License
-    along with TON Blockchain Library.  If not, see <http://www.gnu.org/licenses/>.
+You should have received a copy of the GNU Lesser General Public License
+along with TON Blockchain Library.  If not, see <http://www.gnu.org/licenses/>.
 
-    Copyright 2017-2020 Telegram Systems LLP
+Copyright 2017-2020 Telegram Systems LLP
 */
 #pragma once
 
@@ -27,6 +27,7 @@
 #include "td/utils/HashSet.h"
 #include "vm/dumper.hpp"
 #include "td/utils/optional.h"
+#include "vm/dumper.hpp"
 
 namespace vm {
 
@@ -98,6 +99,7 @@ class VmState final : public VmStateInterface {
   std::vector<Ref<Cell>> libraries;
   td::HashSet<CellHash> loaded_cells;
   int stack_trace{0}, debug_off{0};
+  int vm_ver{1};
   bool chksig_always_succeed{false};
   bool stop_on_accept_message{false};
   td::optional<td::Bits256> missing_library;
@@ -115,8 +117,6 @@ class VmState final : public VmStateInterface {
     cell_create_gas_price = 500,
     exception_gas_price = 50,
     tuple_entry_gas_price = 1,
-    implicit_jmpref_gas_price = 10,
-    implicit_ret_gas_price = 5,
     free_stack_depth = 32,
     stack_entry_gas_price = 1,
     runvm_gas_price = 40,
@@ -184,6 +184,27 @@ class VmState final : public VmStateInterface {
   bool final_gas_ok() const {
     return gas.final_ok();
   }
+
+  int get_implicit_jmpref_gas_price() {
+    if (vm_ver < 1) {
+      return 0;
+    } else {
+      return 10;
+    }
+  }
+
+  int get_implicit_ret_gas_price() {
+    if (vm_ver < 1) {
+      return 0;
+    } else {
+      return 5;
+    }
+  }
+
+  void set_version(int ver) {
+    vm_ver = ver;
+  }
+
   long long gas_consumed() const {
     return gas.gas_consumed();
   }

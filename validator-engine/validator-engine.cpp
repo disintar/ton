@@ -59,6 +59,10 @@
 
 #include "dht/dht.hpp"
 
+//#include "BlockPublisherRMQ.hpp"
+//#include "BlockPublisherZMQ.hpp"
+#include "BlockPublisherKafka.hpp"
+
 #if TD_DARWIN || TD_LINUX
 #include <unistd.h>
 #endif
@@ -1836,6 +1840,10 @@ void ValidatorEngine::start_validator() {
     }
   }
 
+//  LOG(ERROR) << "set_block_publisher";
+  if (publisher_temp_) {
+    td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::set_block_publisher, std::move(publisher_temp_));
+  }
   started_validator();
 }
 
@@ -4046,6 +4054,12 @@ int main(int argc, char *argv[]) {
         acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_catchain_max_block_delay, v); });
         return td::Status::OK();
       });
+  p.add_checked_option('P', "publish", "publish blocks/states to message queue <endpoint>", [&](td::Slice arg) {
+    // TODO: zmq/rmq/kafka/etc choice
+    acts.push_back([&x, endpoint = arg.str()](){ td::actor::send_closure(x, &ValidatorEngine::set_block_publisher, std::make_unique<ton::validator::BlockParser>(std::make_unique<ton::validator::BlockPublisherKafka>(endpoint))); });
+    return td::Status::OK();
+  });
+
   auto S = p.run(argc, argv);
   if (S.is_error()) {
     LOG(ERROR) << "failed to parse options: " << S.move_as_error();

@@ -43,6 +43,8 @@
 #include "auto/tl/ton_api_json.h"
 #include "auto/tl/ton_api.hpp"
 
+#include "IBlockParser.hpp"
+
 enum ValidatorEnginePermissions : td::uint32 { vep_default = 1, vep_modify = 2, vep_unsafe = 4 };
 
 using AdnlCategory = td::uint8;
@@ -146,6 +148,7 @@ class ValidatorEngine : public td::actor::Actor {
   ton::PublicKeyHash default_dht_node_ = ton::PublicKeyHash::zero();
   td::actor::ActorOwn<ton::overlay::Overlays> overlay_manager_;
   td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
+  std::unique_ptr<ton::validator::BlockParser> publisher_temp_;
   td::actor::ActorOwn<ton::adnl::AdnlExtClient> full_node_client_;
   td::actor::ActorOwn<ton::validator::fullnode::FullNode> full_node_;
   std::map<td::uint16, td::actor::ActorOwn<ton::validator::fullnode::FullNodeMaster>> full_node_masters_;
@@ -299,6 +302,10 @@ class ValidatorEngine : public td::actor::Actor {
   void set_catchain_max_block_delay(double value) {
     catchain_max_block_delay_ = value;
   }
+  void set_block_publisher(std::unique_ptr<ton::validator::BlockParser> publisher) {
+    publisher_temp_ = std::move(publisher);
+  }
+
   void start_up() override;
   ValidatorEngine() {
   }

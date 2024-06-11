@@ -72,6 +72,10 @@ class CellHashTable {
     return nullptr;
   }
 
+  void clear() {
+    set_.clear();
+  }
+
  private:
   std::set<InfoT, std::less<>> set_;
 };

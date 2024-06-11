@@ -228,6 +228,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   void get_block_data_from_db(ConstBlockHandle handle, td::Promise<td::Ref<BlockData>> promise) override;
   void get_block_data_from_db_short(BlockIdExt block_id, td::Promise<td::Ref<BlockData>> promise) override;
   void get_shard_state_from_db(ConstBlockHandle handle, td::Promise<td::Ref<ShardState>> promise) override;
+  void get_shard_state_root_cell_from_db(ConstBlockHandle handle, td::Promise<td::Ref<vm::DataCell>> promise) override;
   void get_shard_state_from_db_short(BlockIdExt block_id, td::Promise<td::Ref<ShardState>> promise) override;
   void get_block_candidate_from_db(PublicKey source, BlockIdExt id, FileHash collated_data_file_hash,
                                    td::Promise<BlockCandidate> promise) override;
@@ -474,6 +475,30 @@ class ValidatorManagerImpl : public ValidatorManager {
     opts_ = std::move(opts);
   }
 
+  void set_block_publisher(std::unique_ptr<BlockParser> publisher) override {
+    //    LOG(ERROR) << "set_block_publisher";
+    publisher_ = std::move(publisher);
+    td::actor::send_closure(db_, &Db::set_block_publisher, publisher_.get());
+  }
+  BlockParser *get_block_publisher() override {
+    return publisher_.get();
+  }
+  void clear_celldb_boc_cache() override {
+    //    LOG(ERROR) << "clear_celldb_boc_cache";
+    td::actor::send_closure(db_, &Db::clear_boc_cache);
+  }
+
+  void set_async() override {
+    LOG(WARNING) << "SET ASYNC TO ARCHIVE DB!";
+
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) { R.ensure(); });
+
+    td::actor::send_closure(db_, &Db::set_async_mode, true, std::move(P));
+  }
+
+ private:
+  std::unique_ptr<BlockParser> publisher_;
+
  private:
   PublicKeyHash local_id_;
 
@@ -536,6 +561,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   std::map<BlockSeqno, WaitList<td::actor::Actor, td::Unit>> shard_client_waiters_;
   BlockIdExt last_masterchain_block_id_;
   BlockHandle last_masterchain_block_handle_;
+  bool read_only_;
 
   BlockIdExt last_liteserver_block_id_;
   td::Ref<MasterchainState> last_liteserver_state_;

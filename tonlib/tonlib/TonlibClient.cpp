@@ -64,6 +64,13 @@
 #include "common/util.h"
 #include "td/actor/MultiPromise.h"
 
+#include "ton/ton-types.h"
+#include "fift/Fift.h"
+#include "fift/words.h"
+#include "fift/utils.h"
+#include "td/utils/port/path.h"
+#include "fift/IntCtx.h"
+
 template <class Type>
 using lite_api_ptr = ton::lite_api::object_ptr<Type>;
 template <class Type>

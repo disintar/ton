@@ -258,6 +258,31 @@ void ApplyBlock::applied_prev() {
 void ApplyBlock::applied_set() {
   VLOG(VALIDATOR_DEBUG) << "apply block: setting apply bit for " << id_;
   handle_->set_applied();
+  auto publisher_ = manager_.get_actor_unsafe().get_block_publisher();
+  if (publisher_) {
+    const auto handle_id = handle_->id();
+    const auto shard = handle_id.id.shard;
+    const auto wc = handle_id.id.workchain;
+
+    auto final_publish = td::PromiseCreator::lambda(
+        [handle_id, publisher = publisher_, shard, wc](td::Result<std::tuple<std::string, std::string>> R) {
+          if (R.is_ok()) {
+            const auto answer = R.move_as_ok();
+
+            // skip
+            if (!std::get<0>(answer).empty()) {
+              LOG(DEBUG) << "Send parsed data&state: " << handle_id.to_str();
+              publisher->enqueuePublishBlockData(wc, shard, std::get<0>(answer));
+              publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
+            }
+          } else {
+            LOG(FATAL) << "Failed to parse!";
+          }
+        });
+
+    publisher_->storeBlockApplied(handle_->id(), std::move(final_publish));
+  }
+
   if (handle_->id().seqno() > 0) {
     CHECK(handle_->handle_moved_to_archive());
     CHECK(handle_->moved_to_archive());

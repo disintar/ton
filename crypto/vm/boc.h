@@ -75,7 +75,7 @@ class NewCellStorageStat {
     }
   };
 
-  Stat get_stat() const {
+  [[nodiscard]] Stat get_stat() const {
     return stat_;
   }
 

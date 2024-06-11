@@ -365,7 +365,23 @@ void ValidatorManagerImpl::complete_fake(BlockIdExt block_id) {
 }
 
 void ValidatorManagerImpl::get_next_block(BlockIdExt block_id, td::Promise<BlockHandle> promise) {
-  UNREACHABLE();
+  auto P = td::PromiseCreator::lambda(
+      [SelfId = actor_id(this), promise = std::move(promise)](td::Result<BlockHandle> R) mutable {
+        if (R.is_error()) {
+          promise.set_error(R.move_as_error());
+          return;
+        }
+        auto handle = R.move_as_ok();
+        if (!handle->inited_next_left()) {
+          promise.set_error(td::Status::Error(ErrorCode::notready, "next block not known"));
+          return;
+        }
+
+        td::actor::send_closure(SelfId, &ValidatorManagerImpl::get_block_handle, handle->one_next(true), true,
+                                std::move(promise));
+      });
+
+  get_block_handle(block_id, false, std::move(P));
 }
 
 void ValidatorManagerImpl::get_block_data(BlockHandle handle, td::Promise<td::BufferSlice> promise) {
@@ -755,6 +771,11 @@ void ValidatorManagerImpl::get_block_data_from_db_short(BlockIdExt block_id, td:
 
 void ValidatorManagerImpl::get_shard_state_from_db(ConstBlockHandle handle, td::Promise<td::Ref<ShardState>> promise) {
   td::actor::send_closure(db_, &Db::get_block_state, handle, std::move(promise));
+}
+
+void ValidatorManagerImpl::get_shard_state_root_cell_from_db(ConstBlockHandle handle,
+                                                             td::Promise<td::Ref<vm::DataCell>> promise) {
+  td::actor::send_closure(db_, &Db::get_block_state_root_cell, handle, std::move(promise));
 }
 
 void ValidatorManagerImpl::get_shard_state_from_db_short(BlockIdExt block_id,
@@ -1439,13 +1460,6 @@ void ValidatorManagerImpl::get_shard_client_state(bool from_db, td::Promise<Bloc
 
 void ValidatorManagerImpl::try_get_static_file(FileHash file_hash, td::Promise<td::BufferSlice> promise) {
   td::actor::send_closure(db_, &Db::try_get_static_file, file_hash, std::move(promise));
-}
-
-td::actor::ActorOwn<ValidatorManagerInterface> ValidatorManagerDiskFactory::create(
-    PublicKeyHash id, td::Ref<ValidatorManagerOptions> opts, ShardIdFull shard, BlockIdExt shard_top_block_id,
-    std::string db_root, bool read_only_) {
-  return td::actor::create_actor<validator::ValidatorManagerImpl>("manager", id, std::move(opts), shard,
-                                                                  shard_top_block_id, db_root, read_only_);
 }
 
 td::actor::ActorOwn<ValidatorManagerInterface> ValidatorManagerDiskFactory::create(

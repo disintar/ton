@@ -214,11 +214,11 @@ config.param_proposals_setup!
 // deposit bit_pps cell_pps
 GR$100 1 500 config.complaint_prices!
 
-"validator-keys" +suffix +".pub" file>B
-{ dup Blen } { 32 B| swap dup ."Validator public key = " Bx. cr
-  17 add-validator } while drop
-// newkeypair nip dup ."Validator #1 public key = " Bx. cr 
-// 17 add-validator
+// "validator-keys" +suffix +".pub" file>B
+// { dup Blen } { 32 B| swap dup ."Validator public key = " Bx. cr
+//   17 add-validator } while drop
+newkeypair nip dup ."Validator #1 public key = " Bx. cr
+17 add-validator
 // newkeypair nip dup ."Validator #2 public key = " Bx. cr
 // 239 add-validator
 100000 =: orig_vset_valid_for  // original validator set valid 100000 seconds

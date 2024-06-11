@@ -26,6 +26,8 @@ namespace validator {
 
 void BlockHandleImpl::flush(td::actor::ActorId<ValidatorManagerInterface> manager, BlockHandle self,
                             td::Promise<td::Unit> promise) {
+  LOG(DEBUG) << "Flush ->" << self->id().id.workchain << ":" << self->id().id.seqno
+             << " Is applied: " << self->is_applied();
   td::actor::send_closure(manager, &ValidatorManager::write_handle, self, std::move(promise));
 }
 

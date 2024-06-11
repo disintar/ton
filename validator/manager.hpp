@@ -454,6 +454,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   void get_block_data_from_db(ConstBlockHandle handle, td::Promise<td::Ref<BlockData>> promise) override;
   void get_block_data_from_db_short(BlockIdExt block_id, td::Promise<td::Ref<BlockData>> promise) override;
   void get_shard_state_from_db(ConstBlockHandle handle, td::Promise<td::Ref<ShardState>> promise) override;
+  void get_shard_state_root_cell_from_db(ConstBlockHandle handle, td::Promise<td::Ref<vm::DataCell>> promise) override; ///TODO:
   void get_shard_state_from_db_short(BlockIdExt block_id, td::Promise<td::Ref<ShardState>> promise) override;
   void get_block_candidate_from_db(PublicKey source, BlockIdExt id, FileHash collated_data_file_hash,
                                    td::Promise<BlockCandidate> promise) override;
@@ -628,6 +629,18 @@ class ValidatorManagerImpl : public ValidatorManager {
   void add_lite_query_stats(int lite_query_id) override {
     ++ls_stats_[lite_query_id];
   }
+
+  void set_block_publisher(std::unique_ptr<BlockParser> publisher) override {
+    publisher_ = std::move(publisher);
+    td::actor::send_closure(db_, &Db::set_block_publisher, publisher_.get());
+  }
+
+  BlockParser* get_block_publisher() override {
+    return publisher_.get();
+  }
+
+ private:
+  std::unique_ptr<BlockParser> publisher_;
 
  private:
   td::Timestamp resend_shard_blocks_at_;

@@ -519,6 +519,32 @@ bool Account::unpack(Ref<vm::CellSlice> shard_account, ton::UnixTime now, bool s
     LOG(ERROR) << "balance_unpack unvalid";
     return false;
   }
+  auto storage_info = unpack_storage_info(acc.storage_stat.write());
+
+  if (!storage_info) {
+    LOG(ERROR) << "storage_info unvalid";
+    return false;
+  }
+  auto storage_unpack = tlb::csr_unpack(this->storage = std::move(acc.storage), storage);
+
+  if (!storage_unpack) {
+    LOG(ERROR) << "storage_unpack unvalid";
+    return false;
+  }
+
+  auto storage_trans_lt = std::max(storage.last_trans_lt, 1ULL) > acc_info.last_trans_lt;
+
+  if (!storage_trans_lt) {
+    LOG(ERROR) << "storage_trans_lt unvalid";
+    return false;
+  }
+  auto balance_unpack = balance.unpack(std::move(storage.balance));
+
+  if (!balance_unpack) {
+    LOG(ERROR) << "balance_unpack unvalid";
+    return false;
+  }
+
   is_special = special;
   last_trans_end_lt_ = storage.last_trans_lt;
   switch (block::gen::t_AccountState.get_tag(*storage.state)) {

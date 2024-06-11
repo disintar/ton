@@ -122,7 +122,7 @@ namespace date
 #  define NOEXCEPT noexcept
 
 #elif __cplusplus >= 201402
-// C++14
+// c++17
 #  define CONSTDATA constexpr const
 #  define CONSTCD11 constexpr
 #  define CONSTCD14 constexpr

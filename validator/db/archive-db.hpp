@@ -45,13 +45,14 @@ class ArchiveFile : public td::actor::Actor {
   td::actor::ActorOwn<PackageWriter> writer_;
 
   std::string path_;
+  bool read_only;
   UnixTime ts_;
   bool read_only_ = false;
 };
 
 class ArchiveManager : public td::actor::Actor {
  public:
-  ArchiveManager(std::string db_root);
+  ArchiveManager(std::string db_root, bool read_only=false);
   void write(UnixTime ts, bool key_block, FileDb::RefId ref_id, td::BufferSlice data, td::Promise<td::Unit> promise);
   void write_handle(BlockHandle handle, td::Promise<td::Unit> promise);
   void read(UnixTime ts, bool key_block, FileDb::RefId ref_id, td::Promise<td::BufferSlice> promise);
@@ -73,6 +74,7 @@ class ArchiveManager : public td::actor::Actor {
     }
     UnixTime unix_time;
     bool key_block;
+    bool read_only_;
 
     std::map<ShardIdFull, Desc> first_blocks;
     td::actor::ActorOwn<ArchiveFile> file;

@@ -165,7 +165,8 @@ class LambdaPromise : public PromiseInterface<ValueT> {
   LambdaPromise &operator=(LambdaPromise &&other) = default;
   ~LambdaPromise() override {
     if (has_lambda_.get()) {
-      do_error(Status::Error("Lost promise"));
+      // do_error(Status::Error("Lost promise"));
+      LOG(ERROR) << "Lost promise";
     }
   }
 

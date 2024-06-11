@@ -29,6 +29,12 @@ namespace validator {
 class Db : public td::actor::Actor {
  public:
   virtual ~Db() = default;
+  virtual void set_block_publisher(BlockParser* publisher) {
+//    LOG(ERROR) << "set_block_publisher";
+  }
+  virtual void clear_boc_cache() {
+
+  }
 
   virtual void store_block_data(BlockHandle handle, td::Ref<BlockData> data, td::Promise<td::Unit> promise) = 0;
   virtual void get_block_data(ConstBlockHandle handle, td::Promise<td::Ref<BlockData>> promise) = 0;
@@ -52,6 +58,7 @@ class Db : public td::actor::Actor {
   virtual void get_block_state(ConstBlockHandle handle, td::Promise<td::Ref<ShardState>> promise) = 0;
   virtual void get_cell_db_reader(td::Promise<std::shared_ptr<vm::CellDbReader>> promise) = 0;
 
+  virtual void get_block_state_root_cell(ConstBlockHandle handle, td::Promise<td::Ref<vm::DataCell>> promise) = 0;
   virtual void store_persistent_state_file(BlockIdExt block_id, BlockIdExt masterchain_block_id, td::BufferSlice state,
                                            td::Promise<td::Unit> promise) = 0;
   virtual void store_persistent_state_file_gen(BlockIdExt block_id, BlockIdExt masterchain_block_id,

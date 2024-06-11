@@ -381,7 +381,6 @@ int main(int argc, char *argv[]) {
   td::actor::Scheduler scheduler({7});
 
   scheduler.run_in_context([&] { x = td::actor::create_actor<HardforkCreator>("testnode"); });
-
   scheduler.run_in_context([&] { p.run(argc, argv).ensure(); });
   scheduler.run_in_context([&] { td::actor::send_closure(x, &HardforkCreator::run); });
   scheduler.run();

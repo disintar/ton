@@ -1060,7 +1060,7 @@ x{EDFB} @Defop SAMEALTSAVE
 { dup sbits
    { @addop }
    {
-    dup srefs // 
+    dup srefs //
       { ref@ CALLREF }
       { drop }
       cond

@@ -77,7 +77,9 @@ void WaitBlockState::start() {
       }
     });
     td::actor::send_closure(manager_, &ValidatorManager::get_shard_state_from_db, handle_, std::move(P));
-  } else if (handle_->id().id.seqno == 0 && next_static_file_attempt_.is_in_past()) {
+  }
+  else if (handle_->id().id.seqno == 0 && next_static_file_attempt_.is_in_past()) {
+
     next_static_file_attempt_ = td::Timestamp::in(60.0);
     // id.file_hash contrains correct file hash of zero state
     // => if file with this sha256 is found it is garanteed to be correct
@@ -95,7 +97,9 @@ void WaitBlockState::start() {
       }
     });
     td::actor::send_closure(manager_, &ValidatorManager::try_get_static_file, handle_->id().file_hash, std::move(P));
-  } else if (handle_->id().id.seqno == 0) {
+  }
+  else if (handle_->id().id.seqno == 0) {
+
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::BufferSlice> R) {
       if (R.is_error()) {
         td::actor::send_closure(SelfId, &WaitBlockState::failed_to_get_state_from_net,
@@ -106,7 +110,9 @@ void WaitBlockState::start() {
     });
     td::actor::send_closure(manager_, &ValidatorManager::send_get_zero_state_request, handle_->id(), priority_,
                             std::move(P));
-  } else if (!handle_->inited_prev() || (!handle_->inited_proof() && !handle_->inited_proof_link())) {
+  }
+  else if (!handle_->inited_prev() || (!handle_->inited_proof() && !handle_->inited_proof_link())) {
+
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), handle = handle_](td::Result<td::BufferSlice> R) {
       if (R.is_error()) {
         delay_action([SelfId]() { td::actor::send_closure(SelfId, &WaitBlockState::after_get_proof_link); },
@@ -119,7 +125,9 @@ void WaitBlockState::start() {
     waiting_proof_link_ = true;
     td::actor::send_closure(manager_, &ValidatorManager::send_get_block_proof_link_request, handle_->id(), priority_,
                             std::move(P));
-  } else if (prev_state_.is_null()) {
+  }
+  else if (prev_state_.is_null()) {
+
     CHECK(handle_->inited_proof() || handle_->inited_proof_link());
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
       if (R.is_error()) {
@@ -132,7 +140,9 @@ void WaitBlockState::start() {
 
     td::actor::send_closure(manager_, &ValidatorManager::wait_prev_block_state, handle_, priority_, timeout_,
                             std::move(P));
-  } else if (handle_->id().is_masterchain() && !handle_->inited_proof()) {
+  }
+  else if (handle_->id().is_masterchain() && !handle_->inited_proof()) {
+
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), handle = handle_](td::Result<td::BufferSlice> R) {
       if (R.is_error()) {
         delay_action([SelfId]() { td::actor::send_closure(SelfId, &WaitBlockState::after_get_proof); },
@@ -145,7 +155,9 @@ void WaitBlockState::start() {
     waiting_proof_ = true;
     td::actor::send_closure(manager_, &ValidatorManager::send_get_block_proof_request, handle_->id(), priority_,
                             std::move(P));
-  } else if (block_.is_null()) {
+  }
+  else if (block_.is_null()) {
+
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<BlockData>> R) {
       if (R.is_error()) {
         td::actor::send_closure(SelfId, &WaitBlockState::failed_to_get_block_data,
@@ -156,7 +168,8 @@ void WaitBlockState::start() {
     });
 
     td::actor::send_closure(manager_, &ValidatorManager::wait_block_data, handle_, priority_, timeout_, std::move(P));
-  } else {
+  }
+  else {
     apply();
   }
 }

@@ -34,6 +34,7 @@
 #include "interfaces/block.h"
 #include "interfaces/proof.h"
 #include "interfaces/shard.h"
+#include "validator-engine/IBlockParser.hpp"
 #include "catchain/catchain-types.h"
 #include "interfaces/external-message.h"
 
@@ -48,7 +49,7 @@ class DownloadToken {
 
 struct PerfTimerStats {
   std::string name;
-  std::deque<std::pair<double, double>> stats; // <Time::now(), duration>
+  std::deque<std::pair<double, double>> stats;  // <Time::now(), duration>
 };
 
 struct ValidatorManagerOptions : public td::CntObject {
@@ -227,6 +228,8 @@ class ValidatorManagerInterface : public td::actor::Actor {
   virtual void get_block_candidate_from_db(PublicKey source, BlockIdExt id, FileHash collated_data_file_hash,
                                            td::Promise<BlockCandidate> promise) = 0;
   virtual void get_shard_state_from_db(ConstBlockHandle handle, td::Promise<td::Ref<ShardState>> promise) = 0;
+  virtual void get_shard_state_root_cell_from_db(ConstBlockHandle handle,
+                                                 td::Promise<td::Ref<vm::DataCell>> promise) = 0;
   virtual void get_shard_state_from_db_short(BlockIdExt block_id, td::Promise<td::Ref<ShardState>> promise) = 0;
   virtual void get_block_proof_from_db(ConstBlockHandle handle, td::Promise<td::Ref<Proof>> promise) = 0;
   virtual void get_block_proof_from_db_short(BlockIdExt id, td::Promise<td::Ref<Proof>> promise) = 0;
@@ -243,6 +246,16 @@ class ValidatorManagerInterface : public td::actor::Actor {
   virtual void get_archive_id(BlockSeqno masterchain_seqno, td::Promise<td::uint64> promise) = 0;
   virtual void get_archive_slice(td::uint64 archive_id, td::uint64 offset, td::uint32 limit,
                                  td::Promise<td::BufferSlice> promise) = 0;
+
+  virtual void set_block_publisher(std::unique_ptr<BlockParser> publisher) {
+    //    LOG(ERROR) << "set_block_publisher";
+  }  ///TODO: make it pure virtual
+  virtual void clear_celldb_boc_cache() {
+    //    LOG(ERROR) << "clear_celldb_boc_cache";
+  }  ///TODO: make it pure virtual
+
+  virtual void set_async() {
+  }  ///TODO: make it pure virtual
 
   virtual void run_ext_query(td::BufferSlice data, td::Promise<td::BufferSlice> promise) = 0;
   virtual void prepare_stats(td::Promise<std::vector<std::pair<std::string, std::string>>> promise) = 0;

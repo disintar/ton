@@ -18,6 +18,8 @@
 */
 #include "archive-slice.hpp"
 
+#include <utility>
+
 #include "td/actor/MultiPromise.h"
 #include "validator/fabric.h"
 #include "td/db/RocksDb.h"

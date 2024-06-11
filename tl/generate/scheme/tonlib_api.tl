@@ -233,6 +233,9 @@ blocks.shardBlockProof from:ton.blockIdExt mc_id:ton.blockIdExt links:(vector bl
 
 configInfo config:tvm.cell = ConfigInfo;
 
+disasmCode code:string = DisasmCode;
+methodId id:String = MethodId;
+
 ---functions---
 
 init options:options = options.Info;

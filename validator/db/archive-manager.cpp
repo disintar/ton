@@ -152,9 +152,14 @@ void ArchiveManager::add_temp_file_short(FileReference ref_id, td::BufferSlice d
 
 void ArchiveManager::get_handle(BlockIdExt block_id, td::Promise<BlockHandle> promise) {
   auto f = get_file_desc_by_seqno(block_id.shard_full(), block_id.seqno(), false);
+
   if (f) {
+    LOG(DEBUG) << "Got: " << f->id.name();
+
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), block_id, idx = get_max_temp_file_desc_idx(),
                                          promise = std::move(promise)](td::Result<BlockHandle> R) mutable {
+      LOG(DEBUG) << "Handle received";
+
       if (R.is_ok()) {
         promise.set_value(R.move_as_ok());
       } else {
@@ -563,7 +568,6 @@ void ArchiveManager::deleted_package(PackageId id, td::Promise<td::Unit> promise
   it->second.file.reset();
   promise.set_value(td::Unit());
 }
-
 void ArchiveManager::load_package(PackageId id) {
   auto &m = get_file_map(id);
   if (m.count(id)) {
@@ -877,6 +881,7 @@ void ArchiveManager::start_up() {
     }
   }).ensure();
 
+  LOG(DEBUG) << "Done loading";
   persistent_state_gc(FileHash::zero());
 
   double open_since = td::Clocks::system() - opts_->get_archive_preload_period();

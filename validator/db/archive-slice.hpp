@@ -171,6 +171,7 @@ class ArchiveSlice : public td::actor::Actor {
   td::actor::ActorId<ArchiveLru> archive_lru_;
   DbStatistics statistics_;
   std::unique_ptr<td::KeyValue> kv_;
+  bool read_only_;
 
   struct PackageInfo {
     PackageInfo(std::shared_ptr<Package> package, td::actor::ActorOwn<PackageWriter> writer, BlockSeqno id,
