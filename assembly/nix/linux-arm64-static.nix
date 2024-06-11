@@ -22,9 +22,15 @@ stdenv.mkDerivation {
     ];
 
   buildInputs = with pkgs;
-    [
-      pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.libsodium.dev pkgsStatic.secp256k1 glibc.static
-    ];
+      [
+        pkgsStatic.openssl
+        microhttpdmy
+        pkgsStatic.zlib
+        pkgsStatic.libsodium.dev
+        pkgsStatic.secp256k1
+        glibc.static
+        boost
+      ];
 
   makeStatic = true;
   doCheck = true;
