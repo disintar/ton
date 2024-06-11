@@ -120,6 +120,30 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   size_t get_max_open_archive_files() const override {
     return max_open_archive_files_;
   }
+  double get_archive_preload_period() const override {
+    return archive_preload_period_;
+  }
+  bool get_disable_rocksdb_stats() const override {
+    return disable_rocksdb_stats_;
+  }
+  bool nonfinal_ls_queries_enabled() const override {
+    return nonfinal_ls_queries_enabled_;
+  }
+  td::optional<td::uint64> get_celldb_cache_size() const override {
+    return celldb_cache_size_;
+  }
+  bool get_celldb_direct_io() const override {
+    return celldb_direct_io_;
+  }
+  bool get_celldb_preload_all() const override {
+    return celldb_preload_all_;
+  }
+  td::optional<double> get_catchain_max_block_delay() const override {
+    return catchain_max_block_delay_;
+  }
+  bool get_state_serializer_enabled() const override {
+    return state_serializer_enabled_;
+  }
 
   void set_zero_block_id(BlockIdExt block_id) override {
     zero_block_id_ = block_id;
@@ -179,6 +203,30 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   void set_max_open_archive_files(size_t value) override {
     max_open_archive_files_ = value;
   }
+  void set_archive_preload_period(double value) override {
+    archive_preload_period_ = value;
+  }
+  void set_disable_rocksdb_stats(bool value) override {
+    disable_rocksdb_stats_ = value;
+  }
+  void set_nonfinal_ls_queries_enabled(bool value) override {
+    nonfinal_ls_queries_enabled_ = value;
+  }
+  void set_celldb_cache_size(td::uint64 value) override {
+    celldb_cache_size_ = value;
+  }
+  void set_celldb_direct_io(bool value) override {
+    celldb_direct_io_ = value;
+  }
+  void set_celldb_preload_all(bool value) override {
+    celldb_preload_all_ = value;
+  }
+  void set_catchain_max_block_delay(double value) override {
+    catchain_max_block_delay_ = value;
+  }
+  void set_state_serializer_enabled(bool value) override {
+    state_serializer_enabled_ = value;
+  }
 
   ValidatorManagerOptionsImpl *make_copy() const override {
     return new ValidatorManagerOptionsImpl(*this);
@@ -223,6 +271,14 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   std::string session_logs_file_;
   td::uint32 celldb_compress_depth_{0};
   size_t max_open_archive_files_ = 0;
+  double archive_preload_period_ = 0.0;
+  bool disable_rocksdb_stats_;
+  bool nonfinal_ls_queries_enabled_ = false;
+  td::optional<td::uint64> celldb_cache_size_;
+  bool celldb_direct_io_ = false;
+  bool celldb_preload_all_ = false;
+  td::optional<double> catchain_max_block_delay_;
+  bool state_serializer_enabled_ = true;
 };
 
 }  // namespace validator

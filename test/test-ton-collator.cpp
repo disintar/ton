@@ -300,7 +300,7 @@ class TestNode : public td::actor::Actor {
                                                                              shard_top_block_id_, db_root_);
     for (auto &msg : ext_msgs_) {
       td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManager::new_external_message,
-                              std::move(msg));
+                              std::move(msg), 0);
     }
     for (auto &topmsg : top_shard_descrs_) {
       td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManager::new_shard_block, ton::BlockIdExt{},
@@ -347,7 +347,10 @@ class TestNode : public td::actor::Actor {
           }
         }
       }
-      void send_broadcast(ton::BlockBroadcast broadcast) override {
+      void send_block_candidate(ton::BlockIdExt block_id, ton::CatchainSeqno cc_seqno, td::uint32 validator_set_hash,
+                                td::BufferSlice data) override {
+      }
+      void send_broadcast(ton::BlockBroadcast broadcast, bool custom_overlays_only) override {
       }
       void download_block(ton::BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
                           td::Promise<ton::ReceivedBlock> promise) override {

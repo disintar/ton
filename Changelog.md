@@ -1,3 +1,51 @@
+## 2024.06 Update
+
+1. Make Jemalloc default allocator
+2. Add candidate broadcasting and caching
+3. Limit per address speed for external messages broadcast by reasonably large number 
+4. Overlay improvements: fix dropping peers in small custom overlays, fix wrong certificate on missed keyblocks
+5. Extended statistics and logs for celldb usage, session stats, persistent state serialization
+6. Tonlib and explorer fixes
+7. Flags for precize control of Celldb: `--celldb-cache-size`, `--celldb-direct-io` and `--celldb-preload-all`
+8. Add valiator-console command to stop persistent state serialization
+9. Use `@` path separator for defining include path in fift and create-state utilities on Windows only.
+
+
+## 2024.04 Update
+
+1. Emulator: Single call optimized runGetMethod added
+2. Tonlib: a series of proof improvements, also breaking Change in `liteServer.getAllShardsInfo` method (see below)
+3. DB: usage statistics now collected, outdated persistent states are not serialized
+4. LS: fast `getOutMsgQueueSizes` added, preliminary support of non-final block requests
+5. Network: lz4 compression of block candidates (disabled by default).
+6. Overlays: add custom overlays
+7. Transaction Executor: fixed issue with due_payment collection
+
+* `liteServer.getAllShardsInfo` method was updated for better efficiency. Previously, field proof contained BoC with two roots: one for BlockState from block's root and another for ShardHashes from BlockState. Now, it returns a single-root proof BoC, specifically the merkle proof of ShardHashes directly from the block's root, streamlining data access and integrity. Checking of the proof requires to check that ShardHashes in the `data` correspond to ShardHashes from the block.
+
+Besides the work of the core team, this update is based on the efforts of @akifoq (due_payment issue).
+
+## 2024.03 Update
+
+1. Preparatory (not enabled yet) code for pre-compiled smart-contract.
+2. Minor fixes for fee-related opcodes.
+
+## 2024.02 Update
+
+1. Improvement of validator synchronisation:
+   * Better handling of block broadcasts -> faster sync
+   * Additional separate overlay among validators as second option for synchronisation
+2. Improvements in LS:
+   * c7 and library context is fully filled up for server-side rungetmethod
+   * Cache for runmethods and successfull external messages
+   * Logging of LS requests statistic
+3. Precise control of open files:
+   * almost instantaneous validator start
+   * `--max-archive-fd` option
+   * autoremoval of not used temp archive files
+   * `--archive-preload-period` option
+4. Preparatory (not enabled yet) code for addition on new TVM instructions for cheaper fee calculation onchain.
+
 ## 2024.01 Update
 
 1. Fixes in how gas in transactions on special accounts is accounted in block limit. Previously, gas was counted as usual, so to conduct elections that costs >30m gas block limit in masterchain was set to 37m gas. To lower the limit for safety reasons it is proposed to caunt gas on special accounts separately. Besides `gas_max` is set to `special_gas_limit` for all types of transactions on special accounts. New behavior is activated through setting `version >= 5` in `ConfigParam 8;`.

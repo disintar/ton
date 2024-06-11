@@ -144,12 +144,15 @@ class ValidatorManagerImpl : public ValidatorManager {
   void get_key_block_proof(BlockIdExt block_id, td::Promise<td::BufferSlice> promise) override;
   void get_key_block_proof_link(BlockIdExt block_id, td::Promise<td::BufferSlice> promise) override;
 
-  void new_external_message(td::BufferSlice data) override;
+  void new_external_message(td::BufferSlice data, int priority) override;
   void check_external_message(td::BufferSlice data, td::Promise<td::Ref<ExtMessage>> promise) override {
     UNREACHABLE();
   }
   void new_ihr_message(td::BufferSlice data) override;
   void new_shard_block(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) override {
+    UNREACHABLE();
+  }
+  void new_block_candidate(BlockIdExt block_id, td::BufferSlice data) override {
     UNREACHABLE();
   }
 
@@ -215,7 +218,8 @@ class ValidatorManagerImpl : public ValidatorManager {
   void wait_block_signatures_short(BlockIdExt id, td::Timestamp timeout,
                                    td::Promise<td::Ref<BlockSignatureSet>> promise) override;
 
-  void set_block_candidate(BlockIdExt id, BlockCandidate candidate, td::Promise<td::Unit> promise) override {
+  void set_block_candidate(BlockIdExt id, BlockCandidate candidate, CatchainSeqno cc_seqno,
+                           td::uint32 validator_set_hash, td::Promise<td::Unit> promise) override {
     promise.set_value(td::Unit());
   }
 
@@ -228,7 +232,8 @@ class ValidatorManagerImpl : public ValidatorManager {
                                 td::Promise<td::Ref<MessageQueue>> promise) override;
   void wait_block_message_queue_short(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                       td::Promise<td::Ref<MessageQueue>> promise) override;
-  void get_external_messages(ShardIdFull shard, td::Promise<std::vector<td::Ref<ExtMessage>>> promise) override;
+  void get_external_messages(ShardIdFull shard,
+                             td::Promise<std::vector<std::pair<td::Ref<ExtMessage>, int>>> promise) override;
   void get_ihr_messages(ShardIdFull shard, td::Promise<std::vector<td::Ref<IhrMessage>>> promise) override;
   void get_shard_blocks(BlockIdExt masterchain_block_id,
                         td::Promise<std::vector<td::Ref<ShardTopBlockDescription>>> promise) override;
@@ -308,7 +313,7 @@ class ValidatorManagerImpl : public ValidatorManager {
     UNREACHABLE();
   }
   void send_external_message(td::Ref<ExtMessage> message) override {
-    new_external_message(message->serialize());
+    new_external_message(message->serialize(), 0);
   }
   void send_ihr_message(td::Ref<IhrMessage> message) override {
     new_ihr_message(message->serialize());
@@ -316,7 +321,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   void send_top_shard_block_description(td::Ref<ShardTopBlockDescription> desc) override {
     UNREACHABLE();
   }
-  void send_block_broadcast(BlockBroadcast broadcast) override {
+  void send_block_broadcast(BlockBroadcast broadcast, bool custom_overlays_only) override {
   }
 
   void update_shard_client_state(BlockIdExt masterchain_block_id, td::Promise<td::Unit> promise) override {
@@ -443,6 +448,9 @@ class ValidatorManagerImpl : public ValidatorManager {
     UNREACHABLE();
   };
 
+  void log_new_validator_group_stats(validatorsession::NewValidatorGroupStats stats) override {
+    UNREACHABLE();
+  }
   void get_out_msg_queue_size(BlockIdExt block_id, td::Promise<td::uint32> promise) override {
     if (queue_size_counter_.empty()) {
       queue_size_counter_ =
@@ -453,17 +461,35 @@ class ValidatorManagerImpl : public ValidatorManager {
   void get_block_handle_for_litequery(BlockIdExt block_id, td::Promise<ConstBlockHandle> promise) override {
     get_block_handle(block_id, false, promise.wrap([](BlockHandle &&handle) -> ConstBlockHandle { return handle; }));
   }
-  void get_block_by_lt_from_db_for_litequery(AccountIdPrefixFull account, LogicalTime lt,
+  void get_block_data_for_litequery(BlockIdExt block_id, td::Promise<td::Ref<BlockData>> promise) override {
+    get_block_data_from_db_short(block_id, std::move(promise));
+  }
+  void get_block_state_for_litequery(BlockIdExt block_id, td::Promise<td::Ref<ShardState>> promise) override {
+    get_shard_state_from_db_short(block_id, std::move(promise));
+  }
+  void get_block_by_lt_for_litequery(AccountIdPrefixFull account, LogicalTime lt,
                                              td::Promise<ConstBlockHandle> promise) override {
     get_block_by_lt_from_db(account, lt, std::move(promise));
   }
-  void get_block_by_unix_time_from_db_for_litequery(AccountIdPrefixFull account, UnixTime ts,
+  void get_block_by_unix_time_for_litequery(AccountIdPrefixFull account, UnixTime ts,
                                                     td::Promise<ConstBlockHandle> promise) override {
     get_block_by_unix_time_from_db(account, ts, std::move(promise));
   }
-  void get_block_by_seqno_from_db_for_litequery(AccountIdPrefixFull account, BlockSeqno seqno,
+  void get_block_by_seqno_for_litequery(AccountIdPrefixFull account, BlockSeqno seqno,
                                                 td::Promise<ConstBlockHandle> promise) override {
     get_block_by_seqno_from_db(account, seqno, std::move(promise));
+  }
+  void get_block_candidate_for_litequery(PublicKey source, BlockIdExt block_id, FileHash collated_data_hash,
+                                         td::Promise<BlockCandidate> promise) override {
+    promise.set_result(td::Status::Error("not implemented"));
+  }
+  void get_validator_groups_info_for_litequery(
+      td::optional<ShardIdFull> shard,
+      td::Promise<tl_object_ptr<lite_api::liteServer_nonfinal_validatorGroups>> promise) override {
+    promise.set_result(td::Status::Error("not implemented"));
+  }
+  void update_options(td::Ref<ValidatorManagerOptions> opts) override {
+    opts_ = std::move(opts);
   }
 
  private:

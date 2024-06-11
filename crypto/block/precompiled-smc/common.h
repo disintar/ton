@@ -13,6 +13,9 @@
 
     You should have received a copy of the GNU Lesser General Public License
     along with TON Blockchain Library.  If not, see <http://www.gnu.org/licenses/>.
-
-    Copyright 2017-2020 Telegram Systems LLP
 */
+#pragma once
+#include "PrecompiledSmartContract.h"
+#include "vm/arithops.h"
+#include "vm/cellops.h"
+#include "vm/tonops.h"

@@ -13,19 +13,15 @@
 
     You should have received a copy of the GNU Lesser General Public License
     along with TON Blockchain Library.  If not, see <http://www.gnu.org/licenses/>.
-
-    Copyright 2017-2019 Telegram Systems LLP
 */
 #pragma once
-#include "block/block.h"
-#include "CellString.h"
-namespace tonlib {
-class TestGiver {
- public:
-  static constexpr unsigned max_message_size = vm::CellString::max_bytes;
-  static const block::StdAddress& address() noexcept;
-  static vm::CellHash get_init_code_hash() noexcept;
-  static td::Ref<vm::Cell> make_a_gift_message(td::uint32 seqno, td::uint64 gramms, td::Slice message,
-                                               const block::StdAddress& dest_address) noexcept;
-};
-}  // namespace tonlib
+
+#include "td/utils/buffer.h"
+#include "td/utils/Status.h"
+
+namespace td {
+
+td::BufferSlice lz4_compress(td::Slice data);
+td::Result<td::BufferSlice> lz4_decompress(td::Slice data, int max_decompressed_size);
+
+}  // namespace td

@@ -25,6 +25,8 @@ set(VALIDATOR_DB_SOURCE
   db/statedb.cpp
   db/staticfilesdb.cpp
   db/staticfilesdb.hpp
+  db/db-utils.cpp
+  db/db-utils.h
 
   db/package.hpp
   db/package.cpp
@@ -147,6 +149,8 @@ set(FULL_NODE_SOURCE
   full-node-master.cpp
   full-node-private-overlay.hpp
   full-node-private-overlay.cpp
+  full-node-serializer.hpp
+  full-node-serializer.cpp
 
   net/download-block.hpp
   net/download-block.cpp

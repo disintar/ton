@@ -34,8 +34,10 @@ class ValidatorManager;
 
 class ValidatorGroup : public td::actor::Actor {
  public:
-  void generate_block_candidate(td::uint32 round_id, td::Promise<BlockCandidate> promise);
-  void validate_block_candidate(td::uint32 round_id, BlockCandidate block, td::Promise<td::uint32> promise);
+  void generate_block_candidate(td::uint32 round_id,
+                                td::Promise<validatorsession::ValidatorSession::GeneratedCandidate> promise);
+  void validate_block_candidate(td::uint32 round_id, BlockCandidate block,
+                                td::Promise<std::pair<UnixTime, bool>> promise);
   void accept_block_candidate(td::uint32 round_id, PublicKeyHash src, td::BufferSlice block, RootHash root_hash,
                               FileHash file_hash, std::vector<BlockSignature> signatures,
                               std::vector<BlockSignature> approve_signatures,
@@ -47,6 +49,7 @@ class ValidatorGroup : public td::actor::Actor {
   void get_approved_candidate(PublicKey source, RootHash root_hash, FileHash file_hash,
                               FileHash collated_data_file_hash, td::Promise<BlockCandidate> promise);
   BlockIdExt create_next_block_id(RootHash root_hash, FileHash file_hash) const;
+  BlockId create_next_block_id_simple() const;
 
   void start(std::vector<BlockIdExt> prev, BlockIdExt min_masterchain_block_id, UnixTime min_ts);
   void create_session();
@@ -58,12 +61,15 @@ class ValidatorGroup : public td::actor::Actor {
     }
   }
 
+  void get_validator_group_info_for_litequery(
+      td::Promise<tl_object_ptr<lite_api::liteServer_nonfinal_validatorGroupInfo>> promise);
+
   ValidatorGroup(ShardIdFull shard, PublicKeyHash local_id, ValidatorSessionId session_id,
                  td::Ref<ValidatorSet> validator_set, validatorsession::ValidatorSessionOptions config,
                  td::actor::ActorId<keyring::Keyring> keyring, td::actor::ActorId<adnl::Adnl> adnl,
                  td::actor::ActorId<rldp::Rldp> rldp, td::actor::ActorId<overlay::Overlays> overlays,
                  std::string db_root, td::actor::ActorId<ValidatorManager> validator_manager, bool create_session,
-                 bool allow_unsafe_self_blocks_resync)
+                 bool allow_unsafe_self_blocks_resync, td::Ref<ValidatorManagerOptions> opts)
       : shard_(shard)
       , local_id_(std::move(local_id))
       , session_id_(session_id)
@@ -76,7 +82,8 @@ class ValidatorGroup : public td::actor::Actor {
       , db_root_(std::move(db_root))
       , manager_(validator_manager)
       , init_(create_session)
-      , allow_unsafe_self_blocks_resync_(allow_unsafe_self_blocks_resync) {
+      , allow_unsafe_self_blocks_resync_(allow_unsafe_self_blocks_resync)
+      , opts_(std::move(opts)) {
   }
 
  private:
@@ -117,6 +124,7 @@ class ValidatorGroup : public td::actor::Actor {
   bool init_ = false;
   bool started_ = false;
   bool allow_unsafe_self_blocks_resync_;
+  td::Ref<ValidatorManagerOptions> opts_;
   td::uint32 last_known_round_id_ = 0;
 
   struct CachedCollatedBlock {
@@ -134,6 +142,17 @@ class ValidatorGroup : public td::actor::Actor {
 
   static CacheKey block_to_cache_key(const BlockCandidate& block) {
     return std::make_tuple(block.pubkey.as_bits256(), block.id, sha256_bits256(block.data), block.collated_file_hash);
+  }
+
+  void get_validator_group_info_for_litequery_cont(
+      td::uint32 expected_round,
+      std::vector<tl_object_ptr<lite_api::liteServer_nonfinal_candidateInfo>> candidates,
+      td::Promise<tl_object_ptr<lite_api::liteServer_nonfinal_validatorGroupInfo>> promise);
+
+  std::set<std::tuple<td::Bits256, BlockIdExt, FileHash>> available_block_candidates_;  // source, id, collated hash
+
+  void add_available_block_candidate(td::Bits256 source, BlockIdExt id, FileHash collated_data_hash) {
+    available_block_candidates_.emplace(source, id, collated_data_hash);
   }
 };
 

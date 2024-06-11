@@ -447,17 +447,13 @@ void ValidatorManagerImpl::get_key_block_proof_link(BlockIdExt block_id, td::Pro
   td::actor::send_closure(db_, &Db::get_key_block_proof, block_id, std::move(P));
 }
 
-void ValidatorManagerImpl::new_external_message(td::BufferSlice data) {
-  if (offline_) {
-    if (last_masterchain_state_.is_null()) {
-      return;
-    }
-    auto R = create_ext_message(std::move(data), last_masterchain_state_->get_ext_msg_limits());
-    if (R.is_ok()) {
-      ext_messages_.emplace_back(R.move_as_ok());
-    }
-  } else {
-    UNREACHABLE();
+void ValidatorManagerImpl::new_external_message(td::BufferSlice data, int priority) {
+  if (last_masterchain_state_.is_null()) {
+    return;
+  }
+  auto R = create_ext_message(std::move(data), last_masterchain_state_->get_ext_msg_limits());
+  if (R.is_ok()) {
+    ext_messages_.emplace_back(R.move_as_ok());
   }
 }
 
@@ -699,9 +695,13 @@ void ValidatorManagerImpl::wait_block_message_queue_short(BlockIdExt block_id, t
   get_block_handle(block_id, true, std::move(P));
 }
 
-void ValidatorManagerImpl::get_external_messages(ShardIdFull shard,
-                                                 td::Promise<std::vector<td::Ref<ExtMessage>>> promise) {
-  promise.set_result(ext_messages_);
+void ValidatorManagerImpl::get_external_messages(
+    ShardIdFull shard, td::Promise<std::vector<std::pair<td::Ref<ExtMessage>, int>>> promise) {
+  std::vector<std::pair<td::Ref<ExtMessage>, int>> res;
+  for (const auto& x : ext_messages_) {
+    res.emplace_back(x, 0);
+  }
+  promise.set_result(std::move(res));
 }
 
 void ValidatorManagerImpl::get_ihr_messages(ShardIdFull shard, td::Promise<std::vector<td::Ref<IhrMessage>>> promise) {
@@ -976,7 +976,8 @@ void ValidatorManagerImpl::set_next_block(BlockIdExt block_id, BlockIdExt next, 
   get_block_handle(block_id, true, std::move(P));
 }
 
-void ValidatorManagerImpl::set_block_candidate(BlockIdExt id, BlockCandidate candidate, td::Promise<td::Unit> promise) {
+void ValidatorManagerImpl::set_block_candidate(BlockIdExt id, BlockCandidate candidate, CatchainSeqno cc_seqno,
+                                               td::uint32 validator_set_hash, td::Promise<td::Unit> promise) {
   td::actor::send_closure(db_, &Db::store_block_candidate, std::move(candidate), std::move(promise));
 }
 
@@ -1390,12 +1391,19 @@ void ValidatorManagerImpl::update_shard_blocks() {
 }
 
 void ValidatorManagerImpl::check_external_message(td::BufferSlice data, td::Promise<td::Ref<ExtMessage>> promise) {
-  auto state = last_masterchain_state_;  // todo: last_liteserver_state_
-  if (state.is_null()) {
-    promise.set_error(td::Status::Error(ErrorCode::notready, "not ready"));
-    return;
-  }
-  run_check_external_message(std::move(data), state->get_ext_msg_limits(), actor_id(this), std::move(promise));
+    auto state = last_masterchain_state_;  // todo: last_liteserver_state_
+    if (state.is_null()) {
+        promise.set_error(td::Status::Error(ErrorCode::notready, "not ready"));
+        return;
+    }
+
+    auto R = create_ext_message(std::move(data), state->get_ext_msg_limits());
+    if (R.is_error()) {
+        promise.set_error(R.move_as_error_prefix("failed to parse external message: "));
+        return;
+    }
+    auto message = R.move_as_ok();
+    run_check_external_message(std::move(message), actor_id(this), std::move(promise));
 }
 
 ValidatorSessionId ValidatorManagerImpl::get_validator_set_id(ShardIdFull shard, td::Ref<ValidatorSet> val_set) {

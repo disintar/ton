@@ -65,12 +65,15 @@ class LiteQuery : public td::actor::Actor {
   td::BufferSlice buffer_;
   std::function<void()> continuation_;
   bool cont_set_{false};
-  td::BufferSlice shard_proof_;
+  td::BufferSlice shard_proof_, proof_;
   std::vector<Ref<vm::Cell>> roots_;
   std::vector<Ref<td::CntObject>> aux_objs_;
   std::vector<ton::BlockIdExt> blk_ids_;
   std::unique_ptr<block::BlockProofChain> chain_;
   Ref<vm::Stack> stack_;
+
+  td::BufferSlice lookup_header_proof_;
+  td::BufferSlice lookup_prev_header_proof_;
 
  public:
   enum {
@@ -110,6 +113,7 @@ class LiteQuery : public td::actor::Actor {
   bool finish_query(td::BufferSlice result, bool skip_cache_update = false);
   void alarm() override;
   void start_up() override;
+  bool use_cache();
   void perform();
   void perform_getTime();
   void perform_getVersion();
@@ -135,6 +139,8 @@ class LiteQuery : public td::actor::Actor {
                            UnixTime gen_utime, LogicalTime gen_lt);
   void perform_getLibraries(std::vector<td::Bits256> library_list);
   void continue_getLibraries(Ref<MasterchainState> mc_state, BlockIdExt blkid, std::vector<td::Bits256> library_list);
+  void perform_getLibrariesWithProof(BlockIdExt blkid, int mode, std::vector<td::Bits256> library_list);
+  void continue_getLibrariesWithProof(std::vector<td::Bits256> library_list, int mode);
   void perform_getOneTransaction(BlockIdExt blkid, WorkchainId workchain, StdSmcAddress addr, LogicalTime lt);
   void continue_getOneTransaction();
   void perform_getTransactions(WorkchainId workchain, StdSmcAddress addr, LogicalTime lt, Bits256 hash, unsigned count);
@@ -149,6 +155,12 @@ class LiteQuery : public td::actor::Actor {
   void perform_getConfigParams(BlockIdExt blkid, int mode, std::vector<int> param_list = {});
   void continue_getConfigParams(int mode, std::vector<int> param_list);
   void perform_lookupBlock(BlockId blkid, int mode, LogicalTime lt, UnixTime utime);
+  void perform_lookupBlockWithProof(BlockId blkid, BlockIdExt client_mc_blkid, int mode, LogicalTime lt, UnixTime utime);
+  void continue_lookupBlockWithProof_getHeaderProof(Ref<ton::validator::BlockData> block, AccountIdPrefixFull req_prefix, BlockSeqno masterchain_ref_seqno);
+  void continue_lookupBlockWithProof_gotPrevBlockData(Ref<BlockData> prev_block, BlockSeqno masterchain_ref_seqno);
+  void continue_lookupBlockWithProof_buildProofLinks(td::Ref<BlockData> cur_block, std::vector<std::pair<BlockIdExt, td::Ref<vm::Cell>>> result);
+  void continue_lookupBlockWithProof_getClientMcBlockDataState(std::vector<std::pair<BlockIdExt, td::Ref<vm::Cell>>> links);
+  void continue_lookupBlockWithProof_getMcBlockPrev(std::vector<std::pair<BlockIdExt, td::Ref<vm::Cell>>> links);
   void perform_listBlockTransactions(BlockIdExt blkid, int mode, int count, Bits256 account, LogicalTime lt);
   void finish_listBlockTransactions(int mode, int count);
   void perform_listBlockTransactionsExt(BlockIdExt blkid, int mode, int count, Bits256 account, LogicalTime lt);
@@ -168,6 +180,11 @@ class LiteQuery : public td::actor::Actor {
   void perform_getShardBlockProof(BlockIdExt blkid);
   void continue_getShardBlockProof(Ref<BlockData> cur_block,
                                    std::vector<std::pair<BlockIdExt, td::BufferSlice>> result);
+  void perform_getOutMsgQueueSizes(td::optional<ShardIdFull> shard);
+  void continue_getOutMsgQueueSizes(td::optional<ShardIdFull> shard, Ref<MasterchainState> state);
+
+  void perform_nonfinal_getCandidate(td::Bits256 source, BlockIdExt blkid, td::Bits256 collated_data_hash);
+  void perform_nonfinal_getValidatorGroups(int mode, ShardIdFull shard);
 
   void load_prevKeyBlock(ton::BlockIdExt blkid, td::Promise<std::pair<BlockIdExt, Ref<BlockQ>>>);
   void continue_loadPrevKeyBlock(ton::BlockIdExt blkid, td::Result<std::pair<Ref<MasterchainState>, BlockIdExt>> res,

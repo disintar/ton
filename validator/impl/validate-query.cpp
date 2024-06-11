@@ -947,6 +947,7 @@ bool ValidateQuery::fetch_config_params() {
     compute_phase_cfg_.mc_gas_prices = mc_gas_prices.move_as_ok();
     compute_phase_cfg_.special_gas_full = config_->get_global_version() >= 5;
     storage_phase_cfg_.enable_due_payment = config_->get_global_version() >= 4;
+    storage_phase_cfg_.global_version = config_->get_global_version();
     compute_phase_cfg_.block_rand_seed = rand_seed_;
     compute_phase_cfg_.libraries = std::make_unique<vm::Dictionary>(config_->get_libraries_root(), 256);
     compute_phase_cfg_.max_vm_data_depth = size_limits.max_vm_data_depth;
@@ -965,6 +966,7 @@ bool ValidateQuery::fetch_config_params() {
     }
     compute_phase_cfg_.suspended_addresses = config_->get_suspended_addresses(now_);
     compute_phase_cfg_.size_limits = size_limits;
+    compute_phase_cfg_.precompiled_contracts = config_->get_precompiled_contracts_config();
   }
   {
     // compute action_phase_cfg
@@ -6328,7 +6330,8 @@ bool ValidateQuery::save_candidate() {
     }
   });
 
-  td::actor::send_closure(manager, &ValidatorManager::set_block_candidate, id_, block_candidate.clone(), std::move(P));
+  td::actor::send_closure(manager, &ValidatorManager::set_block_candidate, id_, block_candidate.clone(),
+                          validator_set_->get_catchain_seqno(), validator_set_->get_validator_set_hash(), std::move(P));
   return true;
 }
 

@@ -90,6 +90,8 @@ struct Config {
   std::map<td::int32, Control> controls;
   std::set<ton::PublicKeyHash> gc;
 
+  bool state_serializer_enabled = true;
+
   void decref(ton::PublicKeyHash key);
   void incref(ton::PublicKeyHash key) {
     keys_refcnt[key]++;
@@ -167,6 +169,7 @@ class ValidatorEngine : public td::actor::Actor {
   std::shared_ptr<ton::dht::DhtGlobalConfig> dht_config_;
   td::Ref<ton::validator::ValidatorManagerOptions> validator_options_;
   Config config_;
+  ton::tl_object_ptr<ton::ton_api::engine_validator_customOverlaysConfig> custom_overlays_config_;
 
   std::set<ton::PublicKeyHash> running_gc_;
 
@@ -205,6 +208,13 @@ class ValidatorEngine : public td::actor::Actor {
   double key_proof_ttl_ = 0;
   td::uint32 celldb_compress_depth_ = 0;
   size_t max_open_archive_files_ = 0;
+  double archive_preload_period_ = 0.0;
+  bool disable_rocksdb_stats_ = false;
+  bool nonfinal_ls_queries_enabled_ = false;
+  td::optional<td::uint64> celldb_cache_size_ = 1LL << 30;
+  bool celldb_direct_io_ = false;
+  bool celldb_preload_all_ = false;
+  td::optional<double> catchain_max_block_delay_;
   bool read_config_ = false;
   bool started_keyring_ = false;
   bool started_ = false;
@@ -267,6 +277,27 @@ class ValidatorEngine : public td::actor::Actor {
   }
   void set_max_open_archive_files(size_t value) {
     max_open_archive_files_ = value;
+  }
+  void set_archive_preload_period(double value) {
+    archive_preload_period_ = value;
+  }
+  void set_disable_rocksdb_stats(bool value) {
+    disable_rocksdb_stats_ = value;
+  }
+  void set_nonfinal_ls_queries_enabled() {
+    nonfinal_ls_queries_enabled_ = true;
+  }
+  void set_celldb_cache_size(td::uint64 value) {
+    celldb_cache_size_ = value;
+  }
+  void set_celldb_direct_io(bool value) {
+    celldb_direct_io_ = value;
+  }
+  void set_celldb_preload_all(bool value) {
+    celldb_preload_all_ = value;
+  }
+  void set_catchain_max_block_delay(double value) {
+    catchain_max_block_delay_ = value;
   }
   void start_up() override;
   ValidatorEngine() {
@@ -350,6 +381,16 @@ class ValidatorEngine : public td::actor::Actor {
   void try_del_proxy(td::uint32 ip, td::int32 port, std::vector<AdnlCategory> cats, std::vector<AdnlCategory> prio_cats,
                      td::Promise<td::Unit> promise);
 
+  std::string custom_overlays_config_file() const {
+    return db_root_ + "/custom-overlays.json";
+  }
+
+  void load_custom_overlays_config();
+  td::Status write_custom_overlays_config();
+  void add_custom_overlay_to_config(
+      ton::tl_object_ptr<ton::ton_api::engine_validator_customOverlay> overlay, td::Promise<td::Unit> promise);
+  void del_custom_overlay_from_config(std::string name, td::Promise<td::Unit> promise);
+
   void check_key(ton::PublicKeyHash id, td::Promise<td::Unit> promise);
 
   static td::BufferSlice create_control_query_error(td::Status error);
@@ -427,6 +468,14 @@ class ValidatorEngine : public td::actor::Actor {
   void run_control_query(ton::ton_api::engine_validator_getShardOutQueueSize &query, td::BufferSlice data,
                          ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
   void run_control_query(ton::ton_api::engine_validator_setExtMessagesBroadcastDisabled &query, td::BufferSlice data,
+                         ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
+  void run_control_query(ton::ton_api::engine_validator_addCustomOverlay &query, td::BufferSlice data,
+                         ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
+  void run_control_query(ton::ton_api::engine_validator_delCustomOverlay &query, td::BufferSlice data,
+                         ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
+  void run_control_query(ton::ton_api::engine_validator_showCustomOverlays &query, td::BufferSlice data,
+                         ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
+  void run_control_query(ton::ton_api::engine_validator_setStateSerializerEnabled &query, td::BufferSlice data,
                          ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
   template <class T>
   void run_control_query(T &query, td::BufferSlice data, ton::PublicKeyHash src, td::uint32 perm,

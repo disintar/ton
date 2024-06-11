@@ -224,6 +224,7 @@ set(BLOCK_SOURCE
   block/mc-config.cpp
   block/output-queue-merger.cpp
   block/transaction.cpp
+  block/precompiled-smc/PrecompiledSmartContract.cpp
   ${TLB_BLOCK_AUTO}
 
   block/block-binlog.h
@@ -234,6 +235,8 @@ set(BLOCK_SOURCE
   block/check-proof.h
   block/output-queue-merger.h
   block/transaction.h
+  block/precompiled-smc/PrecompiledSmartContract.h
+  block/precompiled-smc/common.h
 )
 
 set(SMC_ENVELOPE_SOURCE
@@ -391,6 +394,10 @@ add_library(ton_block STATIC ${BLOCK_SOURCE})
 target_include_directories(ton_block PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/block> $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)
 target_link_libraries(ton_block PUBLIC ton_crypto tdutils tdactor tl_api)
+if (USE_EMSCRIPTEN)
+  target_link_options(ton_block PRIVATE -fexceptions)
+  target_compile_options(ton_block PRIVATE -fexceptions)
+endif()
 
 add_library(func-lib STATIC ${FUNC_LIB_SOURCE})
 target_include_directories(func-lib PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
@@ -424,6 +431,7 @@ if (USE_EMSCRIPTEN)
   target_link_options(funcfiftlib PRIVATE -sALLOW_MEMORY_GROWTH=1)
   target_link_options(funcfiftlib PRIVATE -sALLOW_TABLE_GROWTH=1)
   target_link_options(funcfiftlib PRIVATE --embed-file ${CMAKE_CURRENT_SOURCE_DIR}/fift/lib@/fiftlib)
+  target_link_options(funcfiftlib PRIVATE --pre-js ${CMAKE_CURRENT_SOURCE_DIR}/funcfiftlib/funcfiftlib-prejs.js)
   target_link_options(funcfiftlib PRIVATE -fexceptions)
   target_compile_options(funcfiftlib PRIVATE -fexceptions -fno-stack-protector)
 endif()
@@ -501,10 +509,17 @@ if (NOT CMAKE_CROSSCOMPILING OR USE_EMSCRIPTEN)
       OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/${ARG_DEST_FIF}
     )
     set(ARG_DEST_CPP "${ARG_DEST}.cpp")
+
+    if (WIN32)
+      set(ARG_LIB_DIR "fift/lib@smartcont")
+    else()
+      set(ARG_LIB_DIR "fift/lib:smartcont")
+    endif()
+
     add_custom_command(
       COMMENT "Generate ${ARG_DEST_CPP}"
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-      COMMAND fift -Ifift/lib:smartcont -s asm-to-cpp.fif ${ARG_DEST_FIF} ${ARG_DEST_CPP} ${ARG_NAME}
+      COMMAND fift -I${ARG_LIB_DIR} -s asm-to-cpp.fif ${ARG_DEST_FIF} ${ARG_DEST_CPP} ${ARG_NAME}
       MAIN_DEPENDENCY ${ARG_SOURCE}
       DEPENDS fift ${ARG_DEST_FIF} smartcont/asm-to-cpp.fif fift/lib/Asm.fif
       OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/${ARG_DEST_CPP}

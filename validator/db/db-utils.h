@@ -13,29 +13,21 @@
 
     You should have received a copy of the GNU Lesser General Public License
     along with TON Blockchain Library.  If not, see <http://www.gnu.org/licenses/>.
-
-    Copyright 2017-2020 Telegram Systems LLP
 */
 #pragma once
+#include <set>
+#include <string>
 
-#include "tonlib/TonlibCallback.h"
-#include "tonlib/TonlibClient.h"
-#include "auto/tl/tonlib_api.h"
+namespace ton::validator {
 
-namespace tonlinb {
-class ClientActor : public td::actor::Actor {
+class PercentileStats {
  public:
-  explicit ClientActor(td::unique_ptr<TonlibCallback> callback);
-  void request(td::uint64 id, tonlib_api::object_ptr<tonlib_api::Function> request);
-  static tonlib_api::object_ptr<tonlib_api::Object> execute(tonlib_api::object_ptr<tonlib_api::Function> request);
-  ~ClientActor();
-  ClientActor(ClientActor&& other);
-  ClientActor& operator=(ClientActor&& other);
-
-  ClientActor(const ClientActor& other) = delete;
-  ClientActor& operator=(const ClientActor& other) = delete;
+  void insert(double value);
+  std::string to_string() const;
+  void clear();
 
  private:
-  td::actor::ActorOwn<TonlibClient> tonlib_;
+  std::multiset<double> values_;
 };
-}  // namespace tonlinb
+
+}  // namespace ton::validator
