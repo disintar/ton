@@ -52,7 +52,7 @@ jobs:
       - name: Install deps
         run: |
           sudo apt update -y
-          sudo apt install -y git curl xz-utils
+          sudo apt install -y git curl xz-utils build-essential libboost-system-dev libboost-thread-dev libboost-program-options-dev libboost-test-dev
 
       - uses: actions/checkout@v4
         with:
