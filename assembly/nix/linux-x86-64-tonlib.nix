@@ -23,13 +23,6 @@ let
           in (pkgs.overrideCC pkgs.stdenv cc);
 
 in
-let
-  boostStatic = pkgs.boost.overrideAttrs (oldAttrs: {
-    buildInputs = (oldAttrs.buildInputs or []) ++ [ pkgsStatic.stdenv ];
-    doCheck = false;
-    configureFlags = [ "--with-libraries=all" "--with-icu" "--with-serialization" "--with-date_time" "--with-thread" "--with-regex" "--with-filesystem" "--with-program_options" "--with-system" "--with-chrono" "--with-random" "--with-test" ];
-  });
-in
 stdenv227.mkDerivation {
   pname = "ton";
   version = "dev-lib";
@@ -41,7 +34,7 @@ stdenv227.mkDerivation {
 
   buildInputs = with pkgs;
     [
-      pkgsStatic.openssl pkgsStatic.zlib pkgsStatic.libmicrohttpd.dev pkgsStatic.secp256k1 boostStatic
+      pkgsStatic.openssl pkgsStatic.zlib pkgsStatic.libmicrohttpd.dev pkgsStatic.secp256k1 boost
       (pkgsStatic.libsodium.overrideAttrs (oldAttrs: {
         # https://github.com/jedisct1/libsodium/issues/292#issuecomment-137135369
         configureFlags = oldAttrs.configureFlags ++ [ " --disable-pie" ];

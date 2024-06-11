@@ -6,13 +6,6 @@
 , system ? builtins.currentSystem
 , src ? ./.
 }:
-let
-  boostStatic = pkgs.boost.overrideAttrs (oldAttrs: {
-    buildInputs = (oldAttrs.buildInputs or []) ++ [ pkgsStatic.stdenv ];
-    doCheck = false;
-    configureFlags = [ "--with-libraries=all" "--with-icu" "--with-serialization" "--with-date_time" "--with-thread" "--with-regex" "--with-filesystem" "--with-program_options" "--with-system" "--with-chrono" "--with-random" "--with-test" ];
-  });
-in
 pkgs.llvmPackages_14.stdenv.mkDerivation {
   pname = "ton";
   version = "dev-lib";
@@ -24,7 +17,7 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
 
   buildInputs = with pkgs;
     lib.forEach [
-      secp256k1 libsodium.dev libmicrohttpd.dev gmp.dev nettle.dev libtasn1.dev libidn2.dev libunistring.dev gettext (gnutls.override { withP11-kit = false; }).dev boostStatic
+      secp256k1 libsodium.dev libmicrohttpd.dev gmp.dev nettle.dev libtasn1.dev libidn2.dev libunistring.dev gettext (gnutls.override { withP11-kit = false; }).dev boost
     ] (x: x.overrideAttrs(oldAttrs: rec { configureFlags = (oldAttrs.configureFlags or []) ++ [ "--enable-static" "--disable-shared" "--disable-tests" ]; dontDisableStatic = true; }))
     ++ [
       darwin.apple_sdk.frameworks.CoreFoundation

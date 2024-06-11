@@ -9,13 +9,6 @@
 let
   microhttpdmy = (import ./microhttpd.nix) { inherit pkgs; };
 in
-let
-  boostStatic = pkgs.boost.overrideAttrs (oldAttrs: {
-    buildInputs = (oldAttrs.buildInputs or []) ++ [ pkgsStatic.stdenv ];
-    doCheck = false;
-    configureFlags = [ "--with-libraries=all" "--with-icu" "--with-serialization" "--with-date_time" "--with-thread" "--with-regex" "--with-filesystem" "--with-program_options" "--with-system" "--with-chrono" "--with-random" "--with-test" ];
-  });
-in
 with import microhttpdmy;
 stdenv.mkDerivation {
   pname = "ton";
@@ -30,7 +23,7 @@ stdenv.mkDerivation {
 
   buildInputs = with pkgs;
     [
-      pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.libsodium.dev pkgsStatic.secp256k1 glibc.static boostStatic
+      pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.libsodium.dev pkgsStatic.secp256k1 glibc.static boost
     ];
 
   makeStatic = true;
