@@ -8,7 +8,6 @@
 }:
 let
   microhttpdmy = (import ./microhttpd.nix) { inherit pkgs; };
-  staticBoost = import ./static-boost.nix { inherit pkgs; };
 in
 with import microhttpdmy;
 stdenv.mkDerivation {
@@ -24,7 +23,7 @@ stdenv.mkDerivation {
 
   buildInputs = with pkgs;
     [
-      pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.libsodium.dev pkgsStatic.secp256k1 glibc.static staticBoost
+      pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.libsodium.dev pkgsStatic.secp256k1 glibc.static pkgsStatic.boost
     ];
 
   makeStatic = true;

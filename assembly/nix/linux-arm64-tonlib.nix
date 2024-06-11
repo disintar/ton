@@ -8,7 +8,6 @@
 }:
 let
   microhttpdmy = (import ./microhttpd.nix) { inherit pkgs; };
-  staticBoost = import ./static-boost.nix { inherit pkgs; };
 in
 with import microhttpdmy;
 pkgs.llvmPackages_16.stdenv.mkDerivation {
@@ -24,7 +23,7 @@ pkgs.llvmPackages_16.stdenv.mkDerivation {
 
   buildInputs = with pkgs;
     [
-      pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.secp256k1 staticBoost
+      pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.secp256k1 staticBoost pkgsStatic.boost
       (pkgsStatic.libsodium.overrideAttrs (oldAttrs: {
         # https://github.com/jedisct1/libsodium/issues/292#issuecomment-137135369
         configureFlags = oldAttrs.configureFlags ++ [ " --disable-pie" ];

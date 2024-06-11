@@ -21,7 +21,6 @@ let
               bintools = pkgs.binutils.override { libc = glibc227; };
             };
           in (pkgs.overrideCC pkgs.stdenv cc);
-          staticBoost = import ./static-boost.nix { inherit pkgs; };
 
 in
 stdenv227.mkDerivation {
@@ -35,7 +34,7 @@ stdenv227.mkDerivation {
 
   buildInputs = with pkgs;
     [
-      pkgsStatic.openssl pkgsStatic.zlib pkgsStatic.libmicrohttpd.dev pkgsStatic.secp256k1 staticBoost
+      pkgsStatic.openssl pkgsStatic.zlib pkgsStatic.libmicrohttpd.dev pkgsStatic.secp256k1 pkgsStatic.boost
       (pkgsStatic.libsodium.overrideAttrs (oldAttrs: {
         # https://github.com/jedisct1/libsodium/issues/292#issuecomment-137135369
         configureFlags = oldAttrs.configureFlags ++ [ " --disable-pie" ];

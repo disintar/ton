@@ -6,9 +6,6 @@
 , system ? builtins.currentSystem
 , src ? ./.
 }:
-let
-  staticBoost = import ./static-boost.nix { inherit pkgs; };
-in
 pkgs.llvmPackages_14.stdenv.mkDerivation {
   pname = "ton";
   version = "dev-bin";
@@ -20,7 +17,7 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
 
   buildInputs = with pkgs;
    lib.forEach [
-        secp256k1 libsodium.dev libmicrohttpd.dev gmp.dev nettle.dev libtasn1.dev libidn2.dev libunistring.dev gettext (gnutls.override { withP11-kit = false; }).dev staticBoost
+        secp256k1 libsodium.dev libmicrohttpd.dev gmp.dev nettle.dev libtasn1.dev libidn2.dev libunistring.dev gettext (gnutls.override { withP11-kit = false; }).dev boost
       ]
       (x: x.overrideAttrs(oldAttrs: rec { configureFlags = (oldAttrs.configureFlags or []) ++ [ "--enable-static" "--disable-shared" "--disable-tests" ]; dontDisableStatic = true; }))
     ++ [
