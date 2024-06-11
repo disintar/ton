@@ -11,7 +11,7 @@ let
     '';
   });
 
-  staticLibrdkafka = pkgs.librdkafka.overrideAttrs (oldAttrs: {
+  staticLibrdkafka = pkgs.rdkafka.overrideAttrs (oldAttrs: {
     configureFlags = (oldAttrs.configureFlags or []) ++ [ "--enable-static" "--disable-shared" ];
     postInstall = ''
       moveToOutput lib "$lib"
