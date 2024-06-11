@@ -561,7 +561,6 @@ class ValidatorManagerImpl : public ValidatorManager {
   std::map<BlockSeqno, WaitList<td::actor::Actor, td::Unit>> shard_client_waiters_;
   BlockIdExt last_masterchain_block_id_;
   BlockHandle last_masterchain_block_handle_;
-  bool read_only_;
 
   BlockIdExt last_liteserver_block_id_;
   td::Ref<MasterchainState> last_liteserver_state_;

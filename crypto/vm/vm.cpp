@@ -478,10 +478,6 @@ int VmState::step() {
     stack->dump(std::cerr, 3);
   }
 
-  if (vm_dumper.enable) {
-    vm_dumper.dump_stack(stack);
-  }
-
   ++steps;
   if (code->size()) {
     VM_LOG_MASK(this, vm::VmLog::ExecLocation)

@@ -37,35 +37,6 @@
 #include "block/block-auto.h"
 #include "td/utils/date.h"
 
-// todo: move from explorer
-std::string time_to_human(unsigned ts) {
-  td::StringBuilder sb;
-  sb << date::format("%F %T",
-                     std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds>{std::chrono::seconds(ts)})
-     << ", ";
-  auto now = (unsigned)td::Clocks::system();
-  bool past = now >= ts;
-  unsigned x = past ? now - ts : ts - now;
-  if (!past) {
-    sb << "in ";
-  }
-  if (x < 60) {
-    sb << x << "s";
-  } else if (x < 3600) {
-    sb << x / 60 << "m " << x % 60 << "s";
-  } else if (x < 3600 * 24) {
-    x /= 60;
-    sb << x / 60 << "h " << x % 60 << "m";
-  } else {
-    x /= 3600;
-    sb << x / 24 << "d " << x % 24 << "h";
-  }
-  if (past) {
-    sb << " ago";
-  }
-  return sb.as_cslice().str();
-}
-
 namespace ton {
 
 namespace validator {
@@ -1322,7 +1293,7 @@ void ValidatorManagerImpl::receiveLastBlock(td::Result<td::Ref<BlockData>> block
 
     // update DB if needed
     LOG(INFO) << "New MC block: " << last_masterchain_block_id_
-              << " at: " << time_to_human(last_masterchain_time_) + ", shards: " << shards_idents;
+              << " at: " << last_masterchain_time_ << ", shards: " << shards_idents;
 
     // Handle wait_block
     while (!shard_client_waiters_.empty()) {
@@ -1471,6 +1442,14 @@ td::actor::ActorOwn<ValidatorManagerInterface> ValidatorManagerDiskFactory::crea
       "manager", id, std::move(opts), shard, shard_top_block_id, db_root, std::move(keyring), std::move(adnl),
       std::move(rldp), std::move(overlays), std::move(lslimiter), read_only_);
 }
+
+td::actor::ActorOwn<ValidatorManagerInterface> ValidatorManagerDiskFactory::create(
+    PublicKeyHash id, td::Ref<ValidatorManagerOptions> opts, ShardIdFull shard, BlockIdExt shard_top_block_id,
+    std::string db_root, bool read_only) {
+  return td::actor::create_actor<validator::ValidatorManagerImpl>("manager", id, std::move(opts), shard,
+                                                                  shard_top_block_id, db_root, read_only);
+}
+
 
 }  // namespace validator
 

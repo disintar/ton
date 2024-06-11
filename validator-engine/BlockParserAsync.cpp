@@ -435,7 +435,7 @@ void BlockParserAsync::parseBlockData() {
 
   answer["global_id"] = blk.global_id;
   auto now = info.gen_utime;
-  LOG(INFO) << "Parse block: " << blkid.id.to_str() << " time: " << time_to_human(now);
+  LOG(WARNING) << "Parse block: " << blkid.id.to_str() << " time: " << time_to_human(now);
 
   auto start_lt = info.start_lt;
 

@@ -297,7 +297,7 @@ class TestNode : public td::actor::Actor {
 
     opts.write().set_initial_sync_disabled(true);
     validator_manager_ = ton::validator::ValidatorManagerDiskFactory::create(ton::PublicKeyHash::zero(), opts, shard_,
-                                                                             shard_top_block_id_, db_root_);
+                                                                             shard_top_block_id_, db_root_, false);
     for (auto &msg : ext_msgs_) {
       td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManager::new_external_message,
                               std::move(msg), 0);

@@ -406,7 +406,6 @@ void ValidatorManagerMasterchainStarter::got_init_block_state(td::Ref<Masterchai
 
     td::actor::send_closure(db_, &Db::get_gc_masterchain_block, std::move(P));
   }
-}
 
 void ValidatorManagerMasterchainStarter::got_gc_block_id(BlockIdExt block_id) {
   LOG(DEBUG) << "Got gc block id";

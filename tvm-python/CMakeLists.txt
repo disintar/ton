@@ -77,3 +77,4 @@ install(TARGETS python_ton
         COMPONENT tvm-python
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         EXCLUDE_FROM_ALL)
+
