@@ -11,6 +11,25 @@
 
   outputs = { self, nixpkgs-stable, nixpkgs-trunk, flake-compat, flake-utils }:
     let
+      # Define static Boost
+      staticBoost = pkgs: pkgs.boost.overrideAttrs (oldAttrs: {
+        buildInputs = (oldAttrs.buildInputs or []) ++ [ pkgsStatic.stdenv ];
+        doCheck = false;
+        configureFlags = [
+          "--with-libraries=all"
+          "--with-serialization"
+          "--with-date_time"
+          "--with-thread"
+          "--with-regex"
+          "--with-filesystem"
+          "--with-program_options"
+          "--with-system"
+          "--with-chrono"
+          "--with-random"
+          "--with-test"
+        ];
+      });
+
       ton = { host, system, kind }:
         let
           p = host.hostPlatform;
@@ -27,7 +46,9 @@
           pkgs = host;
           inherit system;
           src = host.nix-gitignore.gitignoreRecursiveSource [ ] ./.;
+          boost = staticBoost host;  # Include static Boost
         };
+
       tonPython = ton: python: ton.overrideAttrs (previousAttrs:
         {
           buildInputs = previousAttrs.buildInputs ++ [ python ];
@@ -52,6 +73,7 @@
 
           outputs = [ "out" ];
         });
+
       hostPkgs = system:
         import nixpkgs-stable {
           inherit system;
