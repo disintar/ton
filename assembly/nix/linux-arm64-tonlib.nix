@@ -46,6 +46,8 @@ pkgs.llvmPackages_16.stdenv.mkDerivation {
     "-DMHD_FOUND=1"
     "-DMHD_INCLUDE_DIR=${microhttpdmy}/usr/local/include"
     "-DMHD_LIBRARY=${microhttpdmy}/usr/local/lib/libmicrohttpd.a"
+    "-DCMAKE_CXX_FLAGS=-w"
+    "-DCMAKE_C_FLAGS=-w"
   ];
 
   LDFLAGS = [

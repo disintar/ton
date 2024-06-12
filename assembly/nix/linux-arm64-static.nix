@@ -36,17 +36,19 @@ stdenv.mkDerivation {
   makeStatic = true;
   doCheck = true;
 
-  cmakeFlags = [
-    "-DTON_USE_ABSEIL=OFF"
-    "-DNIX=ON"
-    "-DBUILD_SHARED_LIBS=OFF"
-    "-DCMAKE_LINK_SEARCH_START_STATIC=ON"
-    "-DCMAKE_LINK_SEARCH_END_STATIC=ON"
-    "-DMHD_FOUND=1"
-    "-DMHD_INCLUDE_DIR=${microhttpdmy}/usr/local/include"
-    "-DMHD_LIBRARY=${microhttpdmy}/usr/local/lib/libmicrohttpd.a"
-    "-DCMAKE_CTEST_ARGUMENTS=--timeout;1800"
-  ];
+    cmakeFlags = [
+      "-DTON_USE_ABSEIL=OFF"
+      "-DNIX=ON"
+      "-DBUILD_SHARED_LIBS=OFF"
+      "-DCMAKE_LINK_SEARCH_START_STATIC=ON"
+      "-DCMAKE_LINK_SEARCH_END_STATIC=ON"
+      "-DMHD_FOUND=1"
+      "-DMHD_INCLUDE_DIR=${microhttpdmy}/usr/local/include"
+      "-DMHD_LIBRARY=${microhttpdmy}/usr/local/lib/libmicrohttpd.a"
+      "-DCMAKE_CTEST_ARGUMENTS=--timeout;1800"
+      "-DCMAKE_CXX_FLAGS=-w"
+      "-DCMAKE_C_FLAGS=-w"
+    ];
 
   LDFLAGS = [
      "-static-libgcc" "-static-libstdc++" "-static"

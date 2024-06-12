@@ -53,6 +53,8 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
     "-DCMAKE_CXX_FLAGS=-stdlib=libc++"
     "-DCMAKE_OSX_DEPLOYMENT_TARGET:STRING=11.3"
     "-DCMAKE_CTEST_ARGUMENTS=--timeout;1800"
+    "-DCMAKE_CXX_FLAGS=-w"
+    "-DCMAKE_C_FLAGS=-w"
   ];
 
   LDFLAGS = [

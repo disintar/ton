@@ -46,6 +46,8 @@ stdenv.mkDerivation {
     "-DMHD_INCLUDE_DIR=${microhttpdmy}/usr/local/include"
     "-DMHD_LIBRARY=${microhttpdmy}/usr/local/lib/libmicrohttpd.a"
     "-DCMAKE_CTEST_ARGUMENTS=--timeout;1800"
+    "-DCMAKE_CXX_FLAGS=-w"
+    "-DCMAKE_C_FLAGS=-w"
   ];
 
   LDFLAGS = [

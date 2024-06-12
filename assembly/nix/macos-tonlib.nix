@@ -45,6 +45,8 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
     "-DNIX=ON"
     "-DCMAKE_CXX_FLAGS=-stdlib=libc++"
     "-DCMAKE_OSX_DEPLOYMENT_TARGET:STRING=11.3"
+    "-DCMAKE_CXX_FLAGS=-w"
+    "-DCMAKE_C_FLAGS=-w"
   ];
 
   LDFLAGS = [

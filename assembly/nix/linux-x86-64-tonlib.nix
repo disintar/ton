@@ -53,6 +53,8 @@ stdenv227.mkDerivation {
   cmakeFlags = [
     "-DTON_USE_ABSEIL=OFF"
     "-DNIX=ON"
+    "-DCMAKE_CXX_FLAGS=-w"
+    "-DCMAKE_C_FLAGS=-w"
   ];
 
   LDFLAGS = [
