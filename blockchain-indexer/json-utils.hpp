@@ -16,6 +16,7 @@
 #include "auto/tl/lite_api.h"
 #include "tuple"
 #include "vm/boc.h"
+#include <variant>
 
 
 // TODO: use td/utils/json
