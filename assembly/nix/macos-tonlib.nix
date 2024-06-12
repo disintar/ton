@@ -11,6 +11,7 @@ let
   staticLibs = import ./static-libs.nix { inherit pkgs; };
   staticBoost = pkgs.boost;
   staticLibrdkafka = pkgs.rdkafka;
+  staticLz4 = pkgs.lz4;
 in
 pkgs.llvmPackages_14.stdenv.mkDerivation {
   pname = "ton";
@@ -23,7 +24,7 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
 
   buildInputs = with pkgs;
     lib.forEach [
-      secp256k1 libsodium.dev libmicrohttpd.dev gmp.dev nettle.dev libtasn1.dev libidn2.dev libunistring.dev gettext (gnutls.override { withP11-kit = false; }).dev boost
+      secp256k1 libsodium.dev libmicrohttpd.dev gmp.dev nettle.dev libtasn1.dev libidn2.dev libunistring.dev gettext (gnutls.override { withP11-kit = false; }).dev
     ] (x: x.overrideAttrs(oldAttrs: rec { configureFlags = (oldAttrs.configureFlags or []) ++ [ "--enable-static" "--disable-shared" "--disable-tests" ]; dontDisableStatic = true; }))
     ++ [
       darwin.apple_sdk.frameworks.CoreFoundation
@@ -32,6 +33,7 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
       (libiconv.override { enableStatic = true; enableShared = false; })
       staticBoost
       staticLibrdkafka
+      staticLz4
     ];
 
   dontAddStaticConfigureFlags = true;

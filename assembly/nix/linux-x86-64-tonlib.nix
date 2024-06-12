@@ -24,6 +24,7 @@ let
   staticLibs = import ./static-libs.nix { inherit pkgs; };
   staticBoost = pkgs.boost;
   staticLibrdkafka = pkgs.rdkafka;
+  staticLz4 = pkgs.lz4;
 in
 stdenv227.mkDerivation {
   pname = "ton";
@@ -39,6 +40,7 @@ stdenv227.mkDerivation {
       pkgsStatic.openssl pkgsStatic.zlib pkgsStatic.libmicrohttpd.dev pkgsStatic.secp256k1
       staticBoost
       staticLibrdkafka
+      staticLz4
       (pkgsStatic.libsodium.overrideAttrs (oldAttrs: {
         # https://github.com/jedisct1/libsodium/issues/292#issuecomment-137135369
         configureFlags = oldAttrs.configureFlags ++ [ " --disable-pie" ];

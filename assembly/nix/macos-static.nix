@@ -10,6 +10,7 @@ let
   staticLibs = import ./static-libs.nix { inherit pkgs; };
   staticBoost = pkgs.boost;
   staticLibrdkafka = pkgs.rdkafka;
+  staticLz4 = pkgs.lz4;
 in
 pkgs.llvmPackages_14.stdenv.mkDerivation {
   pname = "ton";
@@ -32,6 +33,7 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
       (libiconv.override { enableStatic = true; enableShared = false; })
       staticBoost
       staticLibrdkafka
+      staticLz4
    ];
 
 
