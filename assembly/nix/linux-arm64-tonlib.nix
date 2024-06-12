@@ -9,8 +9,8 @@
 let
   microhttpdmy = (import ./microhttpd.nix) { inherit pkgs; };
   staticLibs = import ./static-libs.nix { inherit pkgs; };
-  staticBoost = staticLibs.staticBoost;
-  staticLibrdkafka = staticLibs.staticLibrdkafka;
+  staticBoost = pkgs.boost;
+  staticLibrdkafka = pkgs.rdkafka;
 in
 with import microhttpdmy;
 pkgs.llvmPackages_16.stdenv.mkDerivation {

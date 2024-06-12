@@ -9,8 +9,8 @@
 let
   # Import custom static packages
   staticLibs = import ./static-libs.nix { inherit pkgs; };
-  staticBoost = staticLibs.staticBoost;
-  staticLibrdkafka = staticLibs.staticLibrdkafka;
+  staticBoost = pkgs.boost;
+  staticLibrdkafka = pkgs.rdkafka;
 in
 pkgs.llvmPackages_14.stdenv.mkDerivation {
   pname = "ton";

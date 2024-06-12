@@ -22,8 +22,8 @@ let
             };
           in (pkgs.overrideCC pkgs.stdenv cc);
   staticLibs = import ./static-libs.nix { inherit pkgs; };
-  staticBoost = staticLibs.staticBoost;
-  staticLibrdkafka = staticLibs.staticLibrdkafka;
+  staticBoost = pkgs.boost;
+  staticLibrdkafka = pkgs.rdkafka;
 in
 stdenv227.mkDerivation {
   pname = "ton";
