@@ -7,6 +7,7 @@
 #include <locale>
 #include <sstream>
 #include <string>
+#include <variant>
 
 std::vector<std::tuple<int, std::string>> parse_extra_currency(const Ref<vm::Cell> &extra) {
   std::vector<std::tuple<int, std::string>> c_list;
