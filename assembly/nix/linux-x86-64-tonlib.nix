@@ -55,6 +55,7 @@ stdenv227.mkDerivation {
     "-DNIX=ON"
     "-DCMAKE_CXX_FLAGS=-w"
     "-DCMAKE_C_FLAGS=-w"
+    "-DCMAKE_CXX_STANDARD=17"
   ];
 
   LDFLAGS = [
