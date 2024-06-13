@@ -56,7 +56,7 @@ stdenv227.mkDerivation {
     "-DCMAKE_CXX_FLAGS=-w"
     "-DCMAKE_C_FLAGS=-w"
     "-DCMAKE_CXX_STANDARD=17"
-    "-DCMAKE_CXX_FLAGS=-std=c++17"
+    "-DCMAKE_CXX_FLAGS=-std=-Wno-deprecated-declarations"
   ];
 
   LDFLAGS = [
