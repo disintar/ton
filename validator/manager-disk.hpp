@@ -480,7 +480,7 @@ class ValidatorManagerImpl : public ValidatorManager {
     publisher_ = std::move(publisher);
     td::actor::send_closure(db_, &Db::set_block_publisher, publisher_.get());
   }
-  BlockParser *get_block_publisher() override {
+  BlockParser* get_block_publisher() override {
     return publisher_.get();
   }
   void clear_celldb_boc_cache() override {

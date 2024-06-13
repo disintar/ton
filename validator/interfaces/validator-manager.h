@@ -202,6 +202,7 @@ class ValidatorManager : public ValidatorManagerInterface {
 
   virtual BlockParser* get_block_publisher() {
     // TODO: make it pure virtual
+    return nullptr;
   }
 
   void set_async() override {
