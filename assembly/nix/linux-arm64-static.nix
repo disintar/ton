@@ -49,7 +49,7 @@ stdenv.mkDerivation {
       "-DCMAKE_CXX_FLAGS=-w"
       "-DCMAKE_C_FLAGS=-w"
       "-DCMAKE_CXX_STANDARD=17"
-      "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations"
+      "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-unused-but-set-variable"
     ];
 
   LDFLAGS = [
