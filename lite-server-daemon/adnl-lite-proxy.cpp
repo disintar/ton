@@ -585,6 +585,42 @@ namespace ton::liteserver {
             promise.set_value(create_serialize_tl_object<ton::lite_api::liteServer_stats>(std::move(tmp)));
         }
 
+        void check_ext_answer(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
+                              td::Promise<td::BufferSlice> promise, int refire, td::Result<td::BufferSlice> result) {
+            if (refire > 2) {
+                promise.set_result(std::move(result));
+                return;
+            }
+
+            if (result.is_ok()) {
+                auto res = result.move_as_ok();
+                auto lite_error = ton::fetch_tl_object<ton::lite_api::liteServer_error>(res.clone(), true);
+                if (lite_error.is_ok()) {
+                    auto error = lite_error.move_as_ok();
+
+                    if (error->message_.rfind("cannot load block", 0) == 0) {
+                        LOG(ERROR) << "Refire on cannot load block";
+                        usage[dst]--;
+                        td::actor::send_closure(actor_id(this), &LiteProxy::check_ext_query, src, dst,
+                                                std::move(data), std::move(promise), refire + 1);
+                    } else {
+                        promise.set_value(std::move(res));
+                        return;
+                    }
+                } else {
+                    promise.set_value(std::move(res));
+                    return;
+                }
+            } else {
+                auto e = result.move_as_error();
+                usage[dst]--;
+                td::actor::send_closure(actor_id(this), &LiteProxy::check_ext_query, src, dst,
+                                        std::move(data), std::move(promise), refire + 1);
+
+            }
+        }
+
+
         void check_ext_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
                              td::Promise<td::BufferSlice> promise, int refire = 0) {
             if (refire > 50) {
@@ -642,8 +678,16 @@ namespace ton::liteserver {
                     }
 
                     if (!server.empty()) {
+                        auto mP = td::PromiseCreator::lambda(
+                                [P = std::move(promise),
+                                        SelfId = actor_id(this),
+                                        src, dst, data = data.clone(), refire](td::Result<td::BufferSlice> R) mutable {
+                                    td::actor::send_closure(SelfId, &LiteProxy::check_ext_answer, src, dst,
+                                                            std::move(data), std::move(P), refire, std::move(R));
+                                });
+
                         td::actor::send_closure(server, &LiteServerClient::send_raw, std::move(data),
-                                                std::move(promise), live_timeout);
+                                                std::move(mP), live_timeout);
                     } else {
                         usage[dst]--;
                         td::actor::send_closure(actor_id(this), &LiteProxy::check_ext_query, src, dst, std::move(data),
