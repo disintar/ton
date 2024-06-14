@@ -41,6 +41,10 @@
 #include <queue>
 #include <chrono>
 #include <thread>
+#include <cppkafka/cppkafka.h>
+#include "blockchain-indexer/json.hpp"
+#include <chrono>
+#include "tl-utils/lite-utils.hpp"
 
 using ValidUntil = td::int64;
 using RateLimit = td::int32;
@@ -230,14 +234,21 @@ namespace ton::liteserver {
 
     class LiteProxy : public td::actor::Actor {
     public:
-        LiteProxy(std::string config_path, std::string db_path, std::string address, td::uint32 lite_port,
-                  td::uint32 adnl_port, std::string global_config, int mode) {
+        LiteProxy(std::string config_path, std::string db_path, const std::string &address, td::uint32 lite_port,
+                  td::uint32 adnl_port, std::string global_config, int mode, std::string publisher_endpoint) : producer(
+                cppkafka::Configuration{{"metadata.broker.list", publisher_endpoint},
+                                        {"message.max.bytes",    "1000000000"},  // max
+                                        {"retry.backoff.ms",     5},
+                                        {"retries",              2147483647},
+                                        {"acks",                 "1"},
+                                        {"debug",                "broker,topic,msg"}}) {
             config_path_ = std::move(config_path);
             db_root_ = std::move(db_path);
             address_.init_host_port(address, lite_port).ensure();
-            adnl_address_.init_host_port(std::move(address), adnl_port).ensure();
+            adnl_address_.init_host_port(address, adnl_port).ensure();
             global_config_ = std::move(global_config);
             mode_ = mode;
+
         }
 
         std::unique_ptr<ton::adnl::AdnlExtClient::Callback> make_callback(adnl::AdnlNodeIdShort server) {
@@ -300,7 +311,8 @@ namespace ton::liteserver {
                     LOG(INFO)
                     << "Update LS uptodate: "
                     << uptodate_private_ls.size()
-                    << " outdated: " << outdated << " best time: " << time_to_human(best_time);
+                    << " outdated: " << outdated << " best time: " << time_to_human(best_time) << " updated at: "
+                    << started_update_at.elapsed();
 
                     private_time_updated = 0;
                 }
@@ -585,16 +597,42 @@ namespace ton::liteserver {
             promise.set_value(create_serialize_tl_object<ton::lite_api::liteServer_stats>(std::move(tmp)));
         }
 
+        void publish_call(adnl::AdnlNodeIdShort dst, td::BufferSlice data, std::time_t started_at, td::Timer elapsed) {
+            auto elapsed_t = elapsed.elapsed();
+            auto F = fetch_tl_object<lite_api::liteServer_query>(data.clone(), true);
+            if (F.is_ok()) {
+                auto real_data = std::move(F.move_as_ok()->data_);
+
+                auto Fn = fetch_tl_object<ton::lite_api::Function>(real_data, true);
+                if (Fn.is_ok()) {
+                    auto query_obj = Fn.move_as_ok();
+
+                    nlohmann::json answer;
+                    answer["dst"] = dst.bits256_value().to_hex();
+                    answer["q"] = lite_query_name_by_id(query_obj->get_id());
+                    answer["started"] = started_at;
+                    answer["elapsed"] = elapsed_t;
+
+                    std::string publish_answer = answer.dump(-1);
+                    LOG(WARNING) << publish_answer;
+                    producer.produce(cppkafka::MessageBuilder("lite-call-logs").partition(1).payload(publish_answer));
+                }
+            }
+        }
+
         void check_ext_answer(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
-                              td::Promise<td::BufferSlice> promise, int refire, td::Result<td::BufferSlice> result) {
+                              td::Promise<td::BufferSlice> promise, int refire, td::Result<td::BufferSlice> result,
+                              std::time_t started_at, td::Timer elapsed) {
             if (refire > allowed_refire) {
+                td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, std::move(data), started_at,
+                                        elapsed);
                 promise.set_result(std::move(result));
                 return;
             }
 
             if (result.is_ok()) {
                 auto res = result.move_as_ok();
-                auto lite_error = ton::fetch_tl_object < ton::lite_api::liteServer_error > (res.clone(), true);
+                auto lite_error = ton::fetch_tl_object<ton::lite_api::liteServer_error>(res.clone(), true);
                 if (lite_error.is_ok()) {
                     auto error = lite_error.move_as_ok();
 
@@ -610,10 +648,14 @@ namespace ton::liteserver {
                     }
 
                     LOG(ERROR) << "Got unexpected error for refire: " << error->message_;
+                    td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, std::move(data), started_at,
+                                            elapsed);
                     promise.set_value(std::move(res));
                     return;
 
                 } else {
+                    td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, std::move(data), started_at,
+                                            elapsed);
                     promise.set_value(std::move(res));
                     return;
                 }
@@ -687,9 +729,12 @@ namespace ton::liteserver {
                         auto mP = td::PromiseCreator::lambda(
                                 [P = std::move(promise),
                                         SelfId = actor_id(this),
-                                        src, dst, data = data.clone(), refire](td::Result<td::BufferSlice> R) mutable {
+                                        src, dst, data = data.clone(), refire,
+                                        started_at = std::time(nullptr), elapsed = td::Timer()](
+                                        td::Result<td::BufferSlice> R) mutable {
                                     td::actor::send_closure(SelfId, &LiteProxy::check_ext_answer, src, dst,
-                                                            std::move(data), std::move(P), refire, std::move(R));
+                                                            std::move(data), std::move(P), refire, std::move(R),
+                                                            started_at, elapsed);
                                 });
 
                         td::actor::send_closure(server, &LiteServerClient::send_raw, std::move(data),
@@ -753,8 +798,7 @@ namespace ton::liteserver {
             }
 
             if (to_update == 0) {
-                \
-                started_update_at = std::time(nullptr);
+                started_update_at = td::Timer();
                 to_update = private_servers_.size();
                 update_server_stats();
             }
@@ -874,7 +918,7 @@ namespace ton::liteserver {
         int cur_alarm = 0;
         int best_time{0};
         int allowed_refire = 20;
-        std::time_t started_update_at;
+        td::Timer started_update_at;
         unsigned long to_update = 0;
         std::string db_root_;
         std::string config_path_;
@@ -889,6 +933,7 @@ namespace ton::liteserver {
         std::map<ton::PublicKeyHash, ton::PublicKey> keys_;
         td::actor::ActorOwn<keyring::Keyring> keyring_;
         std::vector<adnl::AdnlNodeIdShort> existing;
+        cppkafka::Producer producer;
         td::actor::ActorOwn<adnl::Adnl> adnl_;
         td::actor::ActorOwn<adnl::AdnlNetworkManager> adnl_network_manager_;
         std::map<adnl::AdnlNodeIdShort, int> private_servers_status_;
@@ -919,6 +964,8 @@ int main(int argc, char **argv) {
     int mode = 1;
     td::uint32 lite_port = 0;
     td::uint32 adnl_port = 0;
+    std::string publisher_endpoint = "";
+
 
     p.set_description("lite-proxy");
     p.add_option('h', "help", "prints_help", [&]() {
@@ -956,6 +1003,7 @@ int main(int argc, char **argv) {
     p.add_option('I', "ip", "ip address to start on", [&](td::Slice fname) { address = fname.str(); });
     p.add_option('L', "lite-port", "lite-proxy port", [&](td::Slice arg) { lite_port = td::to_integer<int>(arg); });
     p.add_option('A', "adnl-port", "adnl port", [&](td::Slice arg) { adnl_port = td::to_integer<int>(arg); });
+    p.add_option('P', "publisher", "publisher endpoint", [&](td::Slice arg) { publisher_endpoint = arg.str(); });
 
     auto S = p.run(argc, argv);
     if (S.is_error()) {
@@ -968,7 +1016,7 @@ int main(int argc, char **argv) {
     scheduler.run_in_context([&] {
         td::actor::create_actor<ton::liteserver::LiteProxy>("LiteProxy", std::move(config_path), std::move(db_path),
                                                             std::move(address), lite_port, adnl_port,
-                                                            std::move(global_config), mode)
+                                                            std::move(global_config), mode, publisher_endpoint)
                 .release();
         return td::Status::OK();
     });
