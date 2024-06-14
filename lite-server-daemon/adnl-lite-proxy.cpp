@@ -587,14 +587,14 @@ namespace ton::liteserver {
 
         void check_ext_answer(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
                               td::Promise<td::BufferSlice> promise, int refire, td::Result<td::BufferSlice> result) {
-            if (refire > 2) {
+            if (refire > allowed_refire) {
                 promise.set_result(std::move(result));
                 return;
             }
 
             if (result.is_ok()) {
                 auto res = result.move_as_ok();
-                auto lite_error = ton::fetch_tl_object<ton::lite_api::liteServer_error>(res.clone(), true);
+                auto lite_error = ton::fetch_tl_object < ton::lite_api::liteServer_error > (res.clone(), true);
                 if (lite_error.is_ok()) {
                     auto error = lite_error.move_as_ok();
 
@@ -609,6 +609,7 @@ namespace ton::liteserver {
                         }
                     }
 
+                    LOG(ERROR) << "Got unexpected error for refire: " << error->message_;
                     promise.set_value(std::move(res));
                     return;
 
@@ -872,6 +873,7 @@ namespace ton::liteserver {
         int mode_;
         int cur_alarm = 0;
         int best_time{0};
+        int allowed_refire = 20;
         std::time_t started_update_at;
         unsigned long to_update = 0;
         std::string db_root_;
