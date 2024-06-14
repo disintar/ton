@@ -598,15 +598,20 @@ namespace ton::liteserver {
                 if (lite_error.is_ok()) {
                     auto error = lite_error.move_as_ok();
 
-                    if (error->message_.rfind("cannot load block", 0) == 0) {
-                        LOG(ERROR) << "Refire on cannot load block";
-                        usage[dst]--;
-                        td::actor::send_closure(actor_id(this), &LiteProxy::check_ext_query, src, dst,
-                                                std::move(data), std::move(promise), refire + 1);
-                    } else {
-                        promise.set_value(std::move(res));
-                        return;
+                    for (const auto &substring: {"cannot compute block with specified transaction",
+                                                 "cannot load block"}) {
+                        if (error->message_.find(substring) != std::string::npos) {
+                            LOG(ERROR) << "Refire on cannot load block";
+                            usage[dst]--;
+                            td::actor::send_closure(actor_id(this), &LiteProxy::check_ext_query, src, dst,
+                                                    std::move(data), std::move(promise), refire + 1);
+                            return;
+                        }
                     }
+
+                    promise.set_value(std::move(res));
+                    return;
+
                 } else {
                     promise.set_value(std::move(res));
                     return;
