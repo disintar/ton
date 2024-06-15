@@ -637,7 +637,7 @@ namespace ton::liteserver {
                     auto error = lite_error.move_as_ok();
 
                     for (const auto &substring: {"cannot compute block with specified transaction",
-                                                 "cannot load block"}) {
+                                                 "cannot load block", "seqno not in db", "block not found"}) {
                         if (error->message_.find(substring) != std::string::npos) {
                             LOG(ERROR) << "Refire on cannot load block";
                             usage[dst]--;

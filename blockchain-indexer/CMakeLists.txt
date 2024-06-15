@@ -6,6 +6,7 @@ if (NOT OPENSSL_FOUND)
 endif ()
 
 set(INDEXER_SOURCE indexer.cpp json.hpp json-utils.cpp json-utils.hpp
+        ./dumper-kafka.cpp ./dumper-kafka.h ./dumper-disk.cpp ./dumper-disk.h ./dumper-interface.h
         ../validator-engine/IBlockParser.hpp ../validator-engine/IBlockParser.cpp
         ../validator-engine/BlockParserAsync.hpp ../validator-engine/BlockParserAsync.cpp
         ../validator-engine/BlockPublisherKafka.hpp ../validator-engine/BlockPublisherKafka.cpp
