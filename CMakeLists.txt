@@ -444,6 +444,7 @@ add_subdirectory(utils)
 add_subdirectory(http)
 add_subdirectory(rldp-http-proxy)
 add_subdirectory(lite-server-daemon)
+add_subdirectory(blockchain-indexer)
 endif()
 #END internal
 
