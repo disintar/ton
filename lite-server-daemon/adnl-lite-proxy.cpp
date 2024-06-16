@@ -692,6 +692,7 @@ namespace ton::liteserver {
                     }
                 } else {
                     if (usage[dst] > std::get<1>(k)) {
+                        usage[dst]--;
                         LOG(INFO) << "Drop to: " << dst << " because of ratelimit, usage: " << usage[dst]
                                   << " limit: " << std::get<1>(k);
                         promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Ratelimit"));
