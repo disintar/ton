@@ -81,7 +81,7 @@ namespace ton::validator {
         std::mutex accounts_count_mtx_;
         unsigned long total_accounts;
         json answer;
-        td::Promise<json> final_promise;
+        td::Promise<std::string> final_promise;
         vm::Ref<vm::Cell> root_cell;
         td::optional<td::Ref<vm::Cell>> prev_root_cell;
         std::vector<std::pair<td::Bits256, int>> accounts_keys;
@@ -92,7 +92,7 @@ namespace ton::validator {
         AsyncStateIndexer(std::string block_id_string_, vm::Ref<vm::Cell> root_cell_,
                           td::optional<td::Ref<vm::Cell>> prev_root_cell_,
                           std::vector<std::pair<td::Bits256, int>> accounts_keys_, BlockIdExt block_id_,
-                          td::Promise<json> final_promise_) {
+                          td::Promise<std::string> final_promise_) {
             block_id = block_id_;
             block_id_string = std::move(block_id_string_);
             total_accounts = accounts_keys_.size();
@@ -396,7 +396,8 @@ namespace ton::validator {
                                          std::to_string(block_id.id.seqno)},
                                 {"data", answer}};
 
-                final_promise.set_value(std::move(to_dump));
+                std::string final_data = to_dump.dump(-1);
+                final_promise.set_result(td::Result<std::string>(std::move(final_data)));
             } catch (...) {
                 LOG(ERROR) << "Cant dump state: " << final_id;
 
@@ -878,14 +879,14 @@ namespace ton::validator {
 
         parsed_data = to_dump.dump(-1);
 
-        auto Pfinal = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<json> potential_state) {
+        auto Pfinal = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::string> potential_state) {
             if (potential_state.is_error()) {
                 LOG(ERROR) << "Got failed state";
                 UNREACHABLE();
             } else {
                 td::actor::send_closure(SelfId,
                                         &BlockParserAsync::saveStateData,
-                                        potential_state.move_as_ok().dump(-1));
+                                        potential_state.move_as_ok());
             }
             return 1;
         });
