@@ -19,5 +19,5 @@ let
   });
 in
 {
-  inherit staticBoost staticLibrdkafka staticLz4;
+  inherit staticBoost staticLibrdkafka;
 }
