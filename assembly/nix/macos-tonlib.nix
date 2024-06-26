@@ -28,9 +28,9 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
       (openssl.override { static = true; }).dev
       (zlib.override { shared = false; }).dev
       (libiconv.override { enableStatic = true; enableShared = false; })
-      staticLibs.staticBoost
+      pkgsStatic.boost
       staticLibs.staticLibrdkafka
-      staticLibs.staticLz4
+      pkgsStatic.lz4
     ];
 
   dontAddStaticConfigureFlags = true;

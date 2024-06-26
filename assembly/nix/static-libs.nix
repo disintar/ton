@@ -17,11 +17,6 @@ let
   staticLibrdkafka = pkgs.rdkafka.overrideAttrs (oldAttrs: {
     configureFlags = (oldAttrs.configureFlags or []) ++ ["--enable-static" "--disable-shared"];
   });
-
-  # Static lz4
-  staticLz4 = pkgs.lz4.overrideAttrs (oldAttrs: {
-    buildFlags = (oldAttrs.buildFlags or []) ++ ["STATIC=1"];
-  });
 in
 {
   inherit staticBoost staticLibrdkafka staticLz4;

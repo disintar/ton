@@ -27,7 +27,7 @@ stdenv.mkDerivation {
       pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.libsodium.dev pkgsStatic.secp256k1 glibc.static
       staticLibs.staticBoost
       staticLibs.staticLibrdkafka
-      staticLibs.staticLz4
+      pkgsStatic.lz4
     ];
 
   makeStatic = true;
