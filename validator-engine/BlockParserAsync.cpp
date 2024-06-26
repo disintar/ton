@@ -356,7 +356,7 @@ namespace ton::validator {
                             {"data", answer}};
 
             std::string final_data = to_dump.dump(-1);
-            final_promise.set_result(td::Result<std::string>(std::move(final_data)));
+            final_promise.set_value(std::move(final_data));
         } catch (...) {
             LOG(ERROR) << "Cant dump state: " << final_id;
 
@@ -837,17 +837,6 @@ namespace ton::validator {
 
         parsed_data = to_dump.dump(-1);
 
-        auto Pfinal = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::string> potential_state) {
-            if (potential_state.is_error()) {
-                LOG(ERROR) << "Got failed state";
-                UNREACHABLE();
-            } else {
-                td::actor::send_closure(SelfId,
-                                        &BlockParserAsync::saveStateData,
-                                        potential_state.move_as_ok());
-            }
-            return 1;
-        });
 
         const auto block_id_string =
                 std::to_string(id.id.workchain) + ":" + std::to_string(id.id.shard) + ":" + std::to_string(id.id.seqno);
@@ -857,8 +846,20 @@ namespace ton::validator {
         //                    BlockIdExt block_id_, td::Promise<std::string> final_promise_) {
 
         td::actor::create_actor<AsyncStateIndexer>("AsyncStateIndexer", block_id_string, state, prev_state,
-                                                   accounts_keys, id,
-                                                   std::move(Pfinal))
+                                                   accounts_keys, id, td::PromiseCreator::lambda(
+                        [SelfId = actor_id(this)](td::Result<std::string> potential_state) {
+                            if (potential_state.is_error()) {
+                                LOG(ERROR) << "Got failed state";
+                                UNREACHABLE();
+                            } else {
+                                std::string res = potential_state.move_as_ok();
+
+                                td::actor::send_closure(SelfId,
+                                                        &BlockParserAsync::saveStateData,
+                                                        std::move(res));
+                            }
+                            return 1;
+                        }))
                 .release();
 
         LOG(DEBUG) << "Parsed: " << blkid.to_str() << " success";
