@@ -1,3 +1,4 @@
+# Export NIX_PATH to use the specific version of nixpkgs
 # export NIX_PATH=nixpkgs=https://github.com/nixOS/nixpkgs/archive/23.05.tar.gz
 
 { pkgs ? import <nixpkgs> { inherit system; }
@@ -52,7 +53,26 @@ stdenv.mkDerivation {
     "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-unused-but-set-variable"
   ];
 
+  NIX_CFLAGS_COMPILE = [
+    "-I${microhttpdmy}/usr/local/include"
+    "-I${pkgsStatic.openssl}/include"
+    "-I${pkgsStatic.zlib}/include"
+    "-I${pkgsStatic.libsodium.dev}/include"
+    "-I${pkgsStatic.secp256k1}/include"
+    "-I${staticBoost}/include"
+    "-I${staticLibrdkafka}/include"
+    "-I${staticLz4}/include"
+  ];
+
   LDFLAGS = [
-     "-static-libgcc" "-static-libstdc++" "-static"
+    "-L${microhttpdmy}/usr/local/lib"
+    "-L${pkgsStatic.openssl}/lib"
+    "-L${pkgsStatic.zlib}/lib"
+    "-L${pkgsStatic.libsodium.dev}/lib"
+    "-L${pkgsStatic.secp256k1}/lib"
+    "-L${staticBoost}/lib"
+    "-L${staticLibrdkafka}/lib"
+    "-L${staticLz4}/lib"
+    "-static-libgcc" "-static-libstdc++" "-static"
   ];
 }
