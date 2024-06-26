@@ -91,7 +91,6 @@
                 export cmakeFlags="${host.lib.concatStringsSep " " packages.ton-tonlib.cmakeFlags}"
               '';
             };
-          defaultPackage = packages.ton-static;
         }))
       (eachSystem (with system; [ x86_64-darwin aarch64-darwin ]) (system:
         let
@@ -117,6 +116,5 @@
                 export cmakeFlags="${host.lib.concatStringsSep " " packages.ton-tonlib.cmakeFlags}"
               '';
             };
-          defaultPackage = packages.ton-static;
         })));
 }
