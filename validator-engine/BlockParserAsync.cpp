@@ -386,6 +386,7 @@ class AsyncStateIndexer : public td::actor::Actor {
       LOG(ERROR) << "Cant dump state: " << final_id;
 
       LOG(DEBUG) << "Calling std::exit(0)";
+      final_promise.set_error(td::Status::Error(ErrorCode::notready));
       std::exit(0);
     }
 
@@ -584,9 +585,9 @@ void BlockParserAsync::parseBlockData() {
     td::Bits256 last_key;
 
     in_msg_dict->get_minmax_key(last_key);
-    Ref<vm::CellSlice> data = in_msg_dict->lookup_delete(last_key);
+    Ref<vm::CellSlice> in_data = in_msg_dict->lookup_delete(last_key);
 
-    json parsed = {{"hash", last_key.to_hex()}, {"message", parse_in_msg(data.write(), workchain)}};
+    json parsed = {{"hash", last_key.to_hex()}, {"message", parse_in_msg(in_data.write(), workchain)}};
     in_msgs_json.push_back(parsed);
   }
 
@@ -600,9 +601,9 @@ void BlockParserAsync::parseBlockData() {
     td::Bits256 last_key;
 
     out_msg_dict->get_minmax_key(last_key);
-    Ref<vm::CellSlice> data = out_msg_dict->lookup_delete(last_key);
+    Ref<vm::CellSlice> out_data = out_msg_dict->lookup_delete(last_key);
 
-    json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg(data.write(), workchain)}};
+    json parsed = {{"hash", last_key.to_hex()}, {"message", parse_out_msg(out_data.write(), workchain)}};
     out_msgs_json.push_back(parsed);
   }
 
@@ -625,19 +626,19 @@ void BlockParserAsync::parseBlockData() {
 
   while (!account_blocks_dict->is_empty()) {
     td::Bits256 last_key;
-    Ref<vm::CellSlice> data;
+    Ref<vm::CellSlice> account_data;
 
     account_blocks_dict->get_minmax_key(last_key);
     auto hex_addr = last_key.to_hex();
     LOG(DEBUG) << "Parse: " << blkid.to_str() << " at " << hex_addr;
 
-    data = account_blocks_dict->lookup_delete(last_key);
+    account_data = account_blocks_dict->lookup_delete(last_key);
 
     json account_block_parsed;
     account_block_parsed["account_addr"] = {{"address", last_key.to_hex()}, {"workchain", workchain}};
 
     block::gen::AccountBlock::Record acc_blk;
-    CHECK(tlb::csr_unpack(data, acc_blk));
+    CHECK(tlb::csr_unpack(account_data, acc_blk));
     int count = 0;
     std::vector<json> transactions;
 
@@ -803,7 +804,7 @@ void BlockParserAsync::parseBlockData() {
     std::vector<json> shards_json;
 
     auto f = [&shards_json, &blkid](McShardHash &ms) {
-      json data = {{"BlockIdExt",
+      json blockid_data = {{"BlockIdExt",
                     {{"file_hash", ms.top_block_id().file_hash.to_hex()},
                      {"root_hash", ms.top_block_id().root_hash.to_hex()},
                      {"id",
@@ -824,7 +825,7 @@ void BlockParserAsync::parseBlockData() {
                    {"fsm_utime", ms.fsm_utime()},
                    {"fsm_state", ms.fsm_state()}};
 
-      shards_json.push_back(data);
+      shards_json.push_back(blockid_data);
       return 1;
     };
 
@@ -855,7 +856,8 @@ void BlockParserAsync::parseBlockData() {
 
   auto Pfinal = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::string> potential_state) {
     if (potential_state.is_ok()) {
-      td::actor::send_closure(SelfId, &BlockParserAsync::saveStateData, potential_state.move_as_ok());
+      std::string state_str = potential_state.move_as_ok();
+      td::actor::send_closure(SelfId, &BlockParserAsync::saveStateData, std::move(state_str));
     }
     return 1;
   });
