@@ -1,4 +1,3 @@
-# Export NIX_PATH to use the specific version of nixpkgs
 # export NIX_PATH=nixpkgs=https://github.com/nixOS/nixpkgs/archive/23.05.tar.gz
 
 { pkgs ? import <nixpkgs> { inherit system; }
@@ -10,9 +9,6 @@
 let
   microhttpdmy = (import ./microhttpd.nix) { inherit pkgs; };
   staticLibs = import ./static-libs.nix { inherit pkgs; };
-  staticBoost = pkgs.boost;
-  staticLibrdkafka = pkgs.rdkafka;
-  staticLz4 = pkgs.lz4;
 in
 with import microhttpdmy;
 stdenv.mkDerivation {
@@ -29,9 +25,9 @@ stdenv.mkDerivation {
   buildInputs = with pkgs;
     [
       pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.libsodium.dev pkgsStatic.secp256k1 glibc.static
-      staticBoost
-      staticLibrdkafka
-      staticLz4
+      staticLibs.staticBoost
+      staticLibs.staticLibrdkafka
+      staticLibs.staticLz4
     ];
 
   makeStatic = true;

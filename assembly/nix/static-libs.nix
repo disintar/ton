@@ -1,30 +1,22 @@
 { pkgs }:
 
 let
-  staticBoost = pkgs.boost.overrideAttrs (oldAttrs: {
-    buildInputs = (oldAttrs.buildInputs or []) ++ [ pkgs.stdenv ];
-    doCheck = false;
-    configurePhase = '' ''; # No configure phase
-    buildPhase = ''
-      ./bootstrap.sh --prefix=$out --with-toolset=clang
-      ./b2 install --prefix=$out --build-dir=build --layout=system link=static threading=multi runtime-link=static
-    '';
-    postInstall = ''
-      mv $out/include/boost $out/include/boost-moved
-      mv $out/include/boost-moved/* $out/include/
-      rmdir $out/include/boost-moved
-    '';
-  });
+    # Override Boost to build static libraries
+    staticBoost = pkgs.boost.overrideAttrs (oldAttrs: {
+      configureFlags = oldAttrs.configureFlags or [] ++ ["--with-libraries=all" "--with-toolset=gcc" "--with-icu" "--with-locale"];
+      buildFlags = oldAttrs.buildFlags or [] ++ ["link=static"];
+    });
 
+    # Override librdkafka to build static libraries
+    staticLibrdkafka = pkgs.rdkafka.overrideAttrs (oldAttrs: {
+      configureFlags = oldAttrs.configureFlags or [] ++ ["--enable-static" "--disable-shared"];
+    });
 
-  staticLibrdkafka = pkgs.rdkafka.overrideAttrs (oldAttrs: {
-    configureFlags = (oldAttrs.configureFlags or []) ++ [ "--enable-static" "--disable-shared" ];
-    postInstall = ''
-      mkdir -p $out/lib
-      mv $oldAttrs.out/lib/* $out/lib/
-    '';
-  });
+    # Static lz4
+    staticLz4 = pkgs.lz4.overrideAttrs (oldAttrs: {
+      buildFlags = oldAttrs.buildFlags or [] ++ ["STATIC=1"];
+    });
 in
 {
-  inherit staticBoost staticLibrdkafka;
+  inherit staticBoost staticLibrdkafka staticLz4;
 }
