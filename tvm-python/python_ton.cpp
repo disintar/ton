@@ -497,6 +497,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("get_OneTransaction", &pylite::PyLiteClient::get_OneTransaction, py::arg("blkid"), py::arg("workchain"),
            py::arg("address"), py::arg("lt"))
       .def("stop", &pylite::PyLiteClient::stop)
+      .def("dummy_wait", &pylite::PyLiteClient::dummy_wait)
       .def("get_Block", &pylite::PyLiteClient::get_Block, py::arg("block_id"))
       .def("admin_AddUser", &pylite::PyLiteClient::admin_AddUser, py::arg("pubkey"), py::arg("validuntil"),
            py::arg("ratelimit"))

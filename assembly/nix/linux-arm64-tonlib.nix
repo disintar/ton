@@ -24,7 +24,10 @@ pkgs.llvmPackages_16.stdenv.mkDerivation {
 
   buildInputs = with pkgs;
     [
-      pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.secp256k1 staticBoost
+      pkgsStatic.openssl
+      microhttpdmy
+      pkgsStatic.zlib
+      pkgsStatic.secp256k1
       staticLibs.staticBoost
       staticLibs.staticLibrdkafka
       pkgsStatic.lz4
