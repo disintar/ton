@@ -19,6 +19,8 @@
 #include "PyCellSlice.h"
 #include "PyCell.h"
 #include "PyEmulator.h"
+#include "third-party/pybind11/include/pybind11/embed.h"
+
 
 bool PyEmulator::set_rand_seed(const std::string &rand_seed_hex) {
     auto rand_seed_hex_slice = td::Slice(rand_seed_hex);
@@ -56,7 +58,6 @@ bool PyEmulator::set_debug_enabled(bool debug_enabled) {
 bool PyEmulator::emulate_transaction(const PyCell &shard_account_cell, const PyCell &message_cell,
                                      const std::string &unixtime, const std::string &lt_str, int vm_ver,
                                      bool force_uninit) {
-    py::gil_scoped_release release;
     auto message_cs = vm::load_cell_slice(message_cell.my_cell);
     int msg_tag = block::gen::t_CommonMsgInfo.get_tag(message_cs);
 
@@ -129,6 +130,7 @@ bool PyEmulator::emulate_transaction(const PyCell &shard_account_cell, const PyC
         }
     }
 
+    py::gil_scoped_release release;
     auto result = emulator->emulate_transaction(std::move(account), message_cell.my_cell, now, lt,
                                                 block::transaction::Transaction::tr_ord, vm_ver);
 
@@ -166,6 +168,7 @@ bool PyEmulator::emulate_transaction(const PyCell &shard_account_cell, const PyC
 
 bool PyEmulator::emulate_tick_tock_transaction(const PyCell &shard_account_boc, bool is_tock,
                                                const std::string &unixtime, const std::string &lt_str, int vm_ver) {
+
     py::gil_scoped_release release;
     auto shard_account_cell = shard_account_boc.my_cell;
 

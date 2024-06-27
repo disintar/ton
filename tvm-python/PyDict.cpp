@@ -14,6 +14,7 @@
 #include "PyCellSlice.h"
 #include "PyCellBuilder.h"
 #include "PyDict.h"
+#include "third-party/pybind11/include/pybind11/embed.h"
 
 auto get_mode(const std::string &s) {
     if (s == "add") {
@@ -26,7 +27,6 @@ auto get_mode(const std::string &s) {
 }
 
 bool PyAugmentationCheckData::eval_leaf(vm::CellBuilder &cb, vm::CellSlice &cs) const {
-    py::gil_scoped_release release;
     vm::CellBuilder tmp_cb;
     tmp_cb.append_cellslice(cs.clone());
     td::Ref<vm::Cell> cell = tmp_cb.finalize(cs.is_special());
@@ -45,7 +45,6 @@ bool PyAugmentationCheckData::eval_leaf(vm::CellBuilder &cb, vm::CellSlice &cs) 
 }
 
 bool PyAugmentationCheckData::skip_extra(vm::CellSlice &cs) const {
-    py::gil_scoped_release release;
     vm::CellBuilder tmp_cb;
     tmp_cb.append_cellslice(cs.clone());
     td::Ref<vm::Cell> cell = tmp_cb.finalize(cs.is_special());
@@ -65,7 +64,6 @@ bool PyAugmentationCheckData::skip_extra(vm::CellSlice &cs) const {
 }
 
 bool PyAugmentationCheckData::eval_fork(vm::CellBuilder &cb, vm::CellSlice &left_cs, vm::CellSlice &right_cs) const {
-    py::gil_scoped_release release;
     vm::CellBuilder ltmp_cb;
     ltmp_cb.append_cellslice(left_cs.clone());
     td::Ref<vm::Cell> lcell = ltmp_cb.finalize(left_cs.is_special());
@@ -89,7 +87,6 @@ bool PyAugmentationCheckData::eval_fork(vm::CellBuilder &cb, vm::CellSlice &left
 }
 
 bool PyAugmentationCheckData::eval_empty(vm::CellBuilder &cb) const {
-    py::gil_scoped_release release;
     py::object result_py = py_eval_empty();
     py::tuple t = py::reinterpret_borrow<py::tuple>(result_py);
     bool is_ok = t[0].cast<bool>();
@@ -113,7 +110,6 @@ PyCell PyDict::get_pycell() const {
 
 //  bool set(td::ConstBitPtr key, int key_len, Ref<CellSlice> value, SetMode mode = SetMode::Set);
 PyDict *PyDict::set(const std::string &key, PyCellSlice &value, const std::string &mode, int key_len_, int sgnd_) {
-    py::gil_scoped_release release;
     if (sgnd_ == -1) {
         sgnd_ = sgnd;
     }
@@ -135,7 +131,6 @@ PyDict *PyDict::set(const std::string &key, PyCellSlice &value, const std::strin
 
 //  bool Dictionary::set_ref(td::ConstBitPtr key, int key_len, Ref<Cell> val_ref, SetMode mode)
 PyDict *PyDict::set_ref(const std::string &key, PyCell &value, const std::string &mode, int key_len_, int sgnd_) {
-    py::gil_scoped_release release;
     if (sgnd_ == -1) {
         sgnd_ = sgnd;
     }
@@ -158,7 +153,6 @@ PyDict *PyDict::set_ref(const std::string &key, PyCell &value, const std::string
 // bool Dictionary::set_builder(td::ConstBitPtr key, int key_len, Ref<CellBuilder> val_b, SetMode mode) {
 PyDict *PyDict::set_builder(const std::string &key, PyCellBuilder &value, const std::string &mode, int key_len_,
                             int sgnd_) {
-    py::gil_scoped_release release;
     if (sgnd_ == -1) {
         sgnd_ = sgnd;
     }
@@ -180,7 +174,6 @@ PyDict *PyDict::set_builder(const std::string &key, PyCellBuilder &value, const 
 
 //  bool set(td::ConstBitPtr key, int key_len, Ref<CellSlice> value, SetMode mode = SetMode::Set);
 PyDict *PyDict::set_keycs(PyCellSlice &key, PyCellSlice &value, const std::string &mode, int key_len_) {
-    py::gil_scoped_release release;
     if (key_len_ == 0) {
         key_len_ = key_len;
     }
@@ -193,7 +186,6 @@ PyDict *PyDict::set_keycs(PyCellSlice &key, PyCellSlice &value, const std::strin
 
 //  bool Dictionary::set_ref(td::ConstBitPtr key, int key_len, Ref<Cell> val_ref, SetMode mode)
 PyDict *PyDict::set_keycs_ref(PyCellSlice &key, PyCell &value, const std::string &mode, int key_len_) {
-    py::gil_scoped_release release;
 
     if (key_len_ == 0) {
         key_len_ = key_len;
@@ -207,7 +199,6 @@ PyDict *PyDict::set_keycs_ref(PyCellSlice &key, PyCell &value, const std::string
 
 // bool Dictionary::set_builder(td::ConstBitPtr key, int key_len, Ref<CellBuilder> val_b, SetMode mode) {
 PyDict *PyDict::set_keycs_builder(PyCellSlice &key, PyCellBuilder &value, const std::string &mode, int key_len_) {
-    py::gil_scoped_release release;
     if (key_len_ == 0) {
         key_len_ = key_len;
     }
@@ -219,7 +210,6 @@ PyDict *PyDict::set_keycs_builder(PyCellSlice &key, PyCellBuilder &value, const 
 }
 
 PyCellSlice PyDict::lookup(const std::string &key, int key_len_, int sgnd_) const {
-    py::gil_scoped_release release;
     if (sgnd_ == -1) {
         sgnd_ = sgnd;
     }
@@ -241,7 +231,6 @@ PyCellSlice PyDict::lookup(const std::string &key, int key_len_, int sgnd_) cons
 }
 
 PyCellSlice PyDict::lookup_delete(const std::string &key, int key_len_, int sgnd_) const {
-    py::gil_scoped_release release;
     if (sgnd_ == -1) {
         sgnd_ = sgnd;
     }
@@ -264,7 +253,6 @@ PyCellSlice PyDict::lookup_delete(const std::string &key, int key_len_, int sgnd
 }
 
 PyCellSlice PyDict::lookup_keycs(PyCellSlice &key, int key_len_) const {
-    py::gil_scoped_release release;
     if (key_len_ == 0) {
         key_len_ = key_len;
     }
@@ -278,7 +266,6 @@ PyCellSlice PyDict::lookup_keycs(PyCellSlice &key, int key_len_) const {
 }
 
 PyCellSlice PyDict::lookup_keycs_delete(PyCellSlice &key, int key_len_) const {
-    py::gil_scoped_release release;
     if (key_len_ == 0) {
         key_len_ = key_len;
     }
@@ -294,7 +281,6 @@ PyCellSlice PyDict::lookup_keycs_delete(PyCellSlice &key, int key_len_) const {
 
 std::tuple<std::string, PyCellSlice> PyDict::get_minmax_key(bool fetch_max, bool inver_first, int key_len_,
                                                             int sgnd_) const {
-    py::gil_scoped_release release;
     if (sgnd_ == -1) {
         sgnd_ = sgnd;
     }
@@ -317,7 +303,6 @@ std::tuple<std::string, PyCellSlice> PyDict::get_minmax_key(bool fetch_max, bool
 
 std::tuple<std::string, PyCell> PyDict::get_minmax_key_ref(bool fetch_max, bool inver_first, int key_len_,
                                                            int sgnd_) const {
-    py::gil_scoped_release release;
     if (sgnd_ == -1) {
         sgnd_ = sgnd;
     }
@@ -341,7 +326,6 @@ std::tuple<std::string, PyCell> PyDict::get_minmax_key_ref(bool fetch_max, bool 
 
 std::tuple<std::string, PyCellSlice> PyDict::lookup_nearest_key(const std::string &key, bool fetch_next, bool allow_eq,
                                                                 bool inver_first, int key_len_, int sgnd_) const {
-    py::gil_scoped_release release;
     if (sgnd_ == -1) {
         sgnd_ = sgnd;
     }
@@ -373,7 +357,6 @@ bool PyDict::is_empty() {
 }
 
 PyCell PyDict::lookup_ref(const std::string &key, int key_len_, int sgnd_) const {
-    py::gil_scoped_release release;
     if (sgnd_ == -1) {
         sgnd_ = sgnd;
     }
@@ -398,7 +381,6 @@ PyCell PyDict::lookup_ref(const std::string &key, int key_len_, int sgnd_) const
 }
 
 PyCell PyDict::lookup_keycs_ref(PyCellSlice &key, int key_len_) const {
-    py::gil_scoped_release release;
     if (key_len_ == 0) {
         key_len_ = key_len;
     }
@@ -415,7 +397,6 @@ PyCell PyDict::lookup_keycs_ref(PyCellSlice &key, int key_len_) const {
 }
 
 PyCell PyDict::lookup_delete_ref(const std::string &key, int key_len_, int sgnd_) const {
-    py::gil_scoped_release release;
     if (sgnd_ == -1) {
         sgnd_ = sgnd;
     }
@@ -440,7 +421,6 @@ PyCell PyDict::lookup_delete_ref(const std::string &key, int key_len_, int sgnd_
 }
 
 PyCell PyDict::lookup_keycs_delete_ref(PyCellSlice &key, int key_len_) const {
-    py::gil_scoped_release release;
     if (key_len_ == 0) {
         key_len_ = key_len;
     }
@@ -456,7 +436,6 @@ PyCell PyDict::lookup_keycs_delete_ref(PyCellSlice &key, int key_len_) const {
 }
 
 void PyDict::map(py::function &f) {
-    py::gil_scoped_release release;
     auto clear_f = std::move(f);
 
     my_dict->check_for_each([&clear_f](td::Ref<vm::CellSlice> cs, td::ConstBitPtr ptr, int ptr_bits) {
@@ -482,7 +461,6 @@ void PyDict::map(py::function &f) {
 }
 
 std::string PyDict::to_boc() const {
-    py::gil_scoped_release release;
     td::Ref<vm::Cell> root = my_dict->get_root_cell();
 
     return td::base64_encode(std_boc_serialize(root, 31).move_as_ok());

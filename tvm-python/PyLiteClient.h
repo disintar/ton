@@ -17,6 +17,8 @@
 #include "lite-client/lite-client.h"
 #include "tl/generate/auto/tl/tonlib_api.h"
 #include "tonlib/tonlib/TonlibClient.h"
+#include "third-party/pybind11/include/pybind11/embed.h"
+
 
 #ifndef TON_PYLITECLIENT_H
 #define TON_PYLITECLIENT_H

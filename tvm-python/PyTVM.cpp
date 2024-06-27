@@ -18,6 +18,8 @@
 #include "PyDict.h"
 #include "PyStack.h"
 #include "PyTVM.h"
+#include "third-party/pybind11/include/pybind11/embed.h"
+
 
 namespace py = pybind11;
 

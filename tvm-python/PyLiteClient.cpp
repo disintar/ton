@@ -7,6 +7,8 @@
 #include "tdutils/td/utils/Time.h"
 #include "terminal/terminal.h"
 #include "crypto/vm/cells/MerkleProof.h"
+#include "third-party/pybind11/include/pybind11/embed.h"
+
 
 namespace pylite {
 
@@ -305,6 +307,8 @@ namespace pylite {
     }
 
     std::unique_ptr<ResponseObj> PyLiteClient::wait_response() {
+        py::gil_scoped_release release;
+
         auto is_locked = receive_lock_.exchange(true);
         CHECK(!is_locked);
         auto response = receive_unlocked();
@@ -326,7 +330,6 @@ namespace pylite {
 
     std::unique_ptr<block::AccountState::Info> PyLiteClient::get_AccountState(int workchain, std::string address_string,
                                                                               ton::BlockIdExt &blk) {
-        py::gil_scoped_release release;
         td::RefInt256 address_int = td::string_to_int256(address_string);
         td::Bits256 address_bits;
         if (!address_int->export_bytes(address_bits.data(), 32, false)) {
@@ -336,6 +339,7 @@ namespace pylite {
         scheduler_.run_in_context_external(
                 [&] { send_closure(engine, &LiteClientActorEngine::get_AccountState, workchain, address_bits, blk); });
 
+        
         auto response = wait_response();
         if (response->success) {
             SuccessBufferSlice *data = dynamic_cast<SuccessBufferSlice *>(response.get());
@@ -368,10 +372,9 @@ namespace pylite {
     }
 
     std::unique_ptr<ton::lite_api::liteServer_masterchainInfoExt> PyLiteClient::get_MasterchainInfoExt() {
-        py::gil_scoped_release release;
         scheduler_.run_in_context_external(
                 [&] { send_closure(engine, &LiteClientActorEngine::get_MasterchainInfoExt, 0); });
-
+        
         auto response = wait_response();
         if (response->success) {
             SuccessBufferSlice *data = dynamic_cast<SuccessBufferSlice *>(response.get());
@@ -427,7 +430,6 @@ namespace pylite {
     }
 
     TestNode::BlockHdrInfo PyLiteClient::lookupBlock(int mode, ton::BlockId req_blkid, long long lt, long long time) {
-        py::gil_scoped_release release;
         scheduler_.run_in_context_external(
                 [&] { send_closure(engine, &LiteClientActorEngine::lookupBlock, mode, req_blkid, lt, time); });
 
@@ -444,7 +446,6 @@ namespace pylite {
 
     std::pair<ton::BlockIdExt, PyCell> PyLiteClient::get_ConfigAll(int mode, ton::BlockIdExt req_blkid,
                                                                    bool force_check_on_key_block) {
-        py::gil_scoped_release release;
         scheduler_.run_in_context_external(
                 [&] { send_closure(engine, &LiteClientActorEngine::get_ConfigAll, mode, req_blkid); });
 
@@ -522,7 +523,8 @@ namespace pylite {
 
     block::TransactionList::Info PyLiteClient::get_Transactions(int count, int workchain, std::string address_string,
                                                                 unsigned long long lt, std::string hash_int_string) {
-        py::gil_scoped_release release;
+        
+
         td::RefInt256 address_int = td::string_to_int256(address_string);
         td::Bits256 address_bits;
         if (!address_int->export_bytes(address_bits.data(), 32, false)) {
@@ -581,7 +583,8 @@ namespace pylite {
     }
 
     TestNode::BlockHdrInfo PyLiteClient::get_BlockHeader(ton::BlockIdExt req_blkid, int mode) {
-        py::gil_scoped_release release;
+        
+
         scheduler_.run_in_context_external(
                 [&] { send_closure(engine, &LiteClientActorEngine::get_BlockHeader, req_blkid, mode); });
 
@@ -596,7 +599,8 @@ namespace pylite {
 
     PyCell PyLiteClient::get_OneTransaction(ton::BlockIdExt req_blkid, int workchain, std::string address_string,
                                             unsigned long long trans_lt) {
-        py::gil_scoped_release release;
+        
+
         td::RefInt256 address_int = td::string_to_int256(address_string);
         td::Bits256 address_bits;
         if (!address_int->export_bytes(address_bits.data(), 32, false)) {
@@ -694,7 +698,8 @@ namespace pylite {
 
     std::tuple<PubKeyHex, ShortKeyHex> PyLiteClient::admin_AddUser(std::string privkey, td::int64 valid_until,
                                                                    td::int32 ratelimit) {
-        py::gil_scoped_release release;
+        
+
         td::RefInt256 pubkey_int = td::string_to_int256(privkey);
         td::Bits256 privkey_bits;
         if (!pubkey_int->export_bytes(privkey_bits.data(), 32, false)) {
@@ -722,7 +727,8 @@ namespace pylite {
     }
 
     std::vector<std::tuple<ShortKeyHex, int, td::int64, td::int64, bool>> PyLiteClient::admin_getStatData() {
-        py::gil_scoped_release release;
+        
+
         scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::admin_GetStatData); });
 
         auto response = wait_response();
@@ -751,7 +757,8 @@ namespace pylite {
     };
 
     PyCell PyLiteClient::get_Block(ton::BlockIdExt req_blkid) {
-        py::gil_scoped_release release;
+        
+
         scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::get_Block, req_blkid); });
 
         auto response = wait_response();
@@ -800,7 +807,8 @@ namespace pylite {
     }
 
     std::vector<ton::BlockId> PyLiteClient::get_AllShardsInfo(ton::BlockIdExt req_blkid) {
-        py::gil_scoped_release release;
+        
+
         scheduler_.run_in_context_external(
                 [&] { send_closure(engine, &LiteClientActorEngine::get_AllShardsInfo, std::move(req_blkid)); });
 
@@ -839,7 +847,8 @@ namespace pylite {
     }
 
     PyDict PyLiteClient::get_Libraries(std::vector<std::string> libs) {
-        py::gil_scoped_release release;
+        
+
         std::vector<td::Bits256> libs_bits;
         libs_bits.reserve(libs.size());
 
@@ -887,7 +896,8 @@ namespace pylite {
     }
 
     bool PyLiteClient::wait_connected(double wait) {
-        py::gil_scoped_release release;
+        
+
         scheduler_.run_in_context_external(
                 [&, wait] { send_closure(engine, &LiteClientActorEngine::wait_connected, wait); });
 
@@ -901,7 +911,6 @@ namespace pylite {
 
     std::unique_ptr<ton::lite_api::liteServer_masterchainInfoExt>
     PyLiteClient::wait_masterchain_seqno(int seqno, int tm) {
-        py::gil_scoped_release release;
         scheduler_.run_in_context_external(
                 [&] { send_closure(engine, &LiteClientActorEngine::wait_masterchain_seqno, seqno, tm); });
 
@@ -926,7 +935,8 @@ namespace pylite {
     BlockTransactionsExt PyLiteClient::get_listBlockTransactionsExt(ton::BlockIdExt blkid, int mode, int count,
                                                                     std::optional<std::string> account,
                                                                     std::optional<unsigned long long> lt) {
-        py::gil_scoped_release release;
+        
+
         bool check_proof = mode & 32;
         bool reverse_mode = mode & 64;
         bool has_starting_tx = mode & 128;

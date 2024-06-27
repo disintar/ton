@@ -12,11 +12,12 @@
 #include "PyCell.h"
 #include "PyCellBuilder.h"
 #include "PyFift.h"
+#include "third-party/pybind11/include/pybind11/embed.h"
+
 
 namespace py = pybind11;
 
 int PyFift::run(std::string code_text) {
-    py::gil_scoped_release release;
     std::stringstream ss;
     ss << td::read_file_str(base_path + "Fift.fif").ok();
 
@@ -43,6 +44,7 @@ int PyFift::run(std::string code_text) {
     ctx.dictionary = ctx.context = ctx.main_dictionary = fift.config().dictionary;
     ctx.error_stream = fift.config().error_stream;
 
+    py::gil_scoped_release release;
     auto res = ctx.run(td::make_ref<fift::InterpretCont>());
 
     if (!silent) {
