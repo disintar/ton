@@ -95,7 +95,7 @@ variable @contX  variable @contY  variable @cdict
   dup 8 u@ 0x8A = { ref@ <spec {
     libspecial? {
         vmlib@ { swap drop <s } { abort"Lib not found" } cond
-    } { abort"Invalid special cell" } } if  } {
+    } { abort"Invalid special cell" } cond } if  } {
   abort"invalid PUSHCONT"
   } cond } cond } cond
 } : get-cont-body
@@ -173,3 +173,5 @@ variable @contX  variable @contY  variable @cdict
 { { disasm-slice dup sbitrefs 1- or 0= } { ref@ <s } while flush-dict flush-cont } : disasm-chain
 { @curop @ swap disasm-chain dup sbitrefs or { .indent ."Cannot disassemble: " csr. } { drop } cond @curop ! }
 'disasm !
+
+// "Disasm.fif" include "te6ccuEBAwEAYQAcYsICFJBY5ZRmkDEjijABAghCAropGMiUfpslr5rBuIM1d1QXPlgS+Aej1uZCoUcJWVOVAFxodHRwczovL2Nkbi5qb2luY29tbXVuaXR5Lnh5ei9jbGlja2VyL25vdC5qc29uYSdGPQ==" base64>B B>boc disasmc
