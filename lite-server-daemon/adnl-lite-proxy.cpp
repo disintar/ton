@@ -194,27 +194,76 @@ namespace ton::liteserver {
             send_raw(std::move(q), std::move(promise));
         }
 
-        void get_max_time(td::Promise<int> promise) {
+        void get_max_time(td::Promise<std::tuple<ton::UnixTime, ton::BlockSeqno>> promise) {
             auto P = td::PromiseCreator::lambda([Pp = std::move(promise)](td::Result<td::BufferSlice> R) mutable {
                 if (R.is_ok()) {
                     auto answer = ton::fetch_tl_object<ton::lite_api::liteServer_masterchainInfoExt>(R.move_as_ok(),
                                                                                                      true);
 
                     if (answer.is_error()) {
-                        Pp.set_value(0);
+                        Pp.set_value(std::make_tuple(0, 0));
                         return;
                     }
 
                     auto x = answer.move_as_ok();
-                    Pp.set_value((int) x->last_utime_);
+                    Pp.set_value(std::make_tuple((ton::UnixTime) x->last_utime_,
+                                                 (ton::BlockSeqno) x->last_->seqno_));
                 } else {
-                    Pp.set_value(0);
+                    Pp.set_value(std::make_tuple(0, 0));
                 }
             });
 
             qprocess(ton::serialize_tl_object(ton::create_tl_object<ton::lite_api::liteServer_getMasterchainInfoExt>(0),
                                               true),
                      std::move(P), 0.2);
+        }
+
+        void get_max_time_lazy(int wait_seqno, td::Promise<std::tuple<ton::UnixTime, ton::BlockSeqno>> promise) {
+            if (last_lazy_call_ == 0) {
+                last_lazy_call_ = (unsigned) std::time(nullptr);
+            } else if ((unsigned) std::time(nullptr) - last_lazy_call_ < 5) {
+                LOG(WARNING) << "Error of getting seqno for: " << id_.pubkey().ed25519_value().raw().to_hex()
+                             << ", wait 1s and fire with: " << wait_seqno;
+                current_seqno_ = wait_seqno;
+                wait_promise_ = std::move(promise);
+                alarm_timestamp() = td::Timestamp::in(1.0);
+                return;
+            }
+
+            auto P = td::PromiseCreator::lambda([wait_seqno,
+                                                        SelfId = actor_id(this),
+                                                        Pp = std::move(promise)](
+                    td::Result<td::BufferSlice> R) mutable {
+                if (R.is_ok()) {
+                    auto answer = ton::fetch_tl_object<ton::lite_api::liteServer_masterchainInfoExt>(R.move_as_ok(),
+                                                                                                     true);
+
+                    if (answer.is_ok()) {
+                        auto x = answer.move_as_ok();
+                        Pp.set_value(std::make_tuple((ton::UnixTime) x->last_utime_,
+                                                     (ton::BlockSeqno) x->last_->seqno_));
+                        return;
+                    }
+                }
+
+                td::actor::send_closure(SelfId, &LiteServerClient::get_max_time_lazy, wait_seqno, std::move(Pp));
+            });
+
+            auto wait = ton::lite_api::liteServer_waitMasterchainSeqno(wait_seqno, 10000 - 1);
+            auto prefix = ton::serialize_tl_object(&wait, true);
+            auto q = ton::serialize_tl_object(ton::create_tl_object<ton::lite_api::liteServer_getMasterchainInfoExt>(0),
+                                              true);
+            auto raw_query = td::BufferSlice(PSLICE() << prefix.as_slice() << q.as_slice());
+
+            qprocess(std::move(raw_query), std::move(P), 15);
+        }
+
+        void alarm() override {
+            alarm_timestamp() = td::Timestamp::never();
+
+            td::actor::send_closure(actor_id(this),
+                                    &LiteServerClient::get_max_time_lazy, current_seqno_,
+                                    std::move(wait_promise_));
         }
 
     private:
@@ -227,8 +276,11 @@ namespace ton::liteserver {
                      std::move(P), timeout);
         }
 
+        int current_seqno_;
+        td::Promise<std::tuple<ton::UnixTime, ton::BlockSeqno>> wait_promise_;
         td::IPAddress address_;
         ton::adnl::AdnlNodeIdFull id_;
+        ton::UnixTime last_lazy_call_ = 0;
         td::actor::ActorOwn<ton::adnl::AdnlExtClient> client_;
     };
 
@@ -273,22 +325,47 @@ namespace ton::liteserver {
             return std::make_unique<Callback>(actor_id(this), std::move(server));
         }
 
+        std::unique_ptr<ton::adnl::AdnlExtClient::Callback> make_callback_lazy(adnl::AdnlNodeIdShort server) {
+            class Callback : public ton::adnl::AdnlExtClient::Callback {
+            public:
+                void on_ready() override {
+
+                }
+
+                void on_stop_ready() override {
+                }
+
+                Callback(td::actor::ActorId<LiteProxy> id, adnl::AdnlNodeIdShort server)
+                        : id_(std::move(id)), server_(std::move(server)) {
+                }
+
+            private:
+                td::actor::ActorId<LiteProxy> id_;
+                adnl::AdnlNodeIdShort server_;
+            };
+            return std::make_unique<Callback>(actor_id(this), std::move(server));
+        }
+
         void conn_ready(adnl::AdnlNodeIdShort server) {
             LOG(INFO) << "Server: " << server.bits256_value().to_hex() << " now available";
             to_update++;
-            auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), server](td::Result<int> R) mutable {
-                td::actor::send_closure(SelfId, &LiteProxy::server_update_time, server, std::move(R.move_as_ok()));
+            auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), server](
+                    td::Result<std::tuple<ton::UnixTime, ton::BlockSeqno>> R) mutable {
+                td::actor::send_closure(SelfId, &LiteProxy::server_update_time, server, R.move_as_ok(), true);
             });
 
             td::actor::send_closure(private_servers_[server].get(), &LiteServerClient::get_max_time, std::move(P));
         }
 
-        void server_update_time(adnl::AdnlNodeIdShort server, int time) {
-            to_update--;
-            // LOG(INFO) << "Server: " << server << " time: " << time << " to update: " << to_update;
+        void server_update_time(adnl::AdnlNodeIdShort server, std::tuple<ton::UnixTime, ton::BlockSeqno> time,
+                                bool update = true) {
+            if (update) {
+                to_update--;
+            }
+
             private_time_updated++;
-            private_servers_status_[std::move(server)] = time;
-            if (time > best_time) {
+            private_servers_status_[server] = time;
+            if (std::get<0>(time) > std::get<0>(best_time)) {
                 best_time = time;
             }
 
@@ -311,13 +388,51 @@ namespace ton::liteserver {
                     LOG(INFO)
                     << "Update LS uptodate: "
                     << uptodate_private_ls.size()
-                    << " outdated: " << outdated << " best time: " << time_to_human(best_time) << " updated at: "
+                    << " outdated: " << outdated << " best time: " << time_to_human(std::get<0>(best_time))
+                    << " updated at: "
                     << started_update_at.elapsed();
 
                     private_time_updated = 0;
                 }
+
+                td::actor::send_closure(actor_id(this), &LiteProxy::go_lazy_update_mode);
+                to_update = 999; // skip further updates, do lazy load
             }
 
+        }
+
+        void go_lazy_update_mode() {
+            for (auto &s: private_servers_lazy_clients_) {
+                go_lazy_update_server(s.first, 0);
+            }
+        }
+
+        void go_lazy_update_server(adnl::AdnlNodeIdShort server,
+                                   ton::BlockSeqno seqno) {
+            ton::BlockSeqno to_find_seqno = std::get<1>(best_time);
+
+            if (std::get<0>(private_servers_status_[server]) >= std::get<0>(best_time)) {
+                to_find_seqno = std::get<1>(private_servers_status_[server]) + 1;
+            }
+
+            if (seqno >= to_find_seqno) {
+                to_find_seqno = seqno + 1;
+            }
+
+            auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), server, to_find_seqno](
+                    td::Result<std::tuple<ton::UnixTime, ton::BlockSeqno>> R) mutable {
+                auto res = R.move_as_ok();
+
+                LOG(INFO)
+                << "Receive from server success: " << server.bits256_value().to_hex() << " seqno: " << std::get<1>(res)
+                << " waited: " << to_find_seqno;
+                td::actor::send_closure(SelfId, &LiteProxy::go_lazy_update_server, server, std::get<1>(res));
+                td::actor::send_closure(SelfId, &LiteProxy::server_update_time, server, std::move(res), false);
+            });
+
+            LOG(INFO) << "Send wait query for: " << server.bits256_value().to_hex() << " seqno: " << to_find_seqno;
+            td::actor::send_closure(private_servers_lazy_clients_[server], &LiteServerClient::get_max_time_lazy,
+                                    to_find_seqno, std::move(P));
         }
 
         void conn_closed(adnl::AdnlNodeIdShort server) {
@@ -445,8 +560,12 @@ namespace ton::liteserver {
                 td::IPAddress lc_address = s.addr;
 
                 private_servers_[key.compute_short_id()] = td::actor::create_actor<ton::liteserver::LiteServerClient>(
-                        "LSC " + key.compute_short_id().bits256_value().to_hex(), std::move(lc_address), std::move(key),
+                        "LSC " + key.compute_short_id().bits256_value().to_hex(), lc_address, key,
                         make_callback(key.compute_short_id()));
+
+                private_servers_lazy_clients_[key.compute_short_id()] = td::actor::create_actor<ton::liteserver::LiteServerClient>(
+                        "LSC_lazy " + key.compute_short_id().bits256_value().to_hex(), lc_address, key,
+                        make_callback_lazy(key.compute_short_id()));
             }
         }
 
@@ -798,6 +917,7 @@ namespace ton::liteserver {
                 cur_alarm = 0;
             }
 
+            // update times only on first run, then it will go over lazy mode
             if (to_update == 0) {
                 started_update_at = td::Timer();
                 to_update = private_servers_.size();
@@ -813,8 +933,10 @@ namespace ton::liteserver {
         void update_server_stats() {
             for (auto &s: private_servers_) {
                 auto P = td::PromiseCreator::lambda(
-                        [SelfId = actor_id(this), server = s.first](td::Result<int> R) mutable {
-                            td::actor::send_closure(SelfId, &LiteProxy::server_update_time, server, R.move_as_ok());
+                        [SelfId = actor_id(this), server = s.first](
+                                td::Result<std::tuple<ton::UnixTime, ton::BlockSeqno>> R) mutable {
+                            td::actor::send_closure(SelfId, &LiteProxy::server_update_time, server, R.move_as_ok(),
+                                                    true);
                         });
 
                 td::actor::send_closure(s.second, &LiteServerClient::get_max_time, std::move(P));
@@ -917,7 +1039,7 @@ namespace ton::liteserver {
         // 1 - fire to all return 1 success
         int mode_;
         int cur_alarm = 0;
-        int best_time{0};
+        std::tuple<ton::UnixTime, ton::BlockSeqno> best_time = std::make_tuple(0, 0);
         int allowed_refire = 20;
         td::Timer started_update_at;
         unsigned long to_update = 0;
@@ -937,8 +1059,9 @@ namespace ton::liteserver {
         cppkafka::Producer producer;
         td::actor::ActorOwn<adnl::Adnl> adnl_;
         td::actor::ActorOwn<adnl::AdnlNetworkManager> adnl_network_manager_;
-        std::map<adnl::AdnlNodeIdShort, int> private_servers_status_;
+        std::map<adnl::AdnlNodeIdShort, std::tuple<ton::UnixTime, ton::BlockSeqno>> private_servers_status_;
         std::map<adnl::AdnlNodeIdShort, td::actor::ActorOwn<LiteServerClient>> private_servers_;
+        std::map<adnl::AdnlNodeIdShort, td::actor::ActorOwn<LiteServerClient>> private_servers_lazy_clients_;
         td::IPAddress address_;
         td::IPAddress adnl_address_;
         std::shared_ptr<td::RocksDb> ratelimitdb;
