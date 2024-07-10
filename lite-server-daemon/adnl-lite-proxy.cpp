@@ -370,7 +370,7 @@ namespace ton::liteserver {
             }
 
 
-            if (to_update == 0) {
+            if (to_update == 0 or update == false) {
                 std::vector<adnl::AdnlNodeIdShort> uptodate;
                 int outdated{0};
 
@@ -395,8 +395,10 @@ namespace ton::liteserver {
                     private_time_updated = 0;
                 }
 
-                td::actor::send_closure(actor_id(this), &LiteProxy::go_lazy_update_mode);
-                to_update = 999; // skip further updates, do lazy load
+                if (to_update == 0) {
+                    td::actor::send_closure(actor_id(this), &LiteProxy::go_lazy_update_mode);
+                    to_update = 999; // skip further updates, do lazy load
+                }
             }
 
         }
