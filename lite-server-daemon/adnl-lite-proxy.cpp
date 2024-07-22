@@ -396,6 +396,7 @@ namespace ton::liteserver {
                 }
 
                 if (to_update == 0) {
+                    inited = true;
                     td::actor::send_closure(actor_id(this), &LiteProxy::go_lazy_update_mode);
                     to_update = 999; // skip further updates, do lazy load
                 }
@@ -830,11 +831,11 @@ namespace ton::liteserver {
                     LOG(WARNING) << "New proxy query: " << dst.bits256_value().to_hex() << " size: " << data.size();
 
                     td::actor::ActorId<LiteServerClient> server;
-                    if (uptodate_private_ls.size() > 0) {
+                    if (!uptodate_private_ls.empty()) {
                         auto adnl =
                                 uptodate_private_ls[td::Random::fast(0, td::narrow_cast<td::uint32>(
                                         uptodate_private_ls.size() - 1))];
-                        server = private_servers_[std::move(adnl)].get();
+                        server = private_servers_[adnl].get();
                     } else {
                         auto s = td::Random::fast(0, td::narrow_cast<td::uint32>(private_servers_.size() - 1));
                         int a{0};
@@ -867,7 +868,7 @@ namespace ton::liteserver {
                                                 std::move(promise), 0);
                     }
                 } else {
-                    if (uptodate_private_ls.size() > 0) {
+                    if (!uptodate_private_ls.empty()) {
                         auto waiter = td::actor::create_actor<ton::liteserver::LiteClientFire>(
                                 "LSC::Fire", uptodate_private_ls.size(), src, dst, data.clone(), std::move(promise),
                                 make_refire_callback(refire))
