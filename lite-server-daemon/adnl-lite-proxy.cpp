@@ -830,32 +830,32 @@ namespace ton::liteserver {
                 auto init_data = data.clone();
                 auto E1 = fetch_tl_object<lite_api::liteServer_query>(init_data, true);
                 if (E1.is_ok()) {
-                    auto F = fetch_tl_object<ton::lite_api::Function>(E1.move_as_ok()->data_, true);
+                    auto tmp_data = E1.move_as_ok()->data_.clone();
+                    auto F = fetch_tl_object<ton::lite_api::Function>(tmp_data, true);
                     if (F.is_error()) {
-                        promise.set_error(td::Status::Error("function is not valid"));
-                        return;
+                        LOG(INFO) << "Skip function";
+                    } else {
+                        auto pf = F.move_as_ok();
+
+                        lite_api::downcast_call(
+                                *pf, td::overloaded(
+                                        [&](lite_api::liteServer_sendMessage &q) {
+                                            LOG(INFO) << "Got external message";
+
+                                            nlohmann::json answer;
+                                            answer["dst"] = dst.bits256_value().to_hex();
+                                            answer["source"] = "balancer";
+                                            answer["rps_limit"] = std::get<1>(limits[dst]);
+                                            answer["message"] = td::base64_encode(q.body_);
+
+                                            std::string publish_answer = answer.dump(-1);
+                                            LOG(WARNING) << "Push message to kafka: " << publish_answer;
+                                            producer.produce(
+                                                    cppkafka::MessageBuilder("lite-messages").partition(1).payload(
+                                                            publish_answer));
+                                        },
+                                        [&](auto &obj) {}));
                     }
-                    auto pf = F.move_as_ok();
-
-                    lite_api::downcast_call(
-                            *pf, td::overloaded(
-                                    [&](lite_api::liteServer_sendMessage &q) {
-                                        LOG(INFO) << "Got external message";
-
-                                        nlohmann::json answer;
-                                        answer["dst"] = dst.bits256_value().to_hex();
-                                        answer["source"] = "balancer";
-                                        answer["rps_limit"] = std::get<1>(limits[dst]);
-                                        answer["message"] = td::base64_encode(q.body_);
-
-                                        std::string publish_answer = answer.dump(-1);
-                                        LOG(WARNING) << "Push message to kafka: " << publish_answer;
-                                        producer.produce(
-                                                cppkafka::MessageBuilder("lite-messages").partition(1).payload(
-                                                        publish_answer));
-                                    },
-                                    [&](auto &obj) {}));
-
                 }
 
                 if (mode_ == 0) {
