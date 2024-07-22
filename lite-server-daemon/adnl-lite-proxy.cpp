@@ -79,6 +79,60 @@ std::string time_to_human(unsigned ts) {  // todo: move from explorer
 }
 
 namespace ton::liteserver {
+    // todo: separate from manager.hpp
+    template<typename ResType>
+    struct Waiter {
+        td::Timestamp timeout;
+        td::uint32 priority;
+        td::Promise<ResType> promise;
+
+        Waiter() {
+        }
+
+        Waiter(td::Timestamp timeout, td::uint32 priority, td::Promise<ResType> promise)
+                : timeout(timeout), priority(priority), promise(std::move(promise)) {
+        }
+    };
+
+    template<typename ActorT, typename ResType>
+    struct WaitList {
+        std::vector<Waiter<ResType>> waiting_;
+        td::actor::ActorId<ActorT> actor_;
+
+        WaitList() = default;
+
+        std::pair<td::Timestamp, td::uint32> get_timeout() const {
+            td::Timestamp t = td::Timestamp::now();
+            td::uint32 prio = 0;
+            for (auto &v: waiting_) {
+                if (v.timeout.at() > t.at()) {
+                    t = v.timeout;
+                }
+                if (v.priority > prio) {
+                    prio = v.priority;
+                }
+            }
+            return {td::Timestamp::at(t.at() + 10.0), prio};
+        }
+
+        void check_timers() {
+            td::uint32 j = 0;
+            auto f = waiting_.begin();
+            auto t = waiting_.end();
+            while (f < t) {
+                if (f->timeout.is_in_past()) {
+                    f->promise.set_error(td::Status::Error(ErrorCode::timeout, "timeout"));
+                    t--;
+                    std::swap(*f, *t);
+                } else {
+                    f++;
+                    j++;
+                }
+            }
+            waiting_.resize(j);
+        }
+    };
+
     class LiteClientFire : public td::actor::Actor {
     public:
         class Callback {
@@ -384,6 +438,17 @@ namespace ton::liteserver {
 
                 uptodate_private_ls = std::move(uptodate);
 
+                while (!shard_client_waiters_.empty()) {
+                    auto it = shard_client_waiters_.begin();
+                    if (it->first > std::get<1>(best_time)) {
+                        break;
+                    }
+                    for (auto &y: it->second.waiting_) {
+                        y.promise.set_value(td::Unit());
+                    }
+                    shard_client_waiters_.erase(it);
+                }
+
                 if (private_time_updated >= (int) private_servers_status_.size() * 10) {
                     LOG(INFO)
                     << "Update LS uptodate: "
@@ -426,14 +491,14 @@ namespace ton::liteserver {
                     td::Result<std::tuple<ton::UnixTime, ton::BlockSeqno>> R) mutable {
                 auto res = R.move_as_ok();
 
-                LOG(INFO)
+                LOG(DEBUG)
                 << "Receive from server success: " << server.bits256_value().to_hex() << " seqno: " << std::get<1>(res)
                 << " waited: " << to_find_seqno;
                 td::actor::send_closure(SelfId, &LiteProxy::go_lazy_update_server, server, std::get<1>(res));
                 td::actor::send_closure(SelfId, &LiteProxy::server_update_time, server, std::move(res), false);
             });
 
-            LOG(INFO) << "Send wait query for: " << server.bits256_value().to_hex() << " seqno: " << to_find_seqno;
+            LOG(DEBUG) << "Send wait query for: " << server.bits256_value().to_hex() << " seqno: " << to_find_seqno;
             td::actor::send_closure(private_servers_lazy_clients_[server], &LiteServerClient::get_max_time_lazy,
                                     to_find_seqno, std::move(P));
         }
@@ -790,6 +855,87 @@ namespace ton::liteserver {
             }
         }
 
+        void process_ext_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
+                               td::Promise<td::BufferSlice> promise, int refire = 0) {
+            if (mode_ == 0) {
+                LOG(WARNING) << "New proxy query: " << dst.bits256_value().to_hex() << " size: " << data.size();
+
+                td::actor::ActorId<LiteServerClient> server;
+                if (!uptodate_private_ls.empty()) {
+                    auto adnl =
+                            uptodate_private_ls[td::Random::fast(0, td::narrow_cast<td::uint32>(
+                                    uptodate_private_ls.size() - 1))];
+                    server = private_servers_[adnl].get();
+                } else {
+                    auto s = td::Random::fast(0, td::narrow_cast<td::uint32>(private_servers_.size() - 1));
+                    int a{0};
+                    for (auto &x: private_servers_) {
+                        a += 1;
+                        if (a == s) {
+                            server = x.second.get();
+                            break;
+                        }
+                    }
+                }
+
+                if (!server.empty()) {
+                    auto mP = td::PromiseCreator::lambda(
+                            [P = std::move(promise),
+                                    SelfId = actor_id(this),
+                                    src, dst, data = data.clone(), refire,
+                                    started_at = std::time(nullptr), elapsed = td::Timer()](
+                                    td::Result<td::BufferSlice> R) mutable {
+                                td::actor::send_closure(SelfId, &LiteProxy::check_ext_answer, src, dst,
+                                                        std::move(data), std::move(P), refire, std::move(R),
+                                                        started_at, elapsed);
+                            });
+
+                    td::actor::send_closure(server, &LiteServerClient::send_raw, std::move(data),
+                                            std::move(mP), live_timeout);
+                } else {
+                    usage[dst]--;
+                    td::actor::send_closure(actor_id(this), &LiteProxy::check_ext_query, src, dst, std::move(data),
+                                            std::move(promise), 0);
+                }
+            } else {
+                if (!uptodate_private_ls.empty()) {
+                    auto waiter = td::actor::create_actor<ton::liteserver::LiteClientFire>(
+                            "LSC::Fire", uptodate_private_ls.size(), src, dst, data.clone(), std::move(promise),
+                            make_refire_callback(refire))
+                            .release();
+                    for (auto &s: uptodate_private_ls) {
+                        LOG(INFO) << "[uptodate] Send to: " << dst << " to " << s.bits256_value().to_hex();
+                        auto P = td::PromiseCreator::lambda(
+                                [WaiterId = waiter, s](td::Result<td::BufferSlice> R) mutable {
+                                    td::actor::send_closure(WaiterId, &LiteClientFire::receive_answer, std::move(R),
+                                                            s);
+                                });
+
+                        td::actor::send_closure(private_servers_[s].get(), &LiteServerClient::send_raw,
+                                                data.clone(), std::move(P), live_timeout);
+                    }
+                } else {
+                    auto waiter = td::actor::create_actor<ton::liteserver::LiteClientFire>(
+                            "LSC::Fire", private_servers_.size(), src, dst, data.clone(), std::move(promise),
+                            make_refire_callback(refire))
+                            .release();
+
+                    for (auto &s: private_servers_) {  // Todo: Add some public LC
+                        LOG(INFO) << "[all] Send: " << dst << " to " << s.first.bits256_value().to_hex();
+                        auto P =
+                                td::PromiseCreator::lambda(
+                                        [WaiterId = waiter, s = s.first](td::Result<td::BufferSlice> R) mutable {
+                                            td::actor::send_closure(WaiterId, &LiteClientFire::receive_answer,
+                                                                    std::move(R), s);
+                                        });
+
+                        td::actor::send_closure(s.second, &LiteServerClient::send_raw, data.clone(), std::move(P),
+                                                live_timeout);
+                    }
+                }
+            }
+        }
+
 
         void check_ext_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
                              td::Promise<td::BufferSlice> promise, int refire = 0) {
@@ -833,7 +979,48 @@ namespace ton::liteserver {
                     auto tmp_data = E1.move_as_ok()->data_.clone();
                     auto F = fetch_tl_object<ton::lite_api::Function>(tmp_data, true);
                     if (F.is_error()) {
-                        LOG(INFO) << "Skip function";
+                        auto Fmc = fetch_tl_prefix<lite_api::liteServer_waitMasterchainSeqno>(tmp_data, true);
+                        if (Fmc.is_ok()) {
+                            LOG(INFO) << "Got wait for block query";
+
+                            auto e = Fmc.move_as_ok();
+                            auto last_master = std::get<1>(
+                                    private_servers_status_[uptodate_private_ls[td::Random::fast(0,
+                                                                                                 td::narrow_cast<td::uint32>(
+                                                                                                         uptodate_private_ls.size() -
+                                                                                                         1))]]);
+
+                            if (static_cast<BlockSeqno>(e->seqno_) <= last_master) {
+                                LOG(INFO) << "Pass through wait for block: " << e->seqno_;
+
+                                // Pass through
+                                process_ext_query(src, dst, std::move(data),
+                                                  std::move(promise), refire);
+                                return;
+                            } else {
+
+                                auto t = e->timeout_ms_ < 10000 ? e->timeout_ms_ * 0.001 : 10.0;
+
+                                LOG(INFO) << "Send to wait: " << e->seqno_ << " wait: " << t;
+
+                                auto Q = td::PromiseCreator::lambda(
+                                        [data = std::move(data),
+                                                SelfId = actor_id(this),
+                                                src,
+                                                dst,
+                                                promise = std::move(promise)](
+                                                td::Result<td::Unit> R) mutable {
+                                            if (R.is_error()) {
+                                                promise.set_error(R.move_as_error());
+                                                return;
+                                            }
+                                            td::actor::send_closure(SelfId, &LiteProxy::process_ext_query,
+                                                                    src, dst, std::move(data),
+                                                                    std::move(promise), 0);
+                                        });
+                                wait_shard_client_state(e->seqno_, td::Timestamp::in(t), std::move(Q), last_master);
+                            }
+                        }
                     } else {
                         auto pf = F.move_as_ok();
 
@@ -858,87 +1045,24 @@ namespace ton::liteserver {
                     }
                 }
 
-                if (mode_ == 0) {
-                    LOG(WARNING) << "New proxy query: " << dst.bits256_value().to_hex() << " size: " << data.size();
-
-                    td::actor::ActorId<LiteServerClient> server;
-                    if (!uptodate_private_ls.empty()) {
-                        auto adnl =
-                                uptodate_private_ls[td::Random::fast(0, td::narrow_cast<td::uint32>(
-                                        uptodate_private_ls.size() - 1))];
-                        server = private_servers_[adnl].get();
-                    } else {
-                        auto s = td::Random::fast(0, td::narrow_cast<td::uint32>(private_servers_.size() - 1));
-                        int a{0};
-                        for (auto &x: private_servers_) {
-                            a += 1;
-                            if (a == s) {
-                                server = x.second.get();
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!server.empty()) {
-                        auto mP = td::PromiseCreator::lambda(
-                                [P = std::move(promise),
-                                        SelfId = actor_id(this),
-                                        src, dst, data = data.clone(), refire,
-                                        started_at = std::time(nullptr), elapsed = td::Timer()](
-                                        td::Result<td::BufferSlice> R) mutable {
-                                    td::actor::send_closure(SelfId, &LiteProxy::check_ext_answer, src, dst,
-                                                            std::move(data), std::move(P), refire, std::move(R),
-                                                            started_at, elapsed);
-                                });
-
-                        td::actor::send_closure(server, &LiteServerClient::send_raw, std::move(data),
-                                                std::move(mP), live_timeout);
-                    } else {
-                        usage[dst]--;
-                        td::actor::send_closure(actor_id(this), &LiteProxy::check_ext_query, src, dst, std::move(data),
-                                                std::move(promise), 0);
-                    }
-                } else {
-                    if (!uptodate_private_ls.empty()) {
-                        auto waiter = td::actor::create_actor<ton::liteserver::LiteClientFire>(
-                                "LSC::Fire", uptodate_private_ls.size(), src, dst, data.clone(), std::move(promise),
-                                make_refire_callback(refire))
-                                .release();
-                        for (auto &s: uptodate_private_ls) {
-                            LOG(INFO) << "[uptodate] Send to: " << dst << " to " << s.bits256_value().to_hex();
-                            auto P = td::PromiseCreator::lambda(
-                                    [WaiterId = waiter, s](td::Result<td::BufferSlice> R) mutable {
-                                        td::actor::send_closure(WaiterId, &LiteClientFire::receive_answer, std::move(R),
-                                                                s);
-                                    });
-
-                            td::actor::send_closure(private_servers_[s].get(), &LiteServerClient::send_raw,
-                                                    data.clone(), std::move(P), live_timeout);
-                        }
-                    } else {
-                        auto waiter = td::actor::create_actor<ton::liteserver::LiteClientFire>(
-                                "LSC::Fire", private_servers_.size(), src, dst, data.clone(), std::move(promise),
-                                make_refire_callback(refire))
-                                .release();
-
-                        for (auto &s: private_servers_) {  // Todo: Add some public LC
-                            LOG(INFO) << "[all] Send: " << dst << " to " << s.first.bits256_value().to_hex();
-                            auto P =
-                                    td::PromiseCreator::lambda(
-                                            [WaiterId = waiter, s = s.first](td::Result<td::BufferSlice> R) mutable {
-                                                td::actor::send_closure(WaiterId, &LiteClientFire::receive_answer,
-                                                                        std::move(R), s);
-                                            });
-
-                            td::actor::send_closure(s.second, &LiteServerClient::send_raw, data.clone(), std::move(P),
-                                                    live_timeout);
-                        }
-                    }
-                }
-
+                process_ext_query(src, dst, std::move(data), std::move(promise), refire);
             } else {
                 promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Server not ready"));
             }
+        }
+
+        void wait_shard_client_state(BlockSeqno seqno, td::Timestamp timeout,
+                                     td::Promise<td::Unit> promise, BlockSeqno last_master) {
+            if (timeout.is_in_past()) {
+                promise.set_error(td::Status::Error(ErrorCode::timeout, "timeout"));
+                return;
+            }
+            if (seqno > last_master + 100) {
+                promise.set_error(td::Status::Error(ErrorCode::notready, "too big masterchain block seqno"));
+                return;
+            }
+
+            shard_client_waiters_[seqno].waiting_.emplace_back(timeout, 0, std::move(promise));
         }
 
         void alarm() override {
@@ -1106,6 +1230,7 @@ namespace ton::liteserver {
         ton::PublicKeyHash default_dht_node_ = ton::PublicKeyHash::zero();
         std::map<ton::adnl::AdnlNodeIdShort, std::tuple<ValidUntil, RateLimit>> limits;
         std::map<ton::adnl::AdnlNodeIdShort, int> usage;
+        std::map<BlockSeqno, WaitList<td::actor::Actor, td::Unit>> shard_client_waiters_;
     };
 }  // namespace ton::liteserver
 
