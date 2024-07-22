@@ -344,7 +344,7 @@ namespace pylite {
         if (response->success) {
             SuccessBufferSlice *data = dynamic_cast<SuccessBufferSlice *>(response.get());
 
-            auto R = ton::fetch_tl_object < ton::lite_api::liteServer_accountState >
+            auto R = ton::fetch_tl_object<ton::lite_api::liteServer_accountState>
                      (std::move(data->obj->clone()), true);
             if (R.is_error()) {
                 throw_lite_error(data->obj->clone());
