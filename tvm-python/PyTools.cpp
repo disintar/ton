@@ -78,7 +78,6 @@ std::string code_disassemble(const td::Ref<vm::Cell>& codeCell, const std::strin
   ctx.stack.push_cell(codeCell);
   ctx.stack.push_maybe_cell(vmlibsCell);
 
-  ctx.ton_db = &fift.config().ton_db;
   ctx.source_lookup = &fift.config().source_lookup;
   ctx.dictionary = ctx.context = ctx.main_dictionary = fift.config().dictionary;
   ctx.output_stream = &output;

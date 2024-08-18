@@ -52,8 +52,8 @@ class PyEmulator {
     if (global_config.unpack().is_error()) {
       throw std::invalid_argument("Can't unpack config params");
     }
-
-    emulator = td::make_unique<emulator::TransactionEmulator>(std::move(global_config), 0);
+    auto shared_config = std::make_shared<block::Config>(std::move(global_config));
+    emulator = td::make_unique<emulator::TransactionEmulator>(std::move(shared_config), 0);
   };
 
   ~PyEmulator() = default;

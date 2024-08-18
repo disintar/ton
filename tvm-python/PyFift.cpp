@@ -38,7 +38,6 @@ int PyFift::run(std::string code_text) {
 
     fift::Fift fift(std::move(config));
     ctx = fift::IntCtx{ss, "stdin", base_path, 0};
-    ctx.ton_db = &fift.config().ton_db;
     ctx.output_stream = &output;
     ctx.source_lookup = &fift.config().source_lookup;
     ctx.dictionary = ctx.context = ctx.main_dictionary = fift.config().dictionary;

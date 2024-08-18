@@ -261,7 +261,6 @@ std::string code_disasseble(const std::string& code) {
   fift::IntCtx ctx{ss, "stdin", "./", 0};
   ctx.stack.push_cell(codeCell);
 
-  ctx.ton_db = &fift.config().ton_db;
   ctx.source_lookup = &fift.config().source_lookup;
   ctx.dictionary = ctx.context = ctx.main_dictionary = fift.config().dictionary;
   ctx.output_stream = &output;
