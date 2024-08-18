@@ -25,12 +25,14 @@ td::Result<std::unique_ptr<TransactionEmulator::EmulationResult>> TransactionEmu
     utime = (unsigned)std::time(nullptr);
   }
 
-  auto fetch_res = block::FetchConfigParams::fetch_config_params(
-      config_, prev_blocks_info_, &old_mparams, &storage_prices, &storage_phase_cfg, &rand_seed_, &compute_phase_cfg,
-      &action_phase_cfg, &masterchain_create_fee, &basechain_create_fee, account.workchain, utime);
-  if (fetch_res.is_error()) {
-    return fetch_res.move_as_error_prefix("cannot fetch config params ");
-  }
+    auto fetch_res = block::FetchConfigParams::fetch_config_params(*config_, prev_blocks_info_, &old_mparams,
+                                                                   &storage_prices, &storage_phase_cfg,
+                                                                   &rand_seed_, &compute_phase_cfg,
+                                                                   &action_phase_cfg, &masterchain_create_fee,
+                                                                   &basechain_create_fee, account.workchain, utime);
+    if(fetch_res.is_error()) {
+        return fetch_res.move_as_error_prefix("cannot fetch config params ");
+    }
 
   TRY_STATUS(vm::init_vm(debug_enabled_));
 
@@ -132,18 +134,29 @@ td::Result<TransactionEmulator::EmulationSuccess> TransactionEmulator::emulate_t
     }
   }
 
-  TRY_RESULT(emulation, emulate_transaction(std::move(account), msg_root, utime, lt, trans_type));
+    TRY_RESULT(emulation, emulate_transaction(std::move(account), msg_root, utime, lt, trans_type));
 
-  auto emulation_result = dynamic_cast<EmulationSuccess&>(*emulation);
-  if (td::Bits256(emulation_result.transaction->get_hash().bits()) != td::Bits256(original_trans->get_hash().bits())) {
-    return td::Status::Error("transaction hash mismatch");
-  }
+    if (auto emulation_result_ptr = dynamic_cast<EmulationSuccess*>(emulation.get())) {
+      auto& emulation_result = *emulation_result_ptr;
 
-  if (!check_state_update(emulation_result.account, record_trans)) {
-    return td::Status::Error("account hash mismatch");
-  }
+      if (td::Bits256(emulation_result.transaction->get_hash().bits()) != td::Bits256(original_trans->get_hash().bits())) {
+        return td::Status::Error("transaction hash mismatch");
+      }
 
-  return emulation_result;
+      if (!check_state_update(emulation_result.account, record_trans)) {
+        return td::Status::Error("account hash mismatch");
+      }
+
+      return emulation_result;
+
+    } else if (auto emulation_not_accepted_ptr = dynamic_cast<EmulationExternalNotAccepted*>(emulation.get())) {
+      return td::Status::Error( PSTRING()
+        << "VM Log: " << emulation_not_accepted_ptr->vm_log
+        << ", VM Exit Code: " << emulation_not_accepted_ptr->vm_exit_code
+        << ", Elapsed Time: " << emulation_not_accepted_ptr->elapsed_time);
+    } else {
+       return td::Status::Error("emulation failed");
+    }
 }
 
 td::Result<TransactionEmulator::EmulationChain> TransactionEmulator::emulate_transactions_chain(
@@ -235,9 +248,10 @@ td::Result<std::unique_ptr<block::transaction::Transaction>> TransactionEmulator
         -669, "cannot create action phase of a new transaction for smart contract "s + acc->addr.to_hex());
   }
 
-  if (trans->bounce_enabled && !trans->compute_phase->success && !trans->prepare_bounce_phase(*action_phase_cfg)) {
-    return td::Status::Error(
-        -669, "cannot create bounce phase of a new transaction for smart contract "s + acc->addr.to_hex());
+  if (trans->bounce_enabled
+  && (!trans->compute_phase->success || trans->action_phase->state_exceeds_limits || trans->action_phase->bounce)
+  && !trans->prepare_bounce_phase(*action_phase_cfg)) {
+    return td::Status::Error(-669,"cannot create bounce phase of a new transaction for smart contract "s + acc->addr.to_hex());
   }
 
   return trans;
@@ -259,8 +273,8 @@ void TransactionEmulator::set_ignore_chksig(bool ignore_chksig) {
   ignore_chksig_ = ignore_chksig;
 }
 
-void TransactionEmulator::set_config(block::Config&& config) {
-  config_ = std::forward<block::Config>(config);
+void TransactionEmulator::set_config(std::shared_ptr<block::Config> config) {
+  config_ = std::move(config);
 }
 
 void TransactionEmulator::set_libs(vm::Dictionary&& libs) {
