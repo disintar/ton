@@ -612,6 +612,11 @@ engine.liteserver.config ip:int out_port:int adnl:(vector engine.adnl)
         fullnodeslaves:(vector engine.validator.fullNodeSlave) overlay_prefix:string
         liteslaves:(vector liteserver.desc) = engine.liteserver.Config;
 
+engine.validator.collatorOptions
+  deferring_enabled:Bool defer_messages_after:int defer_out_queue_size_limit:long
+  dispatch_phase_2_max_total:int dispatch_phase_3_max_total:int
+  dispatch_phase_2_max_per_initiator:int dispatch_phase_3_max_per_initiator:int = engine.validator.CollatorOptions;
+
 ---functions---
 ---types---
 
@@ -659,7 +664,7 @@ engine.validator.onePerfTimerStat time:int min:double avg:double max:double = en
 engine.validator.perfTimerStatsByName name:string stats:(vector engine.validator.OnePerfTimerStat) = engine.validator.PerfTimerStatsByName;
 engine.validator.perfTimerStats stats:(vector engine.validator.PerfTimerStatsByName) = engine.validator.PerfTimerStats;
 
-engine.validator.shardOutQueueSize size:int = engine.validator.ShardOutQueueSize;
+engine.validator.shardOutQueueSize size:long = engine.validator.ShardOutQueueSize;
 
 
 ---functions---
@@ -720,6 +725,9 @@ engine.validator.delCustomOverlay name:string = engine.validator.Success;
 engine.validator.showCustomOverlays = engine.validator.CustomOverlaysConfig;
 
 engine.validator.setStateSerializerEnabled enabled:Bool = engine.validator.Success;
+
+engine.validator.setCollatorOptionsJson json:string = engine.validator.Success;
+engine.validator.getCollatorOptionsJson = engine.validator.JsonConfig;
 
 ---types---
 
