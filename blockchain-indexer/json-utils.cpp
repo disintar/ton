@@ -497,7 +497,7 @@ json parse_msg_envelope(Ref<vm::Cell> message_envelope) {
   auto cs = vm::load_cell_slice(message_envelope);
   if (cs.prefetch_ulong(4) == 4){ // msg_envelope#4
       block::gen::MsgEnvelope::Record_msg_envelope msgEnvelope;
-      CHECK(tlb::type_unpack_cell(std::move(message_envelope), block::gen::t_MsgEnvelope, msgEnvelope));
+      CHECK(tlb::unpack(cs, msgEnvelope));
 
       answer["cur_addr"] = parse_intermediate_address(msgEnvelope.cur_addr.write());
       answer["next_addr"] = parse_intermediate_address(msgEnvelope.next_addr.write());
@@ -505,7 +505,7 @@ json parse_msg_envelope(Ref<vm::Cell> message_envelope) {
       answer["msg"] = parse_message(msgEnvelope.msg);
   } else { // msg_envelope_v2#5
       block::gen::MsgEnvelope::Record_msg_envelope_v2 msgEnvelope;
-      CHECK(tlb::type_unpack_cell(std::move(message_envelope), block::gen::t_MsgEnvelope, msgEnvelope));
+      CHECK(tlb::unpack(cs, msgEnvelope));
 
       answer["cur_addr"] = parse_intermediate_address(msgEnvelope.cur_addr.write());
       answer["next_addr"] = parse_intermediate_address(msgEnvelope.next_addr.write());
@@ -525,7 +525,7 @@ json parse_msg_envelope(Ref<vm::Cell> message_envelope) {
           cs_metadata.skip_first(1);
 
           block::gen::MsgMetadata::Record msg_metadata;
-          CHECK(tlb::unpack(cs_metadata, msgEnvelope));
+          CHECK(tlb::unpack(cs_metadata, msg_metadata));
           answer["msg_metadata_depth"] = msg_metadata.depth;
           answer["msg_metadata_initiator_lt"] = msg_metadata.initiator_lt;
           answer["msg_metadata_initiator_addr"] = parse_intermediate_address(msg_metadata.initiator_addr.write());
