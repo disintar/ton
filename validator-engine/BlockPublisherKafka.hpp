@@ -13,6 +13,7 @@ class BlockPublisherKafka : public IBLockPublisher {
   void publishBlockApplied(int wc, unsigned long long shard, std::string json) override;
   void publishBlockData(int wc, unsigned long long shard, std::string json) override;
   void publishBlockState(int wc, unsigned long long shard, std::string json) override;
+  void publishOutMsgs(std::string data) override;
   void deliver() override;
   void merge_new_shards(std::map<unsigned long long, int> new_shards) {
     for (const auto& pair : new_shards) {

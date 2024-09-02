@@ -89,13 +89,15 @@ namespace ton::validator {
     public:
         BlockParserAsync(BlockIdExt id_, ConstBlockHandle handle_, td::Ref<BlockData> data_, td::Ref<vm::Cell> state_,
                          td::optional<td::Ref<vm::Cell>> prev_state_,
-                         td::Promise<std::tuple<td::string, td::string>> P_) {
+                         td::Promise<std::tuple<td::string, td::string>> P_,
+                         td::Promise<std::vector<json>> out_messages_promise_) {
             id = id_;
             handle = std::move(handle_);
             data = std::move(data_);
             state = std::move(state_);
             prev_state = std::move(prev_state_);
             P = std::move(P_);
+            out_messages_promise = std::move(out_messages_promise_);
         }
 
         void start_up() override {
@@ -115,6 +117,7 @@ namespace ton::validator {
         td::Ref<vm::Cell> state;
         td::optional<td::Ref<vm::Cell>> prev_state;
         td::Promise<std::tuple<td::string, td::string>> P;
+        td::Promise<std::vector<json>> out_messages_promise;
         std::string parsed_data;
         std::string parsed_state;
     };
@@ -132,6 +135,7 @@ namespace ton::validator {
             last_masterchain_block_handle = std::move(h);
             manager = std::move(validator_id);
             P_final = std::move(P_);
+
 
             const char *env_var_value = std::getenv("STARTUP_BLOCKS_DOWNLOAD_BEFORE");
             if (env_var_value == nullptr) {
