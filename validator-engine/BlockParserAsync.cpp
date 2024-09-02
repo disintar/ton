@@ -95,20 +95,37 @@ namespace ton::validator {
                               ? parse_extra_currency(total_validator_fees_cc.other->prefetch_ref())
                               : dummy}};
 
-            //      block::gen::OutMsgQueueInfo::Record queue_info;
-            //      CHECK(tlb::unpack_cell(shard_state.out_msg_queue_info, queue_info))
-            //
-            //      auto out_q =
-            //          td::make_unique<vm::AugmentedDictionary>(std::move(queue_info.out_queue), 352, block::tlb::aug_OutMsgQueue);
-            //      int out_q_size;
-            //
-            //      out_q->check_for_each([&out_q_size](Ref<vm::CellSlice> cs_ref, td::ConstBitPtr key, int n) {
-            //        out_q_size++;
-            //        if (out_q_size % 100 == 0) {
-            //          LOG(DEBUG) << "Parse out_q: " << out_q_size;
-            //        }
-            //        return true;
-            //      });
+            block::gen::OutMsgQueueInfo::Record queue_info;
+            std::map<std::string, unsigned long> dispatch_queue_size;
+
+            CHECK(tlb::unpack_cell(shard_state.out_msg_queue_info, queue_info))
+            unsigned long long out_queue_size = 0;
+            if (queue_info.extra.not_null() && queue_info.extra.write().prefetch_ulong(1) == 1) {
+                auto extra_cs = queue_info.extra.write();
+                extra_cs.skip_first(1);
+
+                block::gen::OutMsgQueueExtra::Record msg_queue_extra;
+                CHECK(tlb::unpack(extra_cs, msg_queue_extra));
+
+                if (msg_queue_extra.out_queue_size->prefetch_ulong(1)) {
+                    auto queue_size_cs = msg_queue_extra.out_queue_size.write();
+                    queue_size_cs.skip_first(1);
+                    out_queue_size = queue_size_cs.fetch_ulong(48);
+                }
+
+                auto out_q = td::make_unique<vm::AugmentedDictionary>(std::move(msg_queue_extra.dispatch_queue),
+                                                                      256, block::tlb::aug_DispatchQueue);
+
+                out_q->check_for_each([&dispatch_queue_size](Ref<vm::CellSlice> cs_ref, td::ConstBitPtr key, int n) {
+                    if (cs_ref.not_null()) {
+                        auto cs = cs_ref.write();
+                        cs.skip_first(1); // hashmapE
+                        dispatch_queue_size[key.to_hex(256)] = cs.fetch_ulong(48);
+                    }
+
+                    return true;
+                });
+            }
 
             answer = {{"type",                 "shard_state"},
                       {"id",
@@ -126,7 +143,10 @@ namespace ton::validator {
                       {"overload_history",     shard_state.r1.overload_history},
                       {"underload_history",    shard_state.r1.underload_history},
                       {"total_balance",        total_balance},
-                      {"total_validator_fees", total_validator_fees}};
+                      {"total_validator_fees", total_validator_fees},
+                      {"out_queue_size",       out_queue_size},
+                      {"dispatch_queue_size",  dispatch_queue_size}
+            };
 
             LOG(DEBUG) << "Parsed accounts shard state main info " << block_id_string << " " << timer;
 
