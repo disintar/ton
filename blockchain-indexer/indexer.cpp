@@ -1722,42 +1722,67 @@ class IndexerWorker : public td::actor::Actor {
                              td::actor::ActorId<StateIndexer> state_indexer, bool after_merge) {
     auto prev_id = handle->one_prev(true);
 
-    auto P = td::PromiseCreator::lambda(
-        [SelfId = actor_id(this), state_indexer, after_merge](td::Result<ConstBlockHandle> R) {
-          if (R.is_error()) {
-            // todo: process normally
-            LOG(ERROR) << R.move_as_error().to_string() << " state handle error fatal";
-            std::exit(2);
-          } else {
-            td::actor::send_closure(SelfId, &IndexerWorker::got_prev_block_handle, R.move_as_ok(), state_indexer, true,
-                                    after_merge);
-          }
-        });
+    if (handle->id().id.seqno == 1) {
+        auto P = td::PromiseCreator::lambda(
+                [state_indexer = std::move(state_indexer),
+                 after_merge,
+                 shard = handle->id().id.shard](td::Result<td::BufferSlice> R) {
+                    if (R.is_error()) {
+                        // todo: process normally
+                        LOG(ERROR) << R.move_as_error().to_string() << " state error fatal";
+                        std::exit(2);
+                    } else {
+                        auto state = R.move_as_ok();
+                        auto R2 = vm::std_boc_deserialize(state.clone());
+                        if (R2.is_error()) {
+                            throw std::logic_error(R2.move_as_error().to_string());
+                        }
+                        auto root_cell = R2.move_as_ok();
 
-    ton::AccountIdPrefixFull pfx{prev_id.id.workchain, prev_id.id.shard};
+                        td::actor::send_closure(state_indexer, &StateIndexer::got_prev_state, std::move(root_cell), true,
+                                                after_merge, shard);
+                    }
+                });
 
-    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
-                            prev_id.id.seqno, std::move(P));
+        td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_zero_state, prev_id, std::move(P));
+    } else {
+        auto P = td::PromiseCreator::lambda(
+                [SelfId = actor_id(this), state_indexer, after_merge](td::Result<ConstBlockHandle> R) {
+                    if (R.is_error()) {
+                        // todo: process normally
+                        LOG(ERROR) << R.move_as_error().to_string() << " state handle error fatal";
+                        std::exit(2);
+                    } else {
+                        td::actor::send_closure(SelfId, &IndexerWorker::got_prev_block_handle, R.move_as_ok(), state_indexer, true,
+                                                after_merge);
+                    }
+                });
 
-    if (after_merge) {
-      auto prev_id2 = handle->one_prev(false);
+        ton::AccountIdPrefixFull pfx{prev_id.id.workchain, prev_id.id.shard};
 
-      auto P2 = td::PromiseCreator::lambda([SelfId = actor_id(this), state_indexer = std::move(state_indexer),
-                                            after_merge](td::Result<ConstBlockHandle> R) {
-        if (R.is_error()) {
-          // todo: process normally
-          LOG(ERROR) << R.move_as_error().to_string() << " state handle error fatal";
-          std::exit(2);
-        } else {
-          td::actor::send_closure(SelfId, &IndexerWorker::got_prev_block_handle, R.move_as_ok(), state_indexer, false,
-                                  after_merge);
+        td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
+                                prev_id.id.seqno, std::move(P));
+
+        if (after_merge) {
+            auto prev_id2 = handle->one_prev(false);
+
+            auto P2 = td::PromiseCreator::lambda([SelfId = actor_id(this), state_indexer = std::move(state_indexer),
+                                                         after_merge](td::Result<ConstBlockHandle> R) {
+                if (R.is_error()) {
+                    // todo: process normally
+                    LOG(ERROR) << R.move_as_error().to_string() << " state handle error fatal";
+                    std::exit(2);
+                } else {
+                    td::actor::send_closure(SelfId, &IndexerWorker::got_prev_block_handle, R.move_as_ok(), state_indexer, false,
+                                            after_merge);
+                }
+            });
+
+            ton::AccountIdPrefixFull pfx2{prev_id2.id.workchain, prev_id2.id.shard};
+
+            td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx2,
+                                    prev_id2.id.seqno, std::move(P2));
         }
-      });
-
-      ton::AccountIdPrefixFull pfx2{prev_id2.id.workchain, prev_id2.id.shard};
-
-      td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx2,
-                              prev_id2.id.seqno, std::move(P2));
     }
   }
 
