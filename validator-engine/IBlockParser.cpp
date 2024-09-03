@@ -184,10 +184,13 @@ namespace ton::validator {
       td::Ref<BlockData> data = block_found_iter->second;
       td::Ref<vm::Cell> state = state_found_iter->second;
 
-      auto Po = td::PromiseCreator::lambda([this](td::Result<td::vector<json>> R) {
+      auto Po = td::PromiseCreator::lambda([publisher = publisher_](td::Result<td::vector<json>> R) {
           if (R.is_ok()) {
             auto data = R.move_as_ok();
-            this->process_out_msgs(data);
+
+            for (auto &m: data) {
+              publisher->publishOutMsgs(m.dump(-1));
+            }
           }
       });
 
@@ -201,14 +204,6 @@ namespace ton::validator {
 
       if (with_prev_state) {
         stored_prev_states_.erase(stored_prev_states_.find(key));
-      }
-    }
-
-    bool BlockParser::process_out_msgs(const std::vector<json> &data) {
-      std::unique_lock lock(publish_out_msg_mtx_);
-
-      for (auto &m: data) {
-        publisher_->publishOutMsgs(m.dump(-1));
       }
     }
 

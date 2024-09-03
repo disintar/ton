@@ -122,7 +122,7 @@ namespace ton::validator {
         void publish_states_worker();
 
     private:
-        std::unique_ptr<IBLockPublisher> publisher_;
+        std::shared_ptr<IBLockPublisher> publisher_;
         std::function<std::string(std::string)> post_processor_;
         std::map<unsigned long long, int> shard_to_partition{};
         int max_partition = 0;
@@ -136,7 +136,6 @@ namespace ton::validator {
         // mb rewrite with https://github.com/andreiavrammsd/cpp-channel
 
         std::atomic_bool running_ = true;  // TODO: stop_token when c++20
-
         std::mutex publish_out_msg_mtx_;
 
         std::mutex publish_applied_mtx_;
