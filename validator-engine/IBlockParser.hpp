@@ -137,6 +137,8 @@ namespace ton::validator {
 
         std::atomic_bool running_ = true;  // TODO: stop_token when c++20
 
+        std::mutex publish_out_msg_mtx_;
+
         std::mutex publish_applied_mtx_;
         std::condition_variable publish_applied_cv_;
         std::queue<std::tuple<td::int32, unsigned long long, std::string>> publish_applied_queue_;
