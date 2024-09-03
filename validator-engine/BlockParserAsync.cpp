@@ -676,8 +676,22 @@ namespace ton::validator {
                   {"in_msg",   transaction["in_msg"]},
           };
 
-          out_msgs.push_back(data_for_kafka);
+          json in_msg_compressed;
+          if (transaction["in_msg"].contains("created_lt")){
+            in_msg_compressed["created_lt"] = transaction["in_msg"]["created_lt"];
+          }
 
+          if (transaction["in_msg"].contains("src")){
+            in_msg_compressed["src"] = transaction["in_msg"]["src"];
+          }
+
+          if (transaction["in_msg"].contains("type")){
+            in_msg_compressed["type"] = transaction["in_msg"]["type"];
+          }
+
+          data_for_kafka["in_msg"] = in_msg_compressed;
+
+          out_msgs.push_back(std::move(data_for_kafka));
           transactions.push_back(transaction);
 
           ++count;
