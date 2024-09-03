@@ -124,7 +124,7 @@ namespace ton::validator {
             vm::CellSlice out_data = out_q->lookup_delete(last_key)->clone();
             block::gen::AccountDispatchQueue::Record aq;
 
-            if (tlb::unpack(out_data, aq)){
+            if (tlb::unpack(out_data, aq)) {
               dispatch_queue_size[last_key.to_hex()] = aq.count;
             } else {
               LOG(ERROR) << "QUEUE unpack failed";
@@ -637,6 +637,8 @@ namespace ton::validator {
       std::vector<json> accounts;
       std::vector<std::pair<td::Bits256, int>> accounts_keys;
 
+      std::vector<json> out_msgs;
+
       while (!account_blocks_dict->is_empty()) {
         td::Bits256 last_key;
         Ref<vm::CellSlice> account_data;
@@ -659,7 +661,6 @@ namespace ton::validator {
         vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
                                            block::tlb::aug_AccountTransactions};
 
-        std::vector<json> out_msgs;
         while (!trans_dict.is_empty()) {
           td::BitArray<64> last_lt{};
           trans_dict.get_minmax_key(last_lt);
@@ -668,26 +669,19 @@ namespace ton::validator {
           tvalue = trans_dict.lookup_delete(last_lt);
 
           json transaction = parse_transaction(tvalue, workchain);
+          json data_for_kafka = {
+                  {"root_hash", blkid.root_hash.to_hex()},
+                  {"hash",     transaction["hash"]},
+                  {"out_msgs", transaction["out_msgs"]},
+                  {"in_msg",   transaction["in_msg"]},
+          };
 
-          if (transaction["outmsg_cnt"] > 0) {
-            for (auto &msg: transaction["out_msgs"]) {
-              if (msg.contains("type") && msg["type"] == "int_msg_info"){
-                json data_for_kafka = {
-                        {"created_lt", msg["created_lt"]},
-                        {"dest", msg["dest"]},
-                        {"src", msg["src"]}
-                };
+          out_msgs.push_back(data_for_kafka);
 
-                out_msgs.push_back(data_for_kafka);
-              }
-            }
-          }
           transactions.push_back(transaction);
 
           ++count;
         };
-
-        out_messages_promise.set_value(std::move(out_msgs));
 
         accounts_keys.emplace_back(last_key, count);
         LOG(DEBUG) << "Parse: " << blkid.to_str() << " at " << hex_addr << " transactions success";
@@ -696,6 +690,8 @@ namespace ton::validator {
         account_block_parsed["transactions_count"] = count;
         accounts.push_back(account_block_parsed);
       }
+
+      out_messages_promise.set_value(std::move(out_msgs));
 
       LOG(DEBUG) << "Parse: " << blkid.to_str() << " account_blocks_dict success";
 
