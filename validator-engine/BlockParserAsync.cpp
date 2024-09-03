@@ -38,6 +38,29 @@
 #include "td/utils/Time.h"
 #include "td/utils/date.h"
 
+json compress_message(json message, bool src = true) {
+  json msg_compressed;
+  if (message.contains("created_lt")) {
+    msg_compressed["created_lt"] = message["created_lt"];
+  }
+
+  if (src) {
+    if (message.contains("src")) {
+      msg_compressed["src"] = message["src"];
+    }
+  } else {
+    if (message.contains("dst")) {
+      msg_compressed["dst"] = message["dst"];
+    }
+  }
+
+
+  if (message.contains("type")) {
+    msg_compressed["type"] = message["type"];
+  }
+  return msg_compressed;
+}
+
 std::string time_to_human(unsigned ts) {
   td::StringBuilder sb;
   sb << date::format("%F %T",
@@ -671,25 +694,17 @@ namespace ton::validator {
           json transaction = parse_transaction(tvalue, workchain);
           json data_for_kafka = {
                   {"root_hash", blkid.root_hash.to_hex()},
-                  {"hash",     transaction["hash"]},
-                  {"out_msgs", transaction["out_msgs"]},
-                  {"in_msg",   transaction["in_msg"]},
+                  {"hash",      transaction["hash"]},
+                  {"type",      transaction["description"]["type"]}
           };
 
-          json in_msg_compressed;
-          if (transaction["in_msg"].contains("created_lt")){
-            in_msg_compressed["created_lt"] = transaction["in_msg"]["created_lt"];
+          std::vector<json> out_msg_compressed;
+          for (auto &m: transaction["out_msgs"]) {
+            out_msg_compressed.push_back(compress_message(m, false));
           }
 
-          if (transaction["in_msg"].contains("src")){
-            in_msg_compressed["src"] = transaction["in_msg"]["src"];
-          }
 
-          if (transaction["in_msg"].contains("type")){
-            in_msg_compressed["type"] = transaction["in_msg"]["type"];
-          }
-
-          data_for_kafka["in_msg"] = in_msg_compressed;
+          data_for_kafka["in_msg"] = compress_message(transaction["in_msg"]);
 
           out_msgs.push_back(std::move(data_for_kafka));
           transactions.push_back(transaction);
