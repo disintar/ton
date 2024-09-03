@@ -184,7 +184,7 @@ namespace ton::validator {
       td::Ref<BlockData> data = block_found_iter->second;
       td::Ref<vm::Cell> state = state_found_iter->second;
 
-      auto Po = td::PromiseCreator::lambda([me = std::unique_ptr<BlockParser>(this)](td::Result<td::vector<json>> R) {
+      auto Po = td::PromiseCreator::lambda([](td::Result<td::vector<json>> R) {
           if (R.is_ok()) {
             auto data = R.move_as_ok();
             LOG(INFO) << "GOT DATA FOR KAFKA: " << data.size();
