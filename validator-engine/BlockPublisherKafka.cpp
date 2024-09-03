@@ -93,7 +93,7 @@ namespace ton::validator {
       std::lock_guard<std::mutex> guard(net_mtx);
       const char *value = getenv("KAFKA_OUTMSG_TOPIC");
       LOG(DEBUG) << "[block-out-msg] Sending " << data.size() << " bytes to Kafka";
-      producer.produce(cppkafka::MessageBuilder(value ? value : "testnet-traces").partition(0).payload(data));
+      producer.produce(cppkafka::MessageBuilder(value ? value : "std::shared_ptr<BlockParser>s").partition(0).payload(data));
       deliver();
     }
 

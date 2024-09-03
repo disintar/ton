@@ -184,15 +184,21 @@ namespace ton::validator {
       td::Ref<BlockData> data = block_found_iter->second;
       td::Ref<vm::Cell> state = state_found_iter->second;
 
-      auto Po = td::PromiseCreator::lambda([publisher = publisher_](td::Result<td::vector<json>> R) {
-          if (R.is_ok()) {
-            auto data = R.move_as_ok();
+      const char *value = getenv("KAFKA_OUTMSG_TOPIC");
+      bool allow_send_messages = bool(value);
 
-            for (auto &m: data) {
-              publisher->publishOutMsgs(m.dump(-1));
-            }
-          }
-      });
+      auto Po = td::PromiseCreator::lambda(
+              [publisher = publisher_, allow_send_messages](td::Result<td::vector<json>> R) {
+                  if (R.is_ok() && allow_send_messages) {
+                    json data_to_send = {
+                            {"transactions", R.move_as_ok()}
+                    };
+
+                    publisher->publishOutMsgs(data_to_send.dump(-1));
+                  } else {
+                    LOG(ERROR) << "Unknown error in traces";
+                  }
+              });
 
       td::actor::create_actor<BlockParserAsync>("BlockParserAsync", id, handle, data, state, prev_state_opt,
                                                 std::move(P), std::move(Po))
