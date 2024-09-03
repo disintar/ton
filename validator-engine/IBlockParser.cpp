@@ -187,7 +187,8 @@ namespace ton::validator {
       auto Po = td::PromiseCreator::lambda([me = std::unique_ptr<BlockParser>(this)](td::Result<td::vector<json>> R) {
           if (R.is_ok()) {
             auto data = R.move_as_ok();
-            me->process_out_msgs(std::move(data));
+            LOG(INFO) << "GOT DATA FOR KAFKA: " << data.size();
+            //            me->process_out_msgs(std::move(data));
           }
       });
 
@@ -204,8 +205,8 @@ namespace ton::validator {
       }
     }
 
-    bool BlockParser::process_out_msgs(const std::vector<json>& data) {
-      for (auto &m : data){
+    bool BlockParser::process_out_msgs(const std::vector<json> &data) {
+      for (auto &m: data) {
         publisher_->publishOutMsgs(m.dump(-1));
       }
     }
