@@ -694,6 +694,7 @@ namespace ton::validator {
           json data_for_kafka = {
                   {"hash", std::string(transaction["hash"])},
                   {"type", std::string(transaction["description"]["type"])},
+                  {"start_lt", start_lt},
                   {"account_addr", transaction["account_addr"]}
           };
 
