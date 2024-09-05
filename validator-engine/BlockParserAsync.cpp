@@ -49,8 +49,8 @@ json compress_message(json message, bool src = true) {
       msg_compressed["src"].update(message["src"]);
     }
   } else {
-    if (message.contains("dst")) {
-      msg_compressed["dst"].update(message["dst"]);
+    if (message.contains("dest")) {
+      msg_compressed["dest"].update(message["dest"]);
     }
   }
 
