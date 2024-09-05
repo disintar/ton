@@ -188,13 +188,19 @@ namespace ton::validator {
       bool allow_send_messages = bool(value);
 
       auto Po = td::PromiseCreator::lambda(
-              [publisher = publisher_, allow_send_messages](td::Result<td::vector<json>> R) {
+              [publisher = publisher_, allow_send_messages](td::Result<std::pair<td::vector<json>, std::string>> R) {
                   if (R.is_ok() && allow_send_messages) {
-                    json data_to_send = {
-                            {"transactions", R.move_as_ok()}
-                    };
+                    auto data = R.move_as_ok();
 
-                    publisher->publishOutMsgs(data_to_send.dump(-1));
+                    if (!data.first.empty()) {
+                      json data_to_send = {
+                              {"transactions", data.first},
+                              {"root_hash",    data.second}
+                      };
+
+                      publisher->publishOutMsgs(data_to_send.dump(-1));
+                    }
+
                   } else {
                     LOG(ERROR) << "Unknown error in traces";
                   }

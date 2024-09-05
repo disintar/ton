@@ -41,22 +41,21 @@
 json compress_message(json message, bool src = true) {
   json msg_compressed;
   if (message.contains("created_lt")) {
-    msg_compressed["created_lt"] = message["created_lt"];
+    msg_compressed["created_lt"] = (long long) (message["created_lt"]);
   }
 
   if (src) {
     if (message.contains("src")) {
-      msg_compressed["src"] = message["src"];
+      msg_compressed["src"].update(message["src"]);
     }
   } else {
     if (message.contains("dst")) {
-      msg_compressed["dst"] = message["dst"];
+      msg_compressed["dst"].update(message["dst"]);
     }
   }
 
-
   if (message.contains("type")) {
-    msg_compressed["type"] = message["type"];
+    msg_compressed["type"] = std::string(message["type"]);
   }
   return msg_compressed;
 }
@@ -693,9 +692,8 @@ namespace ton::validator {
 
           json transaction = parse_transaction(tvalue, workchain);
           json data_for_kafka = {
-                  {"root_hash", blkid.root_hash.to_hex()},
-                  {"hash",      transaction["hash"]},
-                  {"type",      transaction["description"]["type"]}
+                  {"hash", std::string(transaction["hash"])},
+                  {"type", std::string(transaction["description"]["type"])}
           };
 
           std::vector<json> out_msg_compressed;
@@ -720,7 +718,7 @@ namespace ton::validator {
         accounts.push_back(account_block_parsed);
       }
 
-      out_messages_promise.set_value(std::move(out_msgs));
+      out_messages_promise.set_value(std::make_pair(std::move(out_msgs), blkid.root_hash.to_hex()));
 
       LOG(DEBUG) << "Parse: " << blkid.to_str() << " account_blocks_dict success";
 
