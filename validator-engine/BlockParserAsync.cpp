@@ -693,7 +693,8 @@ namespace ton::validator {
           json transaction = parse_transaction(tvalue, workchain);
           json data_for_kafka = {
                   {"hash", std::string(transaction["hash"])},
-                  {"type", std::string(transaction["description"]["type"])}
+                  {"type", std::string(transaction["description"]["type"])},
+                  {"account_addr", transaction["account_addr"]}
           };
 
           std::vector<json> out_msg_compressed;
