@@ -703,6 +703,7 @@ namespace ton::validator {
 
 
           data_for_kafka["in_msg"] = compress_message(transaction["in_msg"]);
+          data_for_kafka["out_msgs"] = out_msg_compressed;
 
           out_msgs.push_back(std::move(data_for_kafka));
           transactions.push_back(transaction);
