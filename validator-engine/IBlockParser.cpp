@@ -188,17 +188,18 @@ namespace ton::validator {
       bool allow_send_messages = bool(value);
 
       auto Po = td::PromiseCreator::lambda(
-              [publisher = publisher_, allow_send_messages](td::Result<std::pair<td::vector<json>, std::string>> R) {
+              [publisher = publisher_, allow_send_messages](td::Result<std::tuple<td::vector<json>, std::string, unsigned long long, int>> R) {
                   if (R.is_ok() && allow_send_messages) {
                     auto data = R.move_as_ok();
 
-                    if (!data.first.empty()) {
+                    auto transactions = std::get<0>(data);
+                    if (!transactions.empty()) {
                       json data_to_send = {
-                              {"transactions", data.first},
-                              {"root_hash",    data.second}
+                              {"transactions", std::move(transactions)},
+                              {"root_hash",    std::get<1>(data)},
                       };
 
-                      publisher->publishOutMsgs(data_to_send.dump(-1));
+                      publisher->publishOutMsgs(std::get<3>(data), std::get<2>(data), data_to_send.dump(-1));
                     }
 
                   } else {

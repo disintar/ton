@@ -27,7 +27,7 @@ namespace ton::validator {
 
         virtual void publishBlockState(int wc, unsigned long long shard, std::string json) = 0;
 
-        virtual void publishOutMsgs(std::string out_msg_data) = 0;
+        virtual void publishOutMsgs(int wc, unsigned long long shard, std::string out_msg_data) = 0;
 
         virtual void deliver() = 0;
 

@@ -445,6 +445,7 @@ namespace ton::validator {
       answer["is_applied"] = handle->is_applied();
 
       auto workchain = blkid.id.workchain;
+      auto shard = blkid.id.shard;
 
       answer["BlockIdExt"] = {{"file_hash", blkid.file_hash.to_hex()},
                               {"root_hash", blkid.root_hash.to_hex()},
@@ -694,7 +695,7 @@ namespace ton::validator {
           json data_for_kafka = {
                   {"hash", std::string(transaction["hash"])},
                   {"type", std::string(transaction["description"]["type"])},
-                  {"start_lt", start_lt},
+                  {"lt", transaction["lt"]},
                   {"account_addr", transaction["account_addr"]}
           };
 
@@ -721,7 +722,10 @@ namespace ton::validator {
         accounts.push_back(account_block_parsed);
       }
 
-      out_messages_promise.set_value(std::make_pair(std::move(out_msgs), blkid.root_hash.to_hex()));
+      out_messages_promise.set_value(std::make_tuple(std::move(out_msgs),
+                                                     blkid.root_hash.to_hex(),
+                                                     shard,
+                                                     workchain));
 
       LOG(DEBUG) << "Parse: " << blkid.to_str() << " account_blocks_dict success";
 

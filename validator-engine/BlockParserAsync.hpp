@@ -90,7 +90,7 @@ namespace ton::validator {
         BlockParserAsync(BlockIdExt id_, ConstBlockHandle handle_, td::Ref<BlockData> data_, td::Ref<vm::Cell> state_,
                          td::optional<td::Ref<vm::Cell>> prev_state_,
                          td::Promise<std::tuple<td::string, td::string>> P_,
-                         td::Promise<std::pair<td::vector<json>, std::string>> out_messages_promise_) {
+                         td::Promise<std::tuple<td::vector<json>, std::string, unsigned long long, int>> out_messages_promise_) {
             id = id_;
             handle = std::move(handle_);
             data = std::move(data_);
@@ -117,7 +117,7 @@ namespace ton::validator {
         td::Ref<vm::Cell> state;
         td::optional<td::Ref<vm::Cell>> prev_state;
         td::Promise<std::tuple<td::string, td::string>> P;
-        td::Promise<std::pair<td::vector<json>, std::string>> out_messages_promise;
+        td::Promise<std::tuple<td::vector<json>, std::string, unsigned long long, int>> out_messages_promise;
         std::string parsed_data;
         std::string parsed_state;
     };

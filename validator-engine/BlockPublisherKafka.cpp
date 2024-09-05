@@ -89,11 +89,28 @@ namespace ton::validator {
       }
     }
 
-    void BlockPublisherKafka::publishOutMsgs(std::string data) {
+    void BlockPublisherKafka::publishOutMsgs(int wc, unsigned long long shard, std::string data) {
       std::lock_guard<std::mutex> guard(net_mtx);
       const char *value = getenv("KAFKA_OUTMSG_TOPIC");
       LOG(DEBUG) << "[block-out-msg] Sending " << data.size() << " bytes to Kafka";
-      producer.produce(cppkafka::MessageBuilder(value ? value : "std::shared_ptr<BlockParser>s").partition(0).payload(data));
+
+      int p;
+      if (wc == -1) {
+        p = 0;
+      } else {
+        if (shard_to_partition.find(shard) == shard_to_partition.end()) {
+          max_partition++;
+          if (max_partition > 16) {
+            max_partition = 1;
+          }
+          p = max_partition;
+          shard_to_partition[shard] = max_partition;
+        } else {
+          p = shard_to_partition[shard];
+        }
+      }
+
+      producer.produce(cppkafka::MessageBuilder(value ? value : "testnet-traces").partition(p).payload(data));
       deliver();
     }
 
