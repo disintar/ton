@@ -807,14 +807,14 @@ namespace ton::liteserver {
           bool full_check = false;
           bool founded = false;
 
-          if (publish_items_check_count >= 2){
+          if (publish_items_check_count >= 2) {
             LOG(DEBUG) << "Go full check for publish items";
             full_check = true;
           }
 
           PublishedItem new_item = {root_hash, category, td::Timestamp::in(10)};
 
-          for (auto it = publish_items.begin(); it != publish_items.end(); ) {
+          for (auto it = publish_items.begin(); it != publish_items.end();) {
             if (it->expired()) {
               LOG(DEBUG) << "Found expired item, clear";
               publish_items.erase(it, publish_items.end());
@@ -823,7 +823,7 @@ namespace ton::liteserver {
               if (it->is(new_item)) {
                 founded = true;
 
-                if (!full_check){
+                if (!full_check) {
                   break;
                 }
               }
@@ -831,7 +831,7 @@ namespace ton::liteserver {
             }
           }
 
-          if (!founded){
+          if (!founded) {
             LOG(INFO) << "Cache new itme: " << root_hash.to_hex() << " category " << category;
             publish_items.push_front(new_item);
           }
@@ -1039,14 +1039,16 @@ namespace ton::liteserver {
                   LOG(INFO) << "Got wait for block query";
 
                   auto e = Fmc.move_as_ok();
-                  if (uptodate_private_ls.size() > 0){
-                    auto last_master = std::get<1>(
+
+                  ton::BlockSeqno last_master;
+                  if (uptodate_private_ls.size() > 0) {
+                    last_master = std::get<1>(
                             private_servers_status_[uptodate_private_ls[td::Random::fast(0,
                                                                                          td::narrow_cast<td::uint32>(
                                                                                                  uptodate_private_ls.size() -
                                                                                                  1))]]);
                   } else {
-                    auto last_master = std::get<1>(private_servers_status_.begin()->second);
+                    last_master = std::get<1>(private_servers_status_.begin()->second);
                   }
 
                   if (static_cast<BlockSeqno>(e->seqno_) <= last_master) {
