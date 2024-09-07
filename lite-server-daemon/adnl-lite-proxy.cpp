@@ -866,8 +866,8 @@ namespace ton::liteserver {
                               td::Promise<td::BufferSlice> promise, int refire, td::Result<td::BufferSlice> result,
                               std::time_t started_at, td::Timer elapsed) {
           if (refire > allowed_refire) {
-            td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, std::move(data), started_at,
-                                    elapsed);
+//            td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, std::move(data), started_at,
+//                                    elapsed);
             promise.set_result(std::move(result));
             return;
           }
@@ -890,14 +890,14 @@ namespace ton::liteserver {
               }
 
               LOG(ERROR) << "Got unexpected error for refire: " << error->message_;
-              td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, std::move(data), started_at,
-                                      elapsed);
+//              td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, std::move(data), started_at,
+//                                      elapsed);
               promise.set_value(std::move(res));
               return;
 
             } else {
-              td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, std::move(data), started_at,
-                                      elapsed);
+//              td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, std::move(data), started_at,
+//                                      elapsed);
               promise.set_value(std::move(res));
               return;
             }
