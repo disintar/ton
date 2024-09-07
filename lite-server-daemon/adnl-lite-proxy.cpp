@@ -1041,6 +1041,7 @@ namespace ton::liteserver {
                   auto e = Fmc.move_as_ok();
 
                   ton::BlockSeqno last_master;
+
                   if (uptodate_private_ls.size() > 0) {
                     last_master = std::get<1>(
                             private_servers_status_[uptodate_private_ls[td::Random::fast(0,
