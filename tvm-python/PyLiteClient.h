@@ -142,6 +142,8 @@ namespace pylite {
 
         void admin_AddUser(td::Bits256 pubkey, td::int64 valid_until, td::int32 ratelimit);
 
+        void admin_checkItemPublished(td::Bits256 root_hash, td::int64 category);
+
         void admin_GetStatData();
 
         void wait_masterchain_seqno(int seqno, int tm);
@@ -278,8 +280,8 @@ namespace pylite {
         std::unique_ptr<ton::lite_api::liteServer_masterchainInfoExt> wait_masterchain_seqno(int seqno, int tm);
 
         // Admin functions
-        std::tuple<PubKeyHex, ShortKeyHex>
-        admin_AddUser(std::string pubkey, td::int64 valid_until, td::int32 ratelimit);
+        std::tuple<PubKeyHex, ShortKeyHex> admin_AddUser(std::string pubkey, td::int64 valid_until, td::int32 ratelimit);
+        int admin_checkItemPublished(std::string root_hash, td::int64 category);
 
         std::vector<std::tuple<ShortKeyHex, int, td::int64, td::int64, bool>> admin_getStatData();
 

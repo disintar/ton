@@ -501,6 +501,8 @@ PYBIND11_MODULE(python_ton, m) {
       .def("get_Block", &pylite::PyLiteClient::get_Block, py::arg("block_id"))
       .def("admin_AddUser", &pylite::PyLiteClient::admin_AddUser, py::arg("pubkey"), py::arg("validuntil"),
            py::arg("ratelimit"))
+      .def("admin_checkItemPublished", &pylite::PyLiteClient::admin_checkItemPublished, py::arg("root_hash"),
+           py::arg("category"))
       .def("admin_getStatData", &pylite::PyLiteClient::admin_getStatData)
       .def("get_Libraries", &pylite::PyLiteClient::get_Libraries, py::arg("libs"))
       .def("get_AllShardsInfo", &pylite::PyLiteClient::get_AllShardsInfo, py::arg("blkid"))

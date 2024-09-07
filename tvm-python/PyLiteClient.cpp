@@ -234,6 +234,14 @@ namespace pylite {
         admin_qprocess(std::move(q));
     }
 
+    void LiteClientActorEngine::admin_checkItemPublished(td::Bits256 root_hash, td::int64 category) {
+        auto q = ton::serialize_tl_object(
+                ton::create_tl_object<ton::lite_api::liteServer_checkItemPublished>(std::move(root_hash), category),
+                true);
+
+        admin_qprocess(std::move(q));
+    }
+
     void LiteClientActorEngine::admin_GetStatData() {
         auto q = ton::serialize_tl_object(ton::create_tl_object<ton::lite_api::liteServer_getStatData>(), true);
 
@@ -721,6 +729,33 @@ namespace pylite {
             auto x = R.move_as_ok();
 
             return std::make_tuple(x->pubkey_.to_hex(), x->short_.to_hex());
+        } else {
+            throw std::logic_error(response->error_message);
+        }
+    }
+
+    int PyLiteClient::admin_checkItemPublished(std::string root_hash, td::int64 category) {
+        td::RefInt256 root_hash_int = td::string_to_int256(root_hash);
+        td::Bits256 root_hash_bits;
+        if (!root_hash_int->export_bytes(root_hash_bits.data(), 32, false)) {
+            throw std::logic_error("Invalid pubkey");
+        }
+
+        scheduler_.run_in_context_external(
+                [&] {
+                    send_closure(engine, &LiteClientActorEngine::admin_checkItemPublished, root_hash_bits, category);
+                });
+
+        auto response = wait_response();
+        if (response->success) {
+            SuccessBufferSlice *data = dynamic_cast<SuccessBufferSlice *>(response.get());
+            auto R = ton::fetch_tl_object < ton::lite_api::liteServer_itemPublished> (std::move(data->obj->clone()), true);
+            if (R.is_error()) {
+                throw_lite_error(data->obj->clone());
+            }
+            auto x = R.move_as_ok();
+
+            return x->value_;
         } else {
             throw std::logic_error(response->error_message);
         }

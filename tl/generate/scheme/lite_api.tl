@@ -65,6 +65,7 @@ liteServer.blockOutMsgQueueSize mode:# id:tonNode.blockIdExt size:long proof:mod
 
 liteServer.debug.verbosity value:int = liteServer.debug.Verbosity;
 liteServer.newUser pubkey:int256 short:int256 = liteServer.NewUser;
+liteServer.itemPublished value:int = liteServer.ItemPublished;
 liteServer.statItem shortid:int256 method:int start_at:int64 end_at:int64 success:Bool = liteServer.StatItem;
 liteServer.stats data:(vector liteServer.StatItem) = liteServer.Stats;
 
@@ -111,6 +112,7 @@ liteServer.nonfinal.getCandidate id:liteServer.nonfinal.candidateId = liteServer
 // admin query
 liteServer.addUser key:int256 valid_until:int64 ratelimit:int = liteServer.NewUser;
 liteServer.getStatData = liteServer.Stats;
+liteServer.checkItemPublished key:int256 category:int64 = liteServer.ItemPublished;
 
 liteServer.queryPrefix = Object; 
 liteServer.query data:bytes = Object;
