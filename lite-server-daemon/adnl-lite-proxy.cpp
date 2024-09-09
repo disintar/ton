@@ -1141,6 +1141,7 @@ namespace ton::liteserver {
           cur_alarm++;
           if (cur_alarm * auto_in >= 1) {
             LOG(INFO) << "Clear usage, RPS: " << rps;
+            rps = 0;
             usage.clear();
             cur_alarm = 0;
           }
