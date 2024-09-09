@@ -918,6 +918,11 @@ namespace ton::liteserver {
           if (mode_ == 0) {
             LOG(WARNING) << "New proxy query: " << dst.bits256_value().to_hex() << " size: " << data.size();
 
+            if (data.size() == 0){
+              promise.set_error(td::Status::Error(ErrorCode::timeout, "Empty data"));
+              return;
+            }
+
             td::actor::ActorId<LiteServerClient> server;
             adnl::AdnlNodeIdShort adnl;
             if (!uptodate_private_ls.empty()) {
