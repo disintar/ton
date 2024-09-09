@@ -17,7 +17,6 @@
     Copyright 2017-2020 Telegram Systems LLP
 */
 #include "td/net/TcpListener.h"
-#include "td/utils/port/IPAddress.h"
 
 namespace td {
 TcpListener::TcpListener(int port, std::unique_ptr<Callback> callback) : port_(port), callback_(std::move(callback)) {
@@ -62,13 +61,6 @@ void TcpListener::loop() {
         break;
       }
       TRY_RESULT(client_socket, std::move(r_socket));
-
-      IPAddress my;
-      auto s = my.init_peer_address(client_socket);
-      if (s.is_ok()){
-        LOG(INFO) << "Accept from: " << my.get_ip_host();
-      }
-
       callback_->accept(std::move(client_socket));
     }
     if (td::can_close(server_socket_fd_)) {

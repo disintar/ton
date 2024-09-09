@@ -45,6 +45,7 @@ class AdnlInboundConnection : public AdnlExtConnection {
   td::Status process_init_packet(td::BufferSlice data) override;
   td::Status process_custom_packet(td::BufferSlice &data, bool &processed) override;
   void inited_crypto(td::Result<td::BufferSlice> R);
+  void init_stop();
 
  private:
   td::actor::ActorId<AdnlPeerTable> peer_table_;
@@ -60,6 +61,7 @@ class AdnlExtServerImpl : public AdnlExtServer {
   void add_tcp_port(td::uint16 port) override;
   void add_local_id(AdnlNodeIdShort id) override;
   void accepted(td::SocketFd fd);
+  void stop(std::string ip_addr);
   void decrypt_init_packet(AdnlNodeIdShort dst, td::BufferSlice data, td::Promise<td::BufferSlice> promise);
 
   void start_up() override {
@@ -88,6 +90,8 @@ class AdnlExtServerImpl : public AdnlExtServer {
   std::set<AdnlNodeIdShort> local_ids_;
   std::set<td::uint16> ports_;
   std::map<td::uint16, td::actor::ActorOwn<td::TcpInfiniteListener>> listeners_;
+  std::unordered_map<std::string, int> ip_connection_count_;
+  int max_connections_per_ip_ = 3;
 };
 
 }  // namespace adnl

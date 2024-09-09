@@ -19,6 +19,7 @@
 #include "adnl-ext-server.hpp"
 #include "keys/encryptor.h"
 #include "utils.hpp"
+#include "td/utils/port/IPAddress.h"
 
 namespace ton {
 
@@ -155,7 +156,18 @@ void AdnlExtServerImpl::add_local_id(AdnlNodeIdShort id) {
   local_ids_.insert(id);
 }
 
+
 void AdnlExtServerImpl::accepted(td::SocketFd fd) {
+  td::IPAddress my;
+  auto s = my.init_peer_address(fd);
+  if (s.is_ok()){
+    auto addr = my.get_ip_host();
+
+    auto &connection_count = ip_connection_count_[addr];
+    connection_count++;
+    LOG(INFO) << "Accept from: " << addr << " connections: " << connection_count;
+  }
+
   td::actor::create_actor<AdnlInboundConnection>(td::actor::ActorOptions().with_name("inconn").with_poll(),
                                                  std::move(fd), peer_table_, actor_id(this))
       .release();
