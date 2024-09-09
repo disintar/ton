@@ -862,7 +862,7 @@ namespace ton::liteserver {
 
         void check_ext_answer(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
                               td::Promise<td::BufferSlice> promise, int refire, td::Result<td::BufferSlice> result,
-                              std::time_t started_at, td::Timer elapsed) {
+                              std::time_t started_at, td::Timer elapsed, adnl::AdnlNodeIdShort server_adnl) {
           if (refire > allowed_refire) {
 //            td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, std::move(data), started_at,
 //                                    elapsed);
@@ -901,7 +901,7 @@ namespace ton::liteserver {
             }
           } else {
             auto error = result.move_as_error();
-            LOG(ERROR) << "Got unexpected error for refire: " << error.message();
+            LOG(ERROR) << "Got unexpected error for refire: " << error.message() << " server: " << server_adnl;
             td::actor::send_closure(actor_id(this), &LiteProxy::check_ext_query, src, dst,
                                     std::move(data), std::move(promise), refire + 1);
 
@@ -914,8 +914,9 @@ namespace ton::liteserver {
             LOG(WARNING) << "New proxy query: " << dst.bits256_value().to_hex() << " size: " << data.size();
 
             td::actor::ActorId<LiteServerClient> server;
+            adnl::AdnlNodeIdShort adnl;
             if (!uptodate_private_ls.empty()) {
-              auto adnl =
+              adnl =
                       uptodate_private_ls[td::Random::fast(0, td::narrow_cast<td::uint32>(
                               uptodate_private_ls.size() - 1))];
               server = private_servers_[adnl].get();
@@ -926,6 +927,7 @@ namespace ton::liteserver {
                 a += 1;
                 if (a == s) {
                   server = x.second.get();
+                  adnl = x.first;
                   break;
                 }
               }
@@ -936,11 +938,11 @@ namespace ton::liteserver {
                       [P = std::move(promise),
                               SelfId = actor_id(this),
                               src, dst, data = data.clone(), refire,
-                              started_at = std::time(nullptr), elapsed = td::Timer()](
+                              started_at = std::time(nullptr), server_adbl = adnl, elapsed = td::Timer()](
                               td::Result<td::BufferSlice> R) mutable {
                           td::actor::send_closure(SelfId, &LiteProxy::check_ext_answer, src, dst,
                                                   std::move(data), std::move(P), refire, std::move(R),
-                                                  started_at, elapsed);
+                                                  started_at, elapsed, server_adbl);
                       });
 
               td::actor::send_closure(server, &LiteServerClient::send_raw, std::move(data),
