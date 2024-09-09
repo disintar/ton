@@ -157,7 +157,7 @@ void AdnlExtServerImpl::add_local_id(AdnlNodeIdShort id) {
 }
 
 void AdnlExtServerImpl::alarm() {
-  alarm_timestamp() = td::Timestamp::in(10);
+  alarm_timestamp() = td::Timestamp::in(1);
   ip_connection_count_.clear();
 }
 
