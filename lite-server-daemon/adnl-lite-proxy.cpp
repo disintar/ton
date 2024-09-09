@@ -994,7 +994,7 @@ namespace ton::liteserver {
 
         void check_ext_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
                              td::Promise<td::BufferSlice> promise, int refire = 0) {
-          if (refire > 50) {
+          if (refire > 3) {
             LOG(ERROR) << "Too deep refire";  // todo: move to public LC
             promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Too deep refire"));
             return;
