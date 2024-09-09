@@ -882,7 +882,6 @@ namespace ton::liteserver {
                                            "cannot load block", "seqno not in db", "block not found"}) {
                 if (error->message_.find(substring) != std::string::npos) {
                   LOG(ERROR) << "Refire on cannot load block";
-                  usage[dst]--;
                   td::actor::send_closure(actor_id(this), &LiteProxy::check_ext_query, src, dst,
                                           std::move(data), std::move(promise), refire + 1);
                   return;
@@ -903,7 +902,7 @@ namespace ton::liteserver {
             }
           } else {
             auto e = result.move_as_error();
-            usage[dst]--;
+            LOG(ERROR) << "Got unexpected error for refire: " << e.message();
             td::actor::send_closure(actor_id(this), &LiteProxy::check_ext_query, src, dst,
                                     std::move(data), std::move(promise), refire + 1);
 
@@ -1003,36 +1002,38 @@ namespace ton::liteserver {
           LOG(INFO) << "Got query to: " << dst.bits256_value().to_hex();
 
           if (inited) {
-            usage[dst]++;
-            auto k = limits[dst];
-            if (std::get<1>(k) == -1) {
-              LOG(INFO) << "Got ADMIN connection from: " << dst;
 
-              auto E = fetch_tl_prefix<lite_api::liteServer_adminQuery>(data, true);
-              if (E.is_ok()) {
-                process_admin_request(std::move(E.move_as_ok()->data_), std::move(promise));
-                return;
-              }
-            } else {
-              if (usage[dst] > std::get<1>(k)) {
-                usage[dst]--;
-                LOG(INFO)
-                << "Drop to: " << dst.bits256_value().to_hex() << " because of ratelimit, usage: " << usage[dst]
-                << " limit: " << std::get<1>(k);
-                promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Ratelimit"));
-                return;
-              }
+            if (refire == 0) {
+              usage[dst]++;
+              auto k = limits[dst];
+              if (std::get<1>(k) == -1) {
+                LOG(INFO) << "Got ADMIN connection from: " << dst;
 
-              if (std::time(nullptr) > std::get<0>(k)) {
-                promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Key expired"));
-                LOG(INFO) << "Drop to: " << dst.bits256_value().to_hex() << " because of expired";
-                return;
-              }
+                auto E = fetch_tl_prefix<lite_api::liteServer_adminQuery>(data, true);
+                if (E.is_ok()) {
+                  process_admin_request(std::move(E.move_as_ok()->data_), std::move(promise));
+                  return;
+                }
+              } else {
+                if (usage[dst] > std::get<1>(k)) {
+                  usage[dst]--;
+                  LOG(INFO)
+                  << "Drop to: " << dst.bits256_value().to_hex() << " because of ratelimit, usage: " << usage[dst]
+                  << " limit: " << std::get<1>(k);
+                  promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Ratelimit"));
+                  return;
+                }
 
-              LOG(INFO)
-              << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst] << " limit: "
-              << std::get<1>(k);
+                if (std::time(nullptr) > std::get<0>(k)) {
+                  promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Key expired"));
+                  LOG(INFO) << "Drop to: " << dst.bits256_value().to_hex() << " because of expired";
+                  return;
+                }
+              }
             }
+            LOG(INFO)
+            << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst] << " limit: "
+            << std::get<1>(k) << " refire: " << refire;
 
             auto init_data = data.clone();
             auto E1 = fetch_tl_object<lite_api::liteServer_query>(init_data, true);
