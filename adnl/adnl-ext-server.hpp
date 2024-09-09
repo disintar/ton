@@ -71,12 +71,16 @@ class AdnlExtServerImpl : public AdnlExtServer {
     ports_.clear();
   }
 
+  void alarm() override;
+
   void reopen_port() {
   }
 
   AdnlExtServerImpl(td::actor::ActorId<AdnlPeerTable> adnl, std::vector<AdnlNodeIdShort> ids,
                     std::vector<td::uint16> ports)
       : peer_table_(adnl) {
+    alarm_timestamp() = td::Timestamp::in(10);
+
     for (auto &id : ids) {
       add_local_id(id);
     }

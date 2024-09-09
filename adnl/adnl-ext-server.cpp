@@ -156,6 +156,10 @@ void AdnlExtServerImpl::add_local_id(AdnlNodeIdShort id) {
   local_ids_.insert(id);
 }
 
+void AdnlExtServerImpl::alarm() {
+  alarm_timestamp() = td::Timestamp::in(10);
+  ip_connection_count_.clear();
+}
 
 void AdnlExtServerImpl::accepted(td::SocketFd fd) {
   td::IPAddress my;
@@ -165,7 +169,12 @@ void AdnlExtServerImpl::accepted(td::SocketFd fd) {
 
     auto &connection_count = ip_connection_count_[addr];
     connection_count++;
-    LOG(INFO) << "Accept from: " << addr << " connections: " << connection_count;
+    if (connection_count > 10){
+      LOG(INFO) << "Drop connection from: " << addr << " too many connections";
+      fd.close();
+    } else {
+      LOG(INFO) << "Accept from: " << addr << " connections: " << connection_count;
+    }
   }
 
   td::actor::create_actor<AdnlInboundConnection>(td::actor::ActorOptions().with_name("inconn").with_poll(),
