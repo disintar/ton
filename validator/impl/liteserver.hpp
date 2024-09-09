@@ -36,6 +36,7 @@ using td::Ref;
 
 class LiteQuery : public td::actor::Actor {
   td::BufferSlice query_;
+  std::string compiled_query_string = "UNKNOWN";
   td::actor::ActorId<ton::validator::ValidatorManager> manager_;
   td::actor::ActorId<LiteServerCache> cache_;
   td::Timestamp timeout_;
