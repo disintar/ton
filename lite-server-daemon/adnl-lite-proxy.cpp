@@ -1002,7 +1002,7 @@ namespace ton::liteserver {
           LOG(INFO) << "Got query to: " << dst.bits256_value().to_hex();
 
           if (inited) {
-
+            long long limit = 0;
             if (refire == 0) {
               usage[dst]++;
               auto k = limits[dst];
@@ -1030,10 +1030,11 @@ namespace ton::liteserver {
                   return;
                 }
               }
+              limit = std::get<1>(k);
             }
             LOG(INFO)
             << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst] << " limit: "
-            << std::get<1>(k) << " refire: " << refire;
+            << limit << " refire: " << refire;
 
             auto init_data = data.clone();
             auto E1 = fetch_tl_object<lite_api::liteServer_query>(init_data, true);
