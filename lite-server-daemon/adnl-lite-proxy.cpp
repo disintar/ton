@@ -878,6 +878,7 @@ namespace ton::liteserver {
             if (lite_error.is_ok()) {
               auto error = lite_error.move_as_ok();
 
+              // todo use error codes
               for (const auto &substring: {"cannot compute block with specified transaction",
                                            "cannot load block", "seqno not in db", "block not found"}) {
                 if (error->message_.find(substring) != std::string::npos) {
@@ -901,14 +902,6 @@ namespace ton::liteserver {
               return;
             }
           } else {
-            auto error = result.move_as_error();
-            for (const auto &substring: {"adnl query timeout"}) {
-              if (error.to_string().find(substring) != std::string::npos) {
-                LOG(ERROR) << "Skip refire for ADNL timeout";
-                promise.set_error(std::move(error));
-                return;
-              }
-            }
 
             LOG(ERROR) << "Got unexpected error for refire: " << error.message();
             td::actor::send_closure(actor_id(this), &LiteProxy::check_ext_query, src, dst,
@@ -1001,7 +994,7 @@ namespace ton::liteserver {
 
         void check_ext_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
                              td::Promise<td::BufferSlice> promise, int refire = 0) {
-          if (refire > 3) {
+          if (refire > 50) {
             LOG(ERROR) << "Too deep refire";  // todo: move to public LC
             promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Too deep refire"));
             return;
