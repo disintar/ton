@@ -821,7 +821,7 @@ namespace ton {
                         auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_sendMsgStatus>(1);
                         td::actor::send_closure(Self, &LiteQuery::finish_query, std::move(b), false);
                       }
-                  });
+                  }, true);
         }
 
         void LiteQuery::get_block_handle_checked(BlockIdExt blkid, td::Promise<ConstBlockHandle> promise) {

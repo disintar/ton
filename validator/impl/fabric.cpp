@@ -119,8 +119,8 @@ td::Result<td::Ref<ExtMessage>> create_ext_message(td::BufferSlice data, block::
 }
 
 void run_check_external_message(Ref<ExtMessage> message, td::actor::ActorId<ValidatorManager> manager,
-                                td::Promise<td::Ref<ExtMessage>> promise) {
-  ExtMessageQ::run_message(std::move(message), std::move(manager), std::move(promise));
+                                td::Promise<td::Ref<ExtMessage>> promise, bool from_ls) {
+  ExtMessageQ::run_message(std::move(message), std::move(manager), std::move(promise), from_ls);
 }
 
 td::Result<td::Ref<IhrMessage>> create_ihr_message(td::BufferSlice data) {

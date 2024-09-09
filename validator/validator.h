@@ -233,7 +233,7 @@ class ValidatorManagerInterface : public td::actor::Actor {
   virtual void write_handle(BlockHandle handle, td::Promise<td::Unit> promise) = 0;
 
   virtual void new_external_message(td::BufferSlice data, int priority) = 0;
-  virtual void check_external_message(td::BufferSlice data, td::Promise<td::Ref<ExtMessage>> promise) = 0;
+  virtual void check_external_message(td::BufferSlice data, td::Promise<td::Ref<ExtMessage>> promise, bool from_ls = false) = 0;
   virtual void new_ihr_message(td::BufferSlice data) = 0;
   virtual void new_shard_block(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) = 0;
   virtual void new_block_candidate(BlockIdExt block_id, td::BufferSlice data) = 0;

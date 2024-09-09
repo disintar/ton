@@ -87,7 +87,15 @@ td::Result<Ref<ExtMessageQ>> ExtMessageQ::create_ext_message(td::BufferSlice dat
 }
 
 void ExtMessageQ::run_message(td::Ref<ExtMessage> message, td::actor::ActorId<ton::validator::ValidatorManager> manager,
-                              td::Promise<td::Ref<ExtMessage>> promise) {
+                              td::Promise<td::Ref<ExtMessage>> promise, bool from_ls) {
+  if (!from_ls){
+    promise.set_error(td::Status::Error(PSLICE() << "External message not from our LiteServer"));
+    return;
+  } else {
+    promise.set_value(std::move(message));
+    return;
+  }
+
   auto root = message->root_cell();
   block::gen::CommonMsgInfo::Record_ext_in_msg_info info;
   tlb::unpack_cell_inexact(root, info);  // checked in create message

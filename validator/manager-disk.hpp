@@ -156,7 +156,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   //void get_block_description(BlockIdExt block_id, td::Promise<BlockDescription> promise) override;
 
   void new_external_message(td::BufferSlice data, int priority) override;
-  void check_external_message(td::BufferSlice data, td::Promise<td::Ref<ExtMessage>> promise) override;
+  void check_external_message(td::BufferSlice data, td::Promise<td::Ref<ExtMessage>> promise, bool from_ls = false) override;
   void new_ihr_message(td::BufferSlice data) override;
   void new_shard_block(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) override;
   void new_block_candidate(BlockIdExt block_id, td::BufferSlice data) override {

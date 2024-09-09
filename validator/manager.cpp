@@ -416,7 +416,7 @@ void ValidatorManagerImpl::add_external_message(td::Ref<ExtMessage> msg, int pri
   msgs.ext_addr_messages_[address].emplace(id.hash, id);
   ext_messages_hashes_[id.hash] = {priority, id};
 }
-void ValidatorManagerImpl::check_external_message(td::BufferSlice data, td::Promise<td::Ref<ExtMessage>> promise) {
+void ValidatorManagerImpl::check_external_message(td::BufferSlice data, td::Promise<td::Ref<ExtMessage>> promise, bool from_ls) {
   auto state = do_get_last_liteserver_state();
   if (state.is_null()) {
     promise.set_error(td::Status::Error(ErrorCode::notready, "not ready"));
@@ -452,7 +452,7 @@ void ValidatorManagerImpl::check_external_message(td::BufferSlice data, td::Prom
     });
   };
   ++ls_stats_check_ext_messages_;
-  run_check_external_message(std::move(message), actor_id(this), std::move(promise));
+  run_check_external_message(std::move(message), actor_id(this), std::move(promise), from_ls);
 }
 
 void ValidatorManagerImpl::new_ihr_message(td::BufferSlice data) {

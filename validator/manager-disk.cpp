@@ -1382,7 +1382,7 @@ void ValidatorManagerImpl::update_shard_blocks() {
   }
 }
 
-void ValidatorManagerImpl::check_external_message(td::BufferSlice data, td::Promise<td::Ref<ExtMessage>> promise) {
+void ValidatorManagerImpl::check_external_message(td::BufferSlice data, td::Promise<td::Ref<ExtMessage>> promise, bool from_ls) {
     auto state = last_masterchain_state_;  // todo: last_liteserver_state_
     if (state.is_null()) {
         promise.set_error(td::Status::Error(ErrorCode::notready, "not ready"));
@@ -1395,7 +1395,7 @@ void ValidatorManagerImpl::check_external_message(td::BufferSlice data, td::Prom
         return;
     }
     auto message = R.move_as_ok();
-    run_check_external_message(std::move(message), actor_id(this), std::move(promise));
+    run_check_external_message(std::move(message), actor_id(this), std::move(promise), from_ls);
 }
 
 ValidatorSessionId ValidatorManagerImpl::get_validator_set_id(ShardIdFull shard, td::Ref<ValidatorSet> val_set) {

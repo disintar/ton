@@ -381,7 +381,7 @@ class ValidatorManagerImpl : public ValidatorManager {
 
   void new_external_message(td::BufferSlice data, int priority) override;
   void add_external_message(td::Ref<ExtMessage> message, int priority);
-  void check_external_message(td::BufferSlice data, td::Promise<td::Ref<ExtMessage>> promise) override;
+  void check_external_message(td::BufferSlice data, td::Promise<td::Ref<ExtMessage>> promise, bool from_ls = false) override;
 
   void new_ihr_message(td::BufferSlice data) override;
   void new_shard_block(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) override;

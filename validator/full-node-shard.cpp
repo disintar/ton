@@ -131,7 +131,7 @@ void FullNodeShardImpl::check_broadcast(PublicKeyHash src, td::BufferSlice broad
   }
   td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::check_external_message,
                           std::move(q->message_->data_),
-                          promise.wrap([](td::Ref<ExtMessage>) { return td::Unit(); }));
+                          promise.wrap([](td::Ref<ExtMessage>) { return td::Unit(); }), false);
 }
 
 void FullNodeShardImpl::update_adnl_id(adnl::AdnlNodeIdShort adnl_id, td::Promise<td::Unit> promise) {

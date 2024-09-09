@@ -62,7 +62,7 @@ class ExtMessageQ : public ExtMessage {
   static td::Result<td::Ref<ExtMessageQ>> create_ext_message(td::BufferSlice data,
                                                              block::SizeLimitsConfig::ExtMsgLimits limits);
   static void run_message(td::Ref<ExtMessage> message, td::actor::ActorId<ton::validator::ValidatorManager> manager,
-                          td::Promise<td::Ref<ExtMessage>> promise);
+                          td::Promise<td::Ref<ExtMessage>> promise, bool from_ls = false);
   static td::Status run_message_on_account(ton::WorkchainId wc,
                                            block::Account* acc,
                                            UnixTime utime, LogicalTime lt,
