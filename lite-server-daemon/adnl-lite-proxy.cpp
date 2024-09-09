@@ -46,9 +46,21 @@
 #include <chrono>
 #include "td/utils/Time.h"
 #include "tl-utils/lite-utils.hpp"
+#include "tl/TlObject.h"
 
 using ValidUntil = td::int64;
 using RateLimit = td::int32;
+
+
+static std::string string_block_id(ton::tl_object_ptr<ton::lite_api::tonNode_blockIdExt> &B) {
+  return "(" + std::to_string(B->workchain_) + ":" + std::to_string(B->shard_) + ":" + std::to_string(B->seqno_) +
+         ", " + B->root_hash_.to_hex() + " file hash: " + B->file_hash_.to_hex() + ")";
+}
+
+
+static std::string string_block_id_simple(ton::tl_object_ptr<ton::lite_api::tonNode_blockId> &B) {
+  return "(" + std::to_string(B->workchain_) + ":" + std::to_string(B->shard_) + ":" + std::to_string(B->seqno_) + ")";
+}
 
 std::string time_to_human(unsigned ts) {  // todo: move from explorer
   td::StringBuilder sb;
@@ -862,7 +874,8 @@ namespace ton::liteserver {
 
         void check_ext_answer(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
                               td::Promise<td::BufferSlice> promise, int refire, td::Result<td::BufferSlice> result,
-                              std::time_t started_at, td::Timer elapsed, adnl::AdnlNodeIdShort server_adnl) {
+                              std::time_t started_at, td::Timer elapsed, adnl::AdnlNodeIdShort server_adnl,
+                              const std::string &compiled_query = "") {
           if (refire > allowed_refire) {
 //            td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, std::move(data), started_at,
 //                                    elapsed);
@@ -880,14 +893,17 @@ namespace ton::liteserver {
               for (const auto &substring: {"cannot compute block with specified transaction",
                                            "cannot load block", "seqno not in db", "block not found"}) {
                 if (error->message_.find(substring) != std::string::npos) {
-                  LOG(ERROR) << "Refire on cannot load block";
+                  LOG(ERROR) << "Refire on cannot load block: " << compiled_query << " Elapsed: " << started_at;
                   td::actor::send_closure(actor_id(this), &LiteProxy::check_ext_query, src, dst,
                                           std::move(data), std::move(promise), refire + 1);
                   return;
                 }
               }
 
-              LOG(ERROR) << "Got unexpected error for refire: " << error->message_;
+              LOG(ERROR)
+              << "Got unexpected error for refire: " << error->message_ << " Query: " << compiled_query << " Elapsed: "
+              << started_at;
+
 //              td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, std::move(data), started_at,
 //                                      elapsed);
               promise.set_value(std::move(res));
@@ -896,17 +912,22 @@ namespace ton::liteserver {
             } else {
 //              td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, std::move(data), started_at,
 //                                      elapsed);
+              LOG(INFO)
+              << "Query to: " << server_adnl << " success, Query: " << compiled_query << " Elapsed: " << elapsed;
               promise.set_value(std::move(res));
               return;
             }
           } else {
             auto error = result.move_as_error();
 
-            if (refire < allowed_refire){
+            if (refire < allowed_refire) {
               refire = allowed_refire;
             }
 
-            LOG(ERROR) << "Got unexpected error for refire: " << error.message() << " server: " << server_adnl;
+            LOG(ERROR)
+            << "Got unexpected error for refire: " << error.message() << " server: " << server_adnl << " Query: "
+            << compiled_query << " Elapsed: " << started_at;
+
             td::actor::send_closure(actor_id(this), &LiteProxy::check_ext_query, src, dst,
                                     std::move(data), std::move(promise), refire);
 
@@ -914,11 +935,11 @@ namespace ton::liteserver {
         }
 
         void process_ext_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
-                               td::Promise<td::BufferSlice> promise, int refire = 0) {
+                               td::Promise<td::BufferSlice> promise, int refire = 0, std::string query_compiled = "") {
           if (mode_ == 0) {
             LOG(WARNING) << "New proxy query: " << dst.bits256_value().to_hex() << " size: " << data.size();
 
-            if (data.size() == 0){
+            if (data.size() == 0) {
               promise.set_error(td::Status::Error(ErrorCode::timeout, "Empty data"));
               return;
             }
@@ -948,11 +969,13 @@ namespace ton::liteserver {
                       [P = std::move(promise),
                               SelfId = actor_id(this),
                               src, dst, data = data.clone(), refire,
-                              started_at = std::time(nullptr), server_adbl = adnl, elapsed = td::Timer()](
+                              started_at = std::time(nullptr), server_adbl = adnl,
+                              elapsed = td::Timer(),
+                              query_compiled = std::move(query_compiled)](
                               td::Result<td::BufferSlice> R) mutable {
                           td::actor::send_closure(SelfId, &LiteProxy::check_ext_answer, src, dst,
                                                   std::move(data), std::move(P), refire, std::move(R),
-                                                  started_at, elapsed, server_adbl);
+                                                  started_at, elapsed, server_adbl, std::move(query_compiled));
                       });
 
               td::actor::send_closure(server, &LiteServerClient::send_raw, std::move(data),
@@ -1050,12 +1073,15 @@ namespace ton::liteserver {
 
             auto init_data = data.clone();
             auto E1 = fetch_tl_object<lite_api::liteServer_query>(init_data, true);
+            std::string query_compiled = "";
+
             if (E1.is_ok()) {
               auto tmp_data = E1.move_as_ok()->data_.clone();
               auto F = fetch_tl_object<ton::lite_api::Function>(tmp_data, true);
               if (F.is_error()) {
                 auto Fmc = fetch_tl_prefix<lite_api::liteServer_waitMasterchainSeqno>(tmp_data, true);
                 if (Fmc.is_ok()) {
+                  query_compiled = "waitBlock";
                   LOG(INFO) << "Got wait for block query";
 
                   auto e = Fmc.move_as_ok();
@@ -1077,7 +1103,7 @@ namespace ton::liteserver {
 
                     // Pass through
                     process_ext_query(src, dst, std::move(data),
-                                      std::move(promise), refire);
+                                      std::move(promise), refire, query_compiled);
                     return;
                   } else {
 
@@ -1098,7 +1124,7 @@ namespace ton::liteserver {
                                 }
                                 td::actor::send_closure(SelfId, &LiteProxy::process_ext_query,
                                                         src, dst, std::move(data),
-                                                        std::move(promise), 0);
+                                                        std::move(promise), 0, "waitSeqno");
                             });
                     wait_shard_client_state(e->seqno_, td::Timestamp::in(t), std::move(Q), last_master);
                   }
@@ -1106,9 +1132,306 @@ namespace ton::liteserver {
               } else {
                 auto pf = F.move_as_ok();
 
+
                 lite_api::downcast_call(
                         *pf, td::overloaded(
+                                [&](lite_api::liteServer_getTime &q) {
+                                    query_compiled = " Query: getTime";
+
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+                                [&](lite_api::liteServer_getVersion &q) {
+                                    query_compiled = " Query: getVersion";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_getMasterchainInfo &q) {
+                                    query_compiled = " Query: getMasterchainInfo(-1)";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_getMasterchainInfoExt &q) {
+                                    query_compiled =
+                                            " Query: getMasterchainInfoExt(" + std::to_string(q.mode_ & 0x7fffffff) +
+                                            ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_getBlock &q) {
+                                    query_compiled = " Query: getBlock(" + std::to_string(q.id_->workchain_) + ":"
+                                                     + std::to_string(q.id_->shard_) + ":" +
+                                                     std::to_string(q.id_->seqno_) + ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_getBlockHeader &q) {
+                                    query_compiled = " Query: getBlockHeader(" + string_block_id(q.id_) + ", mode: " +
+                                                     std::to_string(q.mode_) + ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_getState &q) {
+                                    query_compiled = " Query: getState(" + string_block_id(q.id_) + ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_getAccountState &q) {
+                                    query_compiled = " Query: getAccountState(" + string_block_id(q.id_) + ", "
+                                                     + std::to_string(q.account_->workchain_) + ":" +
+                                                     q.account_->id_.to_hex() + ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_getAccountStatePrunned &q) {
+                                    query_compiled = " Query: getAccountStatePrunned(" + string_block_id(q.id_) + ", "
+                                                     + std::to_string(q.account_->workchain_) + ":" +
+                                                     q.account_->id_.to_hex() + ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_getOneTransaction &q) {
+                                    query_compiled = " Query: getOneTransaction(" + string_block_id(q.id_) + ", "
+                                                     + std::to_string(q.account_->workchain_) + ":" +
+                                                     q.account_->id_.to_hex()
+                                                     + ", lt: " + std::to_string(q.lt_) + ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+                                [&](lite_api::liteServer_getTransactions &q) {
+                                    query_compiled =
+                                            " Query: getTransactions(" + std::to_string(q.account_->workchain_) + ":"
+                                            + q.account_->id_.to_hex() + ", lt: " + std::to_string(q.lt_)
+                                            + ", hash: " + q.hash_.to_hex() + ", count: " + std::to_string(q.count_) +
+                                            ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_getShardInfo &q) {
+                                    query_compiled = " Query: getShardInfo(" + string_block_id(q.id_) + ", workchain: "
+                                                     + std::to_string(q.workchain_) + ", shard: " +
+                                                     std::to_string(q.shard_)
+                                                     + ", exact: " + std::to_string(q.exact_) + ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_getAllShardsInfo &q) {
+                                    query_compiled = " Query: getAllShardsInfo(" + string_block_id(q.id_) + ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_lookupBlock &q) {
+                                    query_compiled = " Query: lookupBlock(" + string_block_id_simple(q.id_) + ", mode: "
+                                                     + std::to_string(q.mode_) + ", lt: " + std::to_string(q.lt_)
+                                                     + ", utime: " + std::to_string(q.utime_) + ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_lookupBlockWithProof &q) {
+                                    query_compiled = " Query: lookupBlockWithProof(" + string_block_id_simple(q.id_) +
+                                                     ", mc_block_id: "
+                                                     + string_block_id(q.mc_block_id_) + ", mode: " +
+                                                     std::to_string(q.mode_)
+                                                     + ", lt: " + std::to_string(q.lt_) + ", utime: " +
+                                                     std::to_string(q.utime_) + ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_listBlockTransactions &q) {
+                                    query_compiled =
+                                            " Query: listBlockTransactions(" + string_block_id(q.id_) + ", mode: "
+                                            + std::to_string(q.mode_) + ", count: " + std::to_string(q.count_);
+                                    if (q.mode_ & 128) {
+                                      query_compiled +=
+                                              ", after_account: " + q.after_->account_.to_hex() + ", after_lt: " +
+                                              std::to_string(q.after_->lt_);
+                                    }
+                                    query_compiled += ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_listBlockTransactionsExt &q) {
+                                    query_compiled =
+                                            " Query: listBlockTransactionsExt(" + string_block_id(q.id_) + ", mode: "
+                                            + std::to_string(q.mode_) + ", count: " + std::to_string(q.count_);
+                                    if (q.mode_ & 128) {
+                                      query_compiled +=
+                                              ", after_account: " + q.after_->account_.to_hex() + ", after_lt: " +
+                                              std::to_string(q.after_->lt_);
+                                    }
+                                    query_compiled += ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_getConfigParams &q) {
+                                    std::string params;
+
+                                    for (const auto &param: q.param_list_) {
+                                      params += param + " ";
+                                    }
+
+                                    query_compiled = " Query: getConfigParams(" + string_block_id(q.id_) + ", mode: "
+                                                     + std::to_string((q.mode_ & 0xffff) | 0x10000) + ", param_list: " +
+                                                     params + ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+                                [&](lite_api::liteServer_getConfigAll &q) {
+                                    query_compiled = " Query: getConfigAll(" + string_block_id(q.id_) + ", mode: "
+                                                     + std::to_string((q.mode_ & 0xffff) | 0x20000) + ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_getBlockProof &q) {
+                                    query_compiled =
+                                            " Query: getBlockProof(" + string_block_id(q.known_block_) + ", mode: "
+                                            + std::to_string(q.mode_);
+                                    if (q.mode_ & 1) {
+                                      query_compiled += ", target_block: " + string_block_id(q.target_block_);
+                                    }
+                                    query_compiled += ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_getValidatorStats &q) {
+                                    query_compiled = " Query: getValidatorStats(" + string_block_id(q.id_) + ", mode: "
+                                                     + std::to_string(q.mode_) + ", limit: " + std::to_string(q.limit_);
+                                    if (q.mode_ & 1) {
+                                      query_compiled += ", start_after: " + q.start_after_.to_hex();
+                                    }
+                                    if (q.mode_ & 4) {
+                                      query_compiled += ", modified_after: " + std::to_string(q.modified_after_);
+                                    }
+                                    query_compiled += ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_runSmcMethod &q) {
+                                    query_compiled = " Query: runSmcMethod(" + string_block_id(q.id_) + ", account: "
+                                                     + std::to_string(q.account_->workchain_) + ":" +
+                                                     q.account_->id_.to_hex()
+                                                     + ", method_id: " + std::to_string(q.method_id_) + ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_getLibraries &q) {
+                                    std::string libs;
+
+                                    for (const auto &lib: q.library_list_) {
+                                      libs += lib.to_hex() + " ";
+                                    }
+
+                                    query_compiled = " Query: getLibraries(" + libs + ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_getLibrariesWithProof &q) {
+                                    std::string libs;
+
+                                    for (const auto &lib: q.library_list_) {
+                                      libs += lib.to_hex() + " ";
+                                    }
+
+                                    query_compiled =
+                                            " Query: getLibrariesWithProof(" + string_block_id(q.id_) + ", mode: "
+                                            + std::to_string(q.mode_) + ", library_list: " + libs + ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_getShardBlockProof &q) {
+                                    query_compiled = " Query: getShardBlockProof(" + string_block_id(q.id_) + ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_nonfinal_getCandidate &q) {
+                                    query_compiled = " Query: nonfinal_getCandidate(" + q.id_->creator_.to_hex()
+                                                     + ", block_id: " + string_block_id(q.id_->block_id_)
+                                                     + ", collated_data_hash: " + q.id_->collated_data_hash_.to_hex() +
+                                                     ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+                                [&](lite_api::liteServer_nonfinal_getValidatorGroups &q) {
+                                    query_compiled =
+                                            " Query: nonfinal_getValidatorGroups(mode: " + std::to_string(q.mode_)
+                                            + ", shard: " + std::to_string(q.wc_) + ":" + std::to_string(q.shard_) +
+                                            ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_getOutMsgQueueSizes &q) {
+                                    query_compiled = " Query: getOutMsgQueueSizes("
+                                                     + std::string(q.mode_ & 1 ? "ShardIdFull" : "optional") + ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
+
+                                [&](lite_api::liteServer_getBlockOutMsgQueueSize &q) {
+                                    query_compiled = " Query: getBlockOutMsgQueueSize(mode: " + std::to_string(q.mode_)
+                                                     + ", block_id: " + string_block_id(q.id_) + ")";
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire << query_compiled;
+                                },
                                 [&](lite_api::liteServer_sendMessage &q) {
+                                    query_compiled = " Query: sendMessage";
+
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire
+                                    << " Query: sendMessage";
+
                                     LOG(INFO) << "Got external message";
 
                                     nlohmann::json answer;
@@ -1123,11 +1446,18 @@ namespace ton::liteserver {
                                             cppkafka::MessageBuilder("lite-messages").partition(1).payload(
                                                     publish_answer));
                                 },
-                                [&](auto &obj) {}));
+                                [&](auto &obj) {
+                                    LOG(INFO)
+                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
+                                    << " limit: " << limit << " refire: " << refire
+                                    << " Query: UNKNOWN";
+                                }));
               }
+            } else {
+              query_compiled = "notLiteServerQuery";
             }
 
-            process_ext_query(src, dst, std::move(data), std::move(promise), refire);
+            process_ext_query(src, dst, std::move(data), std::move(promise), refire, std::move(query_compiled));
           } else {
             promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Server not ready"));
           }
