@@ -174,12 +174,11 @@ void AdnlExtServerImpl::accepted(td::SocketFd fd) {
       fd.close();
     } else {
       LOG(INFO) << "Accept from: " << addr << " connections: " << connection_count;
+      td::actor::create_actor<AdnlInboundConnection>(td::actor::ActorOptions().with_name("inconn").with_poll(),
+                                                     std::move(fd), peer_table_, actor_id(this))
+              .release();
     }
   }
-
-  td::actor::create_actor<AdnlInboundConnection>(td::actor::ActorOptions().with_name("inconn").with_poll(),
-                                                 std::move(fd), peer_table_, actor_id(this))
-      .release();
 }
 
 void AdnlExtServerImpl::decrypt_init_packet(AdnlNodeIdShort dst, td::BufferSlice data,
