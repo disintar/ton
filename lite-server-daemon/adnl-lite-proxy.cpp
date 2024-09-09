@@ -901,9 +901,14 @@ namespace ton::liteserver {
             }
           } else {
             auto error = result.move_as_error();
+
+            if (refire < allowed_refire){
+              refire = allowed_refire;
+            }
+
             LOG(ERROR) << "Got unexpected error for refire: " << error.message() << " server: " << server_adnl;
             td::actor::send_closure(actor_id(this), &LiteProxy::check_ext_query, src, dst,
-                                    std::move(data), std::move(promise), refire + 1);
+                                    std::move(data), std::move(promise), refire);
 
           }
         }
@@ -994,7 +999,7 @@ namespace ton::liteserver {
 
         void check_ext_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
                              td::Promise<td::BufferSlice> promise, int refire = 0) {
-          if (refire > 50) {
+          if (refire > allowed_refire) {
             LOG(ERROR) << "Too deep refire";  // todo: move to public LC
             promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Too deep refire"));
             return;
