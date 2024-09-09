@@ -1081,7 +1081,6 @@ namespace ton::liteserver {
               if (F.is_error()) {
                 auto Fmc = fetch_tl_prefix<lite_api::liteServer_waitMasterchainSeqno>(tmp_data, true);
                 if (Fmc.is_ok()) {
-                  query_compiled = "waitBlock";
                   LOG(INFO) << "Got wait for block query";
 
                   auto e = Fmc.move_as_ok();
@@ -1097,6 +1096,8 @@ namespace ton::liteserver {
                   } else {
                     last_master = std::get<1>(private_servers_status_.begin()->second);
                   }
+
+                  query_compiled = "waitSeqno: " + e->seqno_;
 
                   if (static_cast<BlockSeqno>(e->seqno_) <= last_master) {
                     LOG(INFO) << "Pass through wait for block: " << e->seqno_;
@@ -1127,6 +1128,7 @@ namespace ton::liteserver {
                                                         std::move(promise), 0, "waitSeqno");
                             });
                     wait_shard_client_state(e->seqno_, td::Timestamp::in(t), std::move(Q), last_master);
+                    return;
                   }
                 }
               } else {
