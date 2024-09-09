@@ -1034,7 +1034,6 @@ namespace ton::liteserver {
               td::actor::send_closure(server, &LiteServerClient::send_raw, std::move(data),
                                       std::move(mP), live_timeout);
             } else {
-              usage[dst]--;
               td::actor::send_closure(actor_id(this), &LiteProxy::check_ext_query, src, dst, std::move(data),
                                       std::move(promise), 0);
             }
@@ -1103,7 +1102,6 @@ namespace ton::liteserver {
                 }
               } else {
                 if (usage[dst] > std::get<1>(k)) {
-                  usage[dst]--;
                   LOG(INFO)
                   << "Drop to: " << dst.bits256_value().to_hex() << " because of ratelimit, usage: " << usage[dst]
                   << " limit: " << std::get<1>(k);
