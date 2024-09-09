@@ -101,6 +101,7 @@ namespace ton {
                              adnl::AdnlNodeIdShort dst)
                 : query_(std::move(data)), manager_(std::move(manager)), cache_(std::move(cache)),
                   promise_(std::move(promise)), dst_(dst) {
+          compiled_query_string = "UNKNOWN to " + dst.bits256_value().to_hex();
           timeout_ = td::Timestamp::in(default_timeout_msec * 0.001);
           started_at_ = std::time(nullptr);
         }
@@ -110,6 +111,7 @@ namespace ton {
                 td::Promise<std::tuple<td::Ref<vm::CellSlice>, UnixTime, LogicalTime, std::unique_ptr<block::ConfigInfo>>> promise)
                 : manager_(std::move(manager)), acc_state_promise_(std::move(promise)), acc_workchain_(wc),
                   acc_addr_(acc_addr) {
+          compiled_query_string = "Fetch account state: " + std::to_string(wc) + ":" + acc_addr.to_hex();
           timeout_ = td::Timestamp::in(default_timeout_msec * 0.001);
         }
 
