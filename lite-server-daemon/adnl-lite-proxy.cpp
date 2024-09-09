@@ -1148,7 +1148,7 @@ namespace ton::liteserver {
                     last_master = std::get<1>(private_servers_status_.begin()->second);
                   }
 
-                  query_compiled = "waitSeqno: " + e->seqno_;
+                  query_compiled = "waitSeqno: " + std::to_string(e->seqno_);
 
                   if (static_cast<BlockSeqno>(e->seqno_) <= last_master) {
                     LOG(INFO) << "Pass through wait for block: " << e->seqno_;

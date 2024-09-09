@@ -170,7 +170,6 @@ void AdnlExtServerImpl::accepted(td::SocketFd fd) {
     auto &connection_count = ip_connection_count_[addr];
     connection_count++;
     if (connection_count > 10){
-      LOG(INFO) << "Drop connection from: " << addr << " too many connections";
       fd.close();
     } else {
       LOG(INFO) << "Accept from: " << addr << " connections: " << connection_count;
