@@ -468,9 +468,7 @@ namespace ton::liteserver {
               LOG(INFO)
               << "Update LS uptodate: "
               << uptodate_private_ls.size()
-              << " outdated: " << outdated << " best time: " << time_to_human(std::get<0>(best_time))
-              << " updated at: "
-              << started_update_at.elapsed();
+              << " outdated: " << outdated << " best time: " << time_to_human(std::get<0>(best_time));
 
               private_time_updated = 0;
             }
@@ -902,7 +900,7 @@ namespace ton::liteserver {
               return;
             }
           } else {
-
+            auto error = result.move_as_error();
             LOG(ERROR) << "Got unexpected error for refire: " << error.message();
             td::actor::send_closure(actor_id(this), &LiteProxy::check_ext_query, src, dst,
                                     std::move(data), std::move(promise), refire + 1);
@@ -1033,6 +1031,7 @@ namespace ton::liteserver {
               }
               limit = std::get<1>(k);
             }
+            rps++;
             LOG(INFO)
             << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst] << " limit: "
             << limit << " refire: " << refire;
@@ -1141,14 +1140,13 @@ namespace ton::liteserver {
           alarm_timestamp() = td::Timestamp::in(auto_in);
           cur_alarm++;
           if (cur_alarm * auto_in >= 1) {
-            LOG(INFO) << "Clear usage";
+            LOG(INFO) << "Clear usage, RPS: " << rps;
             usage.clear();
             cur_alarm = 0;
           }
 
           // update times only on first run, then it will go over lazy mode
           if (to_update == 0) {
-            started_update_at = td::Timer();
             to_update = private_servers_.size();
             update_server_stats();
           }
@@ -1270,7 +1268,6 @@ namespace ton::liteserver {
         int cur_alarm = 0;
         std::tuple<ton::UnixTime, ton::BlockSeqno> best_time = std::make_tuple(0, 0);
         int allowed_refire = 20;
-        td::Timer started_update_at;
         unsigned long to_update = 0;
         std::string db_root_;
         std::string config_path_;
@@ -1303,6 +1300,7 @@ namespace ton::liteserver {
         ton::PublicKeyHash default_dht_node_ = ton::PublicKeyHash::zero();
         std::map<ton::adnl::AdnlNodeIdShort, std::tuple<ValidUntil, RateLimit>> limits;
         std::map<ton::adnl::AdnlNodeIdShort, int> usage;
+        long long rps;
         std::map<BlockSeqno, WaitList<td::actor::Actor, td::Unit>> shard_client_waiters_;
     };
 }  // namespace ton::liteserver
