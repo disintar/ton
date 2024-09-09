@@ -901,8 +901,16 @@ namespace ton::liteserver {
               return;
             }
           } else {
-            auto e = result.move_as_error();
-            LOG(ERROR) << "Got unexpected error for refire: " << e.message();
+            auto error = result.move_as_error();
+            for (const auto &substring: {"adnl query timeout"}) {
+              if (error.to_string().find(substring) != std::string::npos) {
+                LOG(ERROR) << "Skip refire for ADNL timeout";
+                promise.set_error(std::move(error));
+                return;
+              }
+            }
+
+            LOG(ERROR) << "Got unexpected error for refire: " << error.message();
             td::actor::send_closure(actor_id(this), &LiteProxy::check_ext_query, src, dst,
                                     std::move(data), std::move(promise), refire + 1);
 
