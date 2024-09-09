@@ -1000,7 +1000,7 @@ namespace ton::liteserver {
             return;
           }
 
-          LOG(INFO) << "Got query to: " << dst;
+          LOG(INFO) << "Got query to: " << dst.bits256_value().to_hex();
 
           if (inited) {
             usage[dst]++;
@@ -1016,16 +1016,22 @@ namespace ton::liteserver {
             } else {
               if (usage[dst] > std::get<1>(k)) {
                 usage[dst]--;
-                LOG(INFO) << "Drop to: " << dst << " because of ratelimit, usage: " << usage[dst]
-                          << " limit: " << std::get<1>(k);
+                LOG(INFO)
+                << "Drop to: " << dst.bits256_value().to_hex() << " because of ratelimit, usage: " << usage[dst]
+                << " limit: " << std::get<1>(k);
                 promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Ratelimit"));
                 return;
               }
 
               if (std::time(nullptr) > std::get<0>(k)) {
                 promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Key expired"));
+                LOG(INFO) << "Drop to: " << dst.bits256_value().to_hex() << " because of expired";
                 return;
               }
+
+              LOG(INFO)
+              << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst] << " limit: "
+              << std::get<1>(k);
             }
 
             auto init_data = data.clone();
