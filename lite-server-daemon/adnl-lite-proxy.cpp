@@ -889,7 +889,7 @@ namespace ton::liteserver {
               promise.set_value(result.clone());
             }
 
-            cache_similar.erase(it);
+            cache_similar.erase(data_hash);
           }
         }
 
@@ -980,7 +980,7 @@ namespace ton::liteserver {
 
           auto it = cache_similar.find(data_hash);
 
-          if (it != cache_similar.end()) {
+          if (it != cache_similar.end() && !cache_similar[data_hash].empty()) {
             LOG(INFO) << "Found similar request, store: " << data_hash;
             it->second.push_back(std::move(promise));
             return;
