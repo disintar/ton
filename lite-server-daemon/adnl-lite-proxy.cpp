@@ -1014,7 +1014,7 @@ namespace ton::liteserver {
                 return;
               }
             } else {
-              if (usage[dst] > std::get<1>(k)) {
+              if (usage[dst] > std::get<1>(k) * 10) {
                 usage[dst]--;
                 LOG(INFO)
                 << "Drop to: " << dst.bits256_value().to_hex() << " because of ratelimit, usage: " << usage[dst]
@@ -1137,8 +1137,8 @@ namespace ton::liteserver {
           double auto_in = 0.2;
           alarm_timestamp() = td::Timestamp::in(auto_in);
           cur_alarm++;
-          if (cur_alarm * auto_in == 1) {
-            //      LOG(INFO) << "Clear usage";
+          if (cur_alarm * auto_in >= 10) {
+            LOG(INFO) << "Clear usage";
             usage.clear();
             cur_alarm = 0;
           }
