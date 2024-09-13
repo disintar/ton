@@ -69,6 +69,7 @@ class AdnlExtServerImpl : public AdnlExtServer {
       add_tcp_port(port);
     }
     ports_.clear();
+    alarm_timestamp() = td::Timestamp::in(1);
   }
 
   void alarm() override;
