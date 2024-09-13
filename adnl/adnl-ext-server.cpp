@@ -170,9 +170,9 @@ void AdnlExtServerImpl::accepted(td::SocketFd fd) {
 
     auto &connection_count = ip_connection_count_[addr];
     connection_count++;
-    if (connection_count > 10){
+    if (connection_count > 50){
       LOG(INFO) << "Accept from: " << addr << " connections: " << connection_count << " TOO LARGE!";
-//      fd.close();
+      fd.close();
     } else {
       LOG(INFO) << "Accept from: " << addr << " connections: " << connection_count;
       td::actor::create_actor<AdnlInboundConnection>(td::actor::ActorOptions().with_name("inconn").with_poll(),
