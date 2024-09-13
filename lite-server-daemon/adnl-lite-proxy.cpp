@@ -445,6 +445,10 @@ namespace ton::liteserver {
 
         void server_update_time(adnl::AdnlNodeIdShort server, std::tuple<ton::UnixTime, ton::BlockSeqno> time,
                                 bool update = true) {
+          if (!inited) {
+            inited = true;
+          }
+
           if (update) {
             to_update--;
           }
@@ -908,8 +912,8 @@ namespace ton::liteserver {
                                            "cannot load block", "seqno not in db", "block not found"}) {
                 if (error->message_.find(substring) != std::string::npos) {
                   if (refire + 1 > allowed_refire) {
-                    LOG(ERROR) << "Too deep refire for cannot load block";
-                    // auto res = create_serialize_tl_object<lite_api::liteServer_error>(228, "Too deep refire");
+                    LOG(ERROR) << "Too deep refire";
+                    auto res = create_serialize_tl_object<lite_api::liteServer_error>(228, "Too deep refire");
                     process_cache(std::move(data), res.clone(), compiled_query, elapsed);
                     promise.set_value(std::move(res));
                     return;
@@ -1563,10 +1567,6 @@ namespace ton::liteserver {
                     });
 
             td::actor::send_closure(s.second, &LiteServerClient::get_max_time, std::move(P));
-          }
-
-          if (!inited) {
-            inited = true;
           }
         }
 
