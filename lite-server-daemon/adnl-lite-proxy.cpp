@@ -935,7 +935,9 @@ namespace ton::liteserver {
 
               if (refire + 1 > allowed_refire) {
                 LOG(ERROR) << "Too deep refire";
-                auto res = create_serialize_tl_object<lite_api::liteServer_error>(228, "Too deep refire");
+                auto res = create_serialize_tl_object<lite_api::liteServer_error>(error->code_,
+                                                                                  error->message_ +
+                                                                                  " : tried over all nodes");
                 process_cache(std::move(data), res.clone(), compiled_query, elapsed);
                 promise.set_value(std::move(res));
                 return;
@@ -965,7 +967,7 @@ namespace ton::liteserver {
 
             if (refire + 1 > allowed_refire) {
               LOG(ERROR) << "Too deep refire";
-              auto res = create_serialize_tl_object<lite_api::liteServer_error>(228, "Too deep refire");
+              auto res = create_serialize_tl_object<lite_api::liteServer_error>(228, error.message().str());
               process_cache(std::move(data), res.clone(), compiled_query, elapsed);
               promise.set_value(std::move(res));
               return;
