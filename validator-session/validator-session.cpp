@@ -21,6 +21,7 @@
 #include "td/utils/crypto.h"
 #include "candidate-serializer.h"
 #include "td/utils/overloaded.h"
+#include "ton/ton-tl.hpp"
 
 namespace ton {
 
@@ -270,6 +271,8 @@ void ValidatorSessionImpl::process_broadcast(PublicKeyHash src, td::BufferSlice 
     }
     stat->deserialize_time = deserialize_time;
     stat->serialized_size = data.size();
+    stat->root_hash = candidate->root_hash_;
+    stat->file_hash = file_hash;
   }
 
   if ((td::int32)block_round < (td::int32)cur_round_ - MAX_PAST_ROUND_BLOCK ||
@@ -468,6 +471,8 @@ void ValidatorSessionImpl::generated_block(td::uint32 round, ValidatorSessionCan
     stat->collated_at = td::Clocks::system();
     stat->block_timestamp = td::Clocks::system();
     stat->collation_cached = collation_cached;
+    stat->root_hash = root_hash;
+    stat->file_hash = file_hash;
   }
   if (round != cur_round_) {
     return;
@@ -602,6 +607,8 @@ void ValidatorSessionImpl::try_approve_block(const SentBlock *block) {
         if (stat->block_timestamp <= 0.0) {
           stat->block_timestamp = td::Clocks::system();
         }
+        stat->root_hash = B->root_hash_;
+        stat->file_hash = td::sha256_bits256(B->data_);
       }
 
       auto P = td::PromiseCreator::lambda([round = cur_round_, hash = block_id, root_hash = block->get_root_hash(),
@@ -807,11 +814,23 @@ void ValidatorSessionImpl::request_new_block(bool now) {
   } else {
     double lambda = 10.0 / description().get_total_nodes();
     double x = -1 / lambda * log(td::Random::fast(1, 999) * 0.001);
-    if (x > catchain_max_block_delay_) {  // default = 0.5
-      x = catchain_max_block_delay_;
-    }
+    x = std::min(x, get_current_max_block_delay());  // default = 0.4
     td::actor::send_closure(catchain_, &catchain::CatChain::need_new_block, td::Timestamp::in(x));
   }
+}
+
+double ValidatorSessionImpl::get_current_max_block_delay() const {
+  td::uint32 att = real_state_->cur_attempt_in_round(*description_);
+  td::uint32 att1 = description_->opts().max_round_attempts;
+  if (att <= att1) {
+    return catchain_max_block_delay_;
+  }
+  td::uint32 att2 = att1 + 4;
+  if (att >= att2) {
+    return catchain_max_block_delay_slow_;
+  }
+  return catchain_max_block_delay_ +
+         (catchain_max_block_delay_slow_ - catchain_max_block_delay_) * (double)(att - att1) / (double)(att2 - att1);
 }
 
 void ValidatorSessionImpl::on_new_round(td::uint32 round) {
@@ -995,6 +1014,29 @@ void ValidatorSessionImpl::destroy() {
 
 void ValidatorSessionImpl::get_current_stats(td::Promise<ValidatorSessionStats> promise) {
   promise.set_result(cur_stats_);
+}
+
+void ValidatorSessionImpl::get_end_stats(td::Promise<EndValidatorGroupStats> promise) {
+  if (!started_) {
+    promise.set_error(td::Status::Error(ErrorCode::notready, "not started"));
+    return;
+  }
+  EndValidatorGroupStats stats;
+  stats.session_id = unique_hash_;
+  stats.timestamp = td::Clocks::system();
+  stats.nodes.resize(description().get_total_nodes());
+  for (size_t i = 0; i < stats.nodes.size(); ++i) {
+    stats.nodes[i].id = description().get_source_id(i);
+  }
+  td::actor::send_closure(catchain_, &catchain::CatChain::get_source_heights,
+                          [promise = std::move(promise),
+                           stats = std::move(stats)](td::Result<std::vector<catchain::CatChainBlockHeight>> R) mutable {
+                            TRY_RESULT_PROMISE(promise, heights, std::move(R));
+                            for (size_t i = 0; i < std::min(heights.size(), stats.nodes.size()); ++i) {
+                              stats.nodes[i].catchain_blocks = heights[i];
+                            }
+                            promise.set_result(std::move(stats));
+                          });
 }
 
 void ValidatorSessionImpl::get_validator_group_info_for_litequery(

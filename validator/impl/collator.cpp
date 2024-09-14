@@ -1,7 +1,7 @@
 /*
-  This file is part of TON Blockchain Library.
+    This file is part of TON Blockchain Library.
 
-  TON Blockchain Library is free software: you can redistribute it and/or modify
+    TON Blockchain Library is free software: you can redistribute it and/or modify
     it under the terms of the GNU Lesser General Public License as published by
     the Free Software Foundation, either version 2 of the License, or
     (at your option) any later version.
@@ -66,7 +66,6 @@ static inline bool dbg(int c) {
  *
  * @param shard The shard of the new block.
  * @param is_hardfork A boolean indicating whether the new block is a hardfork.
- * @param min_ts The minimum UnixTime for the new block.
  * @param min_masterchain_block_id The the minimum reference masterchain block.
  * @param prev A vector of BlockIdExt representing the previous blocks.
  * @param validator_set A reference to the ValidatorSet.
@@ -76,13 +75,12 @@ static inline bool dbg(int c) {
  * @param timeout The timeout for the collator.
  * @param promise The promise to return the result.
  */
-Collator::Collator(ShardIdFull shard, bool is_hardfork, UnixTime min_ts, BlockIdExt min_masterchain_block_id,
-                   std::vector<BlockIdExt> prev, Ref<ValidatorSet> validator_set, Ed25519_PublicKey collator_id,
+Collator::Collator(ShardIdFull shard, bool is_hardfork, BlockIdExt min_masterchain_block_id,
+                   std::vector<BlockIdExt> prev, td::Ref<ValidatorSet> validator_set, Ed25519_PublicKey collator_id,
                    Ref<CollatorOptions> collator_opts, td::actor::ActorId<ValidatorManager> manager,
                    td::Timestamp timeout, td::Promise<BlockCandidate> promise)
     : shard_(shard)
     , is_hardfork_(is_hardfork)
-    , min_ts(min_ts)
     , min_mc_block_id{min_masterchain_block_id}
     , prev_blocks(std::move(prev))
     , created_by_(collator_id)
@@ -1772,6 +1770,12 @@ bool Collator::register_shard_block_creators(std::vector<td::Bits256> creator_li
  * @returns True if collation is successful, false otherwise.
  */
 bool Collator::try_collate() {
+  work_timer_.resume();
+  cpu_work_timer_.resume();
+  SCOPE_EXIT {
+    work_timer_.pause();
+    cpu_work_timer_.pause();
+  };
   if (!preinit_complete) {
     LOG(WARNING) << "running do_preinit()";
     if (!do_preinit()) {
@@ -3060,7 +3064,7 @@ int Collator::process_one_new_message(block::NewOutMsg msg, bool enqueue_only, R
   bool defer = false;
   if (!from_dispatch_queue) {
     if (deferring_messages_enabled_ && collator_opts_->deferring_enabled && !is_special && !is_special_account &&
-        msg.msg_idx != 0) {
+        !collator_opts_->whitelist.count({src_wc, src_addr}) && msg.msg_idx != 0) {
       if (++sender_generated_messages_count_[src_addr] >= collator_opts_->defer_messages_after ||
           out_msg_queue_size_ > defer_out_queue_size_limit_) {
         defer = true;
@@ -3482,6 +3486,29 @@ bool Collator::process_inbound_message(Ref<vm::CellSlice> enq_msg, ton::LogicalT
 }
 
 /**
+ * Creates a string that explains which limit is exceeded. Used for collator stats.
+ *
+ * @param block_limit_status Status of block limits.
+ * @param cls Which limit class is exceeded.
+ *
+ * @returns String for collator stats.
+ */
+static std::string block_full_comment(const block::BlockLimitStatus& block_limit_status, unsigned cls) {
+  auto bytes = block_limit_status.estimate_block_size();
+  if (!block_limit_status.limits.bytes.fits(cls, bytes)) {
+    return PSTRING() << "block_full bytes " << bytes;
+  }
+  if (!block_limit_status.limits.gas.fits(cls, block_limit_status.gas_used)) {
+    return PSTRING() << "block_full gas " << block_limit_status.gas_used;
+  }
+  auto lt_delta = block_limit_status.cur_lt - block_limit_status.limits.start_lt;
+  if (!block_limit_status.limits.lt_delta.fits(cls, lt_delta)) {
+    return PSTRING() << "block_full lt_delta " << lt_delta;
+  }
+  return "";
+}
+
+/**
  * Processes inbound internal messages from message queues of the neighbors.
  * Messages are processed until the normal limit is reached, soft timeout is reached or there are no more messages.
  *
@@ -3495,11 +3522,14 @@ bool Collator::process_inbound_internal_messages() {
     block_full_ = !block_limit_status_->fits(block::ParamLimits::cl_normal);
     if (block_full_) {
       LOG(INFO) << "BLOCK FULL, stop processing inbound internal messages";
+      stats_.limits_log += PSTRING() << "INBOUND_INT_MESSAGES: "
+                                     << block_full_comment(*block_limit_status_, block::ParamLimits::cl_normal) << "\n";
       break;
     }
     if (soft_timeout_.is_in_past(td::Timestamp::now())) {
       block_full_ = true;
       LOG(WARNING) << "soft timeout reached, stop processing inbound internal messages";
+      stats_.limits_log += PSTRING() << "INBOUND_INT_MESSAGES: timeout\n";
       break;
     }
     auto kv = nb_out_msgs_->extract_cur();
@@ -3547,15 +3577,23 @@ bool Collator::process_inbound_external_messages() {
     }
     if (full) {
       LOG(INFO) << "BLOCK FULL, stop processing external messages";
+      stats_.limits_log += PSTRING() << "INBOUND_EXT_MESSAGES: "
+                                     << block_full_comment(*block_limit_status_, block::ParamLimits::cl_soft) << "\n";
       break;
     }
     if (medium_timeout_.is_in_past(td::Timestamp::now())) {
       LOG(WARNING) << "medium timeout reached, stop processing inbound external messages";
+      stats_.limits_log += PSTRING() << "INBOUND_EXT_MESSAGES: timeout\n";
       break;
     }
     auto ext_msg = ext_msg_struct.cell;
     ton::Bits256 hash{ext_msg->get_hash().bits()};
     int r = process_external_message(std::move(ext_msg));
+    if (r > 0) {
+      ++stats_.ext_msgs_accepted;
+    } else {
+      ++stats_.ext_msgs_rejected;
+    }
     if (r < 0) {
       bad_ext_msgs_.emplace_back(ext_msg_struct.hash);
       return false;
@@ -3657,21 +3695,48 @@ bool Collator::process_dispatch_queue() {
     vm::AugmentedDictionary cur_dispatch_queue{dispatch_queue_->get_root(), 256, block::tlb::aug_DispatchQueue};
     std::map<std::tuple<WorkchainId, StdSmcAddress, LogicalTime>, size_t> count_per_initiator;
     size_t total_count = 0;
+    auto prioritylist = collator_opts_->prioritylist;
+    auto prioritylist_iter = prioritylist.begin();
     while (!cur_dispatch_queue.is_empty()) {
       block_full_ = !block_limit_status_->fits(block::ParamLimits::cl_normal);
       if (block_full_) {
         LOG(INFO) << "BLOCK FULL, stop processing dispatch queue";
+        stats_.limits_log += PSTRING() << "DISPATCH_QUEUE_STAGE_" << iter << ": "
+                                       << block_full_comment(*block_limit_status_, block::ParamLimits::cl_normal)
+                                       << "\n";
         return true;
       }
       if (soft_timeout_.is_in_past(td::Timestamp::now())) {
         block_full_ = true;
         LOG(WARNING) << "soft timeout reached, stop processing dispatch queue";
+        stats_.limits_log += PSTRING() << "DISPATCH_QUEUE_STAGE_" << iter << ": timeout\n";
         return true;
       }
       StdSmcAddress src_addr;
-      auto account_dispatch_queue = block::get_dispatch_queue_min_lt_account(cur_dispatch_queue, src_addr);
+      td::Ref<vm::CellSlice> account_dispatch_queue;
+      while (!prioritylist.empty()) {
+        if (prioritylist_iter == prioritylist.end()) {
+          prioritylist_iter = prioritylist.begin();
+        }
+        auto priority_addr = *prioritylist_iter;
+        if (priority_addr.first != workchain() || !is_our_address(priority_addr.second)) {
+          prioritylist_iter = prioritylist.erase(prioritylist_iter);
+          continue;
+        }
+        src_addr = priority_addr.second;
+        account_dispatch_queue = cur_dispatch_queue.lookup(src_addr);
+        if (account_dispatch_queue.is_null()) {
+          prioritylist_iter = prioritylist.erase(prioritylist_iter);
+        } else {
+          ++prioritylist_iter;
+          break;
+        }
+      }
       if (account_dispatch_queue.is_null()) {
-        return fatal_error("invalid dispatch queue in shard state");
+        account_dispatch_queue = block::get_dispatch_queue_min_lt_account(cur_dispatch_queue, src_addr);
+        if (account_dispatch_queue.is_null()) {
+          return fatal_error("invalid dispatch queue in shard state");
+        }
       }
       vm::Dictionary dict{64};
       td::uint64 dict_size;
@@ -3691,7 +3756,8 @@ bool Collator::process_dispatch_queue() {
       // Remove message from DispatchQueue
       bool ok;
       if (iter == 0 ||
-          (iter == 1 && sender_generated_messages_count_[src_addr] >= collator_opts_->defer_messages_after)) {
+          (iter == 1 && sender_generated_messages_count_[src_addr] >= collator_opts_->defer_messages_after &&
+           !collator_opts_->whitelist.count({workchain(), src_addr}))) {
         ok = cur_dispatch_queue.lookup_delete(src_addr).not_null();
       } else {
         dict.lookup_delete(key);
@@ -3715,6 +3781,7 @@ bool Collator::process_dispatch_queue() {
       ++total_count;
       if (total_count >= max_total_count[iter]) {
         dispatch_queue_total_limit_reached_ = true;
+        stats_.limits_log += PSTRING() << "DISPATCH_QUEUE_STAGE_" << iter << ": total limit reached\n";
         break;
       }
     }
@@ -4064,6 +4131,8 @@ bool Collator::process_new_messages(bool enqueue_only) {
     if ((block_full_ || have_unprocessed_account_dispatch_queue_) && !enqueue_only) {
       LOG(INFO) << "BLOCK FULL, enqueue all remaining new messages";
       enqueue_only = true;
+      stats_.limits_log += PSTRING() << "NEW_MESSAGES: "
+                                     << block_full_comment(*block_limit_status_, block::ParamLimits::cl_normal) << "\n";
     }
     LOG(DEBUG) << "have message with lt=" << msg.lt;
     int res = process_one_new_message(std::move(msg), enqueue_only);
@@ -4072,6 +4141,8 @@ bool Collator::process_new_messages(bool enqueue_only) {
     } else if (res == 3) {
       LOG(INFO) << "All remaining new messages must be enqueued (BLOCK FULL)";
       enqueue_only = true;
+      stats_.limits_log += PSTRING() << "NEW_MESSAGES: "
+                                     << block_full_comment(*block_limit_status_, block::ParamLimits::cl_normal) << "\n";
     }
   }
   return true;
@@ -5435,6 +5506,18 @@ bool Collator::create_block_candidate() {
     td::actor::send_closure_later(manager, &ValidatorManager::complete_external_messages, std::move(delay_ext_msgs_),
                                   std::move(bad_ext_msgs_));
   }
+
+  double work_time = work_timer_.elapsed();
+  double cpu_work_time = cpu_work_timer_.elapsed();
+  LOG(WARNING) << "Collate query work time = " << work_time << "s, cpu time = " << cpu_work_time << "s";
+  stats_.bytes = block_limit_status_->estimate_block_size();
+  stats_.gas = block_limit_status_->gas_used;
+  stats_.lt_delta = block_limit_status_->cur_lt - block_limit_status_->limits.start_lt;
+  stats_.cat_bytes = block_limit_status_->limits.classify_size(stats_.bytes);
+  stats_.cat_gas = block_limit_status_->limits.classify_gas(stats_.gas);
+  stats_.cat_lt_delta = block_limit_status_->limits.classify_lt(block_limit_status_->cur_lt);
+  td::actor::send_closure(manager, &ValidatorManager::record_collate_query_stats, block_candidate->id, work_time,
+                          cpu_work_time, std::move(stats_));
   return true;
 }
 
@@ -5539,6 +5622,7 @@ void Collator::after_get_external_messages(td::Result<std::vector<std::pair<Ref<
   }
   auto vect = res.move_as_ok();
   for (auto& p : vect) {
+    ++stats_.ext_msgs_total;
     auto& ext_msg = p.first;
     int priority = p.second;
     Ref<vm::Cell> ext_msg_cell = ext_msg->root_cell();
@@ -5550,6 +5634,7 @@ void Collator::after_get_external_messages(td::Result<std::vector<std::pair<Ref<
       }
     }
     if (err) {
+      ++stats_.ext_msgs_filtered;
       bad_ext_msgs_.emplace_back(ext_msg->hash());
     }
   }

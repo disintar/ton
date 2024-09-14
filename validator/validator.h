@@ -65,6 +65,11 @@ struct CollatorOptions : public td::CntObject {
   td::uint32 dispatch_phase_3_max_total = 150;
   td::uint32 dispatch_phase_2_max_per_initiator = 20;
   td::optional<td::uint32> dispatch_phase_3_max_per_initiator;  // Default - depends on out msg queue size
+
+  // Don't defer messages from these accounts
+  std::set<std::pair<WorkchainId, StdSmcAddress>> whitelist;
+  // Prioritize these accounts on each phase of process_dispatch_queue
+  std::set<std::pair<WorkchainId, StdSmcAddress>> prioritylist;
 };
 
 struct ValidatorManagerOptions : public td::CntObject {
@@ -106,6 +111,7 @@ struct ValidatorManagerOptions : public td::CntObject {
   virtual bool get_celldb_direct_io() const = 0;
   virtual bool get_celldb_preload_all() const = 0;
   virtual td::optional<double> get_catchain_max_block_delay() const = 0;
+  virtual td::optional<double> get_catchain_max_block_delay_slow() const = 0;
   virtual bool get_state_serializer_enabled() const = 0;
   virtual td::Ref<CollatorOptions> get_collator_options() const = 0;
   virtual bool get_fast_state_serializer_enabled() const = 0;
@@ -137,6 +143,7 @@ struct ValidatorManagerOptions : public td::CntObject {
   virtual void set_celldb_direct_io(bool value) = 0;
   virtual void set_celldb_preload_all(bool value) = 0;
   virtual void set_catchain_max_block_delay(double value) = 0;
+  virtual void set_catchain_max_block_delay_slow(double value) = 0;
   virtual void set_state_serializer_enabled(bool value) = 0;
   virtual void set_collator_options(td::Ref<CollatorOptions> value) = 0;
   virtual void set_fast_state_serializer_enabled(bool value) = 0;
@@ -146,7 +153,7 @@ struct ValidatorManagerOptions : public td::CntObject {
       std::function<bool(ShardIdFull, CatchainSeqno, ShardCheckMode)> check_shard = [](ShardIdFull, CatchainSeqno,
                                                                                        ShardCheckMode) { return true; },
       bool allow_blockchain_init = false, double sync_blocks_before = 3600, double block_ttl = 86400,
-      double state_ttl = 3600, double archive_ttl = 86400 * 7, double key_proof_ttl = 86400 * 3650,
+      double state_ttl = 86400, double archive_ttl = 86400 * 7, double key_proof_ttl = 86400 * 3650,
       double max_mempool_num = 999999,
       bool initial_sync_disabled = false);
 };
@@ -248,6 +255,7 @@ class ValidatorManagerInterface : public td::actor::Actor {
   virtual void get_block_data_from_db_short(BlockIdExt block_id, td::Promise<td::Ref<BlockData>> promise) = 0;
   virtual void get_block_candidate_from_db(PublicKey source, BlockIdExt id, FileHash collated_data_file_hash,
                                            td::Promise<BlockCandidate> promise) = 0;
+  virtual void get_candidate_data_by_block_id_from_db(BlockIdExt id, td::Promise<td::BufferSlice> promise) = 0;
   virtual void get_shard_state_from_db(ConstBlockHandle handle, td::Promise<td::Ref<ShardState>> promise) = 0;
   virtual void get_shard_state_root_cell_from_db(ConstBlockHandle handle,
                                                  td::Promise<td::Ref<vm::DataCell>> promise) = 0;

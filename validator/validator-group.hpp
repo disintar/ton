@@ -51,7 +51,7 @@ class ValidatorGroup : public td::actor::Actor {
   BlockIdExt create_next_block_id(RootHash root_hash, FileHash file_hash) const;
   BlockId create_next_block_id_simple() const;
 
-  void start(std::vector<BlockIdExt> prev, BlockIdExt min_masterchain_block_id, UnixTime min_ts);
+  void start(std::vector<BlockIdExt> prev, BlockIdExt min_masterchain_block_id);
   void create_session();
   void destroy();
   void start_up() override {
@@ -69,15 +69,17 @@ class ValidatorGroup : public td::actor::Actor {
   }
 
   ValidatorGroup(ShardIdFull shard, PublicKeyHash local_id, ValidatorSessionId session_id,
-                 td::Ref<ValidatorSet> validator_set, validatorsession::ValidatorSessionOptions config,
-                 td::actor::ActorId<keyring::Keyring> keyring, td::actor::ActorId<adnl::Adnl> adnl,
-                 td::actor::ActorId<rldp::Rldp> rldp, td::actor::ActorId<overlay::Overlays> overlays,
-                 std::string db_root, td::actor::ActorId<ValidatorManager> validator_manager, bool create_session,
+                 td::Ref<ValidatorSet> validator_set, BlockSeqno last_key_block_seqno,
+                 validatorsession::ValidatorSessionOptions config, td::actor::ActorId<keyring::Keyring> keyring,
+                 td::actor::ActorId<adnl::Adnl> adnl, td::actor::ActorId<rldp::Rldp> rldp,
+                 td::actor::ActorId<overlay::Overlays> overlays, std::string db_root,
+                 td::actor::ActorId<ValidatorManager> validator_manager, bool create_session,
                  bool allow_unsafe_self_blocks_resync, td::Ref<ValidatorManagerOptions> opts)
       : shard_(shard)
       , local_id_(std::move(local_id))
       , session_id_(session_id)
       , validator_set_(std::move(validator_set))
+      , last_key_block_seqno_(last_key_block_seqno)
       , config_(std::move(config))
       , keyring_(keyring)
       , adnl_(adnl)
@@ -112,9 +114,9 @@ class ValidatorGroup : public td::actor::Actor {
 
   std::vector<BlockIdExt> prev_block_ids_;
   BlockIdExt min_masterchain_block_id_;
-  UnixTime min_ts_;
 
   td::Ref<ValidatorSet> validator_set_;
+  BlockSeqno last_key_block_seqno_;
   validatorsession::ValidatorSessionOptions config_;
 
   td::actor::ActorId<keyring::Keyring> keyring_;
@@ -139,7 +141,7 @@ class ValidatorGroup : public td::actor::Actor {
 
   void generated_block_candidate(std::shared_ptr<CachedCollatedBlock> cache, td::Result<BlockCandidate> R);
 
-  typedef std::tuple<td::Bits256, BlockIdExt, FileHash, FileHash> CacheKey;
+  using CacheKey = std::tuple<td::Bits256, BlockIdExt, FileHash, FileHash>;
   std::map<CacheKey, UnixTime> approved_candidates_cache_;
 
   void update_approve_cache(CacheKey key, UnixTime value);
