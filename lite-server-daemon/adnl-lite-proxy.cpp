@@ -917,6 +917,8 @@ namespace ton::liteserver {
                                                                                       error->message_ +
                                                                                       " : tried over all nodes");
                     process_cache(std::move(data), res.clone(), compiled_query, elapsed);
+                    td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, std::move(data), started_at,
+                                            elapsed);
                     promise.set_value(std::move(res));
                     return;
                   } else {
@@ -939,6 +941,8 @@ namespace ton::liteserver {
                                                                                   error->message_ +
                                                                                   " : tried over all nodes");
                 process_cache(std::move(data), res.clone(), compiled_query, elapsed);
+                td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, std::move(data), started_at,
+                                        elapsed);
                 promise.set_value(std::move(res));
                 return;
               } else {
@@ -955,6 +959,8 @@ namespace ton::liteserver {
               LOG(INFO)
               << "Query to: " << server_adnl << " success, Query: " << compiled_query << " Elapsed: " << elapsed;
               process_cache(std::move(data), res.clone(), compiled_query, elapsed);
+              td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, std::move(data), started_at,
+                                      elapsed);
               promise.set_value(std::move(res));
               return;
             }
@@ -969,6 +975,8 @@ namespace ton::liteserver {
               LOG(ERROR) << "Too deep refire";
               auto res = create_serialize_tl_object<lite_api::liteServer_error>(228, error.message().str());
               process_cache(std::move(data), res.clone(), compiled_query, elapsed);
+              td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, std::move(data), started_at,
+                                      elapsed);
               promise.set_value(std::move(res));
               return;
             } else {
