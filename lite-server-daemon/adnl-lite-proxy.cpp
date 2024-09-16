@@ -858,7 +858,7 @@ namespace ton::liteserver {
           promise.set_value(create_serialize_tl_object<ton::lite_api::liteServer_itemPublished>(founded));
         }
 
-        void publish_call(adnl::AdnlNodeIdShort dst, td::BufferSlice data, std::time_t started_at, td::Timer elapsed) {
+        void publish_call(adnl::AdnlNodeIdShort dst, td::BufferSlice data, std::time_t started_at, td::Timer elapsed, bool is_cache) {
           auto elapsed_t = elapsed.elapsed();
           auto F = fetch_tl_object<lite_api::liteServer_query>(data.clone(), true);
           if (F.is_ok()) {
@@ -870,7 +870,12 @@ namespace ton::liteserver {
 
               nlohmann::json answer;
               answer["dst"] = dst.bits256_value().to_hex();
-              answer["q"] = lite_query_name_by_id(query_obj->get_id());
+              auto q = lite_query_name_by_id(query_obj->get_id());
+              if (is_cache){
+                answer["q"] = q + "_cache";
+              } else {
+                answer["q"] = q;
+              }
               answer["started"] = started_at;
               answer["elapsed"] = elapsed_t;
 
@@ -890,7 +895,10 @@ namespace ton::liteserver {
           if (it != cache_similar.end()) {
             for (auto &promise: it->second) {
               LOG(INFO) << "Found cache for request: " << data_hash << " query: " << compiled_query;
-              promise.set_value(result.clone());
+              td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, std::get<1>(promise), data.clone(),
+                                      std::get<0>(promise),
+                                      elapsed, true);
+              std::get<2>(promise).set_value(result.clone());
             }
 
             cache_similar.erase(data_hash);
@@ -918,7 +926,7 @@ namespace ton::liteserver {
                                                                                       " : tried over all nodes");
 
                     td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, data.clone(), started_at,
-                                            elapsed);
+                                            elapsed, false);
                     process_cache(std::move(data), res.clone(), compiled_query, elapsed);
                     promise.set_value(std::move(res));
                     return;
@@ -943,7 +951,7 @@ namespace ton::liteserver {
                                                                                   " : tried over all nodes");
 
                 td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, data.clone(), started_at,
-                                        elapsed);
+                                        elapsed, false);
                 process_cache(std::move(data), res.clone(), compiled_query, elapsed);
                 promise.set_value(std::move(res));
                 return;
@@ -961,7 +969,7 @@ namespace ton::liteserver {
               LOG(INFO)
               << "Query to: " << server_adnl << " success, Query: " << compiled_query << " Elapsed: " << elapsed;
               td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, data.clone(), started_at,
-                                      elapsed);
+                                      elapsed, false);
               process_cache(std::move(data), res.clone(), compiled_query, elapsed);
               promise.set_value(std::move(res));
               return;
@@ -977,7 +985,7 @@ namespace ton::liteserver {
               LOG(ERROR) << "Too deep refire";
               auto res = create_serialize_tl_object<lite_api::liteServer_error>(228, error.message().str());
               td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, data.clone(), started_at,
-                                      elapsed);
+                                      elapsed, false);
               process_cache(std::move(data), res.clone(), compiled_query, elapsed);
               promise.set_value(std::move(res));
               return;
@@ -1000,10 +1008,10 @@ namespace ton::liteserver {
 
           if (it != cache_similar.end() && !cache_similar[data_hash].empty()) {
             LOG(INFO) << "Found similar request, store: " << data_hash;
-            it->second.push_back(std::move(promise));
+            it->second.push_back(std::make_tuple(std::time(nullptr), dst, std::move(promise)));
             return;
           } else {
-            cache_similar[data_hash] = std::vector<td::Promise<td::BufferSlice>>();
+            cache_similar[data_hash] = std::vector<std::tuple<std::time_t, adnl::AdnlNodeIdShort, td::Promise<td::BufferSlice>>>();
           }
 
 
@@ -1709,7 +1717,7 @@ namespace ton::liteserver {
         std::vector<adnl::AdnlNodeIdShort> uptodate_private_ls{};
         ton::PublicKeyHash default_dht_node_ = ton::PublicKeyHash::zero();
         std::map<ton::adnl::AdnlNodeIdShort, std::tuple<ValidUntil, RateLimit>> limits;
-        std::map<std::string, std::vector<td::Promise<td::BufferSlice>>> cache_similar;
+        std::map<std::string, std::vector<std::tuple<std::time_t, ton::adnl::AdnlNodeIdShort, td::Promise<td::BufferSlice>>>> cache_similar;
         std::map<ton::adnl::AdnlNodeIdShort, int> usage;
         long long rps;
         std::map<BlockSeqno, WaitList<td::actor::Actor, td::Unit>> shard_client_waiters_;
