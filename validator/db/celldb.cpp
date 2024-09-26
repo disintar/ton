@@ -231,7 +231,7 @@ void CellDbIn::alarm() {
     flush_db_stats();
   }
 
-  if (migrate_after_ && migrate_after_.is_in_past()) {
+  if (migrate_after_ && migrate_after_.is_in_past() && !read_only_) {
     migrate_cells();
   }
   if (migration_stats_ && migration_stats_->end_at_.is_in_past()) {
