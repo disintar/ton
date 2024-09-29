@@ -4,7 +4,6 @@
 #include "PyCell.h"
 #include "PyDict.h"
 #include "td/utils/MpscPollableQueue.h"
-#include "tl/generate/auto/tl/lite_api.h"
 #include "ton/lite-tl.hpp"
 #include "tl-utils/lite-utils.hpp"
 #include "tl/generate/auto/tl/tonlib_api_json.h"

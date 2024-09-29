@@ -66,6 +66,7 @@
 #include "crypto/block/mc-config.h"
 
 #include "validator-engine/IBlockParser.hpp"
+#include "validator-engine/ClusterSyncer.hpp"
 #include "validator.h"
 
 namespace ton {
@@ -84,8 +85,10 @@ class RootDb : public Db {
       LOG(ERROR) << "Received nullptr IBlockPublisher";
       return;
     }
+
+    cluster_sync_ = td::actor::create_actor<ClusterPublishSync>("cluster-sync");
     publisher_ = publisher;
-    //    LOG(INFO) << "Received BlockPublisher";
+    publisher_->set_cluster_sync(cluster_sync_.get());
   }
 
   void clear_boc_cache() override {
@@ -202,6 +205,7 @@ class RootDb : public Db {
   td::actor::ActorOwn<StateDb> state_db_;
   td::actor::ActorOwn<StaticFilesDb> static_files_db_;
   td::actor::ActorOwn<ArchiveManager> archive_db_;
+  td::actor::ActorOwn<ClusterPublishSync> cluster_sync_;
 
   BlockParser* publisher_ = nullptr;
   void get_block_state_root_cell(ConstBlockHandle handle, td::Promise<td::Ref<vm::DataCell>> promise) override;

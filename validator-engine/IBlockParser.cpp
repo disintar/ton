@@ -188,27 +188,30 @@ namespace ton::validator {
       bool allow_send_messages = bool(value);
 
       auto Po = td::PromiseCreator::lambda(
-              [publisher = publisher_, allow_send_messages](td::Result<std::tuple<td::vector<json>, std::string, unsigned long long, int>> R) {
+              [publisher = publisher_, allow_send_messages, cluster_sync = cluster_sync_](
+                      td::Result<std::tuple<td::vector<json>, td::Bits256, unsigned long long, int>> R) {
                   if (R.is_ok() && allow_send_messages) {
+                    td::actor::send_closure(cluster_sync, &ClusterPublishSync::sync_block_trace,
+                                            std::move(R.move_as_ok()), publisher);
+                  }
+              });
+
+      auto promise_try_sync = td::PromiseCreator::lambda(
+              [P = std::move(P), cluster_sync = cluster_sync_](
+                      td::Result<std::tuple<td::Bits256, td::string, td::string>> R) mutable {
+                  if (R.is_ok()) {
+                    LOG(ERROR) << "Route over sync actor";
+
                     auto data = R.move_as_ok();
-
-                    auto transactions = std::get<0>(data);
-                    if (!transactions.empty()) {
-                      json data_to_send = {
-                              {"transactions", std::move(transactions)},
-                              {"root_hash",    std::get<1>(data)},
-                      };
-
-                      publisher->publishOutMsgs(std::get<3>(data), std::get<2>(data), data_to_send.dump(-1));
-                    }
-
+                    td::actor::send_closure(cluster_sync, &ClusterPublishSync::sync_block_state, std::move(data),
+                                            std::move(P));
                   } else {
-                    LOG(ERROR) << "Unknown error in traces";
+                    UNREACHABLE();
                   }
               });
 
       td::actor::create_actor<BlockParserAsync>("BlockParserAsync", id, handle, data, state, prev_state_opt,
-                                                std::move(P), std::move(Po))
+                                                std::move(promise_try_sync), std::move(Po))
               .release();
 
       stored_applied_.erase(stored_applied_.find(key));

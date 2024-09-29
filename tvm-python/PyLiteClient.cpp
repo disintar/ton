@@ -347,7 +347,7 @@ namespace pylite {
         scheduler_.run_in_context_external(
                 [&] { send_closure(engine, &LiteClientActorEngine::get_AccountState, workchain, address_bits, blk); });
 
-        
+
         auto response = wait_response();
         if (response->success) {
             SuccessBufferSlice *data = dynamic_cast<SuccessBufferSlice *>(response.get());
@@ -382,7 +382,7 @@ namespace pylite {
     std::unique_ptr<ton::lite_api::liteServer_masterchainInfoExt> PyLiteClient::get_MasterchainInfoExt() {
         scheduler_.run_in_context_external(
                 [&] { send_closure(engine, &LiteClientActorEngine::get_MasterchainInfoExt, 0); });
-        
+
         auto response = wait_response();
         if (response->success) {
             SuccessBufferSlice *data = dynamic_cast<SuccessBufferSlice *>(response.get());
@@ -531,7 +531,7 @@ namespace pylite {
 
     block::TransactionList::Info PyLiteClient::get_Transactions(int count, int workchain, std::string address_string,
                                                                 unsigned long long lt, std::string hash_int_string) {
-        
+
 
         td::RefInt256 address_int = td::string_to_int256(address_string);
         td::Bits256 address_bits;
@@ -591,7 +591,7 @@ namespace pylite {
     }
 
     TestNode::BlockHdrInfo PyLiteClient::get_BlockHeader(ton::BlockIdExt req_blkid, int mode) {
-        
+
 
         scheduler_.run_in_context_external(
                 [&] { send_closure(engine, &LiteClientActorEngine::get_BlockHeader, req_blkid, mode); });
@@ -607,7 +607,7 @@ namespace pylite {
 
     PyCell PyLiteClient::get_OneTransaction(ton::BlockIdExt req_blkid, int workchain, std::string address_string,
                                             unsigned long long trans_lt) {
-        
+
 
         td::RefInt256 address_int = td::string_to_int256(address_string);
         td::Bits256 address_bits;
@@ -706,7 +706,7 @@ namespace pylite {
 
     std::tuple<PubKeyHex, ShortKeyHex> PyLiteClient::admin_AddUser(std::string privkey, td::int64 valid_until,
                                                                    td::int32 ratelimit) {
-        
+
 
         td::RefInt256 pubkey_int = td::string_to_int256(privkey);
         td::Bits256 privkey_bits;
@@ -762,7 +762,7 @@ namespace pylite {
     }
 
     std::vector<std::tuple<ShortKeyHex, int, td::int64, td::int64, bool>> PyLiteClient::admin_getStatData() {
-        
+
 
         scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::admin_GetStatData); });
 
@@ -792,7 +792,7 @@ namespace pylite {
     };
 
     PyCell PyLiteClient::get_Block(ton::BlockIdExt req_blkid) {
-        
+
 
         scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::get_Block, req_blkid); });
 
@@ -842,7 +842,7 @@ namespace pylite {
     }
 
     std::vector<ton::BlockId> PyLiteClient::get_AllShardsInfo(ton::BlockIdExt req_blkid) {
-        
+
 
         scheduler_.run_in_context_external(
                 [&] { send_closure(engine, &LiteClientActorEngine::get_AllShardsInfo, std::move(req_blkid)); });
@@ -882,7 +882,7 @@ namespace pylite {
     }
 
     PyDict PyLiteClient::get_Libraries(std::vector<std::string> libs) {
-        
+
 
         std::vector<td::Bits256> libs_bits;
         libs_bits.reserve(libs.size());
@@ -931,7 +931,7 @@ namespace pylite {
     }
 
     bool PyLiteClient::wait_connected(double wait) {
-        
+
 
         scheduler_.run_in_context_external(
                 [&, wait] { send_closure(engine, &LiteClientActorEngine::wait_connected, wait); });
@@ -970,7 +970,7 @@ namespace pylite {
     BlockTransactionsExt PyLiteClient::get_listBlockTransactionsExt(ton::BlockIdExt blkid, int mode, int count,
                                                                     std::optional<std::string> account,
                                                                     std::optional<unsigned long long> lt) {
-        
+
 
         bool check_proof = mode & 32;
         bool reverse_mode = mode & 64;

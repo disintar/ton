@@ -30,6 +30,8 @@ set(VALIDATOR_DB_SOURCE
   ../blockchain-indexer/json-utils.cpp
   ../validator-engine/IBlockParser.cpp
   ../validator-engine/IBlockParser.hpp
+  ../validator-engine/ClusterSyncer.hpp
+  ../validator-engine/ClusterSyncer.cpp
   ../validator-engine/BlockParserAsync.hpp
   ../validator-engine/BlockParserAsync.cpp
 

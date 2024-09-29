@@ -446,6 +446,7 @@ namespace ton::validator {
 
       auto workchain = blkid.id.workchain;
       auto shard = blkid.id.shard;
+      root_hash_ = blkid.root_hash;
 
       answer["BlockIdExt"] = {{"file_hash", blkid.file_hash.to_hex()},
                               {"root_hash", blkid.root_hash.to_hex()},
@@ -469,7 +470,7 @@ namespace ton::validator {
 
       answer["global_id"] = blk.global_id;
       auto now = info.gen_utime;
-      LOG(WARNING) << "Parse block: " << blkid.id.to_str() << " time: " << time_to_human(now);
+      LOG(WARNING) << "Parse block: " << blkid.id.to_str() << " time: " << time_to_human(now) << " root hash: " << root_hash_;
 
       auto start_lt = info.start_lt;
 
@@ -723,7 +724,7 @@ namespace ton::validator {
       }
 
       out_messages_promise.set_value(std::make_tuple(std::move(out_msgs),
-                                                     blkid.root_hash.to_hex(),
+                                                     blkid.root_hash,
                                                      shard,
                                                      workchain));
 
@@ -953,7 +954,7 @@ namespace ton::validator {
 
     void BlockParserAsync::finalize() {
       LOG(DEBUG) << "Send: " << id.to_str() << " success";
-      P.set_value(std::make_tuple(parsed_data, parsed_state));
+      P.set_value(std::make_tuple(root_hash_, parsed_data, parsed_state));
       stop();
     }
 
