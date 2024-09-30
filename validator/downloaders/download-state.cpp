@@ -210,7 +210,7 @@ void DownloadShardState::written_shard_state(td::Ref<ShardState> state) {
               publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
             }
           } else {
-            LOG(FATAL) << "Failed to parse!";
+            LOG(ERROR) << "Skip publish block!";
           }
         });
     publisher_->storeBlockApplied(handle_->id(), std::move(final_publish));

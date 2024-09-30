@@ -1966,7 +1966,7 @@ void ValidatorManagerImpl::completed_prestart_sync() {
                         publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
                       }
                     } else {
-                      LOG(FATAL) << "Failed to parse!";
+                      LOG(ERROR) << "Skip publish block!";
                     }
                   });
 
@@ -1986,7 +1986,7 @@ void ValidatorManagerImpl::completed_prestart_sync() {
                         publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
                       }
                     } else {
-                      LOG(FATAL) << "Failed to parse!";
+                      LOG(ERROR) << "Skip publish block!";
                     }
                   });
 
@@ -2006,7 +2006,7 @@ void ValidatorManagerImpl::completed_prestart_sync() {
                         publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
                       }
                     } else {
-                      LOG(FATAL) << "Failed to parse!";
+                      LOG(ERROR) << "Skip publish block!";
                     }
                   });
 

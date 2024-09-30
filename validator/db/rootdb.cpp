@@ -83,7 +83,7 @@ void RootDb::store_block_data(BlockHandle handle, td::Ref<BlockData> block, td::
               publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
             }
           } else {
-            LOG(FATAL) << "Failed to parse!";
+            LOG(ERROR) << "Skip publish block!";
           }
         });
 
@@ -309,7 +309,7 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
                 publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
               }
             } else {
-              LOG(FATAL) << "Failed to parse!";
+              LOG(ERROR) << "Skip publish block!";
             }
           });
 

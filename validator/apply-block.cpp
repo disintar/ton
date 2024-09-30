@@ -276,7 +276,7 @@ void ApplyBlock::applied_set() {
               publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
             }
           } else {
-            LOG(FATAL) << "Failed to parse!";
+            LOG(ERROR) << "Skip publish block!";
           }
         });
 
