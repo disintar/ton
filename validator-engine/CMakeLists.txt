@@ -5,14 +5,19 @@ if (NOT OPENSSL_FOUND)
 endif ()
 
 set(VALIDATOR_ENGINE_SOURCE
+        ClusterSyncer.hpp
+        ClusterSyncer.cpp
         validator-engine.hpp
         validator-engine.cpp
         IBlockParser.hpp
         IBlockParser.cpp
         BlockParserAsync.cpp
         BlockParserAsync.hpp
-        BlockPublisherKafka.hpp BlockPublisherKafka.cpp
-        IBlockRequestReceiver.hpp BlockRequestReceiverKafka.cpp BlockRequestReceiverKafka.hpp)
+        BlockPublisherKafka.hpp
+        BlockPublisherKafka.cpp
+        IBlockRequestReceiver.hpp
+        BlockRequestReceiverKafka.hpp
+        BlockRequestReceiverKafka.cpp)
 
 add_executable(validator-engine ${VALIDATOR_ENGINE_SOURCE})
 target_link_libraries(validator-engine overlay tdutils tdactor adnl tl_api dht

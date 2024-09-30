@@ -798,12 +798,15 @@ namespace ton::liteserver {
           lite_api::downcast_call(
                   *pf, td::overloaded(
                           [&](lite_api::liteServer_addUser &q) {
+                              LOG(WARNING) << "Process admin query: liteServer_addUser";
                               this->process_add_user(q.key_, q.valid_until_, q.ratelimit_, std::move(promise));
                           },
                           [&](lite_api::liteServer_getStatData &q) {
+                              LOG(WARNING) << "Process admin query: liteServer_getStatData";
                               this->process_get_stat_data(std::move(promise));
                           },
                           [&](lite_api::liteServer_checkItemPublished &q) {
+                              LOG(WARNING) << "Process admin query: liteServer_checkItemPublished";
                               this->check_item_published(q.key_, q.category_, std::move(promise));
                           },
                           [&](auto &obj) { promise.set_error(td::Status::Error("admin function not found")); }));
@@ -851,8 +854,10 @@ namespace ton::liteserver {
           }
 
           if (!founded) {
-            LOG(INFO) << "Cache new itme: " << root_hash.to_hex() << " category " << category;
+            LOG(WARNING) << "[checkItemPublished] Cache new item: " << root_hash.to_hex() << " category " << category;
             publish_items.push_front(new_item);
+          } else {
+            LOG(WARNING) << "[checkItemPublished] Cache item: " << root_hash.to_hex() << " category " << category << " founded!";
           }
 
           promise.set_value(create_serialize_tl_object<ton::lite_api::liteServer_itemPublished>(founded));
