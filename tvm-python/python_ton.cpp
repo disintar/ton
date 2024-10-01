@@ -498,6 +498,7 @@ PYBIND11_MODULE(python_ton, m) {
            py::arg("address"), py::arg("lt"))
       .def("stop", &pylite::PyLiteClient::stop)
       .def("dummy_wait", &pylite::PyLiteClient::dummy_wait)
+      .def("get_ParsedBlockInfo", &pylite::PyLiteClient::get_ParsedBlockInfo, py::arg("block_id"))
       .def("get_Block", &pylite::PyLiteClient::get_Block, py::arg("block_id"))
       .def("admin_AddUser", &pylite::PyLiteClient::admin_AddUser, py::arg("pubkey"), py::arg("validuntil"),
            py::arg("ratelimit"))

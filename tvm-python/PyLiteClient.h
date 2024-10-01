@@ -110,6 +110,8 @@ namespace pylite {
 
         void lookupBlock(int mode, ton::BlockId block, long long lt, long long time);
 
+        void get_ParsedBlockInfo(ton::BlockId block);
+
         void ready();
 
         void wait_connected(double wait);
@@ -250,14 +252,14 @@ namespace pylite {
         block::TransactionList::Info get_Transactions(int count, int workchain, std::string address_string,
                                                       unsigned long long lt, std::string hash_int_string);
 
-        PyCell
-        get_OneTransaction(ton::BlockIdExt blkid, int workchain, std::string address_string, unsigned long long lt);
+        PyCell get_OneTransaction(ton::BlockIdExt blkid, int workchain, std::string address_string, unsigned long long lt);
 
         TestNode::BlockHdrInfo get_BlockHeader(ton::BlockIdExt blkid, int mode);
 
         TestNode::BlockHdrInfo lookupBlock(int mode, ton::BlockId block, long long lt, long long time);
 
         PyCell get_Block(ton::BlockIdExt blkid);
+        std::string get_ParsedBlockInfo(ton::BlockId blkid);
 
         PyDict get_Libraries(std::vector<std::string> libs);
 

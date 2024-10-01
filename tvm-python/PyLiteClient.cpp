@@ -145,6 +145,12 @@ namespace pylite {
                 });
     }
 
+    void LiteClientActorEngine::get_ParsedBlockInfo(ton::BlockId block){
+      auto q = ton::serialize_tl_object(ton::create_tl_object<ton::lite_api::liteServer_getParsedBlock>(
+              ton::create_tl_lite_block_id_simple(block)), true);
+      qprocess(std::move(q));
+    };
+
     void LiteClientActorEngine::admin_qprocess(td::BufferSlice q) {
         td::actor::send_closure(
                 client, &ton::adnl::AdnlExtClient::send_query, "adminquery",
@@ -791,9 +797,25 @@ namespace pylite {
         }
     };
 
+    std::string PyLiteClient::get_ParsedBlockInfo(ton::BlockId blkid) {
+      scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::get_ParsedBlockInfo, blkid); });
+
+      auto response = wait_response();
+      if (response->success) {
+        SuccessBufferSlice *rdata = dynamic_cast<SuccessBufferSlice *>(response.get());
+        auto R =
+                ton::fetch_tl_object < ton::lite_api::liteServer_parsedBlockData> (std::move(rdata->obj->clone()), true);
+        if (R.is_error()) {
+          throw_lite_error(rdata->obj->clone());
+        }
+
+        return std::move(R.move_as_ok()->json_data_);
+      } else {
+        throw std::logic_error(response->error_message);
+      }
+    }
+
     PyCell PyLiteClient::get_Block(ton::BlockIdExt req_blkid) {
-
-
         scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::get_Block, req_blkid); });
 
         auto response = wait_response();
