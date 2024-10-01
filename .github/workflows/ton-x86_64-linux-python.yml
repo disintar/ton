@@ -1,4 +1,4 @@
-name: "tvm-python x86_64 Linux"
+name: "TON DEV: Linux py3.10 / py3.12 build"
 
 on:
   push:

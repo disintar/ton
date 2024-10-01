@@ -1,4 +1,4 @@
-name: "tvm-python master"
+name: "TON DEV: macos build"
 
 on:
   push:
