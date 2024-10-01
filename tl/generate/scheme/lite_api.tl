@@ -33,6 +33,7 @@ liteServer.masterchainInfoExt mode:# version:int capabilities:long last:tonNode.
 liteServer.currentTime now:int = liteServer.CurrentTime;
 liteServer.version mode:# version:int capabilities:long now:int = liteServer.Version;
 liteServer.blockData id:tonNode.blockIdExt data:bytes = liteServer.BlockData;
+liteServer.parsedBlockData json_data:string = liteServer.ParsedBlockData;
 liteServer.blockState id:tonNode.blockIdExt root_hash:int256 file_hash:int256 data:bytes = liteServer.BlockState;
 liteServer.blockHeader id:tonNode.blockIdExt mode:# header_proof:bytes = liteServer.BlockHeader;
 liteServer.sendMsgStatus status:int = liteServer.SendMsgStatus;
@@ -121,6 +122,7 @@ liteServer.nonfinal.getCandidate id:liteServer.nonfinal.candidateId = liteServer
 liteServer.addUser key:int256 valid_until:int64 ratelimit:int = liteServer.NewUser;
 liteServer.getStatData = liteServer.Stats;
 liteServer.checkItemPublished key:int256 category:int64 = liteServer.ItemPublished;
+liteServer.getParsedBlock id:tonNode.blockId = liteServer.ParsedBlockData;
 
 liteServer.queryPrefix = Object; 
 liteServer.query data:bytes = Object;

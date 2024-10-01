@@ -15,6 +15,7 @@ set(TON_VALIDATOR_SOURCE
   fabric.cpp
   ihr-message.cpp
   liteserver.cpp
+  liteserver-extra.cpp
   message-queue.cpp
   proof.cpp
   shard.cpp

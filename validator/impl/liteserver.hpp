@@ -58,8 +58,12 @@ class LiteQuery : public td::actor::Actor {
   LogicalTime trans_lt_;
   Bits256 trans_hash_;
   BlockIdExt base_blk_id_, base_blk_id_alt_, blk_id_;
+  ConstBlockHandle parse_handle_;
   Ref<MasterchainStateQ> mc_state_, mc_state0_;
-  Ref<ShardStateQ> state_;
+
+  ShardId prev_accounts_left_shard, prev_accounts_right_shard;
+  // If we perform getParsedBlockInfo - get prev state in state_ and current state in current_state_
+  Ref<ShardStateQ> state_, left_prev_state_, current_state_;
   Ref<BlockQ> mc_block_, block_;
   Ref<ProofQ> mc_proof_, mc_proof_alt_;
   Ref<ProofLinkQ> proof_link_;
@@ -186,6 +190,11 @@ class LiteQuery : public td::actor::Actor {
   void perform_getBlockOutMsgQueueSize(int mode, BlockIdExt blkid);
   void finish_getBlockOutMsgQueueSize();
   void perform_getDispatchQueueInfo(int mode, BlockIdExt blkid, StdSmcAddress after_addr, int max_accounts);
+  void perform_getParsedBlock(BlockId blkid);
+  void continue_getParsedBlock(std::vector<BlockIdExt> blkids_prev);
+  void continue_prev_getParsedBlock(BlockIdExt blkid_prev_right);
+  void finish_getParsedBlock(bool after_merge);
+  void send_getParsedBlock(std::string data);
   void finish_getDispatchQueueInfo(StdSmcAddress after_addr, int max_accounts);
   void perform_getDispatchQueueMessages(int mode, BlockIdExt blkid, StdSmcAddress addr, LogicalTime lt,
                                         int max_messages);
@@ -216,6 +225,7 @@ class LiteQuery : public td::actor::Actor {
   void got_mc_block_data(BlockIdExt blkid, Ref<BlockData> data);
   void got_mc_block_proof(BlockIdExt blkid, int mode, Ref<Proof> proof);
   void got_block_proof_link(BlockIdExt blkid, Ref<ProofLink> proof_link);
+  void set_handle(ConstBlockHandle handle);
   void got_zero_state(BlockIdExt blkid, td::BufferSlice zerostate);
   void dec_pending() {
     if (!--pending_) {
