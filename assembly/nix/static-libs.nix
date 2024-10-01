@@ -19,7 +19,7 @@ let
   });
 
   staticLZ4 = (pkgs.lz4.override { enableStatic = true; enableShared = false; }).dev;
-  staticLibiconv = (libiconv.override { enableStatic = true; enableShared = false; });
+  staticLibiconv = (pkgs.libiconv.override { enableStatic = true; enableShared = false; });
 in
 {
   inherit staticBoost staticLibrdkafka staticLZ4;
