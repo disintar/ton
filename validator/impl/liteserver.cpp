@@ -528,11 +528,19 @@ namespace ton {
                               this->perform_getBlockOutMsgQueueSize(q.mode_, create_block_id(q.id_));
                           },
                           [&](lite_api::liteServer_getDispatchQueueInfo& q) {
+                              query_compiled = " Query: getDispatchQueueInfo(block_id: " + string_block_id(q.id_) +
+                                      ", after_addr: " + q.after_addr_.to_hex() + ", max_accounts: " + std::to_string(q.max_accounts_) + ")";
                             this->perform_getDispatchQueueInfo(q.mode_, create_block_id(q.id_), q.after_addr_, q.max_accounts_);
                           },
                           [&](lite_api::liteServer_getDispatchQueueMessages& q) {
+                              query_compiled = " Query: getDispatchQueueInfo(block_id: " + string_block_id(q.id_) +
+                                               ", addr: " + q.addr_.to_hex() + ", after_lt: " + std::to_string(q.after_lt_)
+                                               + ", max_messages: " + std::to_string(q.max_messages_) + ")";
                             this->perform_getDispatchQueueMessages(q.mode_, create_block_id(q.id_), q.addr_,
                                                                    std::max<td::int64>(q.after_lt_, 0), q.max_messages_);
+                          },
+                          [&](lite_api::liteServer_getParsedBlock& q){
+                              this->perform_getParsedBlock(create_block_id_simple(q.id_));
                           },
                           [&](auto &obj) {
                               this->abort_query(td::Status::Error(ErrorCode::protoviolation, "unknown query"));
