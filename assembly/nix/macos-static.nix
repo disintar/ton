@@ -31,6 +31,7 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
       pkgsStatic.boost
       staticLibs.staticLibrdkafka
       staticLibs.staticLZ4
+      staticLibs.staticLibiconv
    ];
 
 

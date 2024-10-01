@@ -28,6 +28,7 @@ stdenv.mkDerivation {
       staticLibs.staticBoost
       staticLibs.staticLibrdkafka
       staticLibs.staticLZ4
+      staticLibs.staticLibiconv
     ];
 
   makeStatic = true;
