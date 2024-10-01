@@ -18,13 +18,7 @@ let
     configureFlags = (oldAttrs.configureFlags or []) ++ ["--enable-static" "--disable-shared"];
   });
 
-  staticLZ4 = pkgs.lz4.overrideAttrs (oldAttrs: rec {
-    # Disable shared library building and ensure a static build
-    buildInputs = oldAttrs.buildInputs or [];
-
-    # Override the configure flags
-    configureFlags = [ "-DBUILD_SHARED_LIBS=OFF" "-DBUILD_STATIC_LIBS=ON" ];
-  });
+  staticLZ4 = (pkgs.lz4.override { enableStatic = true; enableShared = false; }).dev;
 in
 {
   inherit staticBoost staticLibrdkafka staticLZ4;
