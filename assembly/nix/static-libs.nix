@@ -18,7 +18,7 @@ let
     configureFlags = (oldAttrs.configureFlags or []) ++ ["--enable-static" "--disable-shared"];
   });
 
-  staticLZ4 = lz4.overrideAttrs (oldAttrs: rec {
+  staticLZ4 = pkgs.lz4.overrideAttrs (oldAttrs: rec {
     # Disable shared library building and ensure a static build
     buildInputs = oldAttrs.buildInputs or [];
 
