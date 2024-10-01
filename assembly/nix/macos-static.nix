@@ -30,7 +30,7 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
       (libiconv.override { enableStatic = true; enableShared = false; })
       pkgsStatic.boost
       staticLibs.staticLibrdkafka
-      pkgsStatic.lz4
+      staticLibs.staticLZ4
    ];
 
 
