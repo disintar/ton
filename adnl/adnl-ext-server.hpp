@@ -18,6 +18,7 @@
 */
 #pragma once
 
+#include <unordered_map>
 #include "adnl-peer-table.h"
 #include "td/net/TcpListener.h"
 #include "td/utils/crypto.h"
