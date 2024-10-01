@@ -22,5 +22,5 @@ let
   staticLibiconv = (pkgs.libiconv.override { enableStatic = true; enableShared = false; });
 in
 {
-  inherit staticBoost staticLibrdkafka staticLZ4;
+  inherit staticBoost staticLibrdkafka staticLZ4 staticLibiconv;
 }
