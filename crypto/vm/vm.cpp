@@ -472,6 +472,9 @@ int VmState::step() {
   }
 
   if (vm_dumper.enable) {
+    std::unique_ptr<VmStateInterface> tmp_ctx;
+    VmStateInterface::Guard guard(tmp_ctx.get());
+
     vm_dumper.dump_stack(stack.write(),
                          gas_consumed(),
                          gas.gas_remaining);
