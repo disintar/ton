@@ -43,6 +43,7 @@ class PyTVM {
   int log_level;
   bool skip_c7 = false;
   bool enable_vm_dumper = true;
+  bool ignore_chksig = false;
 
   td::optional<PyStackEntry> c7;
 
@@ -68,8 +69,7 @@ class PyTVM {
     sameC3 = sameC3_;
     skip_c7 = skip_c7_;
     enable_vm_dumper = enable_vm_dumper_;
-
-    this->log_level = log_level_;
+    log_level = log_level_;
 
     if (code_) {
       set_code(code_.value());
@@ -95,6 +95,9 @@ class PyTVM {
   void set_data(PyCell data_);
   void set_code(PyCell code_);
   void set_state_init(PyCell state_init_);
+  void set_unsafe_ignore_chksig(bool ignore_chksig_){
+    ignore_chksig = ignore_chksig_;
+  }
   void set_stack(PyStack pystack);
   void set_libs(PyCell libs);
   PyStack run_vm();

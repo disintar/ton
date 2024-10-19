@@ -281,6 +281,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("set_stack", &PyTVM::set_stack)
       .def("set_libs", &PyTVM::set_libs)
       .def("get_ops", &PyTVM::get_ops)
+      .def("set_unsafe_ignore_chksig", &PyTVM::set_unsafe_ignore_chksig)
       .def("set_state_init", &PyTVM::set_state_init)
       .def("clear_stack", &PyTVM::clear_stack)
       .def("set_gasLimit", &PyTVM::set_gasLimit, py::arg("gas_limit") = "0", py::arg("gas_max") = "-1")

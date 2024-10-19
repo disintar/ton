@@ -33,9 +33,9 @@ void PyTVM::set_c7(PyStackEntry x) {
 }
 
 void PyTVM::log(const std::string &log_string, int level) {
-  if (this->log_level >= level && level == LOG_INFO) {
+  if (log_level >= level && level == LOG_INFO) {
     py::print("INFO: " + log_string);
-  } else if (this->log_level >= level && level == LOG_DEBUG) {
+  } else if (log_level >= level && level == LOG_DEBUG) {
     py::print("DEBUG: " + log_string);
   }
 }
@@ -103,7 +103,7 @@ td::Result<block::Config> decode_config(vm::Ref<vm::Cell> config_params_cell) {
                                      block::Config::needWorkchainInfo | block::Config::needSpecialSmc |
                                      block::Config::needCapabilities);
   TRY_STATUS_PREFIX(global_config.unpack(), "Can't unpack config params: ");
-  return global_config;
+  return std::move(global_config);
 }
 
 // Vm logger
@@ -137,6 +137,11 @@ public:
     }
 };
 
+std::vector<vm::StackEntry> ref_tuple_to_vector(const td::Ref<vm::Tuple> &ref_tuple) {
+  return *ref_tuple;
+}
+
+
 PyStack PyTVM::run_vm() {
   py::gil_scoped_release release;
   if (code.is_null()) {
@@ -160,27 +165,45 @@ PyStack PyTVM::run_vm() {
   vm_log.log_interface = pyLogger;
   vm_log.log_options = td::LogOptions(VERBOSITY_NAME(DEBUG), true, false);
 
-  td::Ref<vm::Tuple> init_c7;
+  std::vector<vm::StackEntry> init_c7;
   int supported_version = ton::SUPPORTED_VERSION;
-
+  td::uint16 max_vm_data_depth = 512;
 
   if (!skip_c7 && c7) {
-    init_c7 = c7.value().entry.as_tuple();
+    init_c7 = ref_tuple_to_vector(c7.value().entry.as_tuple());
 
-    if (init_c7->size() >= 10) {
-      auto config = (*init_c7)[9];
+    if (init_c7.size() >= 10) {
+      auto config = init_c7[9];
 
       if (config.is_cell()) {
         auto cfg = decode_config(config.as_cell());
 
         if (cfg.is_ok()) {
-          supported_version = cfg.move_as_ok().get_global_version();
+          auto config_parsed = cfg.move_as_ok();
+
+          supported_version = config_parsed.get_global_version();
+          auto r_limits = config_parsed.get_size_limits_config();
+          if (r_limits.is_ok()) {
+            max_vm_data_depth = r_limits.ok().max_vm_data_depth;
+          }
+          if (supported_version >= 6 && init_c7.size() > 17) {
+            if (init_c7[3].is_int()) {
+              auto now = static_cast<unsigned int>(init_c7[3].as_int()->to_long());
+              init_c7[15] = config_parsed.get_unpacked_config_tuple(now);
+            }
+
+            td::optional<block::PrecompiledContractsConfig::Contract> precompiled;
+            precompiled = config_parsed.get_precompiled_contracts_config().get_contract(
+                    code.my_cell->get_hash().bits());
+            init_c7[17] = precompiled ? td::make_refint(precompiled.value().gas_usage) : vm::StackEntry();
+          }
         }
       }
     }
-
-
   }
+
+  auto tuple_ref = td::make_cnt_ref<std::vector<vm::StackEntry>>(std::move(init_c7));
+
   log_debug("Use code: " + code.my_cell->get_hash().to_hex());
 
   log_debug("Load cp0");
@@ -196,9 +219,19 @@ PyStack PyTVM::run_vm() {
   }
 
   vm::VmState vm_local{
-          code.my_cell, td::make_ref<vm::Stack>(stackVm), &vm_dumper, gas_limits, flags, data.my_cell, vm_log,
-          std::move(lib_set), vm::make_tuple_ref(std::move(init_c7))};
+          code.my_cell,
+          td::make_ref<vm::Stack>(stackVm),
+          &vm_dumper,
+          gas_limits,
+          flags,
+          data.my_cell,
+          vm_log,
+          std::move(lib_set)};
+
+  vm_local.set_c7(vm::make_tuple_ref(std::move(tuple_ref)));
   vm_local.set_global_version(supported_version);
+  vm_local.set_chksig_always_succeed(ignore_chksig);
+  vm_local.set_max_data_depth(max_vm_data_depth);
 
   vm_init_state_hash_out = vm_local.get_state_hash().to_hex();
   exit_code_out = vm_local.run();
