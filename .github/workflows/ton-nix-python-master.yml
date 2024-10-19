@@ -17,7 +17,7 @@ jobs:
     strategy:
       matrix:
         arch: [x86_64, aarch64]
-        os: [Linux, macos-15]
+        os: [Linux, macos-14]
         python: [39, 310, 311]
         exclude:
           - # covered by ton-x86_64-linux-python.yml
