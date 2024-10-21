@@ -1916,6 +1916,10 @@ class Indexer : public td::actor::Actor {
         //        td::actor::send_closure(id_, &FullNodeImpl::add_shard, shard);
       }
 
+      void send_broadcast(BlockBroadcast broadcast, int mode) override {
+        LOG(DEBUG) << "send_broadcast";
+        //        td::actor::send_closure(id_, &FullNodeImpl::send_broadcast, std::move(broadcast));
+      }
       void send_block_candidate(BlockIdExt block_id, CatchainSeqno cc_seqno, td::uint32 validator_set_hash,
                                 td::BufferSlice data) override {
         LOG(DEBUG) << "send_block_candidate";
@@ -1937,10 +1941,6 @@ class Indexer : public td::actor::Actor {
       void send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) override {
         LOG(DEBUG) << "send_shard_block_info";
         //        td::actor::send_closure(id_, &FullNodeImpl::send_shard_block_info, block_id, cc_seqno, std::move(data));
-      }
-      void send_broadcast(BlockBroadcast broadcast, bool custom_overlays_only = false) override {
-        LOG(DEBUG) << "send_broadcast";
-        //        td::actor::send_closure(id_, &FullNodeImpl::send_broadcast, std::move(broadcast));
       }
       void download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                           td::Promise<ReceivedBlock> promise) override {
@@ -2220,7 +2220,7 @@ class IndexerSimple : public td::actor::Actor {
         LOG(DEBUG) << "send_shard_block_info";
         //        td::actor::send_closure(id_, &FullNodeImpl::send_shard_block_info, block_id, cc_seqno, std::move(data));
       }
-      void send_broadcast(BlockBroadcast broadcast, bool custom_overlays_only = false) override {
+      void send_broadcast(BlockBroadcast broadcast, int mode) override {
         LOG(DEBUG) << "send_broadcast";
         //        td::actor::send_closure(id_, &FullNodeImpl::send_broadcast, std::move(broadcast));
       }

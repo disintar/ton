@@ -140,8 +140,8 @@ class LiteServerDaemon : public td::actor::Actor {
       void send_block_candidate(BlockIdExt block_id, CatchainSeqno cc_seqno, td::uint32 validator_set_hash,
                                           td::BufferSlice data) override {
       };
-      void send_broadcast(BlockBroadcast broadcast, bool custom_overlays_only = false) override {
-      };
+      void send_broadcast(BlockBroadcast broadcast, int mode) override {
+      }
       void download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                           td::Promise<ReceivedBlock> promise) override {
       }
