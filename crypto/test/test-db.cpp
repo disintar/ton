@@ -62,7 +62,7 @@
 #include "vm/dict.h"
 
 #include <condition_variable>
-#include <latch>
+#include <future>
 #include <numeric>
 #include <optional>
 #include <queue>
@@ -983,15 +983,20 @@ struct BocOptions {
   void prepare_commit(DynamicBagOfCellsDb &dboc) {
     if (async_executor) {
       async_executor->inc_generation();
-      std::latch latch(1);
-      td::Result<td::Unit> res;
+
+      // Use promise and future to replace latch functionality
+      std::promise<td::Result<td::Unit>> promise;
+      std::future<td::Result<td::Unit>> future = promise.get_future();
+
       async_executor->execute_sync([&] {
-        dboc.prepare_commit_async(async_executor, [&](auto r) {
-          res = std::move(r);
-          latch.count_down();
-        });
+          dboc.prepare_commit_async(async_executor, [&](auto r) {
+              promise.set_value(std::move(r));  // Set the result
+          });
       });
-      latch.wait();
+
+      // Wait for the result from the promise
+      td::Result<td::Unit> res = future.get();
+
       async_executor->execute_sync([&] {});
       async_executor->inc_generation();
     } else {
