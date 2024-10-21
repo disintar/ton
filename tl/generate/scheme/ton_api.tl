@@ -674,6 +674,7 @@ engine.validator.signature signature:bytes = engine.validator.Signature;
 
 engine.validator.oneStat key:string value:string = engine.validator.OneStat;
 engine.validator.stats stats:(vector engine.validator.oneStat) = engine.validator.Stats;
+engine.validator.textStats data:string = engine.validator.TextStats;
 
 engine.validator.controlQueryError code:int message:string = engine.validator.ControlQueryError;
 
@@ -688,10 +689,16 @@ engine.validator.proposalVote perm_key:int256 to_send:bytes = engine.validator.P
 engine.validator.dhtServerStatus id:int256 status:int = engine.validator.DhtServerStatus;
 engine.validator.dhtServersStatus servers:(vector engine.validator.dhtServerStatus) = engine.validator.DhtServersStatus;
 
-engine.validator.overlayStatsNode adnl_id:int256 ip_addr:string is_neighbour:Bool is_alive:Bool node_flags:int
-    bdcst_errors:int fec_bdcst_errors:int last_in_query:int last_out_query:int t_out_bytes:int t_in_bytes:int t_out_pckts:int t_in_pckts:int = engine.validator.OverlayStatsNode;
+engine.validator.overlayStatsTraffic t_out_bytes:long t_in_bytes:long t_out_pckts:int t_in_pckts:int = engine.validator.OverlayStatsTraffic;
 
-engine.validator.overlayStats overlay_id:int256 overlay_id_full:PublicKey adnl_id:int256 scope:string nodes:(vector engine.validator.overlayStatsNode) stats:(vector engine.validator.oneStat) extra:string = engine.validator.OverlayStats;
+engine.validator.overlayStatsNode adnl_id:int256 ip_addr:string is_neighbour:Bool is_alive:Bool node_flags:int
+    bdcst_errors:int fec_bdcst_errors:int last_in_query:int last_out_query:int
+    traffic:engine.validator.overlayStatsTraffic traffic_responses:engine.validator.overlayStatsTraffic = engine.validator.OverlayStatsNode;
+
+engine.validator.overlayStats overlay_id:int256 overlay_id_full:PublicKey adnl_id:int256 scope:string
+    nodes:(vector engine.validator.overlayStatsNode) stats:(vector engine.validator.oneStat)
+    total_traffic:engine.validator.overlayStatsTraffic total_traffic_responses:engine.validator.overlayStatsTraffic
+    extra:string = engine.validator.OverlayStats;
 engine.validator.overlaysStats overlays:(vector engine.validator.overlayStats) = engine.validator.OverlaysStats;
 
 engine.validator.onePerfTimerStat time:int min:double avg:double max:double = engine.validator.OnePerfTimerStat;
@@ -763,7 +770,8 @@ engine.validator.setStateSerializerEnabled enabled:Bool = engine.validator.Succe
 engine.validator.setCollatorOptionsJson json:string = engine.validator.Success;
 engine.validator.getCollatorOptionsJson = engine.validator.JsonConfig;
 
-engine.validator.getAdnlStats = adnl.Stats;
+engine.validator.getAdnlStats all:Bool = adnl.Stats;
+engine.validator.getActorTextStats = engine.validator.TextStats;
 
 ---types---
 

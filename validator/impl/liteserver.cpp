@@ -1647,73 +1647,68 @@ void LiteQuery::perform_runSmcMethod(BlockIdExt blkid, WorkchainId workchain, St
             return;
           }
 
-          Ref<vm::Cell> acc_root;
-          if (acc_csr.not_null()) {
-            acc_root = acc_csr->prefetch_ref();
-          }
-          if (!pb.extract_proof_to(proof2)) {
-            fatal_error("unknown error creating Merkle proof");
-            return;
-          }
-          auto proof = vm::std_boc_serialize_multi({std::move(proof1), std::move(proof2)});
-          pb.clear();
-          if (proof.is_error()) {
-            fatal_error(proof.move_as_error());
-            return;
-          }
-          if (mode_ & 0x10000) {
-            if (!mc_state_.is_null()) {
-              finish_runSmcMethod(std::move(shard_proof), proof.move_as_ok(), std::move(acc_root), sstate.gen_utime,
-                                  sstate.gen_lt);
-              return;
-            }
-            shard_proof_ = std::move(shard_proof);
-            proof_ = proof.move_as_ok();
-            set_continuation(
-                    [&, base_blk_id = base_blk_id_, acc_root, utime = sstate.gen_utime, lt = sstate.gen_lt]() mutable -> void {
-                        base_blk_id_ = base_blk_id;  // It gets overridden by request_mc_block_data_state
-                        finish_runSmcMethod(std::move(shard_proof_), std::move(proof_), std::move(acc_root), utime, lt);
-                    });
-            td::optional<BlockIdExt> master_ref = state_->get_master_ref();
-            if (!master_ref) {
-              fatal_error("masterchain ref block is not available");
-              return;
-            }
-            request_mc_block_data_state(master_ref.value());
-            return;
-          }
-          td::BufferSlice data;
-          if (acc_root.not_null()) {
-            if (mode_ & 0x40000000) {
-              vm::MerkleProofBuilder mpb{acc_root};
-              // account_none$0 = Account;
-              // account$1 addr:MsgAddressInt storage_stat:StorageInfo storage:AccountStorage = Account;
-              // account_storage$_ last_trans_lt:uint64 balance:CurrencyCollection state:AccountState = AccountStorage;
-              // account_active$1 _:StateInit = AccountState;
-              auto S = mpb.root()->load_cell();
-              if (S.is_error()) {
-                fatal_error(S.move_as_error_prefix("Failed to load account: "));
-                return;
-              }
-              if (!mpb.extract_proof_to(acc_root)) {
-                fatal_error("unknown error creating Merkle proof");
-                return;
-              }
-            }
-            auto res = vm::std_boc_serialize(std::move(acc_root));
-            if (res.is_error()) {
-              fatal_error(res.move_as_error());
-              return;
-            }
-            data = res.move_as_ok();
-          }
-          LOG(INFO) << "getAccountState(" << acc_workchain_ << ":" << acc_addr_.to_hex() << ") query completed";
-          auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_accountState>(
-                  ton::create_tl_lite_block_id(base_blk_id_), ton::create_tl_lite_block_id(blk_id_),
-                  std::move(shard_proof),
-                  proof.move_as_ok(), std::move(data));
-          finish_query(std::move(b));
-        }
+  Ref<vm::Cell> acc_root;
+  if (acc_csr.not_null()) {
+    acc_root = acc_csr->prefetch_ref();
+  }
+  if (!pb.extract_proof_to(proof2)) {
+    fatal_error("unknown error creating Merkle proof");
+    return;
+  }
+  auto proof = vm::std_boc_serialize_multi({std::move(proof1), std::move(proof2)});
+  pb.clear();
+  if (proof.is_error()) {
+    fatal_error(proof.move_as_error());
+    return;
+  }
+  if (mode_ & 0x10000) {
+    if (!mc_state_.is_null()) {
+      finish_runSmcMethod(std::move(shard_proof), proof.move_as_ok(), std::move(acc_root), sstate.gen_utime,
+                          sstate.gen_lt);
+      return;
+    }
+    shard_proof_ = std::move(shard_proof);
+    proof_ = proof.move_as_ok();
+    set_continuation(
+        [&, base_blk_id = base_blk_id_, acc_root, utime = sstate.gen_utime, lt = sstate.gen_lt]() mutable -> void {
+          base_blk_id_ = base_blk_id;  // It gets overridden by request_mc_block_data_state
+          finish_runSmcMethod(std::move(shard_proof_), std::move(proof_), std::move(acc_root), utime, lt);
+        });
+    td::optional<BlockIdExt> master_ref = state_->get_master_ref();
+    if (!master_ref) {
+      fatal_error("masterchain ref block is not available");
+      return;
+    }
+    request_mc_block_data_state(master_ref.value());
+    return;
+  }
+  td::BufferSlice data;
+  if (acc_root.not_null()) {
+    if (mode_ & 0x40000000) {
+      vm::MerkleProofBuilder mpb{acc_root};
+      // This does not include code, data and libs into proof, but it includes extra currencies
+      if (!block::gen::t_Account.validate_ref(mpb.root())) {
+        fatal_error("failed to validate Account");
+        return;
+      }
+      if (!mpb.extract_proof_to(acc_root)) {
+        fatal_error("unknown error creating Merkle proof");
+        return;
+      }
+    }
+    auto res = vm::std_boc_serialize(std::move(acc_root));
+    if (res.is_error()) {
+      fatal_error(res.move_as_error());
+      return;
+    }
+    data = res.move_as_ok();
+  }
+  LOG(INFO) << "getAccountState(" << acc_workchain_ << ":" << acc_addr_.to_hex() << ") query completed";
+  auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_accountState>(
+      ton::create_tl_lite_block_id(base_blk_id_), ton::create_tl_lite_block_id(blk_id_), std::move(shard_proof),
+      proof.move_as_ok(), std::move(data));
+  finish_query(std::move(b));
+}
 
 // same as in lite-client/lite-client-common.cpp
         static td::Ref<vm::Tuple> prepare_vm_c7(ton::UnixTime now, ton::LogicalTime lt, td::Ref<vm::CellSlice> my_addr,
@@ -2187,34 +2182,33 @@ void LiteQuery::perform_runSmcMethod(BlockIdExt blkid, WorkchainId workchain, St
           promise.set_result(std::make_pair(blkid, std::move(data0)));
         }
 
-        void LiteQuery::perform_getConfigParams(BlockIdExt blkid, int mode, std::vector<int> param_list) {
-          LOG(INFO)
-          << "started a getConfigParams(" << blkid.to_str() << ", " << mode << ", <list of " << param_list.size()
-          << " parameters>) liteserver query";
-          if (!blkid.is_masterchain_ext()) {
-            fatal_error("configuration parameters can be loaded with respect to a masterchain block only");
-            return;
-          }
-          if (!(mode & 0x8000)) {
-            // ordinary case: get configuration from masterchain state
-            set_continuation([this, mode, param_list = std::move(param_list)]() mutable {
-                continue_getConfigParams(mode, std::move(param_list));
-            });
-            request_mc_block_data_state(blkid);
-          } else {
-            // get configuration from previous key block
-            load_prevKeyBlock(blkid, [this, blkid, mode, param_list = std::move(param_list)](
-                    td::Result<std::pair<BlockIdExt, Ref<BlockQ>>> res) mutable {
-                if (res.is_error()) {
-                  this->abort_query(res.move_as_error());
-                } else {
-                  this->base_blk_id_ = res.ok().first;
-                  this->mc_block_ = res.move_as_ok().second;
-                  this->continue_getConfigParams(mode, std::move(param_list));
-                }
-            });
-          }
-        }
+void LiteQuery::perform_getConfigParams(BlockIdExt blkid, int mode, std::vector<int> param_list) {
+  LOG(INFO) << "started a getConfigParams(" << blkid.to_str() << ", " << mode << ", <list of " << param_list.size()
+            << " parameters>) liteserver query";
+  if (!blkid.is_masterchain_ext()) {
+    fatal_error("configuration parameters can be loaded with respect to a masterchain block only");
+    return;
+  }
+  if (!(mode & 0x8000)) {
+    // ordinary case: get configuration from masterchain state
+    set_continuation([this, mode, param_list = std::move(param_list)]() mutable {
+      continue_getConfigParams(mode, std::move(param_list));
+    });
+    request_mc_block_data_state(blkid);
+  } else {
+    // get configuration from previous key block
+    load_prevKeyBlock(blkid, [this, mode, param_list = std::move(param_list)](
+                                 td::Result<std::pair<BlockIdExt, Ref<BlockQ>>> res) mutable {
+      if (res.is_error()) {
+        this->abort_query(res.move_as_error());
+      } else {
+        this->base_blk_id_ = res.ok().first;
+        this->mc_block_ = res.move_as_ok().second;
+        this->continue_getConfigParams(mode, std::move(param_list));
+      }
+    });
+  }
+}
 
         void LiteQuery::continue_getConfigParams(int mode, std::vector<int> param_list) {
           LOG(INFO) << "completing getConfigParams(" << base_blk_id_.to_str() << ", " << mode << ", <list of "
@@ -2400,39 +2394,32 @@ void LiteQuery::perform_runSmcMethod(BlockIdExt blkid, WorkchainId workchain, St
           << "started a lookupBlockWithProof(" << blkid.to_str() << ", " << mc_blkid.to_str() << ", " << mode << ", "
           << lt << ", " << utime << ") liteserver query";
 
-          ton::AccountIdPrefixFull pfx{blkid.workchain, blkid.shard};
-          auto P = td::PromiseCreator::lambda(
-                  [Self = actor_id(this), mc_blkid, manager = manager_, mode, pfx](td::Result<ConstBlockHandle> res) {
-                      if (res.is_error()) {
-                        td::actor::send_closure(Self, &LiteQuery::abort_query, res.move_as_error());
-                        return;
-                      }
-                      auto handle = res.move_as_ok();
-                      if (!handle->inited_masterchain_ref_block()) {
-                        td::actor::send_closure(Self, &LiteQuery::abort_query,
-                                                td::Status::Error("block doesn't have masterchain ref"));
-                        return;
-                      }
-                      if (handle->masterchain_ref_block() > mc_blkid.seqno()) {
-                        td::actor::send_closure(Self, &LiteQuery::abort_query, td::Status::Error(
-                                "specified mc block is older than block's masterchain ref"));
-                        return;
-                      }
-                      LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
-                      td::actor::send_closure_later(manager, &ValidatorManager::get_block_data_from_db, handle,
-                                                    [Self, mc_ref_blkid = handle->masterchain_ref_block(), mc_blkid, pfx, mode](
-                                                            td::Result<Ref<BlockData>> res) {
-                                                        if (res.is_error()) {
-                                                          td::actor::send_closure(Self, &LiteQuery::abort_query,
-                                                                                  res.move_as_error());
-                                                        } else {
-                                                          td::actor::send_closure_later(Self,
-                                                                                        &LiteQuery::continue_lookupBlockWithProof_getHeaderProof,
-                                                                                        res.move_as_ok(), pfx,
-                                                                                        mc_ref_blkid);
-                                                        }
-                                                    });
-                  });
+  ton::AccountIdPrefixFull pfx{blkid.workchain, blkid.shard};
+  auto P = td::PromiseCreator::lambda(
+    [Self = actor_id(this), mc_blkid, manager = manager_, pfx](td::Result<ConstBlockHandle> res) {
+      if (res.is_error()) {
+        td::actor::send_closure(Self, &LiteQuery::abort_query, res.move_as_error());
+        return;
+      }
+      auto handle = res.move_as_ok();
+      if (!handle->inited_masterchain_ref_block()) {
+        td::actor::send_closure(Self, &LiteQuery::abort_query, td::Status::Error("block doesn't have masterchain ref"));
+        return;
+      }
+      if (handle->masterchain_ref_block() > mc_blkid.seqno()) {
+        td::actor::send_closure(Self, &LiteQuery::abort_query, td::Status::Error("specified mc block is older than block's masterchain ref"));
+        return;
+      }
+      LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
+      td::actor::send_closure_later(manager, &ValidatorManager::get_block_data_from_db, handle,
+                                    [Self, mc_ref_blkid = handle->masterchain_ref_block(), pfx](td::Result<Ref<BlockData>> res) {
+        if (res.is_error()) {
+          td::actor::send_closure(Self, &LiteQuery::abort_query, res.move_as_error());
+        } else {
+          td::actor::send_closure_later(Self, &LiteQuery::continue_lookupBlockWithProof_getHeaderProof, res.move_as_ok(), pfx, mc_ref_blkid);
+        }
+      });
+  });
 
           if (mode & 2) {
             td::actor::send_closure_later(manager_, &ValidatorManager::get_block_by_lt_for_litequery, pfx, lt,

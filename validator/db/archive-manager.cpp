@@ -32,11 +32,11 @@ std::string PackageId::path() const {
     return "/files/packages/";
   } else if (key) {
     char s[24];
-    sprintf(s, "key%03d", id / 1000000);
+    snprintf(s, sizeof(s), "key%03d", id / 1000000);
     return PSTRING() << "/archive/packages/" << s << "/";
   } else {
     char s[20];
-    sprintf(s, "arch%04d", id / 100000);
+    snprintf(s, sizeof(s), "arch%04d", id / 100000);
     return PSTRING() << "/archive/packages/" << s << "/";
   }
 }
@@ -46,11 +46,11 @@ std::string PackageId::name() const {
     return PSTRING() << "temp.archive." << id;
   } else if (key) {
     char s[20];
-    sprintf(s, "%06d", id);
+    snprintf(s, sizeof(s), "%06d", id);
     return PSTRING() << "key.archive." << s;
   } else {
     char s[10];
-    sprintf(s, "%05d", id);
+    snprintf(s, sizeof(s), "%05d", id);
     return PSTRING() << "archive." << s;
   }
 }
@@ -931,7 +931,8 @@ void ArchiveManager::start_up() {
 void ArchiveManager::alarm() {
   alarm_timestamp() = td::Timestamp::in(60.0);
   auto stats = statistics_.to_string_and_reset();
-  auto to_file_r = td::FileFd::open(db_root_ + "/db_stats.txt", td::FileFd::Truncate | td::FileFd::Create | td::FileFd::Write, 0644);
+  auto to_file_r =
+      td::FileFd::open(db_root_ + "/db_stats.txt", td::FileFd::Truncate | td::FileFd::Create | td::FileFd::Write, 0644);
   if (to_file_r.is_error()) {
     LOG(ERROR) << "Failed to open db_stats.txt: " << to_file_r.move_as_error();
     return;
@@ -1054,7 +1055,7 @@ void ArchiveManager::persistent_state_gc(std::pair<BlockSeqno, FileHash> last) {
   }
   if (res != 0) {
     delay_action([key, SelfId = actor_id(
-                            this)]() { td::actor::send_closure(SelfId, &ArchiveManager::persistent_state_gc, key); },
+                           this)]() { td::actor::send_closure(SelfId, &ArchiveManager::persistent_state_gc, key); },
                  td::Timestamp::in(1.0));
     return;
   }
@@ -1071,7 +1072,7 @@ void ArchiveManager::persistent_state_gc(std::pair<BlockSeqno, FileHash> last) {
   }
   if (!allow_delete) {
     delay_action([key, SelfId = actor_id(
-                            this)]() { td::actor::send_closure(SelfId, &ArchiveManager::persistent_state_gc, key); },
+                           this)]() { td::actor::send_closure(SelfId, &ArchiveManager::persistent_state_gc, key); },
                  td::Timestamp::in(1.0));
     return;
   }
@@ -1102,9 +1103,9 @@ void ArchiveManager::got_gc_masterchain_handle(ConstBlockHandle handle, std::pai
     td::unlink(db_root_ + "/archive/states/" + F.filename_short()).ignore();
     perm_states_.erase(it);
   }
-  delay_action([key, SelfId = actor_id(
-                          this)]() { td::actor::send_closure(SelfId, &ArchiveManager::persistent_state_gc, key); },
-               td::Timestamp::in(1.0));
+  delay_action(
+      [key, SelfId = actor_id(this)]() { td::actor::send_closure(SelfId, &ArchiveManager::persistent_state_gc, key); },
+      td::Timestamp::in(1.0));
 }
 
 PackageId ArchiveManager::get_temp_package_id() const {

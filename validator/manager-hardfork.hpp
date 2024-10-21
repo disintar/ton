@@ -226,6 +226,10 @@ class ValidatorManagerImpl : public ValidatorManager {
                            td::uint32 validator_set_hash, td::Promise<td::Unit> promise) override {
     promise.set_value(td::Unit());
   }
+  void send_block_candidate_broadcast(BlockIdExt id, CatchainSeqno cc_seqno, td::uint32 validator_set_hash,
+                                      td::BufferSlice data) {
+    callback_->send_block_candidate(id, cc_seqno, validator_set_hash, std::move(data));
+  }
 
   void wait_block_state_merge(BlockIdExt left_id, BlockIdExt right_id, td::uint32 priority, td::Timestamp timeout,
                               td::Promise<td::Ref<ShardState>> promise) override;
@@ -327,7 +331,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   void send_top_shard_block_description(td::Ref<ShardTopBlockDescription> desc) override {
     UNREACHABLE();
   }
-  void send_block_broadcast(BlockBroadcast broadcast, bool custom_overlays_only) override {
+  void send_block_broadcast(BlockBroadcast broadcast, int mode) override {
   }
 
   void update_shard_client_state(BlockIdExt masterchain_block_id, td::Promise<td::Unit> promise) override {
@@ -432,6 +436,10 @@ class ValidatorManagerImpl : public ValidatorManager {
   void prepare_stats(td::Promise<std::vector<std::pair<std::string, std::string>>> promise) override {
     UNREACHABLE();
   }
+
+ void prepare_actor_stats(td::Promise<std::string> promise) override {
+    UNREACHABLE();
+ }
 
   void prepare_perf_timer_stats(td::Promise<std::vector<PerfTimerStats>> promise) override {
     UNREACHABLE();
