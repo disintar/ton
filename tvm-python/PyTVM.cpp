@@ -226,7 +226,7 @@ PyStack PyTVM::run_vm() {
           flags,
           data.my_cell,
           vm_log,
-          std::move(lib_set)};
+          lib_set};
 
   vm_local.set_c7(vm::make_tuple_ref(std::move(tuple_ref)));
   vm_local.set_global_version(supported_version);
