@@ -95,9 +95,9 @@ Result<RocksDb> RocksDb::open(std::string path, RocksDbOptions options, bool rea
     std::vector<rocksdb::ColumnFamilyHandle *> handles;
 
       if (read_only) {
-          const std::string kSecondaryPath = "/tmp/rocksdb_secondary/";
-          TRY_STATUS(from_rocksdb(rocksdb::OptimisticTransactionDB::OpenAsSecondary(
-                  db_options, path, kSecondaryPath, column_families, &handles, reinterpret_cast<rocksdb::DB **>(&db))));
+//          const std::string kSecondaryPath = "/tmp/rocksdb_secondary/";
+          TRY_STATUS(from_rocksdb(rocksdb::OptimisticTransactionDB::OpenForReadOnly(
+                  db_options, std::move(path), column_families, &handles, reinterpret_cast<rocksdb::DB **>(&db))));
       } else {
           TRY_STATUS(from_rocksdb(rocksdb::OptimisticTransactionDB::Open(db_options, occ_options, std::move(path),
                                                                          column_families, &handles, &db)));
