@@ -132,6 +132,7 @@ class OverlayManager : public Overlays {
   std::string prefix_;
 
   using DbType = td::KeyValueAsync<td::Bits256, td::BufferSlice>;
+  bool with_db_ = false;
   DbType db_;
 
   class AdnlCallback : public adnl::Adnl::Callback {

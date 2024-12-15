@@ -213,7 +213,7 @@ void OverlayImpl::add_peer(OverlayNode node) {
     peer_list_.peers_.insert(id, OverlayPeer(std::move(node)));
     del_some_peers();
     auto X = peer_list_.peers_.get(id);
-    if (X != nullptr && peer_list_.neighbours_.size() < max_neighbours() &&
+    if (X != nullptr && !X->is_neighbour() && peer_list_.neighbours_.size() < max_neighbours() &&
         !(X->get_node()->flags() & OverlayMemberFlags::DoNotReceiveBroadcasts) && X->get_id() != local_id_) {
       peer_list_.neighbours_.push_back(X->get_id());
       X->set_neighbour(true);
@@ -407,7 +407,8 @@ void OverlayImpl::update_neighbours(td::uint32 nodes_to_change) {
       continue;
     }
 
-    if (X->get_version() <= td::Clocks::system() - Overlays::overlay_peer_ttl()) {
+    if (overlay_type_ != OverlayType::FixedMemberList && X->get_version() <= td::Clocks::system() -
+        Overlays::overlay_peer_ttl()) {
       if (X->is_permanent_member()) {
         del_from_neighbour_list(X);
       } else {
@@ -439,7 +440,7 @@ void OverlayImpl::update_neighbours(td::uint32 nodes_to_change) {
       VLOG(OVERLAY_INFO) << this << ": adding new neighbour " << X->get_id();
       peer_list_.neighbours_.push_back(X->get_id());
       X->set_neighbour(true);
-    } else {
+    } else if (X->is_alive()) {
       CHECK(nodes_to_change > 0);
       auto i = td::Random::fast(0, static_cast<td::uint32>(peer_list_.neighbours_.size()) - 1);
       auto Y = peer_list_.peers_.get(peer_list_.neighbours_[i]);
@@ -656,14 +657,9 @@ size_t OverlayImpl::neighbours_cnt() const {
 
 void OverlayImpl::update_root_member_list(std::vector<adnl::AdnlNodeIdShort> ids,
                                           std::vector<PublicKeyHash> root_public_keys, OverlayMemberCertificate cert) {
-  td::uint32 expectd_size =
+  auto expected_size =
       (td::uint32)(ids.size() + root_public_keys.size() * opts_.max_slaves_in_semiprivate_overlay_);
-  if (expectd_size > opts_.max_peers_) {
-    opts_.max_peers_ = expectd_size;
-  }
-  if (expectd_size > opts_.max_neighbours_) {
-    opts_.max_neighbours_ = expectd_size;
-  }
+  opts_.max_peers_ = std::max(opts_.max_peers_, expected_size);
   std::sort(ids.begin(), ids.end());
   auto old_root_public_keys = std::move(peer_list_.root_public_keys_);
   for (const auto &pub_key : root_public_keys) {

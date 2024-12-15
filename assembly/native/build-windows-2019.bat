@@ -58,26 +58,6 @@ cd ..\..\..\..
 echo Using lz4...
 )
 
-if not exist "secp256k1" (
-git clone https://github.com/bitcoin-core/secp256k1.git
-cd secp256k1
-git checkout v0.3.2
-cmake -G "Visual Studio 16 2019" -A x64 -S . -B build -DSECP256K1_ENABLE_MODULE_RECOVERY=ON -DBUILD_SHARED_LIBS=OFF
-IF %errorlevel% NEQ 0 (
-  echo Can't configure secp256k1
-  exit /b %errorlevel%
-)
-cmake --build build --config Release
-IF %errorlevel% NEQ 0 (
-  echo Can't install secp256k1
-  exit /b %errorlevel%
-)
-cd ..
-) else (
-echo Using secp256k1...
-)
-
-
 curl --retry 5 --retry-delay 10 -Lo libsodium-1.0.18-stable-msvc.zip https://download.libsodium.org/libsodium/releases/libsodium-1.0.18-stable-msvc.zip
 IF %errorlevel% NEQ 0 (
   echo Can't download libsodium
@@ -131,9 +111,6 @@ cd build
 cmake -GNinja  -DCMAKE_BUILD_TYPE=Release ^
 -DPORTABLE=1 ^
 -DSODIUM_USE_STATIC_LIBS=1 ^
--DSECP256K1_FOUND=1 ^
--DSECP256K1_INCLUDE_DIR=%root%\secp256k1\include ^
--DSECP256K1_LIBRARY=%root%\secp256k1\build\src\Release\libsecp256k1.lib ^
 -DLZ4_FOUND=1 ^
 -DLZ4_INCLUDE_DIRS=%root%\lz4\lib ^
 -DLZ4_LIBRARIES=%root%\lz4\build\VS2017\liblz4\bin\x64_Release\liblz4_static.lib ^
@@ -155,20 +132,20 @@ IF %errorlevel% NEQ 0 (
 )
 
 IF "%1"=="-t" (
-ninja storage-daemon storage-daemon-cli blockchain-explorer fift func tonlib tonlibjson  ^
+ninja storage-daemon storage-daemon-cli blockchain-explorer fift func tolk tonlib tonlibjson  ^
 tonlib-cli validator-engine lite-client pow-miner validator-engine-console generate-random-id ^
 json2tlo dht-server http-proxy rldp-http-proxy adnl-proxy create-state create-hardfork emulator ^
 test-ed25519 test-ed25519-crypto test-bigint test-vm test-fift test-cells test-smartcont test-net ^
 test-tdactor test-tdutils test-tonlib-offline test-adnl test-dht test-rldp test-rldp2 test-catchain ^
-test-fec test-tddb test-db test-validator-session-state test-emulator
+test-fec test-tddb test-db test-validator-session-state test-emulator proxy-liteserver
 IF %errorlevel% NEQ 0 (
   echo Can't compile TON
   exit /b %errorlevel%
 )
 ) else (
-ninja storage-daemon storage-daemon-cli blockchain-explorer fift func tonlib tonlibjson  ^
+ninja storage-daemon storage-daemon-cli blockchain-explorer fift func tolk tonlib tonlibjson  ^
 tonlib-cli validator-engine lite-client pow-miner validator-engine-console generate-random-id ^
-json2tlo dht-server http-proxy rldp-http-proxy adnl-proxy create-state create-hardfork emulator
+json2tlo dht-server http-proxy rldp-http-proxy adnl-proxy create-state create-hardfork emulator proxy-liteserver
 IF %errorlevel% NEQ 0 (
   echo Can't compile TON
   exit /b %errorlevel%
@@ -204,6 +181,7 @@ build\blockchain-explorer\blockchain-explorer.exe ^
 build\crypto\fift.exe ^
 build\crypto\tlbc.exe ^
 build\crypto\func.exe ^
+build\tolk\tolk.exe ^
 build\crypto\create-state.exe ^
 build\validator-engine-console\validator-engine-console.exe ^
 build\tonlib\tonlib-cli.exe ^
@@ -215,6 +193,7 @@ build\lite-client\lite-client.exe ^
 build\validator-engine\validator-engine.exe ^
 build\utils\generate-random-id.exe ^
 build\utils\json2tlo.exe ^
+build\utils\proxy-liteserver.exe ^
 build\adnl\adnl-proxy.exe ^
 build\emulator\emulator.dll) do (strip -s %%I & copy %%I artifacts\)
 xcopy /e /k /h /i crypto\smartcont artifacts\smartcont

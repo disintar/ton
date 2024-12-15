@@ -17,6 +17,7 @@ set(TON_VALIDATOR_SOURCE
   liteserver.cpp
   liteserver-extra.cpp
   message-queue.cpp
+  out-msg-queue-proof.cpp
   proof.cpp
   shard.cpp
   signature-set.cpp
@@ -36,13 +37,13 @@ set(TON_VALIDATOR_SOURCE
   liteserver.hpp
   liteserver-cache.hpp
   message-queue.hpp
+  out-msg-queue-proof.hpp
   proof.hpp
   shard.hpp
   signature-set.hpp
   top-shard-descr.hpp
   validate-query.hpp
-  validator-set.hpp
-)
+  validator-set.hpp)
 
 add_library(ton_validator STATIC ${TON_VALIDATOR_SOURCE})
 
