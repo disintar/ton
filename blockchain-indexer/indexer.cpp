@@ -1911,10 +1911,9 @@ class Indexer : public td::actor::Actor {
         LOG(DEBUG) << "Initial read complete: " << handle->id().to_str();
         td::actor::send_closure(id_, &Indexer::sync_complete, handle);
       }
-      void add_shard(ShardIdFull shard) override {
-        LOG(DEBUG) << "add_shard";
-        //        td::actor::send_closure(id_, &FullNodeImpl::add_shard, shard);
-      }
+        void on_new_masterchain_block(td::Ref<ton::validator::MasterchainState> state,
+                                      std::set<ton::ShardIdFull> shards_to_monitor) override {
+        }
 
       void send_broadcast(BlockBroadcast broadcast, int mode) override {
         LOG(DEBUG) << "send_broadcast";
@@ -1925,11 +1924,6 @@ class Indexer : public td::actor::Actor {
         LOG(DEBUG) << "send_block_candidate";
         //        td::actor::send_closure(id_, &FullNodeImpl::add_shard, shard);
       };
-
-      void del_shard(ShardIdFull shard) override {
-        LOG(DEBUG) << "del_shard";
-        //        td::actor::send_closure(id_, &FullNodeImpl::del_shard, shard);
-      }
       void send_ihr_message(AccountIdPrefixFull dst, td::BufferSlice data) override {
         LOG(DEBUG) << "send_ihr_message";
         //        td::actor::send_closure(id_, &FullNodeImpl::send_ihr_message, dst, std::move(data));
@@ -1975,16 +1969,24 @@ class Indexer : public td::actor::Actor {
         LOG(DEBUG) << "get_next_key_blocks";
         //        td::actor::send_closure(id_, &FullNodeImpl::get_next_key_blocks, block_id, timeout, std::move(promise));
       }
-      void download_archive(BlockSeqno masterchain_seqno, std::string tmp_dir, td::Timestamp timeout,
-                            td::Promise<std::string> promise) override {
+      void download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
+                            td::Timestamp timeout, td::Promise<std::string> promise) override {
         LOG(DEBUG) << "download_archive";
         //        td::actor::send_closure(id_, &FullNodeImpl::download_archive, masterchain_seqno, std::move(tmp_dir), timeout,
         //                                std::move(promise));
+      }
+      void download_out_msg_queue_proof(
+              ton::ShardIdFull dst_shard, std::vector<ton::BlockIdExt> blocks, block::ImportedMsgQueueLimits limits,
+              td::Timestamp timeout, td::Promise<std::vector<td::Ref<ton::validator::OutMsgQueueProof>>> promise) override {
       }
 
       void new_key_block(BlockHandle handle) override {
         LOG(DEBUG) << "new_key_block";
         //        td::actor::send_closure(id_, &FullNodeImpl::new_key_block, std::move(handle));
+      }
+
+      void send_validator_telemetry(ton::PublicKeyHash key,
+                                    ton::tl_object_ptr<ton::ton_api::validator_telemetry> telemetry) override {
       }
 
       Callback(td::actor::ActorId<Indexer> id) : id_(id) {
@@ -2034,9 +2036,7 @@ class Indexer : public td::actor::Actor {
       init_block = ton::create_block_id(conf.validator_->init_block_);
     }
 
-    std::function<bool(ton::ShardIdFull, ton::CatchainSeqno, ton::validator::ValidatorManagerOptions::ShardCheckMode)>
-        check_shard = [](ton::ShardIdFull, ton::CatchainSeqno,
-                         ton::validator::ValidatorManagerOptions::ShardCheckMode) { return true; };
+    auto check_shard = [](ShardIdFull) { return true; };
     bool allow_blockchain_init = false;
     double sync_blocks_before = 86400;
     double block_ttl = 86400 * 7;
@@ -2195,19 +2195,14 @@ class IndexerSimple : public td::actor::Actor {
         LOG(DEBUG) << "Initial read complete: " << handle->id().to_str();
         td::actor::send_closure(id_, &IndexerSimple::sync_complete, handle);
       }
-      void add_shard(ShardIdFull shard) override {
-        LOG(DEBUG) << "add_shard";
-        //        td::actor::send_closure(id_, &FullNodeImpl::add_shard, shard);
+      void on_new_masterchain_block(td::Ref<ton::validator::MasterchainState> state,
+                                    std::set<ton::ShardIdFull> shards_to_monitor) override {
       }
       void send_block_candidate(BlockIdExt block_id, CatchainSeqno cc_seqno, td::uint32 validator_set_hash,
                                 td::BufferSlice data) override {
         LOG(DEBUG) << "send_block_candidate";
         //        td::actor::send_closure(id_, &FullNodeImpl::add_shard, shard);
       };
-      void del_shard(ShardIdFull shard) override {
-        LOG(DEBUG) << "del_shard";
-        //        td::actor::send_closure(id_, &FullNodeImpl::del_shard, shard);
-      }
       void send_ihr_message(AccountIdPrefixFull dst, td::BufferSlice data) override {
         LOG(DEBUG) << "send_ihr_message";
         //        td::actor::send_closure(id_, &FullNodeImpl::send_ihr_message, dst, std::move(data));
@@ -2257,16 +2252,24 @@ class IndexerSimple : public td::actor::Actor {
         LOG(DEBUG) << "get_next_key_blocks";
         //        td::actor::send_closure(id_, &FullNodeImpl::get_next_key_blocks, block_id, timeout, std::move(promise));
       }
-      void download_archive(BlockSeqno masterchain_seqno, std::string tmp_dir, td::Timestamp timeout,
-                            td::Promise<std::string> promise) override {
+      void download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
+                            td::Timestamp timeout, td::Promise<std::string> promise) override {
         LOG(DEBUG) << "download_archive";
         //        td::actor::send_closure(id_, &FullNodeImpl::download_archive, masterchain_seqno, std::move(tmp_dir), timeout,
         //                                std::move(promise));
+      }
+      void download_out_msg_queue_proof(
+              ton::ShardIdFull dst_shard, std::vector<ton::BlockIdExt> blocks, block::ImportedMsgQueueLimits limits,
+              td::Timestamp timeout, td::Promise<std::vector<td::Ref<ton::validator::OutMsgQueueProof>>> promise) override {
       }
 
       void new_key_block(BlockHandle handle) override {
         LOG(DEBUG) << "new_key_block";
         //        td::actor::send_closure(id_, &FullNodeImpl::new_key_block, std::move(handle));
+      }
+
+      void send_validator_telemetry(ton::PublicKeyHash key,
+                                    ton::tl_object_ptr<ton::ton_api::validator_telemetry> telemetry) override {
       }
 
       Callback(td::actor::ActorId<IndexerSimple> id) : id_(id) {
@@ -2315,9 +2318,7 @@ class IndexerSimple : public td::actor::Actor {
       init_block = ton::create_block_id(conf.validator_->init_block_);
     }
 
-    std::function<bool(ton::ShardIdFull, ton::CatchainSeqno, ton::validator::ValidatorManagerOptions::ShardCheckMode)>
-        check_shard = [](ton::ShardIdFull, ton::CatchainSeqno,
-                         ton::validator::ValidatorManagerOptions::ShardCheckMode) { return true; };
+    auto check_shard = [](ShardIdFull) { return true; };
     bool allow_blockchain_init = false;
     double sync_blocks_before = 86400;
     double block_ttl = 86400 * 7;

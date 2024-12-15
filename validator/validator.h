@@ -151,7 +151,6 @@ struct ValidatorManagerOptions : public td::CntObject {
 
   static td::Ref<ValidatorManagerOptions> create(
       BlockIdExt zero_block_id, BlockIdExt init_block_id,
-
       std::function<bool(ShardIdFull)> check_shard = [](ShardIdFull) { return true; },
       bool allow_blockchain_init = false, double sync_blocks_before = 3600, double block_ttl = 86400,
       double state_ttl = 86400, double archive_ttl = 86400 * 7, double key_proof_ttl = 86400 * 3650,

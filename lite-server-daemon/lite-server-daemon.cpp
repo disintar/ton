@@ -126,9 +126,8 @@ class LiteServerDaemon : public td::actor::Actor {
         LOG(DEBUG) << "Initial read complete: " << handle->id().to_str();
         td::actor::send_closure(id_, &LiteServerDaemon::sync_complete, handle);
       }
-      void add_shard(ShardIdFull shard) override {
-      }
-      void del_shard(ShardIdFull shard) override {
+      void on_new_masterchain_block(td::Ref<ton::validator::MasterchainState> state,
+                                    std::set<ton::ShardIdFull> shards_to_monitor) override {
       }
       void send_ihr_message(AccountIdPrefixFull dst, td::BufferSlice data) override {
       }
@@ -151,20 +150,25 @@ class LiteServerDaemon : public td::actor::Actor {
       void download_persistent_state(BlockIdExt id, BlockIdExt masterchain_block_id, td::uint32 priority,
                                      td::Timestamp timeout, td::Promise<td::BufferSlice> promise) override {
       }
-      void download_block_proof(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
-                                td::Promise<td::BufferSlice> promise) override {
+      void download_block_proof(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout, td::Promise<td::BufferSlice> promise) override {
       }
-      void download_block_proof_link(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
-                                     td::Promise<td::BufferSlice> promise) override {
+      void download_block_proof_link(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,  td::Promise<td::BufferSlice> promise) override {
       }
-      void get_next_key_blocks(BlockIdExt block_id, td::Timestamp timeout,
-                               td::Promise<std::vector<BlockIdExt>> promise) override {
+      void get_next_key_blocks(BlockIdExt block_id, td::Timestamp timeout,  td::Promise<std::vector<BlockIdExt>> promise) override {
       }
-      void download_archive(BlockSeqno masterchain_seqno, std::string tmp_dir, td::Timestamp timeout,
-                            td::Promise<std::string> promise) override {
+      void download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
+                            td::Timestamp timeout, td::Promise<std::string> promise) override {
+      }
+      void download_out_msg_queue_proof(
+              ton::ShardIdFull dst_shard, std::vector<ton::BlockIdExt> blocks, block::ImportedMsgQueueLimits limits,
+              td::Timestamp timeout, td::Promise<std::vector<td::Ref<ton::validator::OutMsgQueueProof>>> promise) override {
       }
 
       void new_key_block(ton::validator::BlockHandle handle) override {
+      }
+
+      void send_validator_telemetry(ton::PublicKeyHash key,
+                                    ton::tl_object_ptr<ton::ton_api::validator_telemetry> telemetry) override {
       }
 
       Callback(td::actor::ActorId<LiteServerDaemon> id) : id_(id) {
@@ -386,9 +390,7 @@ class LiteServerDaemon : public td::actor::Actor {
       init_block = ton::create_block_id(conf.validator_->init_block_);
     }
 
-    std::function<bool(ton::ShardIdFull, ton::CatchainSeqno, ton::validator::ValidatorManagerOptions::ShardCheckMode)>
-        check_shard = [](ton::ShardIdFull, ton::CatchainSeqno,
-                         ton::validator::ValidatorManagerOptions::ShardCheckMode) { return true; };
+    auto check_shard = [](ShardIdFull) { return true; };
     bool allow_blockchain_init = false;
     double sync_blocks_before = 86400;
     double block_ttl = 86400 * 7;
