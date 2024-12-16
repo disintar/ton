@@ -16,7 +16,7 @@ let
           glibc227 = nixos1909.glibc // { pname = "glibc"; };
           stdenv227 = let
             cc = pkgs.wrapCCWith {
-              cc = nixos1909.buildPackages.gcc-unwrapped;
+              cc = pkgs.gcc12;
               libc = glibc227;
               bintools = pkgs.binutils.override { libc = glibc227; };
             };
