@@ -44,6 +44,7 @@
 #include "auto/tl/ton_api.hpp"
 
 #include "IBlockParser.hpp"
+#include "validator-engine/prometheus/PrometheusExporterActor.h"
 
 enum ValidatorEnginePermissions : td::uint32 { vep_default = 1, vep_modify = 2, vep_unsafe = 4 };
 
@@ -156,6 +157,10 @@ class ValidatorEngine : public td::actor::Actor {
   td::actor::ActorOwn<ton::validator::fullnode::FullNode> full_node_;
   std::map<td::uint16, td::actor::ActorOwn<ton::validator::fullnode::FullNodeMaster>> full_node_masters_;
   td::actor::ActorOwn<ton::adnl::AdnlExtServer> control_ext_server_;
+  td::actor::ActorOwn<ton::PrometheusExporterActor> prometheus_exporter_;
+
+  td::uint32 prometheus_port_;
+  bool prometheus_available_ = false;
 
   std::string local_config_ = "";
   std::string global_config_ = "ton-global.config";
@@ -331,6 +336,11 @@ class ValidatorEngine : public td::actor::Actor {
   }
   void add_shard_cmd(ton::ShardIdFull shard) {
     add_shard_cmds_.push_back(shard);
+  }
+
+  void set_prometheus_port(td::uint32 port){
+    prometheus_available_ = true;
+    prometheus_port_ = port;
   }
 
   void start_up() override;
@@ -538,4 +548,6 @@ class ValidatorEngine : public td::actor::Actor {
   }
   void process_control_query(td::uint16 port, ton::adnl::AdnlNodeIdShort src, ton::adnl::AdnlNodeIdShort dst,
                              td::BufferSlice data, td::Promise<td::BufferSlice> promise);
+
+  void update_prometheus_exporter_stats();
 };

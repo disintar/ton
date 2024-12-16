@@ -38,6 +38,7 @@
 #include "catchain/catchain-types.h"
 #include "interfaces/out-msg-queue-proof.h"
 #include "interfaces/external-message.h"
+#include "validator-engine/prometheus/PrometheusExporterActor.h"
 
 namespace ton {
 
@@ -288,6 +289,8 @@ class ValidatorManagerInterface : public td::actor::Actor {
   virtual void set_block_publisher(std::unique_ptr<BlockParser> publisher) {
     //    LOG(ERROR) << "set_block_publisher";
   }  ///TODO: make it pure virtual
+  virtual void set_prometheus_exporter(td::actor::ActorId<PrometheusExporterActor>) {
+  }
   virtual void clear_celldb_boc_cache() {
     //    LOG(ERROR) << "clear_celldb_boc_cache";
   }  ///TODO: make it pure virtual

@@ -668,6 +668,11 @@ class ValidatorManagerImpl : public ValidatorManager {
     td::actor::send_closure(db_, &Db::set_block_publisher, publisher_.get());
   }
 
+  void set_prometheus_exporter(td::actor::ActorId<PrometheusExporterActor> actor) override {
+    prometheus_exporter_ = std::move(actor);
+    prometheus_exporter_available_ = true;
+  }
+
   BlockParser* get_block_publisher() override {
     return publisher_.get();
   }
@@ -696,6 +701,8 @@ class ValidatorManagerImpl : public ValidatorManager {
  private:
   td::actor::ActorOwn<adnl::AdnlExtServer> lite_server_;
   td::actor::ActorOwn<LiteServerCache> lite_server_cache_;
+  td::actor::ActorId<PrometheusExporterActor> prometheus_exporter_;
+  bool prometheus_exporter_available_ = false;
   std::vector<td::uint16> pending_ext_ports_;
   std::vector<adnl::AdnlNodeIdShort> pending_ext_ids_;
 

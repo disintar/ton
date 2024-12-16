@@ -82,23 +82,27 @@ struct Debug {
   }
 
   void dump(td::StringBuilder &sb) {
-    sb << "list of active actors with names:\n";
+    sb << "# HELP active_actors Status of active actors\n";
+    sb << "# TYPE active_actors gauge\n";
     for_each([&](core::Debug &debug) {
-      core::DebugInfo info;
-      debug.read(info);
-      if (info.is_active) {
-        sb << "\t\"" << info.name << "\" is active for " << Time::now() - info.start_at << "s\n";
-      }
+        core::DebugInfo info;
+        debug.read(info);
+        if (info.is_active) {
+          sb << "active_actors{name=\"" << info.name << "\"} " << (Time::now() - info.start_at) << "\n";
+        }
     });
-    sb << "\nsizes of cpu local queues:\n";
+
+    sb << "# HELP cpu_local_queue_size Size of CPU local queues\n";
+    sb << "# TYPE cpu_local_queue_size gauge\n";
     for (auto &scheduler : group_info_->schedulers) {
       for (size_t i = 0; i < scheduler.cpu_threads_count; i++) {
         auto size = scheduler.cpu_local_queue[i].size();
         if (size != 0) {
-          sb << "\tcpu#" << i << " queue.size() = " << size << "\n";
+          sb << "cpu_local_queue_size{cpu_thread=\"" << i << "\"} " << size << "\n";
         }
       }
     }
+
     sb << "\n";
   }
 

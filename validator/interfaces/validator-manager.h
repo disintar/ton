@@ -29,6 +29,7 @@
 #include "liteserver.h"
 #include "crypto/vm/db/DynamicBagOfCellsDb.h"
 #include "validator-session/validator-session-types.h"
+#include "validator-engine/prometheus/PrometheusExporterActor.h"
 #include "auto/tl/lite_api.h"
 
 namespace ton {
@@ -216,6 +217,8 @@ class ValidatorManager : public ValidatorManagerInterface {
 //    LOG(ERROR) << "set_block_publisher";
   } ///TODO: make it pure virtual
 
+  virtual void set_prometheus_exporter(td::actor::ActorId<PrometheusExporterActor>) override {
+  }
   virtual BlockParser* get_block_publisher() {
     // TODO: make it pure virtual
     return nullptr;

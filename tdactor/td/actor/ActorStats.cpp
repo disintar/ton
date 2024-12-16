@@ -87,14 +87,17 @@ std::string ActorStats::prepare_stats() {
   };
 
   td::StringBuilder sb;
-  sb << "================================= PERF COUNTERS ================================\n";
-  sb << "ticks_per_second_estimate\t" << 1.0 / estimated_inv_ticks_per_second << "\n";
+  sb << "# HELP perf_counters Performance counters metrics\n";
+  sb << "# TYPE perf_counters counter\n";
+  sb << "#================================= PERF COUNTERS ================================\n";
+  sb << "perf_ticks_per_second_estimate " << 1.0 / estimated_inv_ticks_per_second << "\n";
   for (auto &it : perf_map_10s) {
     const std::string &name = it.first;
     auto dot_at = name.rfind('.');
     CHECK(dot_at != std::string::npos);
     auto base_name = name.substr(0, dot_at);
     auto rest_name = name.substr(dot_at + 1);
+
     td::Slice new_rest_name = rest_name;
     if (rest_name == "count") {
       new_rest_name = "qps";
@@ -102,12 +105,16 @@ std::string ActorStats::prepare_stats() {
     if (rest_name == "duration") {
       new_rest_name = "load";
     }
-    auto rewrite_name = PSTRING() << base_name << "." << new_rest_name;
-    sb << rewrite_name << "\t" << perf_map_10s[name] << " " << perf_map_10m[name] << " " << current_perf_map[name]
-       << "\n";
+
+    auto rewrite_name = PSTRING() << base_name << "_" << new_rest_name;
+
+    sb << rewrite_name << "{type=\"10s\"} " << perf_map_10s[name] << "\n";
+    sb << rewrite_name << "{type=\"10m\"} " << perf_map_10m[name] << "\n";
+    sb << rewrite_name << "{type=\"current\"} " << current_perf_map[name] << "\n";
   }
+
   sb << "\n";
-  sb << "================================= ACTORS STATS =================================\n";
+  sb << "#================================= ACTORS STATS =================================\n";
   double max_delay = 0;
   ActorTypeStat sum_stat_forever;
   ActorTypeStat sum_stat_10m;
@@ -124,43 +131,74 @@ std::string ActorStats::prepare_stats() {
   sb << "\n";
 
   auto do_describe = [&](auto &&sb, const ActorTypeStat &stat_10s, const ActorTypeStat &stat_10m,
-                         const ActorTypeStat &stat_forever) {
-    sb() << "load_per_second:\t" << stat_10s.seconds << " " << stat_10m.seconds << " " << stat_forever.seconds << "\n";
-    sb() << "messages_per_second:\t" << stat_10s.messages << " " << stat_10m.messages << " " << stat_forever.messages
-         << "\n";
+                         const ActorTypeStat &stat_forever, const std::string prefix) {
+      // Metrics for load per second
+      sb() << "actor_load_per_second{actor=\"" << prefix << "\", period=\"10s\"} " << stat_10s.seconds << "\n";
+      sb() << "actor_load_per_second{actor=\"" << prefix << "\", period=\"10m\"} " << stat_10m.seconds << "\n";
+      sb() << "actor_load_per_second{actor=\"" << prefix << "\", period=\"forever\"} " << stat_forever.seconds << "\n";
 
-    sb() << "max_execute_messages:\t" << stat_forever.max_execute_messages.value_10s << " "
-         << stat_forever.max_execute_messages.value_10m << " " << stat_forever.max_execute_messages.value_forever
-         << "\n";
+      // Metrics for messages per second
+      sb() << "actor_messages_per_second{actor=\"" << prefix << "\", period=\"10s\"} " << stat_10s.messages << "\n";
+      sb() << "actor_messages_per_second{actor=\"" << prefix << "\", period=\"10m\"} " << stat_10m.messages << "\n";
+      sb() << "actor_messages_per_second{actor=\"" << prefix << "\", period=\"forever\"} " << stat_forever.messages << "\n";
 
-    sb() << "max_execute_seconds:\t" << stat_forever.max_execute_seconds.value_10s << "s"
-         << " " << stat_forever.max_execute_seconds.value_10m << "s"
-         << " " << stat_forever.max_execute_seconds.value_forever << "s\n";
-    sb() << "max_message_seconds:\t" << stat_forever.max_message_seconds.value_10s << " "
-         << stat_forever.max_message_seconds.value_10m << " " << stat_forever.max_message_seconds.value_forever << "\n";
-    sb() << "created_per_second:\t" << stat_10s.created << " " << stat_10m.created << " " << stat_forever.created
-         << "\n";
+      // Metrics for max execute messages
+      sb() << "actor_max_execute_messages{actor=\"" << prefix << "\", period=\"10s\"} "
+           << stat_forever.max_execute_messages.value_10s << "\n";
+      sb() << "actor_max_execute_messages{actor=\"" << prefix << "\", period=\"10m\"} "
+           << stat_forever.max_execute_messages.value_10m << "\n";
+      sb() << "actor_max_execute_messages{actor=\"" << prefix << "\", period=\"forever\"} "
+           << stat_forever.max_execute_messages.value_forever << "\n";
 
-    auto executing_for =
-        stat_forever.executing_start > 1e15
-            ? 0
-            : double(td::Clocks::rdtsc()) * estimated_inv_ticks_per_second - stat_forever.executing_start;
-    sb() << "max_delay:\t" << stat_forever.max_delay_seconds.value_10s << "s "
-         << stat_forever.max_delay_seconds.value_10m << "s " << stat_forever.max_delay_seconds.value_forever << "s\n";
-    sb() << ""
-         << "alive: " << stat_forever.alive << " executing: " << stat_forever.executing
-         << " max_executing_for: " << executing_for << "s\n";
+      // Metrics for max execute seconds
+      sb() << "actor_max_execute_seconds{actor=\"" << prefix << "\", period=\"10s\"} "
+           << stat_forever.max_execute_seconds.value_10s << "\n";
+      sb() << "actor_max_execute_seconds{actor=\"" << prefix << "\", period=\"10m\"} "
+           << stat_forever.max_execute_seconds.value_10m << "\n";
+      sb() << "actor_max_execute_seconds{actor=\"" << prefix << "\", period=\"forever\"} "
+           << stat_forever.max_execute_seconds.value_forever << "\n";
+
+      // Metrics for max message seconds
+      sb() << "actor_max_message_seconds{actor=\"" << prefix << "\", period=\"10s\"} "
+           << stat_forever.max_message_seconds.value_10s << "\n";
+      sb() << "actor_max_message_seconds{actor=\"" << prefix << "\", period=\"10m\"} "
+           << stat_forever.max_message_seconds.value_10m << "\n";
+      sb() << "actor_max_message_seconds{actor=\"" << prefix << "\", period=\"forever\"} "
+           << stat_forever.max_message_seconds.value_forever << "\n";
+
+      // Metrics for created per second
+      sb() << "actor_created_per_second{actor=\"" << prefix << "\", period=\"10s\"} " << stat_10s.created << "\n";
+      sb() << "actor_created_per_second{actor=\"" << prefix << "\", period=\"10m\"} " << stat_10m.created << "\n";
+      sb() << "actor_created_per_second{actor=\"" << prefix << "\", period=\"forever\"} " << stat_forever.created << "\n";
+
+      // Calculating executing_for
+      auto executing_for =
+              stat_forever.executing_start > 1e15
+              ? 0
+              : double(td::Clocks::rdtsc()) * estimated_inv_ticks_per_second - stat_forever.executing_start;
+
+      // Metrics for max delay
+      sb() << "actor_max_delay_seconds{actor=\"" << prefix << "\", period=\"10s\"} "
+           << stat_forever.max_delay_seconds.value_10s << "\n";
+      sb() << "actor_max_delay_seconds{actor=\"" << prefix << "\", period=\"10m\"} "
+           << stat_forever.max_delay_seconds.value_10m << "\n";
+      sb() << "actor_max_delay_seconds{actor=\"" << prefix << "\", period=\"forever\"} "
+           << stat_forever.max_delay_seconds.value_forever << "\n";
+
+      // Miscellaneous metrics
+      sb() << "actor_alive{actor=\"" << prefix << "\"} " << stat_forever.alive << "\n";
+      sb() << "actor_executing{actor=\"" << prefix << "\"} " << stat_forever.executing << "\n";
+      sb() << "actor_max_executing_for{actor=\"" << prefix << "\"} " << executing_for << "\n";
   };
 
-  auto describe = [&](td::StringBuilder &sb, std::type_index actor_type_index) {
+  auto describe = [&](td::StringBuilder &sb, std::type_index actor_type_index, const std::string prefix) {
     auto stat_10s = stats_10s[actor_type_index];
     auto stat_10m = stats_10m[actor_type_index];
     auto stat_forever = stats_forever[actor_type_index];
-    do_describe([&sb]() -> td::StringBuilder & { return sb << "\t\t"; }, stat_10s, stat_10m, stat_forever);
+    do_describe([&sb]() -> td::StringBuilder & { return sb; }, stat_10s, stat_10m, stat_forever, std::move(prefix));
   };
 
-  sb << "Cummulative stats:\n";
-  do_describe([&sb]() -> td::StringBuilder & { return sb << "\t"; }, sum_stat_10s, sum_stat_10m, sum_stat_forever);
+  do_describe([&sb]() -> td::StringBuilder & { return sb; }, sum_stat_10s, sum_stat_10m, sum_stat_forever, "cumulative");
   sb << "\n";
 
   auto top_k_by = [&](auto &stats_map, size_t k, std::string description, auto by) {
@@ -174,10 +212,11 @@ std::string ActorStats::prepare_stats() {
         break;
       }
       if (is_first) {
-        sb << "top actors by " << description << "\n";
+        sb << "# HELP top_actors_by_" << description << " Top actors by " << description << "\n";
+        sb << "# TYPE top_actors_by_" << description << " gauge\n";
         is_first = false;
       }
-      sb << "\t#" << i << ": " << ActorTypeStatManager::get_class_name(stats[i].first.name()) << "\t" << value << "\n";
+      sb << "top_actors_by_" << description << "{actor=\"" << ActorTypeStatManager::get_class_name(stats[i].first.name()) << "\"} " << value << "\n";
     }
     sb << "\n";
   };
@@ -211,11 +250,10 @@ std::string ActorStats::prepare_stats() {
             [&](auto &left, auto &right) { return main_key(left.first) > main_key(right.first); });
   auto debug = Debug(SchedulerContext::get()->scheduler_group());
   debug.dump(sb);
-  sb << "All actors:\n";
+
   for (auto &it : stats) {
-    sb << "\t" << ActorTypeStatManager::get_class_name(it.first.name()) << "\n";
     auto key = main_key(it.first);
-    describe(sb, it.first);
+    describe(sb, it.first, ActorTypeStatManager::get_class_name(it.first.name()));
   }
   sb << "\n";
   return sb.as_cslice().str();

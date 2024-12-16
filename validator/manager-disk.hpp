@@ -356,6 +356,9 @@ class ValidatorManagerImpl : public ValidatorManager {
   void run_ext_query(td::BufferSlice data, td::Promise<td::BufferSlice> promise) override {
     UNREACHABLE();
   };
+  void set_prometheus_exporter(td::actor::ActorId<PrometheusExporterActor>) override {
+    UNREACHABLE();
+  }
   void add_lite_query_stats_extended(int lite_query_id, adnl::AdnlNodeIdShort dst, long start_at, long end_at,
                                      bool success) override;
 
