@@ -215,7 +215,7 @@ void FullNodeImpl::on_new_masterchain_block(td::Ref<MasterchainState> state, std
     }
   }
   for (const auto &[wc, winfo] : state->get_workchain_list()) {
-    if (!workchains.contains(wc) && winfo->active && winfo->enabled_since <= state->get_unix_time()) {
+    if (workchains.find(wc) == workchains.end() && winfo->active && winfo->enabled_since <= state->get_unix_time()) {
       all_shards.insert(ShardIdFull(wc));
     }
   }
@@ -231,14 +231,14 @@ void FullNodeImpl::on_new_masterchain_block(td::Ref<MasterchainState> state, std
   }
 
   for (auto it = shards_.begin(); it != shards_.end(); ) {
-    if (all_shards.contains(it->first)) {
+    if (all_shards.find(it->first) != all_shards.end()) {
       ++it;
     } else {
       it = shards_.erase(it);
     }
   }
   for (ShardIdFull shard : all_shards) {
-    bool active = new_active.contains(shard);
+    bool active = new_active.find(shard) != new_active.end();
     bool overlay_exists = !shards_[shard].actor.empty();
     if (active || join_all_overlays || overlay_exists) {
       update_shard_actor(shard, active);
@@ -290,7 +290,7 @@ void FullNodeImpl::send_ext_message(AccountIdPrefixFull dst, td::BufferSlice dat
   for (auto &[_, private_overlay] : custom_overlays_) {
     if (private_overlay.params_.send_shard(dst.as_leaf_shard())) {
       for (auto &[local_id, actor] : private_overlay.actors_) {
-        if (private_overlay.params_.msg_senders_.contains(local_id)) {
+        if (private_overlay.params_.msg_senders_.find(local_id) != private_overlay.params_.msg_senders_.end()) {
           td::actor::send_closure(actor, &FullNodeCustomOverlay::send_external_message, data.clone());
         }
       }
@@ -761,7 +761,7 @@ void FullNodeImpl::send_block_broadcast_to_custom_overlays(const BlockBroadcast 
   for (auto &[_, private_overlay] : custom_overlays_) {
     if (private_overlay.params_.send_shard(broadcast.block_id.shard_full())) {
       for (auto &[local_id, actor] : private_overlay.actors_) {
-        if (private_overlay.params_.block_senders_.contains(local_id)) {
+        if (private_overlay.params_.block_senders_.find(local_id) != private_overlay.params_.block_senders_.end()) {
           td::actor::send_closure(actor, &FullNodeCustomOverlay::send_broadcast, broadcast.clone());
         }
       }
@@ -784,7 +784,7 @@ void FullNodeImpl::send_block_candidate_broadcast_to_custom_overlays(const Block
   for (auto &[_, private_overlay] : custom_overlays_) {
     if (private_overlay.params_.send_shard(block_id.shard_full())) {
       for (auto &[local_id, actor] : private_overlay.actors_) {
-        if (private_overlay.params_.block_senders_.contains(local_id)) {
+        if (private_overlay.params_.block_senders_.find(local_id) != private_overlay.params_.block_senders_.end()) {
           td::actor::send_closure(actor, &FullNodeCustomOverlay::send_block_candidate, block_id, cc_seqno,
                                   validator_set_hash, data.clone());
         }

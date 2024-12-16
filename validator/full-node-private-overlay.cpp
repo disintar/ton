@@ -107,9 +107,12 @@ void FullNodePrivateBlockOverlay::process_telemetry_broadcast(
   }
   VLOG(FULL_NODE_DEBUG) << "Got telemetry broadcast from " << src;
   auto s = td::json_encode<std::string>(td::ToJson(*telemetry), false);
-  std::erase_if(s, [](char c) {
-    return c == '\n' || c == '\r';
-  });
+  s.erase(
+          std::remove_if(s.begin(), s.end(), [](char c) {
+              return c == '\n' || c == '\r';
+          }),
+          s.end()
+  );
   telemetry_file_ << s << "\n";
   telemetry_file_.flush();
   if (telemetry_file_.fail()) {
