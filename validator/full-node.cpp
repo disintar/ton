@@ -591,7 +591,7 @@ void FullNodeImpl::update_validator_telemetry_collector() {
     validator_telemetry_collector_key_ = PublicKeyHash::zero();
     return;
   }
-  if (!private_block_overlays_.contains(validator_telemetry_collector_key_)) {
+  if (private_block_overlays_.find(validator_telemetry_collector_key_) == private_block_overlays_.end()) {
     auto it = private_block_overlays_.begin();
     validator_telemetry_collector_key_ = it->first;
     td::actor::send_closure(it->second, &FullNodePrivateBlockOverlay::collect_validator_telemetry,
