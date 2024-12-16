@@ -17,7 +17,7 @@ jobs:
     strategy:
       matrix:
         python: [310, 312]
-    runs-on: Linux
+    runs-on: arc-runner-set
 
     steps:
       - uses: kenchan0130/actions-system-info@master

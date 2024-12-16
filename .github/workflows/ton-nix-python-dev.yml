@@ -25,7 +25,7 @@ jobs:
     steps:
     - name: Install QEMU
       uses: docker/setup-qemu-action@v2
-      if: matrix.os == 'Linux' && matrix.arch == 'aarch64'
+      if: matrix.os == 'arc-runner-set' && matrix.arch == 'aarch64'
 
     - uses: actions/checkout@v4
       with:

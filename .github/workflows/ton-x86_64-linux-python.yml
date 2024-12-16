@@ -17,7 +17,7 @@ jobs:
     strategy:
       matrix:
         python: [39, 310, 311]
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: arc-runner-set
     steps:
     - uses: actions/checkout@v4
       with:
