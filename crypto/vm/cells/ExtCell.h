@@ -76,7 +76,7 @@ class ExtCell : public Cell {
   }
 
   static td::NamedThreadSafeCounter::CounterRef get_thread_safe_counter_unloaded() {
-    static auto res = td::NamedThreadSafeCounter::get_default().get_counter("ExtCell.unloaded");
+    static auto res = td::NamedThreadSafeCounter::get_default().get_counter("ExtCell_unloaded");
     return res;
   }
 

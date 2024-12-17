@@ -2725,6 +2725,12 @@ void ValidatorManagerImpl::state_serializer_update(BlockSeqno seqno) {
 void ValidatorManagerImpl::alarm() {
   try_advance_gc_masterchain_block();
   alarm_timestamp() = td::Timestamp::in(1.0);
+  if (prometheus_exporter_available_){
+    td::actor::send_closure(prometheus_exporter_,
+                            &ton::PrometheusExporterActor::set_validator_manager_alive_at,
+                            td::Clocks::system());
+  }
+
   if (shard_client_handle_ && gc_masterchain_handle_) {
     td::actor::send_closure(db_, &Db::run_gc, shard_client_handle_->unix_time(), gc_masterchain_handle_->unix_time(),
                             static_cast<UnixTime>(opts_->archive_ttl()));
@@ -2810,10 +2816,30 @@ void ValidatorManagerImpl::alarm() {
 
   if (log_ls_stats_at_.is_in_past()) {
     if (!ls_stats_.empty() || ls_stats_check_ext_messages_ != 0) {
+      if (prometheus_exporter_available_){
+        td::StringBuilder sb;
+        sb << "# HELP liteserver_stats_1m Liteserver stats (1 minute)\n";
+        sb << "# TYPE liteserver_stats_1m gauge\n";
+        td::uint32 total = 0;
+        for (const auto &p : ls_stats_) {
+          sb << "liteserver_stats_1m{name=\"" << lite_query_name_by_id(p.first) << "\"} " << p.second << "\n";
+          total += p.second;
+        }
+        if (total > 0) {
+          sb << "liteserver_stats_total { } " << total << "\n";
+        }
+        if (ls_stats_check_ext_messages_ > 0) {
+          sb << "liteserver_stats_check_ext_message " << ls_stats_check_ext_messages_ << "\n";
+        }
+        sb << "\n";
+
+        td::actor::send_closure(prometheus_exporter_, &ton::PrometheusExporterActor::set_liteserver_stats, sb.as_cslice().str());
+      }
+
       td::StringBuilder sb;
-      sb << "Liteserver stats (1 minute):";
+      sb << "Liteserver stats (1 minute) " << " (prometheus " << (prometheus_exporter_available_ ? "enabled): " : "disabled): ");
       td::uint32 total = 0;
-      for (const auto &p : ls_stats_) {
+      for (const auto &p: ls_stats_) {
         sb << " " << lite_query_name_by_id(p.first) << ":" << p.second;
         total += p.second;
       }
@@ -2953,19 +2979,36 @@ void ValidatorManagerImpl::prepare_stats(td::Promise<std::vector<std::pair<std::
   auto merger = StatsMerger::create(std::move(promise));
 
   std::vector<std::pair<std::string, std::string>> vec;
-  vec.emplace_back("unixtime", td::to_string(static_cast<UnixTime>(td::Clocks::system())));
+  vec.emplace_back("ton_node_status_unixtime", td::to_string(static_cast<UnixTime>(td::Clocks::system())));
   if (last_masterchain_block_handle_) {
-    vec.emplace_back("masterchainblock", last_masterchain_block_id_.to_str());
-    vec.emplace_back("masterchainblocktime", td::to_string(last_masterchain_block_handle_->unix_time()));
-    vec.emplace_back("gcmasterchainblock", gc_masterchain_handle_->id().to_str());
-    vec.emplace_back("keymasterchainblock", last_key_block_handle_->id().to_str());
-    vec.emplace_back("knownkeymasterchainblock", last_known_key_block_handle_->id().to_str());
-    vec.emplace_back("rotatemasterchainblock", last_rotate_block_id_.to_str());
-    //vec.emplace_back("shardclientmasterchainseqno", td::to_string(min_confirmed_masterchain_seqno_));
-    vec.emplace_back("stateserializermasterchainseqno", td::to_string(state_serializer_masterchain_seqno_));
+    //    vec.emplace_back("masterchainblock", last_masterchain_block_id_.to_str());
+    //    vec.emplace_back("masterchainblocktime", td::to_string(last_masterchain_block_handle_->unix_time()));
+    //    vec.emplace_back("gcmasterchainblock", gc_masterchain_handle_->id().to_str());
+    //    vec.emplace_back("keymasterchainblock", last_key_block_handle_->id().to_str());
+    //    vec.emplace_back("knownkeymasterchainblock", last_known_key_block_handle_->id().to_str());
+    //    vec.emplace_back("rotatemasterchainblock", last_rotate_block_id_.to_str());
+    //    vec.emplace_back("shardclientmasterchainseqno", td::to_string(min_confirmed_masterchain_seqno_));
+    //    vec.emplace_back("stateserializermasterchainseqno", td::to_string(state_serializer_masterchain_seqno_));
+
+    vec.emplace_back("ton_node_status_last_masterchain_block_seqno ", std::to_string(last_masterchain_block_id_.seqno()));
+    vec.emplace_back("ton_node_status_last_masterchain_gc_block_seqno ", std::to_string(gc_masterchain_handle_->id().seqno()));
+
+    std::string last_masterchain_gc_block_ago = std::to_string(td::Clocks::system() - gc_masterchain_handle_->unix_time());
+    vec.emplace_back("ton_node_status_last_masterchain_gc_block_ago ", last_masterchain_gc_block_ago);
+    vec.emplace_back("ton_node_status_last_masterchain_gc_block_at ", std::to_string(gc_masterchain_handle_->unix_time()));
+
+    std::string last_masterchain_block_ago = std::to_string(td::Clocks::system() - last_masterchain_block_handle_->unix_time());
+    vec.emplace_back("ton_node_status_last_masterchain_block_ago ", last_masterchain_block_ago);
+    vec.emplace_back("ton_node_status_last_masterchain_block_at ", std::to_string(last_masterchain_block_handle_->unix_time()));
+    std::string last_known_key_block_ago = std::to_string(td::Clocks::system() - (last_known_key_block_handle_->inited_unix_time() ? last_known_key_block_handle_->unix_time() : 0));
+    vec.emplace_back("ton_node_status_last_known_key_block_ago ", last_known_key_block_ago);
+    vec.emplace_back("ton_node_status_last_known_key_block_at ", std::to_string(last_known_key_block_handle_->inited_unix_time() ? last_known_key_block_handle_->unix_time() : 0));
+    std::string shard_client_ago = std::to_string(td::Clocks::system() - (shard_client_handle_ ? shard_client_handle_->unix_time() : 0));
+    vec.emplace_back("ton_node_status_shard_client_ago ", shard_client_ago);
+    vec.emplace_back("ton_node_status_shard_client_at ", std::to_string((shard_client_handle_ ? shard_client_handle_->unix_time() : 0)));
   }
   td::NamedThreadSafeCounter::get_default().for_each([&](auto key, auto value) {
-    vec.emplace_back("counter." + key, PSTRING() << value);
+    vec.emplace_back("ton_node_status_cell_stat_" + key, PSTRING() << value);
   });
 
   if (!shard_client_.empty()) {
@@ -2975,7 +3018,7 @@ void ValidatorManagerImpl::prepare_stats(td::Promise<std::vector<std::pair<std::
         return;
       }
       std::vector<std::pair<std::string, std::string>> vec;
-      vec.emplace_back("shardclientmasterchainseqno", td::to_string(R.move_as_ok()));
+      vec.emplace_back("ton_node_status_shard_client_masterchain_seqno ", td::to_string(R.move_as_ok()));
       promise.set_value(std::move(vec));
     });
     td::actor::send_closure(shard_client_, &ShardClient::get_processed_masterchain_block, std::move(P));
@@ -2983,7 +3026,7 @@ void ValidatorManagerImpl::prepare_stats(td::Promise<std::vector<std::pair<std::
 
   merger.make_promise("").set_value(std::move(vec));
 
-  td::actor::send_closure(db_, &Db::prepare_stats, merger.make_promise("db."));
+  //  td::actor::send_closure(db_, &Db::prepare_stats, merger.make_promise("db."));
 }
 
 void ValidatorManagerImpl::prepare_perf_timer_stats(td::Promise<std::vector<PerfTimerStats>> promise) {

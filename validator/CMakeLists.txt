@@ -4,6 +4,13 @@ if (NOT OPENSSL_FOUND)
   find_package(OpenSSL REQUIRED)
 endif()
 
+if (NIX)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(MHD REQUIRED libmicrohttpd)
+else()
+  find_package(MHD REQUIRED)
+endif()
+
 #add_subdirectory(dummy0)
 add_subdirectory(impl)
 
@@ -211,10 +218,15 @@ target_include_directories(full-node PUBLIC
   ${OPENSSL_INCLUDE_DIR}
   )
 
-target_link_libraries(validator PRIVATE tdactor adnl rldp tl_api dht tdfec overlay catchain validatorsession ton_db)
+target_include_directories(full-node PUBLIC ${MHD_INCLUDE_DIR} ${MHD_STATIC_INCLUDE_DIRS})
+target_include_directories(validator-hardfork PUBLIC ${MHD_INCLUDE_DIR} ${MHD_STATIC_INCLUDE_DIRS})
+target_include_directories(validator-disk PUBLIC ${MHD_INCLUDE_DIR} ${MHD_STATIC_INCLUDE_DIRS})
+target_include_directories(validator PUBLIC ${MHD_INCLUDE_DIR} ${MHD_STATIC_INCLUDE_DIRS})
 
-target_link_libraries(validator-disk PRIVATE ton_validator tdutils tdactor adnl rldp tl_api dht tdfec overlay catchain validatorsession ton_db)
+target_link_libraries(validator PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} tdactor adnl rldp tl_api dht tdfec overlay catchain validatorsession ton_db)
 
-target_link_libraries(validator-hardfork PRIVATE tdactor adnl rldp tl_api dht tdfec overlay catchain validatorsession ton_db)
+target_link_libraries(validator-disk PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} ton_validator tdutils tdactor adnl rldp tl_api dht tdfec overlay catchain validatorsession ton_db)
 
-target_link_libraries(full-node PRIVATE tdactor adnl rldp rldp2 tl_api dht tdfec overlay catchain validatorsession ton_db)
+target_link_libraries(validator-hardfork PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} tdactor adnl rldp tl_api dht tdfec overlay catchain validatorsession ton_db)
+
+target_link_libraries(full-node PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} tdactor adnl rldp rldp2 tl_api dht tdfec overlay catchain validatorsession ton_db)

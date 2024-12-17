@@ -1302,6 +1302,28 @@ void ValidatorEngine::start_up() {
 #endif
 }
 
+void ValidatorEngine::update_prometheus_exporter_stats(){
+  auto PromId = prometheus_exporter_.get();
+
+  auto P = td::PromiseCreator::lambda(
+          [PromId](td::Result<std::vector<std::pair<std::string, std::string>>> R) {
+              if (R.is_ok()) {
+                td::actor::send_closure(PromId, &ton::PrometheusExporterActor::set_validator_manager_stats, R.move_as_ok());
+              }
+          });
+  td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::prepare_stats, std::move(P));
+
+  auto P2 = td::PromiseCreator::lambda(
+          [PromId](td::Result<std::string> R) {
+              if (R.is_ok()) {
+                td::actor::send_closure(PromId, &ton::PrometheusExporterActor::set_validator_manager_actor_stats, R.move_as_ok());
+              }
+          });
+  td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::prepare_actor_stats, std::move(P2));
+}
+
+
+
 void ValidatorEngine::alarm() {
   alarm_timestamp() = td::Timestamp::in(1.0 + td::Random::fast(0, 100) * 0.01);
 
@@ -1353,6 +1375,10 @@ void ValidatorEngine::alarm() {
 
       if (need_write) {
         write_config([](td::Unit) {});
+      }
+
+      if (prometheus_available_){
+        update_prometheus_exporter_stats();
       }
     }
     for (auto &x : config_.gc) {
@@ -2123,6 +2149,16 @@ void ValidatorEngine::start_full_node_masters() {
 }
 
 void ValidatorEngine::started_full_node_masters() {
+  if (prometheus_available_){
+    prometheus_exporter_ = td::actor::create_actor<ton::PrometheusExporterActor>("PrometheusExporterActor", prometheus_port_);
+    td::actor::send_closure(prometheus_exporter_, &ton::PrometheusExporterActor::run);
+    if (!validator_manager_.empty()) {
+      td::actor::send_closure(validator_manager_,
+                              &ton::validator::ValidatorManagerInterface::set_prometheus_exporter,
+                              prometheus_exporter_.get());
+    }
+  }
+
   started();
 }
 
@@ -4570,6 +4606,16 @@ int main(int argc, char *argv[]) {
               td::actor::send_closure(x, &ValidatorEngine::set_validator_telemetry_filename, s);
             });
       });
+  p.add_option(
+      '\0', "prometheus-exporter-port",
+      "enable and set prometheus-exporter on specific http port",
+      [&](td::Slice s) {
+        acts.push_back(
+            [&x, s = s.str()]() {
+              td::uint32 port = std::stoi(s);
+              td::actor::send_closure(x, &ValidatorEngine::set_prometheus_port, port);
+            });
+      });
   auto S = p.run(argc, argv);
   if (S.is_error()) {
     LOG(ERROR) << "failed to parse options: " << S.move_as_error();
@@ -4584,6 +4630,7 @@ int main(int argc, char *argv[]) {
 
   scheduler.run_in_context([&] {
     vm::init_vm().ensure();
+
     x = td::actor::create_actor<ValidatorEngine>("validator-engine");
     for (auto &act : acts) {
       act();

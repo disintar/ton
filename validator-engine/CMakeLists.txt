@@ -4,7 +4,16 @@ if (NOT OPENSSL_FOUND)
     find_package(OpenSSL REQUIRED)
 endif ()
 
+if (NIX)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(MHD REQUIRED libmicrohttpd)
+else()
+    find_package(MHD REQUIRED)
+endif()
+
 set(VALIDATOR_ENGINE_SOURCE
+        prometheus/PrometheusExporterActor.h
+        prometheus/PrometheusExporterActor.cpp
         ClusterSyncer.hpp
         ClusterSyncer.cpp
         validator-engine.hpp
@@ -22,7 +31,10 @@ set(VALIDATOR_ENGINE_SOURCE
 add_executable(validator-engine ${VALIDATOR_ENGINE_SOURCE})
 target_link_libraries(validator-engine overlay tdutils tdactor adnl tl_api dht
   rldp rldp2 catchain validatorsession full-node validator ton_validator validator
-  fift-lib memprof git ${JEMALLOC_LIBRARIES})
+  fift-lib memprof git ${JEMALLOC_LIBRARIES} ${MHD_LIBRARY})
+
+target_include_directories(validator-engine PUBLIC ${MHD_INCLUDE_DIR})
+
 if (JEMALLOC_FOUND)
   target_include_directories(validator-engine PRIVATE ${JEMALLOC_INCLUDE_DIR})
   target_compile_definitions(validator-engine PRIVATE -DTON_USE_JEMALLOC=1)

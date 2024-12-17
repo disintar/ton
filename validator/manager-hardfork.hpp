@@ -522,6 +522,9 @@ class ValidatorManagerImpl : public ValidatorManager {
   void add_persistent_state_description(td::Ref<PersistentStateDescription> desc) override {
   }
 
+  void set_prometheus_exporter(td::actor::ActorId<PrometheusExporterActor>) override {
+    UNREACHABLE();
+  }
  private:
   td::Ref<ValidatorManagerOptions> opts_;
 
