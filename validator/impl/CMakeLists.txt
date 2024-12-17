@@ -4,6 +4,13 @@ if (NOT OPENSSL_FOUND)
   find_package(OpenSSL REQUIRED)
 endif()
 
+if (NIX)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(MHD REQUIRED libmicrohttpd)
+else()
+  find_package(MHD REQUIRED)
+endif()
+
 set(TON_VALIDATOR_SOURCE
   accept-block.cpp
   block.cpp
@@ -47,11 +54,12 @@ set(TON_VALIDATOR_SOURCE
 
 add_library(ton_validator STATIC ${TON_VALIDATOR_SOURCE})
 
+target_include_directories(ton_validator PUBLIC ${MHD_INCLUDE_DIR} ${MHD_STATIC_INCLUDE_DIRS})
 target_include_directories(ton_validator PUBLIC 
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}> 
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>/.. 
   ${OPENSSL_INCLUDE_DIR}
 )
 
-target_link_libraries(ton_validator PRIVATE tdutils tdactor adnl tl_api tl_lite_api tl-lite-utils dht tdfec
+target_link_libraries(ton_validator PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} tdutils tdactor adnl tl_api tl_lite_api tl-lite-utils dht tdfec
   overlay catchain validatorsession ton_crypto ton_block)
