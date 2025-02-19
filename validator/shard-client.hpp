@@ -88,6 +88,7 @@ class ShardClient : public td::actor::Actor {
   void force_update_shard_client_ex(BlockHandle handle, td::Ref<MasterchainState> state, td::Promise<td::Unit> promise);
 
   void update_options(td::Ref<ValidatorManagerOptions> opts);
+  void get_current_shards(td::Promise<std::vector<BlockIdExt>> promise);
 };
 
 }  // namespace validator

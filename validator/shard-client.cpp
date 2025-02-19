@@ -216,6 +216,14 @@ void ShardClient::apply_all_shards() {
   }
 }
 
+void ShardClient::get_current_shards(td::Promise<std::vector<BlockIdExt>> promise) {
+  std::vector<BlockIdExt> answer;
+  auto vec = masterchain_state_->get_shards();
+  for (auto &shard : vec) {
+    answer.push_back(shard->top_block_id());
+  }
+}
+
 void ShardClient::downloaded_shard_state(td::Ref<ShardState> state, td::Promise<td::Unit> promise) {
   run_apply_block_query(state->get_block_id(), td::Ref<BlockData>{}, masterchain_block_handle_->id(), manager_,
                         td::Timestamp::in(600), std::move(promise));
