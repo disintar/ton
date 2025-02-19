@@ -38,7 +38,11 @@ class PackageReader : public td::actor::Actor {
 void ArchiveFile::start_up() {
   auto R = Package::open(path_, false, true);
   if (R.is_error()) {
-    LOG(FATAL) << "failed to open/create archive '" << path_ << "': " << R.move_as_error();
+    if (read_only_){
+      LOG(ERROR) << "failed to open/create archive '" << path_ << "': " << R.move_as_error();
+    } else {
+      LOG(FATAL) << "failed to open/create archive '" << path_ << "': " << R.move_as_error();
+    }
     return;
   }
   package_ = std::make_shared<Package>(R.move_as_ok());
