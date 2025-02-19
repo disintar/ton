@@ -22,6 +22,8 @@ Copyright 2017-2020 Telegram Systems LLP
 #include "vm/log.h"
 #include "vm/vm.h"
 #include "cp0.h"
+#include "memo.h"
+
 #include <sodium.h>
 #include "vm/dumper.hpp"
 
@@ -32,52 +34,7 @@ ensure_throw(init_cp(0));
 init_cregs();
 }
 
-VmState::VmState(Ref<CellSlice> _code)
-  : code(std::move(_code)), cp(-1), dispatch(&dummy_dispatch_table), quit0(true, 0), quit1(true, 1) {
-ensure_throw(init_cp(0));
-init_cregs();
-}
-
-VmState::VmState(Ref<CellSlice> _code, Ref<Stack> _stack, int flags, Ref<Cell> _data, VmLog log,
-               std::vector<Ref<Cell>> _libraries, Ref<Tuple> init_c7)
-  : code(std::move(_code))
-  , stack(std::move(_stack))
-  , cp(-1)
-  , dispatch(&dummy_dispatch_table)
-  , quit0(true, 0)
-  , quit1(true, 1)
-  , log(log)
-  , libraries(std::move(_libraries))
-  , stack_trace((flags >> 2) & 1) {
-ensure_throw(init_cp(0));
-set_c4(std::move(_data));
-if (init_c7.not_null()) {
-  set_c7(std::move(init_c7));
-}
-init_cregs(flags & 1, flags & 2);
-}
-
-VmState::VmState(Ref<CellSlice> _code, Ref<Stack> _stack, const GasLimits& gas, int flags, Ref<Cell> _data, VmLog log,
-               std::vector<Ref<Cell>> _libraries, Ref<Tuple> init_c7)
-  : code(std::move(_code))
-  , stack(std::move(_stack))
-  , cp(-1)
-  , dispatch(&dummy_dispatch_table)
-  , quit0(true, 0)
-  , quit1(true, 1)
-  , log(log)
-  , gas(gas)
-  , libraries(std::move(_libraries))
-  , stack_trace((flags >> 2) & 1) {
-ensure_throw(init_cp(0));
-set_c4(std::move(_data));
-if (init_c7.not_null()) {
-  set_c7(std::move(init_c7));
-}
-init_cregs(flags & 1, flags & 2);
-}
-
-VmState::VmState(Ref<CellSlice> _code, Ref<Stack> _stack, VmDumper* vm_dumper_, const GasLimits& gas, int flags,
+VmState::VmState(Ref<CellSlice> _code, int global_version, Ref<Stack> _stack, const GasLimits& gas, int flags,
                  Ref<Cell> _data, VmLog log, std::vector<Ref<Cell>> _libraries, Ref<Tuple> init_c7)
     : code(std::move(_code))
     , stack(std::move(_stack))
@@ -89,7 +46,28 @@ VmState::VmState(Ref<CellSlice> _code, Ref<Stack> _stack, VmDumper* vm_dumper_, 
     , gas(gas)
     , libraries(std::move(_libraries))
     , stack_trace((flags >> 2) & 1)
-    , vm_dumper(vm_dumper_) {
+    , global_version(global_version) {
+  ensure_throw(init_cp(0));
+  set_c4(std::move(_data));
+  if (init_c7.not_null()) {
+    set_c7(std::move(init_c7));
+  }
+  init_cregs(flags & 1, flags & 2);
+}
+
+VmState::VmState(Ref<CellSlice> _code, int global_version, Ref<Stack> _stack, VmDumper* vm_dumper_, const GasLimits& gas, int flags,
+                 Ref<Cell> _data, VmLog log, std::vector<Ref<Cell>> _libraries, Ref<Tuple> init_c7)
+        : code(std::move(_code))
+        , stack(std::move(_stack))
+        , cp(-1)
+        , dispatch(&dummy_dispatch_table)
+        , quit0(true, 0)
+        , quit1(true, 1)
+        , log(log)
+        , gas(gas)
+        , libraries(std::move(_libraries))
+        , stack_trace((flags >> 2) & 1)
+        , vm_dumper(vm_dumper_) {
   ensure_throw(init_cp(0));
   set_c4(std::move(_data));
   if (init_c7.not_null()) {
@@ -124,15 +102,27 @@ if (cr.c7.is_null()) {
 }
 }
 
-Ref<CellSlice> VmState::convert_code_cell(Ref<Cell> code_cell) {
-if (code_cell.is_null()) {
-  return {};
-}
-Ref<CellSlice> csr{true, NoVmOrd(), code_cell};
-if (csr->is_valid()) {
-  return csr;
-}
-return load_cell_slice_ref(CellBuilder{}.store_ref(std::move(code_cell)).finalize());
+Ref<CellSlice> VmState::convert_code_cell(Ref<Cell> code_cell, int global_version,
+                                          const std::vector<Ref<Cell>>& libraries) {
+  if (code_cell.is_null()) {
+    return {};
+  }
+  Ref<CellSlice> csr;
+  if (global_version >= 9) {
+    // Use DummyVmState instead of this to avoid consuming gas for cell loading
+    DummyVmState dummy{libraries, global_version};
+    Guard guard(&dummy);
+    try {
+      csr = load_cell_slice_ref(code_cell);
+    } catch (VmError&) {  // NOLINT(*-empty-catch)
+    }
+  } else {
+    csr = td::Ref<CellSlice>{true, NoVmOrd(), code_cell};
+  }
+  if (csr.not_null() && csr->is_valid()) {
+    return csr;
+  }
+  return load_cell_slice_ref(CellBuilder{}.store_ref(std::move(code_cell)).finalize());
 }
 
 bool VmState::init_cp(int new_cp) {
@@ -280,60 +270,65 @@ if (cont_data && (cont_data->stack.not_null() || cont_data->nargs >= 0)) {
 
 // general jump to continuation cont
 int VmState::jump(Ref<Continuation> cont, int pass_args) {
-const ControlData* cont_data = cont->get_cdata();
-if (cont_data) {
-  // first do the checks
-  int depth = stack->depth();
-  if (pass_args > depth || cont_data->nargs > depth) {
-    throw VmError{Excno::stk_und, "stack underflow while jumping to a continuation: not enough arguments on stack"};
-  }
-  if (cont_data->nargs > pass_args && pass_args >= 0) {
-    throw VmError{Excno::stk_und,
-                  "stack underflow while jumping to closure continuation: not enough arguments passed"};
-  }
-  // optimization(?): decrease refcnts of unused continuations in c[i] as early as possible
-  preclear_cr(cont_data->save);
-  // no exceptions should be thrown after this point
-  int copy = cont_data->nargs;
-  if (pass_args >= 0 && copy < 0) {
-    copy = pass_args;
-  }
-  // copy=-1 : pass whole stack, else pass top `copy` elements, drop the remainder.
-  if (cont_data->stack.not_null() && !cont_data->stack->is_empty()) {
-    // `cont` already has a stack, create resulting stack from it
-    if (copy < 0) {
-      copy = get_stack().depth();
-    }
-    Ref<Stack> new_stk;
-    if (cont->is_unique()) {
-      // optimization: avoid copying the stack if we hold the only copy of `cont`
-      new_stk = std::move(cont.unique_write().get_cdata()->stack);
-    } else {
-      new_stk = cont_data->stack;
-    }
-    new_stk.write().move_from_stack(get_stack(), copy);
-    consume_stack_gas(new_stk);
-    set_stack(std::move(new_stk));
-  } else {
-    if (copy >= 0 && copy < stack->depth()) {
-      get_stack().drop_bottom(stack->depth() - copy);
-      consume_stack_gas(copy);
-    }
-  }
-  return jump_to(std::move(cont));
-} else {
-  // have no continuation data, situation is somewhat simpler
-  if (pass_args >= 0) {
-    int depth = get_stack().depth();
-    if (pass_args > depth) {
-      throw VmError{Excno::stk_und, "stack underflow while jumping to a continuation: not enough arguments on stack"};
-    } else if (pass_args < depth) {
-      get_stack().drop_bottom(depth - pass_args);
-      consume_stack_gas(pass_args);
-    }
-  }
+  cont = adjust_jump_cont(std::move(cont), pass_args);
   return jump_to(std::move(cont));
 }
+
+Ref<Continuation> VmState::adjust_jump_cont(Ref<Continuation> cont, int pass_args) {
+  const ControlData* cont_data = cont->get_cdata();
+  if (cont_data) {
+    // first do the checks
+    int depth = stack->depth();
+    if (pass_args > depth || cont_data->nargs > depth) {
+      throw VmError{Excno::stk_und, "stack underflow while jumping to a continuation: not enough arguments on stack"};
+    }
+    if (cont_data->nargs > pass_args && pass_args >= 0) {
+      throw VmError{Excno::stk_und,
+                    "stack underflow while jumping to closure continuation: not enough arguments passed"};
+    }
+    // optimization(?): decrease refcnts of unused continuations in c[i] as early as possible
+    preclear_cr(cont_data->save);
+    // no exceptions should be thrown after this point
+    int copy = cont_data->nargs;
+    if (pass_args >= 0 && copy < 0) {
+      copy = pass_args;
+    }
+    // copy=-1 : pass whole stack, else pass top `copy` elements, drop the remainder.
+    if (cont_data->stack.not_null() && !cont_data->stack->is_empty()) {
+      // `cont` already has a stack, create resulting stack from it
+      if (copy < 0) {
+        copy = get_stack().depth();
+      }
+      Ref<Stack> new_stk;
+      if (cont->is_unique()) {
+        // optimization: avoid copying the stack if we hold the only copy of `cont`
+        new_stk = std::move(cont.unique_write().get_cdata()->stack);
+      } else {
+        new_stk = cont_data->stack;
+      }
+      new_stk.write().move_from_stack(get_stack(), copy);
+      consume_stack_gas(new_stk);
+      set_stack(std::move(new_stk));
+    } else {
+      if (copy >= 0 && copy < stack->depth()) {
+        get_stack().drop_bottom(stack->depth() - copy);
+        consume_stack_gas(copy);
+      }
+    }
+    return cont;
+  } else {
+    // have no continuation data, situation is somewhat simpler
+    if (pass_args >= 0) {
+      int depth = get_stack().depth();
+      if (pass_args > depth) {
+        throw VmError{Excno::stk_und, "stack underflow while jumping to a continuation: not enough arguments on stack"};
+      } else if (pass_args < depth) {
+        get_stack().drop_bottom(depth - pass_args);
+        consume_stack_gas(pass_args);
+      }
+    }
+    return cont;
+  }
 }
 
 int VmState::ret() {
@@ -612,6 +607,7 @@ int run_vm_code(Ref<CellSlice> code, Ref<Stack>& stack, int flags, Ref<Cell>* da
                 GasLimits* gas_limits, std::vector<Ref<Cell>> libraries, Ref<Tuple> init_c7, Ref<Cell>* actions_ptr,
                 int global_version) {
   VmState vm{code,
+             global_version,
              std::move(stack),
              gas_limits ? *gas_limits : GasLimits{},
              flags,
@@ -619,7 +615,6 @@ int run_vm_code(Ref<CellSlice> code, Ref<Stack>& stack, int flags, Ref<Cell>* da
              log,
              std::move(libraries),
              std::move(init_c7)};
-  vm.set_global_version(global_version);
   int res = vm.run();
   stack = vm.get_stack_ref();
   if (vm.committed() && data_ptr) {

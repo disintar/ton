@@ -1762,150 +1762,147 @@ void LiteQuery::perform_runSmcMethod(BlockIdExt blkid, WorkchainId workchain, St
           return vm::make_tuple_ref(std::move(tuple_ref));
         }
 
-        void
-        LiteQuery::finish_runSmcMethod(td::BufferSlice shard_proof, td::BufferSlice state_proof, Ref<vm::Cell> acc_root,
-                                       UnixTime gen_utime, LogicalTime gen_lt) {
-          LOG(INFO) << "completing runSmcMethod() query";
-          int mode = mode_ & 0xffff;
-          if (acc_root.is_null()) {
-            // no such account
-            LOG(INFO) << "runSmcMethod(" << acc_workchain_ << ":" << acc_addr_.to_hex()
-                      << ") query completed: account state is empty";
-            auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_runMethodResult>(
-                    mode, ton::create_tl_lite_block_id(base_blk_id_), ton::create_tl_lite_block_id(blk_id_),
-                    std::move(shard_proof),
-                    std::move(state_proof), td::BufferSlice(), td::BufferSlice(), td::BufferSlice(), -0x100,
-                    td::BufferSlice());
-            finish_query(std::move(b));
-            return;
-          }
-          vm::MerkleProofBuilder pb{std::move(acc_root)};
-          block::gen::Account::Record_account acc;
-          block::gen::StorageInfo::Record storage_info;
-          block::gen::AccountStorage::Record store;
-          block::CurrencyCollection balance;
-          block::gen::StateInit::Record state_init;
-          if (!(tlb::unpack_cell(pb.root(), acc) && tlb::csr_unpack(std::move(acc.storage), store) &&
-                balance.validate_unpack(store.balance) && store.state->prefetch_ulong(1) == 1 &&
-                store.state.write().advance(1) && tlb::csr_unpack(std::move(store.state), state_init) &&
-                tlb::csr_unpack(std::move(acc.storage_stat), storage_info))) {
-            LOG(INFO) << "error unpacking account state, or account is frozen or uninitialized";
-            td::Result<td::BufferSlice> proof_boc;
-            if (mode & 2) {
-              proof_boc = pb.extract_proof_boc();
-              if (proof_boc.is_error()) {
-                fatal_error(proof_boc.move_as_error());
-                return;
-              }
-            } else {
-              proof_boc = td::BufferSlice();
-            }
-            auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_runMethodResult>(
-                    mode, ton::create_tl_lite_block_id(base_blk_id_), ton::create_tl_lite_block_id(blk_id_),
-                    std::move(shard_proof),
-                    std::move(state_proof), proof_boc.move_as_ok(), td::BufferSlice(), td::BufferSlice(), -0x100,
-                    td::BufferSlice());
-            finish_query(std::move(b));
-            return;
-          }
-          auto code = state_init.code->prefetch_ref();
-          auto data = state_init.data->prefetch_ref();
-          auto acc_libs = state_init.library->prefetch_ref();
-          long long gas_limit = client_method_gas_limit;
-          td::RefInt256 due_payment;
-          if (storage_info.due_payment.write().fetch_long(1)) {
-            due_payment = block::tlb::t_Grams.as_integer(storage_info.due_payment);
-          } else {
-            due_payment = td::zero_refint();
-          }
-          LOG(DEBUG) << "creating VM with gas limit " << gas_limit;
-          // **** INIT VM ****
-          auto r_config = block::ConfigInfo::extract_config(
-                  mc_state_->root_cell(),
-                  block::ConfigInfo::needLibraries | block::ConfigInfo::needCapabilities |
-                  block::ConfigInfo::needPrevBlocks);
-          if (r_config.is_error()) {
-            fatal_error(r_config.move_as_error());
-            return;
-          }
-          auto config = r_config.move_as_ok();
-          std::vector<td::Ref<vm::Cell>> libraries;
-          if (config->get_libraries_root().not_null()) {
-            libraries.push_back(config->get_libraries_root());
-          }
-          if (acc_libs.not_null()) {
-            libraries.push_back(acc_libs);
-          }
-          vm::GasLimits gas{gas_limit, gas_limit};
-          vm::VmState vm{code, std::move(stack_), gas, 1, std::move(data), vm::VmLog::Null(), std::move(libraries)};
-          auto c7 = prepare_vm_c7(gen_utime, gen_lt, td::make_ref<vm::CellSlice>(acc.addr->clone()), balance,
-                                  config.get(),
-                                  std::move(code), due_payment);
-          vm.set_c7(c7);  // tuple with SmartContractInfo
-          vm.set_global_version(config->get_global_version());
-          // vm.incr_stack_trace(1);    // enable stack dump after each step
-          LOG(INFO)
-          << "starting VM to run GET-method of smart contract " << acc_workchain_ << ":" << acc_addr_.to_hex();
-          // **** RUN VM ****
-          int exit_code = ~vm.run();
-          LOG(DEBUG) << "VM terminated with exit code " << exit_code;
-          stack_ = vm.get_stack_ref();
-          LOG(INFO)
-          << "runSmcMethod(" << acc_workchain_ << ":" << acc_addr_.to_hex() << ") query completed: exit code is "
-          << exit_code;
-          vm::FakeVmStateLimits fstate(1000);  // limit recursive (de)serialization calls
-          vm::VmStateInterface::Guard guard(&fstate);
-          Ref<vm::Cell> cell;
-          td::BufferSlice c7_info, result;
-          if (mode & 8) {
-            // serialize c7
-            if (!(mode & 32)) {
-              c7 = prepare_vm_c7(gen_utime, gen_lt, td::make_ref<vm::CellSlice>(acc.addr->clone()), balance);
-            }
-            vm::CellBuilder cb;
-            if (!(vm::StackEntry{std::move(c7)}.serialize(cb) && cb.finalize_to(cell))) {
-              fatal_error("cannot serialize c7");
-              return;
-            }
-            auto res = vm::std_boc_serialize(std::move(cell));
-            if (res.is_error()) {
-              fatal_error("cannot serialize c7 : "s + res.move_as_error().to_string());
-              return;
-            }
-            c7_info = res.move_as_ok();
-          }
-          // pre-serialize stack always (to visit all data cells referred from the result)
-          vm::CellBuilder cb;
-          if (!(stack_->serialize(cb) && cb.finalize_to(cell))) {
-            fatal_error("cannot serialize resulting stack");
-            return;
-          }
-          if (mode & 4) {
-            // serialize stack if required
-            auto res = vm::std_boc_serialize(std::move(cell));
-            if (res.is_error()) {
-              fatal_error("cannot serialize resulting stack : "s + res.move_as_error().to_string());
-              return;
-            }
-            result = res.move_as_ok();
-          }
-          td::Result<td::BufferSlice> proof_boc;
-          if (mode & 2) {
-            proof_boc = pb.extract_proof_boc();
-            if (proof_boc.is_error()) {
-              fatal_error(proof_boc.move_as_error());
-              return;
-            }
-          } else {
-            proof_boc = td::BufferSlice();
-          }
-          auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_runMethodResult>(
-                  mode, ton::create_tl_lite_block_id(base_blk_id_), ton::create_tl_lite_block_id(blk_id_),
-                  std::move(shard_proof),
-                  std::move(state_proof), proof_boc.move_as_ok(), std::move(c7_info), td::BufferSlice(), exit_code,
-                  std::move(result));
-          finish_query(std::move(b));
-        }
+void LiteQuery::finish_runSmcMethod(td::BufferSlice shard_proof, td::BufferSlice state_proof, Ref<vm::Cell> acc_root,
+                                    UnixTime gen_utime, LogicalTime gen_lt) {
+  LOG(INFO) << "completing runSmcMethod() query";
+  int mode = mode_ & 0xffff;
+  if (acc_root.is_null()) {
+    // no such account
+    LOG(INFO) << "runSmcMethod(" << acc_workchain_ << ":" << acc_addr_.to_hex()
+              << ") query completed: account state is empty";
+    auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_runMethodResult>(
+        mode, ton::create_tl_lite_block_id(base_blk_id_), ton::create_tl_lite_block_id(blk_id_), std::move(shard_proof),
+        std::move(state_proof), td::BufferSlice(), td::BufferSlice(), td::BufferSlice(), -0x100, td::BufferSlice());
+    finish_query(std::move(b));
+    return;
+  }
+  vm::MerkleProofBuilder pb{std::move(acc_root)};
+  block::gen::Account::Record_account acc;
+  block::gen::StorageInfo::Record storage_info;
+  block::gen::AccountStorage::Record store;
+  block::CurrencyCollection balance;
+  block::gen::StateInit::Record state_init;
+  if (!(tlb::unpack_cell(pb.root(), acc) && tlb::csr_unpack(std::move(acc.storage), store) &&
+        balance.validate_unpack(store.balance) && store.state->prefetch_ulong(1) == 1 &&
+        store.state.write().advance(1) && tlb::csr_unpack(std::move(store.state), state_init) &&
+        tlb::csr_unpack(std::move(acc.storage_stat), storage_info))) {
+    LOG(INFO) << "error unpacking account state, or account is frozen or uninitialized";
+    td::Result<td::BufferSlice> proof_boc;
+    if (mode & 2) {
+      proof_boc = pb.extract_proof_boc();
+      if (proof_boc.is_error()) {
+        fatal_error(proof_boc.move_as_error());
+        return;
+      }
+    } else {
+      proof_boc = td::BufferSlice();
+    }
+    auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_runMethodResult>(
+        mode, ton::create_tl_lite_block_id(base_blk_id_), ton::create_tl_lite_block_id(blk_id_), std::move(shard_proof),
+        std::move(state_proof), proof_boc.move_as_ok(), td::BufferSlice(), td::BufferSlice(), -0x100,
+        td::BufferSlice());
+    finish_query(std::move(b));
+    return;
+  }
+  auto code = state_init.code->prefetch_ref();
+  auto data = state_init.data->prefetch_ref();
+  auto acc_libs = state_init.library->prefetch_ref();
+  long long gas_limit = client_method_gas_limit;
+  td::RefInt256 due_payment;
+  if (storage_info.due_payment.write().fetch_long(1)) {
+    due_payment = block::tlb::t_Grams.as_integer(storage_info.due_payment);
+  } else {
+    due_payment = td::zero_refint();
+  }
+  LOG(DEBUG) << "creating VM with gas limit " << gas_limit;
+  // **** INIT VM ****
+  auto r_config = block::ConfigInfo::extract_config(
+      mc_state_->root_cell(),
+      block::ConfigInfo::needLibraries | block::ConfigInfo::needCapabilities | block::ConfigInfo::needPrevBlocks);
+  if (r_config.is_error()) {
+    fatal_error(r_config.move_as_error());
+    return;
+  }
+  auto config = r_config.move_as_ok();
+  std::vector<td::Ref<vm::Cell>> libraries;
+  if (config->get_libraries_root().not_null()) {
+    libraries.push_back(config->get_libraries_root());
+  }
+  if (acc_libs.not_null()) {
+    libraries.push_back(acc_libs);
+  }
+  vm::GasLimits gas{gas_limit, gas_limit};
+  vm::VmState vm{code,
+                 config->get_global_version(),
+                 std::move(stack_),
+                 gas,
+                 1,
+                 std::move(data),
+                 vm::VmLog::Null(),
+                 std::move(libraries)};
+  auto c7 = prepare_vm_c7(gen_utime, gen_lt, td::make_ref<vm::CellSlice>(acc.addr->clone()), balance, config.get(),
+                          std::move(code), due_payment);
+  vm.set_c7(c7);  // tuple with SmartContractInfo
+  // vm.incr_stack_trace(1);    // enable stack dump after each step
+  LOG(INFO) << "starting VM to run GET-method of smart contract " << acc_workchain_ << ":" << acc_addr_.to_hex();
+  // **** RUN VM ****
+  int exit_code = ~vm.run();
+  LOG(DEBUG) << "VM terminated with exit code " << exit_code;
+  stack_ = vm.get_stack_ref();
+  LOG(INFO) << "runSmcMethod(" << acc_workchain_ << ":" << acc_addr_.to_hex() << ") query completed: exit code is "
+            << exit_code;
+  vm::FakeVmStateLimits fstate(1000);  // limit recursive (de)serialization calls
+  vm::VmStateInterface::Guard guard(&fstate);
+  Ref<vm::Cell> cell;
+  td::BufferSlice c7_info, result;
+  if (mode & 8) {
+    // serialize c7
+    if (!(mode & 32)) {
+      c7 = prepare_vm_c7(gen_utime, gen_lt, td::make_ref<vm::CellSlice>(acc.addr->clone()), balance);
+    }
+    vm::CellBuilder cb;
+    if (!(vm::StackEntry{std::move(c7)}.serialize(cb) && cb.finalize_to(cell))) {
+      fatal_error("cannot serialize c7");
+      return;
+    }
+    auto res = vm::std_boc_serialize(std::move(cell));
+    if (res.is_error()) {
+      fatal_error("cannot serialize c7 : "s + res.move_as_error().to_string());
+      return;
+    }
+    c7_info = res.move_as_ok();
+  }
+  // pre-serialize stack always (to visit all data cells referred from the result)
+  vm::CellBuilder cb;
+  if (!(stack_->serialize(cb) && cb.finalize_to(cell))) {
+    fatal_error("cannot serialize resulting stack");
+    return;
+  }
+  if (mode & 4) {
+    // serialize stack if required
+    auto res = vm::std_boc_serialize(std::move(cell));
+    if (res.is_error()) {
+      fatal_error("cannot serialize resulting stack : "s + res.move_as_error().to_string());
+      return;
+    }
+    result = res.move_as_ok();
+  }
+  td::Result<td::BufferSlice> proof_boc;
+  if (mode & 2) {
+    proof_boc = pb.extract_proof_boc();
+    if (proof_boc.is_error()) {
+      fatal_error(proof_boc.move_as_error());
+      return;
+    }
+  } else {
+    proof_boc = td::BufferSlice();
+  }
+  auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_runMethodResult>(
+      mode, ton::create_tl_lite_block_id(base_blk_id_), ton::create_tl_lite_block_id(blk_id_), std::move(shard_proof),
+      std::move(state_proof), proof_boc.move_as_ok(), std::move(c7_info), td::BufferSlice(), exit_code,
+      std::move(result));
+  finish_query(std::move(b));
+}
 
         void LiteQuery::continue_getOneTransaction() {
           LOG(INFO) << "completing getOneTransaction() query";
@@ -2230,57 +2227,60 @@ void LiteQuery::perform_getConfigParams(BlockIdExt blkid, int mode, std::vector<
             }
           }
 
-          std::unique_ptr<block::Config> cfg;
-          if (keyblk || !(mode & block::ConfigInfo::needPrevBlocks)) {
-            auto res = keyblk ? block::Config::extract_from_key_block(mpb.root(), mode)
-                              : block::Config::extract_from_state(mpb.root(), mode);
-            if (res.is_error()) {
-              fatal_error(res.move_as_error());
-              return;
-            }
-            cfg = res.move_as_ok();
-          } else {
-            auto res = block::ConfigInfo::extract_config(mpb.root(), mode);
-            if (res.is_error()) {
-              fatal_error(res.move_as_error());
-              return;
-            }
-            cfg = res.move_as_ok();
-          }
-          if (!cfg) {
-            fatal_error("cannot extract configuration from last mc state");
-            return;
-          }
-          try {
-            if (mode & 0x20000) {
-              visit(cfg->get_root_cell());
-            } else if (mode & 0x10000) {
-              for (int i: param_list) {
-                visit(cfg->get_config_param(i));
-              }
-            }
-            if (!keyblk && mode & block::ConfigInfo::needPrevBlocks) {
-              ((block::ConfigInfo *) cfg.get())->get_prev_blocks_info();
-            }
-          } catch (vm::VmError &err) {
-            fatal_error("error while traversing required configuration parameters: "s + err.get_msg());
-            return;
-          }
-          auto res1 = !keyblk ? vm::std_boc_serialize(std::move(proof1)) : td::BufferSlice();
-          if (res1.is_error()) {
-            fatal_error("cannot serialize Merkle proof : "s + res1.move_as_error().to_string());
-            return;
-          }
-          auto res2 = mpb.extract_proof_boc();
-          if (res2.is_error()) {
-            fatal_error("cannot serialize Merkle proof : "s + res2.move_as_error().to_string());
-            return;
-          }
-          LOG(INFO) << "getConfigParams() query completed";
-          auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_configInfo>(
-                  mode & 0xffff, ton::create_tl_lite_block_id(base_blk_id_), res1.move_as_ok(), res2.move_as_ok());
-          finish_query(std::move(b));
-        }
+  std::unique_ptr<block::Config> cfg;
+  if (keyblk || !(mode & block::ConfigInfo::needPrevBlocks)) {
+    auto res = keyblk ? block::Config::extract_from_key_block(mpb.root(), mode)
+                      : block::Config::extract_from_state(mpb.root(), mode);
+    if (res.is_error()) {
+      fatal_error(res.move_as_error());
+      return;
+    }
+    cfg = res.move_as_ok();
+  } else {
+    if (mode & block::ConfigInfo::needPrevBlocks) {
+      mode |= block::ConfigInfo::needCapabilities;
+    }
+    auto res = block::ConfigInfo::extract_config(mpb.root(), mode);
+    if (res.is_error()) {
+      fatal_error(res.move_as_error());
+      return;
+    }
+    cfg = res.move_as_ok();
+  }
+  if (!cfg) {
+    fatal_error("cannot extract configuration from last mc state");
+    return;
+  }
+  try {
+    if (mode & 0x20000) {
+      visit(cfg->get_root_cell());
+    } else if (mode & 0x10000) {
+      for (int i : param_list) {
+        visit(cfg->get_config_param(i));
+      }
+    }
+    if (!keyblk && mode & block::ConfigInfo::needPrevBlocks) {
+      ((block::ConfigInfo*)cfg.get())->get_prev_blocks_info();
+    }
+  } catch (vm::VmError& err) {
+    fatal_error("error while traversing required configuration parameters: "s + err.get_msg());
+    return;
+  }
+  auto res1 = !keyblk ? vm::std_boc_serialize(std::move(proof1)) : td::BufferSlice();
+  if (res1.is_error()) {
+    fatal_error("cannot serialize Merkle proof : "s + res1.move_as_error().to_string());
+    return;
+  }
+  auto res2 = mpb.extract_proof_boc();
+  if (res2.is_error()) {
+    fatal_error("cannot serialize Merkle proof : "s + res2.move_as_error().to_string());
+    return;
+  }
+  LOG(INFO) << "getConfigParams() query completed";
+  auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_configInfo>(
+      mode & 0xffff, ton::create_tl_lite_block_id(base_blk_id_), res1.move_as_ok(), res2.move_as_ok());
+  finish_query(std::move(b));
+}
 
         void LiteQuery::perform_getAllShardsInfo(BlockIdExt blkid) {
           LOG(INFO) << "started a getAllShardsInfo(" << blkid.to_str() << ") liteserver query";
