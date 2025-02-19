@@ -169,8 +169,10 @@ class VmState final : public VmStateInterface {
   VmState();
   VmState(Ref<CellSlice> _code, int global_version, Ref<Stack> _stack, const GasLimits& _gas, int flags = 0, Ref<Cell> _data = {},
           VmLog log = {}, std::vector<Ref<Cell>> _libraries = {}, Ref<Tuple> init_c7 = {});
-  VmState(Ref<Cell> _code, int global_version, Ref<Stack> _stack, VmDumper* vm_dumper_, const GasLimits& _gas, int flags = 0,
-          Ref<Cell> _data = {}, VmLog log = {}, std::vector<Ref<Cell>> _libraries = {}, Ref<Tuple> init_c7 = {});
+  VmState(Ref<Cell> _code, int global_version, Ref<Stack> _stack, const GasLimits& _gas, int flags = 0,
+          Ref<Cell> _data = {}, VmLog log = {}, std::vector<Ref<Cell>> _libraries = {}, Ref<Tuple> init_c7 = {}) : VmState(convert_code_cell(std::move(_code), global_version, _libraries), global_version, std::move(_stack),
+                                                                                                                           _gas, flags, std::move(_data), std::move(log), _libraries, std::move(init_c7)) {
+  };
   VmState(const VmState&) = delete;
   VmState(VmState&&) = default;
   VmState& operator=(const VmState&) = delete;
@@ -178,6 +180,11 @@ class VmState final : public VmStateInterface {
   bool set_gas_limits(long long _max, long long _limit, long long _credit = 0);
   bool final_gas_ok() const {
     return gas.final_ok();
+  }
+
+  bool set_vm_dumper(VmDumper* vm_dumper_){
+    vm_dumper = *vm_dumper_;
+    return true;
   }
 
   int get_implicit_jmpref_gas_price() {

@@ -220,16 +220,16 @@ PyStack PyTVM::run_vm() {
 
   vm::VmState vm_local{
           code.my_cell,
+          supported_version,
           td::make_ref<vm::Stack>(stackVm),
-          &vm_dumper,
           gas_limits,
           flags,
           data.my_cell,
           vm_log,
           lib_set};
 
+  vm_local.set_vm_dumper(&vm_dumper);
   vm_local.set_c7(vm::make_tuple_ref(std::move(tuple_ref)));
-  vm_local.set_global_version(supported_version);
   vm_local.set_chksig_always_succeed(ignore_chksig);
   vm_local.set_max_data_depth(max_vm_data_depth);
 
