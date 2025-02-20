@@ -31,6 +31,7 @@ class ShardClient : public td::actor::Actor {
 
   BlockHandle masterchain_block_handle_;
   td::Ref<MasterchainState> masterchain_state_;
+  std::vector<BlockIdExt> latest_shards_;
 
   std::vector<td::actor::ActorOwn<ShardClient>> children_;
 

@@ -183,6 +183,12 @@ void ShardClient::apply_all_shards() {
   ig.add_promise(std::move(P));
 
   auto vec = masterchain_state_->get_shards();
+  latest_shards_.clear();
+  auto shards_info = masterchain_state_->get_shards();
+  for (auto &shard : shards_info) {
+    latest_shards_.push_back(shard->top_block_id());
+  }
+
   std::set<WorkchainId> workchains;
   for (auto &shard : vec) {
     workchains.insert(shard->shard().workchain);
@@ -219,15 +225,9 @@ void ShardClient::apply_all_shards() {
 void ShardClient::get_current_shards(td::Promise<std::vector<BlockIdExt>> promise) {
   LOG(ERROR) << "Init get_current_shards query";
 
-  if (masterchain_state_.not_null()){
-    std::vector<BlockIdExt> answer;
-    auto vec = masterchain_state_->get_shards();
-    for (auto &shard : vec) {
-      LOG(ERROR) << "Push block " << shard->top_block_id();
-      answer.push_back(shard->top_block_id());
-    }
-
-    promise.set_value(std::move(answer));
+  if (!latest_shards_.empty()){
+    std::vector<BlockIdExt> latest_shards_copy = latest_shards_;
+    promise.set_value(std::move(latest_shards_copy));
   } else {
     LOG(ERROR) << "No masterchain_state_";
     std::vector<BlockIdExt> answer;
