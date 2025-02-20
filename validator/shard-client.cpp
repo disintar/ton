@@ -226,8 +226,12 @@ void ShardClient::get_current_shards(td::Promise<std::vector<BlockIdExt>> promis
       LOG(ERROR) << "Push block " << shard->top_block_id();
       answer.push_back(shard->top_block_id());
     }
+
+    promise.set_value(std::move(answer));
   } else {
     LOG(ERROR) << "No masterchain_state_";
+    std::vector<BlockIdExt> answer;
+    promise.set_value(std::move(answer));
   }
 
 }
