@@ -3023,23 +3023,23 @@ void ValidatorManagerImpl::prepare_stats(td::Promise<std::vector<std::pair<std::
     });
     td::actor::send_closure(shard_client_, &ShardClient::get_processed_masterchain_block, std::move(P));
 
-    auto P2 = td::PromiseCreator::lambda([promise = merger.make_promise("")](td::Result<std::vector<BlockIdExt>> R) mutable {
-      if (R.is_ok()){
-        auto answer = R.move_as_ok();
-
-        std::vector<std::pair<std::string, std::string>> vec;
-        for (auto &shard : answer){
-          auto shard_id = shard.id.shard;
-          auto shard_seqno = shard.id.seqno;
-
-          vec.emplace_back("node_shard_seqno{shard_id=\"" + std::to_string(shard_id) + "\"} ", std::to_string(shard_seqno));
-        }
-        promise.set_value(std::move(vec));
-      } else {
-        LOG(ERROR) << "Can't find shards";
-      }
-    });
-    td::actor::send_closure(shard_client_, &ShardClient::get_current_shards, std::move(P2));
+//    auto P2 = td::PromiseCreator::lambda([promise = merger.make_promise("")](td::Result<std::vector<BlockIdExt>> R) mutable {
+//      if (R.is_ok()){
+//        auto answer = R.move_as_ok();
+//
+//        std::vector<std::pair<std::string, std::string>> vec;
+//        for (auto &shard : answer){
+//          auto shard_id = shard.id.shard;
+//          auto shard_seqno = shard.id.seqno;
+//
+//          vec.emplace_back("node_shard_seqno{shard_id=\"" + std::to_string(shard_id) + "\"} ", std::to_string(shard_seqno));
+//        }
+//        promise.set_value(std::move(vec));
+//      } else {
+//        LOG(ERROR) << "Can't find shards";
+//      }
+//    });
+//    td::actor::send_closure(shard_client_, &ShardClient::get_current_shards, std::move(P2));
   }
 
   merger.make_promise("").set_value(std::move(vec));
