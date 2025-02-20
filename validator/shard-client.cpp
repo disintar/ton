@@ -223,13 +223,10 @@ void ShardClient::apply_all_shards() {
 }
 
 void ShardClient::get_current_shards(td::Promise<std::vector<BlockIdExt>> promise) {
-  LOG(ERROR) << "Init get_current_shards query";
-
   if (!latest_shards_.empty()){
     std::vector<BlockIdExt> latest_shards_copy = latest_shards_;
     promise.set_value(std::move(latest_shards_copy));
   } else {
-    LOG(ERROR) << "No masterchain_state_";
     std::vector<BlockIdExt> answer;
     promise.set_value(std::move(answer));
   }
