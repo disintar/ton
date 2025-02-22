@@ -34,6 +34,8 @@ foreach (target ${deps})
 endforeach ()
 
 set(PYTHON_EMULATOR_SOURCE
+        PyGlobal.h
+        PyGlobal.cpp
         PyCellSlice.cpp
         PyCellSlice.h
         PyCell.cpp

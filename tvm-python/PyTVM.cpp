@@ -20,9 +20,23 @@
 #include "PyStack.h"
 #include "PyTVM.h"
 #include "third-party/pybind11/include/pybind11/embed.h"
-
+#include "PyGlobal.h"
 
 namespace py = pybind11;
+
+void PyTVM::start_async_vm() {
+  std::ostringstream oss;
+  oss << std::this_thread::get_id();
+
+  pyglobal::execute_async([this]() {
+      auto output = this->run_vm();
+
+      {
+        py::gil_scoped_acquire acquire;
+        result.emplace(py::cast(std::move(output)));
+      }
+  });
+};
 
 void PyTVM::set_c7(PyStackEntry x) {
   if (!skip_c7) {
@@ -143,7 +157,6 @@ std::vector<vm::StackEntry> ref_tuple_to_vector(const td::Ref<vm::Tuple> &ref_tu
 
 
 PyStack PyTVM::run_vm() {
-  py::gil_scoped_release release;
   if (code.is_null()) {
     throw std::invalid_argument("To run VM, please pass code");
   }

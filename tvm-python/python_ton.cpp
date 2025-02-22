@@ -20,6 +20,7 @@
 #include "crypto/func/func.h"
 #include "td/utils/optional.h"
 #include "tl/generate/auto/tl/tonlib_api.h"
+#include "PyGlobal.h"
 
 namespace py = pybind11;
 using namespace pybind11::literals;  // to bring in the `_a` literal
@@ -81,6 +82,10 @@ bool shard_is_ancestor(ton::ShardId parent, ton::ShardId child) {
 
 unsigned long long shard_child(ton::ShardId shard, bool left) {
   return ton::shard_child(shard, left);
+}
+
+void cleanup() {
+  pyglobal::stop_scheduler_thread();
 }
 
 PYBIND11_MODULE(python_ton, m) {
@@ -286,6 +291,8 @@ PYBIND11_MODULE(python_ton, m) {
       .def("clear_stack", &PyTVM::clear_stack)
       .def("set_gasLimit", &PyTVM::set_gasLimit, py::arg("gas_limit") = "0", py::arg("gas_max") = "-1")
       .def("run_vm", &PyTVM::run_vm)
+      .def("start_async_vm", &PyTVM::start_async_vm)
+      .def("check_async_vm", &PyTVM::check_async_vm)
       .def("get_stacks", &PyTVM::get_stacks)
       .def("set_c7", &PyTVM::set_c7, py::arg("stack"))
       .def_property("exit_code", &PyTVM::get_exit_code, &PyTVM::dummy_set)
@@ -530,4 +537,10 @@ PYBIND11_MODULE(python_ton, m) {
   m.def("address_from_string", address_from_string, py::arg("address"));
   m.def("parse_chunked_data", py_parse_chunked_data, py::arg("cs"));
   m.def("address_from_cell_slice", address_from_cell_slice, py::arg("cell_slice"));
+
+  m.def("init_thread_scheduler", pyglobal::init_thread_scheduler);
+  m.def("stop_scheduler_thread", pyglobal::stop_scheduler_thread);
+
+  m.def("cleanup", &cleanup);
+  py::module::import("atexit").attr("register")(py::cpp_function(cleanup));
 }

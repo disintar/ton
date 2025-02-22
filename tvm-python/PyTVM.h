@@ -15,6 +15,7 @@
 #include "third-party/pybind11/include/pybind11/pybind11.h"
 #include "td/utils/optional.h"
 
+
 #ifndef TON_TVM_H
 #define TON_TVM_H
 
@@ -60,6 +61,7 @@ class PyTVM {
   std::vector<vm::StackInfo> stacks;
   std::vector<std::string> vm_ops;
   std::vector<std::tuple<long long, long long>> gas_info;
+  std::optional<py::object> result;
 
   // constructor
   explicit PyTVM(int log_level_ = 0, td::optional<PyCell> code_ = td::optional<PyCell>(),
@@ -101,6 +103,14 @@ class PyTVM {
   void set_stack(PyStack pystack);
   void set_libs(PyCell libs);
   PyStack run_vm();
+  void start_async_vm();
+
+  py::object check_async_vm() {
+    if (result) {
+      return *result;
+    }
+    return py::none();
+  }
   std::vector<PyStackInfo> get_stacks();
 
   std::vector<std::string> get_ops() {
