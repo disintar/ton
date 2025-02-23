@@ -104,14 +104,6 @@ class PyTVM {
   void set_stack(PyStack pystack);
   void set_libs(PyCell libs);
   PyStack run_vm();
-  py::object start_async_vm();
-
-  py::object check_async_vm() {
-    if (result) {
-      return *result;
-    }
-    return py::none();
-  }
   std::vector<PyStackInfo> get_stacks();
 
   std::vector<std::string> get_ops() {
