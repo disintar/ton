@@ -35,6 +35,7 @@ class PyTVM {
  public:
   PyCell code;
   PyCell data;
+  py::object m_loop;
 
   vm::GasLimits gas_limits;
   std::vector<td::Ref<vm::Cell>> lib_set;
@@ -103,7 +104,7 @@ class PyTVM {
   void set_stack(PyStack pystack);
   void set_libs(PyCell libs);
   PyStack run_vm();
-  void start_async_vm();
+  py::object start_async_vm();
 
   py::object check_async_vm() {
     if (result) {

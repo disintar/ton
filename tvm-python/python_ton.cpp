@@ -48,6 +48,31 @@ const ton::lite_api::tonNode_blockIdExt& getLast(const ton::lite_api::liteServer
   return *(obj.last_);
 }
 
+template <typename Func, typename... Args>
+py::object async_wrapper(Func&& func, Args&&... args) {
+  py::object loop = py::module_::import("asyncio.events").attr("get_event_loop")();
+  py::object future = loop.attr("create_future")();
+
+  future.inc_ref();
+  pyglobal::execute_async([loop, future, func = std::forward<Func>(func), args...]() mutable {
+      try {
+        auto result = func(std::forward<Args>(args)...);
+
+        {
+          py::gil_scoped_acquire acquire;
+          auto call_soon_threadsafe = loop.attr("call_soon_threadsafe");
+          call_soon_threadsafe(future.attr("set_result"), py::cast(std::move(result)));
+        }
+      } catch (const std::exception& e) {
+        py::gil_scoped_acquire acquire;
+        future.attr("set_exception")(py::cast(std::runtime_error(e.what())));
+      }
+  });
+
+  return future;
+}
+
+
 template <typename T>
 struct py::detail::type_caster<td::optional<T>> {
  public:
@@ -291,8 +316,9 @@ PYBIND11_MODULE(python_ton, m) {
       .def("clear_stack", &PyTVM::clear_stack)
       .def("set_gasLimit", &PyTVM::set_gasLimit, py::arg("gas_limit") = "0", py::arg("gas_max") = "-1")
       .def("run_vm", &PyTVM::run_vm)
-      .def("start_async_vm", &PyTVM::start_async_vm)
-      .def("check_async_vm", &PyTVM::check_async_vm)
+      .def("arun_vm", [](PyTVM &self) {
+          return async_wrapper([&self]() { return self.run_vm(); });
+      })
       .def("get_stacks", &PyTVM::get_stacks)
       .def("set_c7", &PyTVM::set_c7, py::arg("stack"))
       .def_property("exit_code", &PyTVM::get_exit_code, &PyTVM::dummy_set)

@@ -24,18 +24,25 @@
 
 namespace py = pybind11;
 
-void PyTVM::start_async_vm() {
+py::object PyTVM::start_async_vm() {
+  m_loop = py::module::import("asyncio.events").attr("get_event_loop")();
+  py::object future = m_loop.attr("create_future")();
+
   std::ostringstream oss;
   oss << std::this_thread::get_id();
 
-  pyglobal::execute_async([this]() {
-      auto output = this->run_vm();
+  future.inc_ref();
+  pyglobal::execute_async([this, m_loop, future]() {
+      auto result = this->run_vm();
 
       {
         py::gil_scoped_acquire acquire;
-        result.emplace(py::cast(std::move(output)));
+        auto call_soon_threadsafe = m_loop.attr("call_soon_threadsafe");
+        call_soon_threadsafe(future.attr("set_result"), py::cast(std::move(result)));
       }
   });
+
+  return future;
 };
 
 void PyTVM::set_c7(PyStackEntry x) {

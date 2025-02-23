@@ -15,8 +15,11 @@
 
 namespace pyglobal {
     void init_thread_scheduler(int thread_count);
+
     td::actor::Scheduler *get_thread_scheduler();
+
     void stop_scheduler_thread();
+
     void execute_async(std::function<void()> f);
 }
 
