@@ -1002,6 +1002,7 @@ namespace ton::liteserver {
                 if (error->message_.find(substring) != std::string::npos) {
                   if (refire + 1 > allowed_refire) {
                     LOG(ERROR) << "Too deep refire";
+                    query_statuses_.push_back({false, elapsed.elapsed(), compiled_query});
                     auto res = create_serialize_tl_object<lite_api::liteServer_error>(error->code_,
                                                                                       error->message_ +
                                                                                       " : tried over all nodes");
@@ -1050,7 +1051,7 @@ namespace ton::liteserver {
             } else {
               LOG(INFO)
               << "Query to: " << server_adnl << " success, Query: " << compiled_query << " Elapsed: " << elapsed;
-              query_statuses_.push_back({false, elapsed.elapsed(), compiled_query});
+              query_statuses_.push_back({true, elapsed.elapsed(), compiled_query});
               td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, data.clone(), started_at,
                                       elapsed, false);
               process_cache(std::move(data), res.clone(), compiled_query, elapsed);
@@ -1066,6 +1067,7 @@ namespace ton::liteserver {
 
             if (refire + 1 > allowed_refire) {
               LOG(ERROR) << "Too deep refire";
+              query_statuses_.push_back({false, elapsed.elapsed(), compiled_query});
               auto res = create_serialize_tl_object<lite_api::liteServer_error>(228, error.message().str());
               td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, data.clone(), started_at,
                                       elapsed, false);
