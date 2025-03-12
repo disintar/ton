@@ -25,6 +25,8 @@ namespace ton {
       ss << "\n" << validator_manager_actor_stats;
       ss << "\n# Liteserver stats\n\n";
       ss << "\n" << liteserver_stats;
+      ss << "\n# Liteserver credentials\n\n";
+      ss << "\n" << liteserver_credentials;
 
       return ss.str();
     }
@@ -59,6 +61,11 @@ namespace ton {
     void PrometheusExporterActor::set_liteserver_stats(std::string data) {
       std::lock_guard<std::mutex> lock(status_mutex);
       get_ton_node_status()->liteserver_stats = std::move(data);
+    }
+
+    void PrometheusExporterActor::set_liteserver_credentials(std::string data) {
+      std::lock_guard<std::mutex> lock(status_mutex);
+      get_ton_node_status()->liteserver_credentials = std::move(data);
     }
 
     MHD_Result PrometheusExporterActor::process_http_request(void *cls, struct MHD_Connection *connection,
@@ -128,6 +135,7 @@ namespace ton {
                   (void *) status_text.c_str(),
                   MHD_RESPMEM_MUST_COPY
           );
+          MHD_add_response_header(response, "Content-Type", "text/plain");
 
           if (!response) {
             LOG(WARNING) << "Failed to create response";

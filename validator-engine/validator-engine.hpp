@@ -161,6 +161,7 @@ class ValidatorEngine : public td::actor::Actor {
 
   td::uint32 prometheus_port_;
   bool prometheus_available_ = false;
+  bool allow_share_liteserver_credentials_ = false;
 
   std::string local_config_ = "";
   std::string global_config_ = "ton-global.config";

@@ -65,8 +65,11 @@
 #include "BlockPublisherKafka.hpp"
 
 #if TD_DARWIN || TD_LINUX
+
 #include <unistd.h>
+
 #endif
+
 #include <algorithm>
 #include <iostream>
 #include <cstdlib>
@@ -95,70 +98,73 @@ Config::Config(const ton::ton_api::engine_validator_config &config) {
   if (!out_port) {
     out_port = 3278;
   }
-  for (auto &addr : config.addrs_) {
+  for (auto &addr: config.addrs_) {
     td::IPAddress in_ip;
     td::IPAddress out_ip;
     std::shared_ptr<ton::adnl::AdnlProxy> proxy = nullptr;
     std::vector<AdnlCategory> categories;
     std::vector<AdnlCategory> priority_categories;
     ton::ton_api::downcast_call(
-        *addr,
-        td::overloaded(
-            [&](const ton::ton_api::engine_addr &obj) {
-              in_ip.init_ipv4_port(td::IPAddress::ipv4_to_str(obj.ip_), static_cast<td::uint16>(obj.port_)).ensure();
-              out_ip = in_ip;
-              for (auto cat : obj.categories_) {
-                categories.push_back(td::narrow_cast<td::uint8>(cat));
-              }
-              for (auto cat : obj.priority_categories_) {
-                priority_categories.push_back(td::narrow_cast<td::uint8>(cat));
-              }
-            },
-            [&](const ton::ton_api::engine_addrProxy &obj) {
-              in_ip.init_ipv4_port(td::IPAddress::ipv4_to_str(obj.in_ip_), static_cast<td::uint16>(obj.in_port_))
-                  .ensure();
-              out_ip.init_ipv4_port(td::IPAddress::ipv4_to_str(obj.out_ip_), static_cast<td::uint16>(obj.out_port_))
-                  .ensure();
-              if (obj.proxy_type_) {
-                auto R = ton::adnl::AdnlProxy::create(*obj.proxy_type_.get());
-                R.ensure();
-                proxy = R.move_as_ok();
-                for (auto cat : obj.categories_) {
-                  categories.push_back(td::narrow_cast<td::uint8>(cat));
-                }
-                for (auto cat : obj.priority_categories_) {
-                  priority_categories.push_back(td::narrow_cast<td::uint8>(cat));
-                }
-              }
-            }));
+            *addr,
+            td::overloaded(
+                    [&](const ton::ton_api::engine_addr &obj) {
+                        in_ip.init_ipv4_port(td::IPAddress::ipv4_to_str(obj.ip_),
+                                             static_cast<td::uint16>(obj.port_)).ensure();
+                        out_ip = in_ip;
+                        for (auto cat: obj.categories_) {
+                          categories.push_back(td::narrow_cast<td::uint8>(cat));
+                        }
+                        for (auto cat: obj.priority_categories_) {
+                          priority_categories.push_back(td::narrow_cast<td::uint8>(cat));
+                        }
+                    },
+                    [&](const ton::ton_api::engine_addrProxy &obj) {
+                        in_ip.init_ipv4_port(td::IPAddress::ipv4_to_str(obj.in_ip_),
+                                             static_cast<td::uint16>(obj.in_port_))
+                                .ensure();
+                        out_ip.init_ipv4_port(td::IPAddress::ipv4_to_str(obj.out_ip_),
+                                              static_cast<td::uint16>(obj.out_port_))
+                                .ensure();
+                        if (obj.proxy_type_) {
+                          auto R = ton::adnl::AdnlProxy::create(*obj.proxy_type_.get());
+                          R.ensure();
+                          proxy = R.move_as_ok();
+                          for (auto cat: obj.categories_) {
+                            categories.push_back(td::narrow_cast<td::uint8>(cat));
+                          }
+                          for (auto cat: obj.priority_categories_) {
+                            priority_categories.push_back(td::narrow_cast<td::uint8>(cat));
+                          }
+                        }
+                    }));
 
     config_add_network_addr(in_ip, out_ip, std::move(proxy), categories, priority_categories).ensure();
   }
-  for (auto &adnl : config.adnl_) {
+  for (auto &adnl: config.adnl_) {
     config_add_adnl_addr(ton::PublicKeyHash{adnl->id_}, td::narrow_cast<td::uint8>(adnl->category_)).ensure();
   }
-  for (auto &dht : config.dht_) {
+  for (auto &dht: config.dht_) {
     config_add_dht_node(ton::PublicKeyHash{dht->id_}).ensure();
   }
-  for (auto &val : config.validators_) {
+  for (auto &val: config.validators_) {
     auto key = ton::PublicKeyHash{val->id_};
     config_add_validator_permanent_key(key, val->election_date_, val->expire_at_).ensure();
-    for (auto &temp : val->temp_keys_) {
+    for (auto &temp: val->temp_keys_) {
       config_add_validator_temp_key(key, ton::PublicKeyHash{temp->key_}, temp->expire_at_).ensure();
     }
-    for (auto &adnl : val->adnl_addrs_) {
+    for (auto &adnl: val->adnl_addrs_) {
       config_add_validator_adnl_id(key, ton::PublicKeyHash{adnl->id_}, adnl->expire_at_).ensure();
     }
   }
   config_add_full_node_adnl_id(ton::PublicKeyHash{config.fullnode_}).ensure();
 
-  for (auto &s : config.fullnodeslaves_) {
+  for (auto &s: config.fullnodeslaves_) {
     td::IPAddress ip;
     ip.init_ipv4_port(td::IPAddress::ipv4_to_str(s->ip_), static_cast<td::uint16>(s->port_)).ensure();
     config_add_full_node_slave(ip, ton::PublicKey{s->adnl_}).ensure();
   }
 
-  for (auto &s : config.fullnodemasters_) {
+  for (auto &s: config.fullnodemasters_) {
     config_add_full_node_master(s->port_, ton::PublicKeyHash{s->adnl_}).ensure();
   }
 
@@ -171,25 +177,25 @@ Config::Config(const ton::ton_api::engine_validator_config &config) {
     state_serializer_enabled = true;
   }
 
-  for (auto &serv : config.liteservers_) {
+  for (auto &serv: config.liteservers_) {
     config_add_lite_server(ton::PublicKeyHash{serv->id_}, serv->port_).ensure();
   }
 
-  for (auto &serv : config.control_) {
+  for (auto &serv: config.control_) {
     auto key = ton::PublicKeyHash{serv->id_};
     config_add_control_interface(key, serv->port_).ensure();
 
-    for (auto &proc : serv->allowed_) {
+    for (auto &proc: serv->allowed_) {
       config_add_control_process(key, serv->port_, ton::PublicKeyHash{proc->id_}, proc->permissions_).ensure();
     }
   }
 
-  for (auto &shard : config.shards_to_monitor_) {
+  for (auto &shard: config.shards_to_monitor_) {
     config_add_shard(ton::create_shard_id(shard)).ensure();
   }
 
   if (config.gc_) {
-    for (auto &gc : config.gc_->ids_) {
+    for (auto &gc: config.gc_->ids_) {
       config_add_gc(ton::PublicKeyHash{gc}).ensure();
     }
   }
@@ -197,52 +203,53 @@ Config::Config(const ton::ton_api::engine_validator_config &config) {
 
 ton::tl_object_ptr<ton::ton_api::engine_validator_config> Config::tl() const {
   std::vector<ton::tl_object_ptr<ton::ton_api::engine_Addr>> addrs_vec;
-  for (auto &x : addrs) {
+  for (auto &x: addrs) {
     if (x.second.proxy) {
       addrs_vec.push_back(ton::create_tl_object<ton::ton_api::engine_addrProxy>(
-          static_cast<td::int32>(x.second.in_addr.get_ipv4()), x.second.in_addr.get_port(),
-          static_cast<td::int32>(x.first.addr.get_ipv4()), x.first.addr.get_port(), x.second.proxy->tl(),
-          std::vector<td::int32>(x.second.cats.begin(), x.second.cats.end()),
-          std::vector<td::int32>(x.second.priority_cats.begin(), x.second.priority_cats.end())));
+              static_cast<td::int32>(x.second.in_addr.get_ipv4()), x.second.in_addr.get_port(),
+              static_cast<td::int32>(x.first.addr.get_ipv4()), x.first.addr.get_port(), x.second.proxy->tl(),
+              std::vector<td::int32>(x.second.cats.begin(), x.second.cats.end()),
+              std::vector<td::int32>(x.second.priority_cats.begin(), x.second.priority_cats.end())));
     } else {
       addrs_vec.push_back(ton::create_tl_object<ton::ton_api::engine_addr>(
-          static_cast<td::int32>(x.first.addr.get_ipv4()), x.first.addr.get_port(),
-          std::vector<td::int32>(x.second.cats.begin(), x.second.cats.end()),
-          std::vector<td::int32>(x.second.priority_cats.begin(), x.second.priority_cats.end())));
+              static_cast<td::int32>(x.first.addr.get_ipv4()), x.first.addr.get_port(),
+              std::vector<td::int32>(x.second.cats.begin(), x.second.cats.end()),
+              std::vector<td::int32>(x.second.priority_cats.begin(), x.second.priority_cats.end())));
     }
   }
   std::vector<ton::tl_object_ptr<ton::ton_api::engine_adnl>> adnl_vec;
-  for (auto &x : adnl_ids) {
+  for (auto &x: adnl_ids) {
     adnl_vec.push_back(ton::create_tl_object<ton::ton_api::engine_adnl>(x.first.tl(), x.second));
   }
   std::vector<ton::tl_object_ptr<ton::ton_api::engine_dht>> dht_vec;
-  for (auto &x : dht_ids) {
+  for (auto &x: dht_ids) {
     dht_vec.push_back(ton::create_tl_object<ton::ton_api::engine_dht>(x.tl()));
   }
 
   std::vector<ton::tl_object_ptr<ton::ton_api::engine_validator>> val_vec;
-  for (auto &val : validators) {
+  for (auto &val: validators) {
     std::vector<ton::tl_object_ptr<ton::ton_api::engine_validatorTempKey>> temp_vec;
-    for (auto &t : val.second.temp_keys) {
+    for (auto &t: val.second.temp_keys) {
       temp_vec.push_back(ton::create_tl_object<ton::ton_api::engine_validatorTempKey>(t.first.tl(), t.second));
     }
     std::vector<ton::tl_object_ptr<ton::ton_api::engine_validatorAdnlAddress>> adnl_val_vec;
-    for (auto &t : val.second.adnl_ids) {
+    for (auto &t: val.second.adnl_ids) {
       adnl_val_vec.push_back(ton::create_tl_object<ton::ton_api::engine_validatorAdnlAddress>(t.first.tl(), t.second));
     }
     val_vec.push_back(ton::create_tl_object<ton::ton_api::engine_validator>(
-        val.first.tl(), std::move(temp_vec), std::move(adnl_val_vec), val.second.election_date, val.second.expire_at));
+            val.first.tl(), std::move(temp_vec), std::move(adnl_val_vec), val.second.election_date,
+            val.second.expire_at));
   }
 
   std::vector<ton::tl_object_ptr<ton::ton_api::engine_validator_fullNodeSlave>> full_node_slaves_vec;
-  for (auto &x : full_node_slaves) {
+  for (auto &x: full_node_slaves) {
     full_node_slaves_vec.push_back(ton::create_tl_object<ton::ton_api::engine_validator_fullNodeSlave>(
-        x.addr.get_ipv4(), x.addr.get_port(), x.key.tl()));
+            x.addr.get_ipv4(), x.addr.get_port(), x.key.tl()));
   }
   std::vector<ton::tl_object_ptr<ton::ton_api::engine_validator_fullNodeMaster>> full_node_masters_vec;
-  for (auto &x : full_node_masters) {
+  for (auto &x: full_node_masters) {
     full_node_masters_vec.push_back(
-        ton::create_tl_object<ton::ton_api::engine_validator_fullNodeMaster>(x.first, x.second.tl()));
+            ton::create_tl_object<ton::ton_api::engine_validator_fullNodeMaster>(x.first, x.second.tl()));
   }
 
   ton::tl_object_ptr<ton::ton_api::engine_validator_fullNodeConfig> full_node_config_obj = {};
@@ -257,14 +264,14 @@ ton::tl_object_ptr<ton::ton_api::engine_validator_config> Config::tl() const {
   }
 
   std::vector<ton::tl_object_ptr<ton::ton_api::engine_liteServer>> liteserver_vec;
-  for (auto &x : liteservers) {
+  for (auto &x: liteservers) {
     liteserver_vec.push_back(ton::create_tl_object<ton::ton_api::engine_liteServer>(x.second.tl(), x.first));
   }
 
   std::vector<ton::tl_object_ptr<ton::ton_api::engine_controlInterface>> control_vec;
-  for (auto &x : controls) {
+  for (auto &x: controls) {
     std::vector<ton::tl_object_ptr<ton::ton_api::engine_controlProcess>> control_proc_vec;
-    for (auto &y : x.second.clients) {
+    for (auto &y: x.second.clients) {
       control_proc_vec.push_back(ton::create_tl_object<ton::ton_api::engine_controlProcess>(y.first.tl(), y.second));
     }
     control_vec.push_back(ton::create_tl_object<ton::ton_api::engine_controlInterface>(x.second.key.tl(), x.first,
@@ -272,20 +279,21 @@ ton::tl_object_ptr<ton::ton_api::engine_validator_config> Config::tl() const {
   }
 
   std::vector<ton::tl_object_ptr<ton::ton_api::tonNode_shardId>> shards_vec;
-  for (auto &shard : shards_to_monitor) {
+  for (auto &shard: shards_to_monitor) {
     shards_vec.push_back(ton::create_tl_shard_id(shard));
   }
 
   auto gc_vec = ton::create_tl_object<ton::ton_api::engine_gc>(std::vector<td::Bits256>{});
-  for (auto &id : gc) {
+  for (auto &id: gc) {
     gc_vec->ids_.push_back(id.tl());
   }
 
   return ton::create_tl_object<ton::ton_api::engine_validator_config>(
-      out_port, std::move(addrs_vec), std::move(adnl_vec), std::move(dht_vec), std::move(val_vec),
-      full_node.tl(), std::move(full_node_slaves_vec), std::move(full_node_masters_vec),
-      std::move(full_node_config_obj), std::move(extra_config_obj), std::move(liteserver_vec), std::move(control_vec),
-      std::move(shards_vec), std::move(gc_vec));
+          out_port, std::move(addrs_vec), std::move(adnl_vec), std::move(dht_vec), std::move(val_vec),
+          full_node.tl(), std::move(full_node_slaves_vec), std::move(full_node_masters_vec),
+          std::move(full_node_config_obj), std::move(extra_config_obj), std::move(liteserver_vec),
+          std::move(control_vec),
+          std::move(shards_vec), std::move(gc_vec));
 }
 
 td::Result<bool> Config::config_add_network_addr(td::IPAddress in_ip, td::IPAddress out_ip,
@@ -304,12 +312,12 @@ td::Result<bool> Config::config_add_network_addr(td::IPAddress in_ip, td::IPAddr
       it->second.proxy = std::move(proxy);
       mod = true;
     }
-    for (auto &c : cats) {
+    for (auto &c: cats) {
       if (it->second.cats.insert(c).second) {
         mod = true;
       }
     }
-    for (auto &c : prio_cats) {
+    for (auto &c: prio_cats) {
       if (it->second.priority_cats.insert(c).second) {
         mod = true;
       }
@@ -319,10 +327,10 @@ td::Result<bool> Config::config_add_network_addr(td::IPAddress in_ip, td::IPAddr
     it = addrs.emplace(std::move(addr), AddrCats{}).first;
     it->second.in_addr = in_ip;
     it->second.proxy = std::move(proxy);
-    for (auto &c : cats) {
+    for (auto &c: cats) {
       it->second.cats.insert(c);
     }
-    for (auto &c : prio_cats) {
+    for (auto &c: prio_cats) {
       it->second.priority_cats.insert(c);
     }
     return true;
@@ -359,7 +367,7 @@ td::Result<bool> Config::config_add_dht_node(ton::PublicKeyHash id) {
 
 td::Result<bool> Config::config_add_validator_permanent_key(ton::PublicKeyHash id, ton::UnixTime election_date,
                                                             ton::UnixTime expire_at) {
-  for (auto &x : validators) {
+  for (auto &x: validators) {
     if (x.second.election_date == election_date && x.first != id) {
       return td::Status::Error(ton::ErrorCode::protoviolation, "duplicate election date");
     }
@@ -447,7 +455,7 @@ td::Result<bool> Config::config_add_full_node_adnl_id(ton::PublicKeyHash id) {
 }
 
 td::Result<bool> Config::config_add_full_node_slave(td::IPAddress addr, ton::PublicKey id) {
-  for (auto &s : full_node_slaves) {
+  for (auto &s: full_node_slaves) {
     if (s.addr == addr) {
       if (s.key == id) {
         return true;
@@ -593,12 +601,12 @@ td::Result<bool> Config::config_del_network_addr(td::IPAddress a, std::vector<Ad
   auto it = addrs.find(addr);
   if (it != addrs.end()) {
     bool mod = false;
-    for (auto &c : cats) {
+    for (auto &c: cats) {
       if (it->second.cats.erase(c)) {
         mod = true;
       }
     }
-    for (auto &c : prio_cats) {
+    for (auto &c: prio_cats) {
       if (it->second.priority_cats.erase(c)) {
         mod = true;
       }
@@ -624,7 +632,7 @@ td::Result<bool> Config::config_del_adnl_addr(ton::PublicKeyHash addr) {
     return td::Status::Error(ton::ErrorCode::error, "adnl addr still in use");
   }
 
-  for (auto &x : validators) {
+  for (auto &x: validators) {
     if (x.second.adnl_ids.count(addr)) {
       return td::Status::Error(ton::ErrorCode::error, "adnl addr still in use");
     }
@@ -649,10 +657,10 @@ td::Result<bool> Config::config_del_validator_permanent_key(ton::PublicKeyHash i
     return false;
   }
   auto &v = validators[id];
-  for (auto &temp_key : v.temp_keys) {
+  for (auto &temp_key: v.temp_keys) {
     decref(temp_key.first);
   }
-  for (auto &adnl_id : v.adnl_ids) {
+  for (auto &adnl_id: v.adnl_ids) {
     decref(adnl_id.first);
   }
   decref(id);
@@ -732,497 +740,492 @@ td::Result<bool> Config::config_del_gc(ton::PublicKeyHash key) {
 }
 
 class ValidatorElectionBidCreator : public td::actor::Actor {
- public:
-  ValidatorElectionBidCreator(td::uint32 date, std::string addr, std::string wallet, std::string dir,
-                              std::vector<ton::PublicKeyHash> old_keys, td::actor::ActorId<ValidatorEngine> engine,
-                              td::actor::ActorId<ton::keyring::Keyring> keyring, td::Promise<td::BufferSlice> promise)
-      : date_(date)
-      , addr_(addr)
-      , wallet_(wallet)
-      , dir_(dir)
-      , old_keys_(std::move(old_keys))
-      , engine_(engine)
-      , keyring_(keyring)
-      , promise_(std::move(promise)) {
-    ttl_ = date_ + 7 * 86400;
-  }
+public:
+    ValidatorElectionBidCreator(td::uint32 date, std::string addr, std::string wallet, std::string dir,
+                                std::vector<ton::PublicKeyHash> old_keys, td::actor::ActorId<ValidatorEngine> engine,
+                                td::actor::ActorId<ton::keyring::Keyring> keyring, td::Promise<td::BufferSlice> promise)
+            : date_(date), addr_(addr), wallet_(wallet), dir_(dir), old_keys_(std::move(old_keys)), engine_(engine),
+              keyring_(keyring), promise_(std::move(promise)) {
+      ttl_ = date_ + 7 * 86400;
+    }
 
-  void start_up() override {
-    if (old_keys_.size() > 0) {
-      CHECK(old_keys_.size() == 3);
+    void start_up() override {
+      if (old_keys_.size() > 0) {
+        CHECK(old_keys_.size() == 3);
 
-      adnl_addr_ = ton::adnl::AdnlNodeIdShort{old_keys_[2]};
-      perm_key_ = old_keys_[0];
+        adnl_addr_ = ton::adnl::AdnlNodeIdShort{old_keys_[2]};
+        perm_key_ = old_keys_[0];
 
-      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ton::PublicKey> R) {
-        if (R.is_error()) {
-          td::actor::send_closure(SelfId, &ValidatorElectionBidCreator::abort_query, R.move_as_error());
-        } else {
-          td::actor::send_closure(SelfId, &ValidatorElectionBidCreator::got_perm_public_key, R.move_as_ok());
-        }
+        auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ton::PublicKey> R) {
+            if (R.is_error()) {
+              td::actor::send_closure(SelfId, &ValidatorElectionBidCreator::abort_query, R.move_as_error());
+            } else {
+              td::actor::send_closure(SelfId, &ValidatorElectionBidCreator::got_perm_public_key, R.move_as_ok());
+            }
+        });
+        td::actor::send_closure(keyring_, &ton::keyring::Keyring::get_public_key, perm_key_, std::move(P));
+        return;
+      }
+      auto pk1 = ton::PrivateKey{ton::privkeys::Ed25519::random()};
+      perm_key_full_ = pk1.compute_public_key();
+      perm_key_ = perm_key_full_.compute_short_id();
+
+      auto pk2 = ton::PrivateKey{ton::privkeys::Ed25519::random()};
+      adnl_key_full_ = ton::adnl::AdnlNodeIdFull{pk2.compute_public_key()};
+      adnl_addr_ = adnl_key_full_.compute_short_id();
+
+      td::MultiPromise mp;
+
+      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) {
+          if (R.is_error()) {
+            td::actor::send_closure(SelfId, &ValidatorElectionBidCreator::abort_query,
+                                    R.move_as_error_prefix("keyring fail: "));
+          } else {
+            td::actor::send_closure(SelfId, &ValidatorElectionBidCreator::written_keys);
+          }
       });
-      td::actor::send_closure(keyring_, &ton::keyring::Keyring::get_public_key, perm_key_, std::move(P));
-      return;
+      auto ig = mp.init_guard();
+      ig.add_promise(std::move(P));
+
+      td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key, std::move(pk1), false, ig.get_promise());
+      td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key, std::move(pk2), false, ig.get_promise());
     }
-    auto pk1 = ton::PrivateKey{ton::privkeys::Ed25519::random()};
-    perm_key_full_ = pk1.compute_public_key();
-    perm_key_ = perm_key_full_.compute_short_id();
 
-    auto pk2 = ton::PrivateKey{ton::privkeys::Ed25519::random()};
-    adnl_key_full_ = ton::adnl::AdnlNodeIdFull{pk2.compute_public_key()};
-    adnl_addr_ = adnl_key_full_.compute_short_id();
+    void written_keys() {
+      td::MultiPromise mp;
 
-    td::MultiPromise mp;
+      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) {
+          if (R.is_error()) {
+            td::actor::send_closure(SelfId, &ValidatorElectionBidCreator::abort_query,
+                                    R.move_as_error_prefix("update config fail: "));
+          } else {
+            td::actor::send_closure(SelfId, &ValidatorElectionBidCreator::updated_config);
+          }
+      });
+      auto ig = mp.init_guard();
+      ig.add_promise(std::move(P));
 
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) {
-      if (R.is_error()) {
-        td::actor::send_closure(SelfId, &ValidatorElectionBidCreator::abort_query,
-                                R.move_as_error_prefix("keyring fail: "));
-      } else {
-        td::actor::send_closure(SelfId, &ValidatorElectionBidCreator::written_keys);
+      td::actor::send_closure(engine_, &ValidatorEngine::add_key_to_set, perm_key_full_);
+      td::actor::send_closure(engine_, &ValidatorEngine::add_key_to_set, adnl_key_full_.pubkey());
+      td::actor::send_closure(engine_, &ValidatorEngine::try_add_validator_permanent_key, perm_key_, date_, ttl_,
+                              ig.get_promise());
+      td::actor::send_closure(engine_, &ValidatorEngine::try_add_validator_temp_key, perm_key_, perm_key_, ttl_,
+                              ig.get_promise());
+      td::actor::send_closure(engine_, &ValidatorEngine::try_add_adnl_node, adnl_addr_.pubkey_hash(), cat_,
+                              ig.get_promise());
+      td::actor::send_closure(engine_, &ValidatorEngine::try_add_validator_adnl_addr, perm_key_,
+                              adnl_addr_.pubkey_hash(),
+                              ttl_, ig.get_promise());
+    }
+
+    void got_perm_public_key(ton::PublicKey pub) {
+      perm_key_full_ = pub;
+      updated_config();
+    }
+
+    void updated_config() {
+      auto codeR = td::read_file_str(dir_ + "/validator-elect-req.fif");
+      if (codeR.is_error()) {
+        abort_query(codeR.move_as_error_prefix("fif not found (validator-elect-req.fif)"));
+        return;
       }
-    });
-    auto ig = mp.init_guard();
-    ig.add_promise(std::move(P));
-
-    td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key, std::move(pk1), false, ig.get_promise());
-    td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key, std::move(pk2), false, ig.get_promise());
-  }
-
-  void written_keys() {
-    td::MultiPromise mp;
-
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) {
+      auto R = fift::mem_run_fift(codeR.move_as_ok(),
+                                  {"validator-elect-req.fif", wallet_, td::to_string(date_), td::to_string(frac),
+                                   adnl_addr_.bits256_value().to_hex(), "OUTPUT"},
+                                  dir_ + "/");
       if (R.is_error()) {
-        td::actor::send_closure(SelfId, &ValidatorElectionBidCreator::abort_query,
-                                R.move_as_error_prefix("update config fail: "));
-      } else {
-        td::actor::send_closure(SelfId, &ValidatorElectionBidCreator::updated_config);
+        abort_query(R.move_as_error_prefix("fift fail (validator-elect-req.fif)"));
+        return;
       }
-    });
-    auto ig = mp.init_guard();
-    ig.add_promise(std::move(P));
 
-    td::actor::send_closure(engine_, &ValidatorEngine::add_key_to_set, perm_key_full_);
-    td::actor::send_closure(engine_, &ValidatorEngine::add_key_to_set, adnl_key_full_.pubkey());
-    td::actor::send_closure(engine_, &ValidatorEngine::try_add_validator_permanent_key, perm_key_, date_, ttl_,
-                            ig.get_promise());
-    td::actor::send_closure(engine_, &ValidatorEngine::try_add_validator_temp_key, perm_key_, perm_key_, ttl_,
-                            ig.get_promise());
-    td::actor::send_closure(engine_, &ValidatorEngine::try_add_adnl_node, adnl_addr_.pubkey_hash(), cat_,
-                            ig.get_promise());
-    td::actor::send_closure(engine_, &ValidatorEngine::try_add_validator_adnl_addr, perm_key_, adnl_addr_.pubkey_hash(),
-                            ttl_, ig.get_promise());
-  }
+      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::BufferSlice> R) {
+          if (R.is_error()) {
+            td::actor::send_closure(SelfId, &ValidatorElectionBidCreator::abort_query,
+                                    R.move_as_error_prefix("sign fail: "));
+          } else {
+            td::actor::send_closure(SelfId, &ValidatorElectionBidCreator::signed_bid, R.move_as_ok());
+          }
+      });
 
-  void got_perm_public_key(ton::PublicKey pub) {
-    perm_key_full_ = pub;
-    updated_config();
-  }
+      auto res = R.move_as_ok();
+      auto to_signR = res.source_lookup.read_file("OUTPUT");
+      if (to_signR.is_error()) {
+        abort_query(td::Status::Error(PSTRING() << "strange error: no to sign file. Output: " << res.output));
+        return;
+      }
 
-  void updated_config() {
-    auto codeR = td::read_file_str(dir_ + "/validator-elect-req.fif");
-    if (codeR.is_error()) {
-      abort_query(codeR.move_as_error_prefix("fif not found (validator-elect-req.fif)"));
-      return;
-    }
-    auto R = fift::mem_run_fift(codeR.move_as_ok(),
-                                {"validator-elect-req.fif", wallet_, td::to_string(date_), td::to_string(frac),
-                                 adnl_addr_.bits256_value().to_hex(), "OUTPUT"},
-                                dir_ + "/");
-    if (R.is_error()) {
-      abort_query(R.move_as_error_prefix("fift fail (validator-elect-req.fif)"));
-      return;
+      td::actor::send_closure(keyring_, &ton::keyring::Keyring::sign_message, perm_key_,
+                              td::BufferSlice{to_signR.move_as_ok().data}, std::move(P));
     }
 
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::BufferSlice> R) {
+    void signed_bid(td::BufferSlice signature) {
+      signature_ = std::move(signature);
+
+      auto codeR = td::read_file_str(dir_ + "/validator-elect-signed.fif");
+      if (codeR.is_error()) {
+        abort_query(codeR.move_as_error_prefix("fif not found (validator-elect-req.fif)"));
+        return;
+      }
+      auto R = fift::mem_run_fift(
+              codeR.move_as_ok(),
+              {"validator-elect-signed.fif", wallet_, td::to_string(date_), td::to_string(frac),
+               adnl_addr_.bits256_value().to_hex(), td::base64_encode(perm_key_full_.export_as_slice().as_slice()),
+               td::base64_encode(signature_.as_slice()), "OUTPUT"},
+              dir_ + "/");
       if (R.is_error()) {
-        td::actor::send_closure(SelfId, &ValidatorElectionBidCreator::abort_query,
-                                R.move_as_error_prefix("sign fail: "));
-      } else {
-        td::actor::send_closure(SelfId, &ValidatorElectionBidCreator::signed_bid, R.move_as_ok());
+        abort_query(R.move_as_error_prefix("fift fail (validator-elect-req.fif)"));
+        return;
       }
-    });
 
-    auto res = R.move_as_ok();
-    auto to_signR = res.source_lookup.read_file("OUTPUT");
-    if (to_signR.is_error()) {
-      abort_query(td::Status::Error(PSTRING() << "strange error: no to sign file. Output: " << res.output));
-      return;
+      auto res = R.move_as_ok();
+      auto dataR = res.source_lookup.read_file("OUTPUT");
+      if (dataR.is_error()) {
+        abort_query(td::Status::Error("strage error: no result boc"));
+        return;
+      }
+
+      result_ = td::BufferSlice(dataR.move_as_ok().data);
+      finish_query();
     }
 
-    td::actor::send_closure(keyring_, &ton::keyring::Keyring::sign_message, perm_key_,
-                            td::BufferSlice{to_signR.move_as_ok().data}, std::move(P));
-  }
-
-  void signed_bid(td::BufferSlice signature) {
-    signature_ = std::move(signature);
-
-    auto codeR = td::read_file_str(dir_ + "/validator-elect-signed.fif");
-    if (codeR.is_error()) {
-      abort_query(codeR.move_as_error_prefix("fif not found (validator-elect-req.fif)"));
-      return;
-    }
-    auto R = fift::mem_run_fift(
-        codeR.move_as_ok(),
-        {"validator-elect-signed.fif", wallet_, td::to_string(date_), td::to_string(frac),
-         adnl_addr_.bits256_value().to_hex(), td::base64_encode(perm_key_full_.export_as_slice().as_slice()),
-         td::base64_encode(signature_.as_slice()), "OUTPUT"},
-        dir_ + "/");
-    if (R.is_error()) {
-      abort_query(R.move_as_error_prefix("fift fail (validator-elect-req.fif)"));
-      return;
+    void abort_query(td::Status error) {
+      promise_.set_value(ValidatorEngine::create_control_query_error(std::move(error)));
+      stop();
     }
 
-    auto res = R.move_as_ok();
-    auto dataR = res.source_lookup.read_file("OUTPUT");
-    if (dataR.is_error()) {
-      abort_query(td::Status::Error("strage error: no result boc"));
-      return;
+    void finish_query() {
+      promise_.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_electionBid>(
+              date_, perm_key_.tl(), adnl_addr_.bits256_value(), std::move(result_)));
+      stop();
     }
 
-    result_ = td::BufferSlice(dataR.move_as_ok().data);
-    finish_query();
-  }
+private:
+    td::uint32 date_;
+    std::string addr_;
+    std::string wallet_;
+    std::string dir_;
+    std::vector<ton::PublicKeyHash> old_keys_;
+    td::actor::ActorId<ValidatorEngine> engine_;
+    td::actor::ActorId<ton::keyring::Keyring> keyring_;
 
-  void abort_query(td::Status error) {
-    promise_.set_value(ValidatorEngine::create_control_query_error(std::move(error)));
-    stop();
-  }
-  void finish_query() {
-    promise_.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_electionBid>(
-        date_, perm_key_.tl(), adnl_addr_.bits256_value(), std::move(result_)));
-    stop();
-  }
+    td::Promise<td::BufferSlice> promise_;
 
- private:
-  td::uint32 date_;
-  std::string addr_;
-  std::string wallet_;
-  std::string dir_;
-  std::vector<ton::PublicKeyHash> old_keys_;
-  td::actor::ActorId<ValidatorEngine> engine_;
-  td::actor::ActorId<ton::keyring::Keyring> keyring_;
+    td::uint32 ttl_;
+    AdnlCategory cat_ = 2;
+    double frac = 2.7;
 
-  td::Promise<td::BufferSlice> promise_;
+    ton::PublicKeyHash perm_key_;
+    ton::PublicKey perm_key_full_;
+    ton::adnl::AdnlNodeIdShort adnl_addr_;
+    ton::adnl::AdnlNodeIdFull adnl_key_full_;
 
-  td::uint32 ttl_;
-  AdnlCategory cat_ = 2;
-  double frac = 2.7;
-
-  ton::PublicKeyHash perm_key_;
-  ton::PublicKey perm_key_full_;
-  ton::adnl::AdnlNodeIdShort adnl_addr_;
-  ton::adnl::AdnlNodeIdFull adnl_key_full_;
-
-  td::BufferSlice signature_;
-  td::BufferSlice result_;
+    td::BufferSlice signature_;
+    td::BufferSlice result_;
 };
 
 class ValidatorProposalVoteCreator : public td::actor::Actor {
- public:
-  ValidatorProposalVoteCreator(td::BufferSlice proposal, std::string dir, td::actor::ActorId<ValidatorEngine> engine,
-                               td::actor::ActorId<ton::keyring::Keyring> keyring, td::Promise<td::BufferSlice> promise)
-      : proposal_(std::move(proposal))
-      , dir_(std::move(dir))
-      , engine_(engine)
-      , keyring_(keyring)
-      , promise_(std::move(promise)) {
-  }
+public:
+    ValidatorProposalVoteCreator(td::BufferSlice proposal, std::string dir, td::actor::ActorId<ValidatorEngine> engine,
+                                 td::actor::ActorId<ton::keyring::Keyring> keyring,
+                                 td::Promise<td::BufferSlice> promise)
+            : proposal_(std::move(proposal)), dir_(std::move(dir)), engine_(engine), keyring_(keyring),
+              promise_(std::move(promise)) {
+    }
 
-  void start_up() override {
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::pair<ton::PublicKey, size_t>> R) {
-      if (R.is_error()) {
-        td::actor::send_closure(SelfId, &ValidatorProposalVoteCreator::abort_query,
-                                R.move_as_error_prefix("failed to find self permanent key: "));
-      } else {
-        auto v = R.move_as_ok();
-        td::actor::send_closure(SelfId, &ValidatorProposalVoteCreator::got_id, v.first, v.second);
+    void start_up() override {
+      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::pair<ton::PublicKey, size_t>> R) {
+          if (R.is_error()) {
+            td::actor::send_closure(SelfId, &ValidatorProposalVoteCreator::abort_query,
+                                    R.move_as_error_prefix("failed to find self permanent key: "));
+          } else {
+            auto v = R.move_as_ok();
+            td::actor::send_closure(SelfId, &ValidatorProposalVoteCreator::got_id, v.first, v.second);
+          }
+      });
+      td::actor::send_closure(engine_, &ValidatorEngine::get_current_validator_perm_key, std::move(P));
+    }
+
+    void got_id(ton::PublicKey pubkey, size_t idx) {
+      pubkey_ = std::move(pubkey);
+      idx_ = idx;
+      auto codeR = td::read_file_str(dir_ + "/config-proposal-vote-req.fif");
+      if (codeR.is_error()) {
+        abort_query(codeR.move_as_error_prefix("fif not found (validator-elect-req.fif)"));
+        return;
       }
-    });
-    td::actor::send_closure(engine_, &ValidatorEngine::get_current_validator_perm_key, std::move(P));
-  }
-
-  void got_id(ton::PublicKey pubkey, size_t idx) {
-    pubkey_ = std::move(pubkey);
-    idx_ = idx;
-    auto codeR = td::read_file_str(dir_ + "/config-proposal-vote-req.fif");
-    if (codeR.is_error()) {
-      abort_query(codeR.move_as_error_prefix("fif not found (validator-elect-req.fif)"));
-      return;
-    }
-    auto data = proposal_.as_slice().str();
-    auto R = fift::mem_run_fift(codeR.move_as_ok(), {"config-proposal-vote-req.fif", "-i", td::to_string(idx_), data},
-                                dir_ + "/");
-    if (R.is_error()) {
-      abort_query(R.move_as_error_prefix("fift fail (cofig-proposal-vote-req.fif)"));
-      return;
-    }
-    auto res = R.move_as_ok();
-    auto to_signR = res.source_lookup.read_file("validator-to-sign.req");
-    if (to_signR.is_error()) {
-      abort_query(td::Status::Error(PSTRING() << "strange error: no to sign file. Output: " << res.output));
-      return;
-    }
-    auto to_sign = td::BufferSlice{to_signR.move_as_ok().data};
-
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::BufferSlice> R) {
+      auto data = proposal_.as_slice().str();
+      auto R = fift::mem_run_fift(codeR.move_as_ok(), {"config-proposal-vote-req.fif", "-i", td::to_string(idx_), data},
+                                  dir_ + "/");
       if (R.is_error()) {
-        td::actor::send_closure(SelfId, &ValidatorProposalVoteCreator::abort_query,
-                                R.move_as_error_prefix("sign fail: "));
-      } else {
-        td::actor::send_closure(SelfId, &ValidatorProposalVoteCreator::signed_vote, R.move_as_ok());
+        abort_query(R.move_as_error_prefix("fift fail (cofig-proposal-vote-req.fif)"));
+        return;
       }
-    });
+      auto res = R.move_as_ok();
+      auto to_signR = res.source_lookup.read_file("validator-to-sign.req");
+      if (to_signR.is_error()) {
+        abort_query(td::Status::Error(PSTRING() << "strange error: no to sign file. Output: " << res.output));
+        return;
+      }
+      auto to_sign = td::BufferSlice{to_signR.move_as_ok().data};
 
-    td::actor::send_closure(keyring_, &ton::keyring::Keyring::sign_message, pubkey_.compute_short_id(),
-                            std::move(to_sign), std::move(P));
-  }
+      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::BufferSlice> R) {
+          if (R.is_error()) {
+            td::actor::send_closure(SelfId, &ValidatorProposalVoteCreator::abort_query,
+                                    R.move_as_error_prefix("sign fail: "));
+          } else {
+            td::actor::send_closure(SelfId, &ValidatorProposalVoteCreator::signed_vote, R.move_as_ok());
+          }
+      });
 
-  void signed_vote(td::BufferSlice signature) {
-    signature_ = std::move(signature);
-
-    auto codeR = td::read_file_str(dir_ + "/config-proposal-vote-signed.fif");
-    if (codeR.is_error()) {
-      abort_query(codeR.move_as_error_prefix("fif not found (config-proposal-vote-signed.fif)"));
-      return;
+      td::actor::send_closure(keyring_, &ton::keyring::Keyring::sign_message, pubkey_.compute_short_id(),
+                              std::move(to_sign), std::move(P));
     }
 
-    auto key = td::base64_encode(pubkey_.export_as_slice().as_slice());
-    auto sig = td::base64_encode(signature_.as_slice());
+    void signed_vote(td::BufferSlice signature) {
+      signature_ = std::move(signature);
 
-    auto data = proposal_.as_slice().str();
-    auto R = fift::mem_run_fift(
-        codeR.move_as_ok(), {"config-proposal-vote-signed.fif", "-i", td::to_string(idx_), data, key, sig}, dir_ + "/");
-    if (R.is_error()) {
-      abort_query(R.move_as_error_prefix("fift fail (config-proposal-vote-signed.fif)"));
-      return;
+      auto codeR = td::read_file_str(dir_ + "/config-proposal-vote-signed.fif");
+      if (codeR.is_error()) {
+        abort_query(codeR.move_as_error_prefix("fif not found (config-proposal-vote-signed.fif)"));
+        return;
+      }
+
+      auto key = td::base64_encode(pubkey_.export_as_slice().as_slice());
+      auto sig = td::base64_encode(signature_.as_slice());
+
+      auto data = proposal_.as_slice().str();
+      auto R = fift::mem_run_fift(
+              codeR.move_as_ok(), {"config-proposal-vote-signed.fif", "-i", td::to_string(idx_), data, key, sig},
+              dir_ + "/");
+      if (R.is_error()) {
+        abort_query(R.move_as_error_prefix("fift fail (config-proposal-vote-signed.fif)"));
+        return;
+      }
+
+      auto res = R.move_as_ok();
+      auto dataR = res.source_lookup.read_file("vote-msg-body.boc");
+      if (dataR.is_error()) {
+        abort_query(td::Status::Error("strage error: no result boc"));
+        return;
+      }
+
+      result_ = td::BufferSlice(dataR.move_as_ok().data);
+      finish_query();
     }
 
-    auto res = R.move_as_ok();
-    auto dataR = res.source_lookup.read_file("vote-msg-body.boc");
-    if (dataR.is_error()) {
-      abort_query(td::Status::Error("strage error: no result boc"));
-      return;
+    void abort_query(td::Status error) {
+      promise_.set_value(ValidatorEngine::create_control_query_error(std::move(error)));
+      stop();
     }
 
-    result_ = td::BufferSlice(dataR.move_as_ok().data);
-    finish_query();
-  }
+    void finish_query() {
+      promise_.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_proposalVote>(
+              pubkey_.compute_short_id().bits256_value(), std::move(result_)));
+      stop();
+    }
 
-  void abort_query(td::Status error) {
-    promise_.set_value(ValidatorEngine::create_control_query_error(std::move(error)));
-    stop();
-  }
-  void finish_query() {
-    promise_.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_proposalVote>(
-        pubkey_.compute_short_id().bits256_value(), std::move(result_)));
-    stop();
-  }
+private:
+    td::BufferSlice proposal_;
+    std::string dir_;
 
- private:
-  td::BufferSlice proposal_;
-  std::string dir_;
+    ton::PublicKey pubkey_;
+    size_t idx_;
 
-  ton::PublicKey pubkey_;
-  size_t idx_;
+    td::BufferSlice signature_;
+    td::BufferSlice result_;
+    td::actor::ActorId<ValidatorEngine> engine_;
+    td::actor::ActorId<ton::keyring::Keyring> keyring_;
 
-  td::BufferSlice signature_;
-  td::BufferSlice result_;
-  td::actor::ActorId<ValidatorEngine> engine_;
-  td::actor::ActorId<ton::keyring::Keyring> keyring_;
+    td::Promise<td::BufferSlice> promise_;
 
-  td::Promise<td::BufferSlice> promise_;
-
-  ton::PublicKeyHash perm_key_;
-  ton::PublicKey perm_key_full_;
-  ton::adnl::AdnlNodeIdShort adnl_addr_;
-  ton::adnl::AdnlNodeIdFull adnl_key_full_;
+    ton::PublicKeyHash perm_key_;
+    ton::PublicKey perm_key_full_;
+    ton::adnl::AdnlNodeIdShort adnl_addr_;
+    ton::adnl::AdnlNodeIdFull adnl_key_full_;
 };
 
 class ValidatorPunishVoteCreator : public td::actor::Actor {
- public:
-  ValidatorPunishVoteCreator(td::uint32 election_id, td::BufferSlice proposal, std::string dir,
-                             td::actor::ActorId<ValidatorEngine> engine,
-                             td::actor::ActorId<ton::keyring::Keyring> keyring, td::Promise<td::BufferSlice> promise)
-      : election_id_(election_id)
-      , proposal_(std::move(proposal))
-      , dir_(std::move(dir))
-      , engine_(engine)
-      , keyring_(keyring)
-      , promise_(std::move(promise)) {
-  }
+public:
+    ValidatorPunishVoteCreator(td::uint32 election_id, td::BufferSlice proposal, std::string dir,
+                               td::actor::ActorId<ValidatorEngine> engine,
+                               td::actor::ActorId<ton::keyring::Keyring> keyring, td::Promise<td::BufferSlice> promise)
+            : election_id_(election_id), proposal_(std::move(proposal)), dir_(std::move(dir)), engine_(engine),
+              keyring_(keyring), promise_(std::move(promise)) {
+    }
 
-  void start_up() override {
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::pair<ton::PublicKey, size_t>> R) {
-      if (R.is_error()) {
-        td::actor::send_closure(SelfId, &ValidatorPunishVoteCreator::abort_query,
-                                R.move_as_error_prefix("failed to find self permanent key: "));
-      } else {
-        auto v = R.move_as_ok();
-        td::actor::send_closure(SelfId, &ValidatorPunishVoteCreator::got_id, v.first, v.second);
+    void start_up() override {
+      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::pair<ton::PublicKey, size_t>> R) {
+          if (R.is_error()) {
+            td::actor::send_closure(SelfId, &ValidatorPunishVoteCreator::abort_query,
+                                    R.move_as_error_prefix("failed to find self permanent key: "));
+          } else {
+            auto v = R.move_as_ok();
+            td::actor::send_closure(SelfId, &ValidatorPunishVoteCreator::got_id, v.first, v.second);
+          }
+      });
+      td::actor::send_closure(engine_, &ValidatorEngine::get_current_validator_perm_key, std::move(P));
+    }
+
+    void got_id(ton::PublicKey pubkey, size_t idx) {
+      pubkey_ = std::move(pubkey);
+      idx_ = idx;
+      auto codeR = td::read_file_str(dir_ + "/complaint-vote-req.fif");
+      if (codeR.is_error()) {
+        abort_query(codeR.move_as_error_prefix("fif not found (complaint-vote-req.fif)"));
+        return;
       }
-    });
-    td::actor::send_closure(engine_, &ValidatorEngine::get_current_validator_perm_key, std::move(P));
-  }
-
-  void got_id(ton::PublicKey pubkey, size_t idx) {
-    pubkey_ = std::move(pubkey);
-    idx_ = idx;
-    auto codeR = td::read_file_str(dir_ + "/complaint-vote-req.fif");
-    if (codeR.is_error()) {
-      abort_query(codeR.move_as_error_prefix("fif not found (complaint-vote-req.fif)"));
-      return;
-    }
-    auto data = proposal_.as_slice().str();
-    auto R = fift::mem_run_fift(codeR.move_as_ok(),
-                                {"complaint-vote-req.fif", td::to_string(idx_), td::to_string(election_id_), data},
-                                dir_ + "/");
-    if (R.is_error()) {
-      abort_query(R.move_as_error_prefix("fift fail (complaint-vote-req.fif)"));
-      return;
-    }
-    auto res = R.move_as_ok();
-    auto to_signR = res.source_lookup.read_file("validator-to-sign.req");
-    if (to_signR.is_error()) {
-      abort_query(td::Status::Error(PSTRING() << "strange error: no to sign file. Output: " << res.output));
-      return;
-    }
-    auto to_sign = td::BufferSlice{to_signR.move_as_ok().data};
-
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::BufferSlice> R) {
+      auto data = proposal_.as_slice().str();
+      auto R = fift::mem_run_fift(codeR.move_as_ok(),
+                                  {"complaint-vote-req.fif", td::to_string(idx_), td::to_string(election_id_), data},
+                                  dir_ + "/");
       if (R.is_error()) {
-        td::actor::send_closure(SelfId, &ValidatorPunishVoteCreator::abort_query,
-                                R.move_as_error_prefix("sign fail: "));
-      } else {
-        td::actor::send_closure(SelfId, &ValidatorPunishVoteCreator::signed_vote, R.move_as_ok());
+        abort_query(R.move_as_error_prefix("fift fail (complaint-vote-req.fif)"));
+        return;
       }
-    });
+      auto res = R.move_as_ok();
+      auto to_signR = res.source_lookup.read_file("validator-to-sign.req");
+      if (to_signR.is_error()) {
+        abort_query(td::Status::Error(PSTRING() << "strange error: no to sign file. Output: " << res.output));
+        return;
+      }
+      auto to_sign = td::BufferSlice{to_signR.move_as_ok().data};
 
-    td::actor::send_closure(keyring_, &ton::keyring::Keyring::sign_message, pubkey_.compute_short_id(),
-                            std::move(to_sign), std::move(P));
-  }
+      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::BufferSlice> R) {
+          if (R.is_error()) {
+            td::actor::send_closure(SelfId, &ValidatorPunishVoteCreator::abort_query,
+                                    R.move_as_error_prefix("sign fail: "));
+          } else {
+            td::actor::send_closure(SelfId, &ValidatorPunishVoteCreator::signed_vote, R.move_as_ok());
+          }
+      });
 
-  void signed_vote(td::BufferSlice signature) {
-    signature_ = std::move(signature);
-
-    auto codeR = td::read_file_str(dir_ + "/complaint-vote-signed.fif");
-    if (codeR.is_error()) {
-      abort_query(codeR.move_as_error_prefix("fif not found (complaint-vote-signed.fif)"));
-      return;
+      td::actor::send_closure(keyring_, &ton::keyring::Keyring::sign_message, pubkey_.compute_short_id(),
+                              std::move(to_sign), std::move(P));
     }
 
-    auto key = td::base64_encode(pubkey_.export_as_slice().as_slice());
-    auto sig = td::base64_encode(signature_.as_slice());
+    void signed_vote(td::BufferSlice signature) {
+      signature_ = std::move(signature);
 
-    auto data = proposal_.as_slice().str();
-    auto R = fift::mem_run_fift(
-        codeR.move_as_ok(),
-        {"complaint-vote-signed.fif", td::to_string(idx_), td::to_string(election_id_), data, key, sig}, dir_ + "/");
-    if (R.is_error()) {
-      abort_query(R.move_as_error_prefix("fift fail (complaint-vote-signed.fif)"));
-      return;
+      auto codeR = td::read_file_str(dir_ + "/complaint-vote-signed.fif");
+      if (codeR.is_error()) {
+        abort_query(codeR.move_as_error_prefix("fif not found (complaint-vote-signed.fif)"));
+        return;
+      }
+
+      auto key = td::base64_encode(pubkey_.export_as_slice().as_slice());
+      auto sig = td::base64_encode(signature_.as_slice());
+
+      auto data = proposal_.as_slice().str();
+      auto R = fift::mem_run_fift(
+              codeR.move_as_ok(),
+              {"complaint-vote-signed.fif", td::to_string(idx_), td::to_string(election_id_), data, key, sig},
+              dir_ + "/");
+      if (R.is_error()) {
+        abort_query(R.move_as_error_prefix("fift fail (complaint-vote-signed.fif)"));
+        return;
+      }
+
+      auto res = R.move_as_ok();
+      auto dataR = res.source_lookup.read_file("vote-query.boc");
+      if (dataR.is_error()) {
+        abort_query(td::Status::Error("strage error: no result boc"));
+        return;
+      }
+
+      result_ = td::BufferSlice(dataR.move_as_ok().data);
+      finish_query();
     }
 
-    auto res = R.move_as_ok();
-    auto dataR = res.source_lookup.read_file("vote-query.boc");
-    if (dataR.is_error()) {
-      abort_query(td::Status::Error("strage error: no result boc"));
-      return;
+    void abort_query(td::Status error) {
+      promise_.set_value(ValidatorEngine::create_control_query_error(std::move(error)));
+      stop();
     }
 
-    result_ = td::BufferSlice(dataR.move_as_ok().data);
-    finish_query();
-  }
+    void finish_query() {
+      promise_.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_proposalVote>(
+              pubkey_.compute_short_id().bits256_value(), std::move(result_)));
+      stop();
+    }
 
-  void abort_query(td::Status error) {
-    promise_.set_value(ValidatorEngine::create_control_query_error(std::move(error)));
-    stop();
-  }
-  void finish_query() {
-    promise_.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_proposalVote>(
-        pubkey_.compute_short_id().bits256_value(), std::move(result_)));
-    stop();
-  }
+private:
+    td::uint32 election_id_;
+    td::BufferSlice proposal_;
+    std::string dir_;
 
- private:
-  td::uint32 election_id_;
-  td::BufferSlice proposal_;
-  std::string dir_;
+    ton::PublicKey pubkey_;
+    size_t idx_;
 
-  ton::PublicKey pubkey_;
-  size_t idx_;
+    td::BufferSlice signature_;
+    td::BufferSlice result_;
+    td::actor::ActorId<ValidatorEngine> engine_;
+    td::actor::ActorId<ton::keyring::Keyring> keyring_;
 
-  td::BufferSlice signature_;
-  td::BufferSlice result_;
-  td::actor::ActorId<ValidatorEngine> engine_;
-  td::actor::ActorId<ton::keyring::Keyring> keyring_;
+    td::Promise<td::BufferSlice> promise_;
 
-  td::Promise<td::BufferSlice> promise_;
-
-  ton::PublicKeyHash perm_key_;
-  ton::PublicKey perm_key_full_;
-  ton::adnl::AdnlNodeIdShort adnl_addr_;
-  ton::adnl::AdnlNodeIdFull adnl_key_full_;
+    ton::PublicKeyHash perm_key_;
+    ton::PublicKey perm_key_full_;
+    ton::adnl::AdnlNodeIdShort adnl_addr_;
+    ton::adnl::AdnlNodeIdFull adnl_key_full_;
 };
 
 class CheckDhtServerStatusQuery : public td::actor::Actor {
- public:
-  void start_up() override {
-    auto &n = dht_config_->nodes();
+public:
+    void start_up() override {
+      auto &n = dht_config_->nodes();
 
-    result_.resize(n.size(), false);
+      result_.resize(n.size(), false);
 
-    pending_ = n.size();
-    for (td::uint32 i = 0; i < n.size(); i++) {
-      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), idx = i](td::Result<td::BufferSlice> R) {
-        td::actor::send_closure(SelfId, &CheckDhtServerStatusQuery::got_result, idx, R.is_ok());
-      });
+      pending_ = n.size();
+      for (td::uint32 i = 0; i < n.size(); i++) {
+        auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), idx = i](td::Result<td::BufferSlice> R) {
+            td::actor::send_closure(SelfId, &CheckDhtServerStatusQuery::got_result, idx, R.is_ok());
+        });
 
-      auto &E = n.list().at(i);
+        auto &E = n.list().at(i);
 
-      td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_peer, local_id_, E.adnl_id(), E.addr_list());
-      td::actor::send_closure(adnl_, &ton::adnl::Adnl::send_query, local_id_, E.adnl_id().compute_short_id(), "ping",
-                              std::move(P), td::Timestamp::in(1.0),
-                              ton::create_serialize_tl_object<ton::ton_api::dht_getSignedAddressList>());
+        td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_peer, local_id_, E.adnl_id(), E.addr_list());
+        td::actor::send_closure(adnl_, &ton::adnl::Adnl::send_query, local_id_, E.adnl_id().compute_short_id(), "ping",
+                                std::move(P), td::Timestamp::in(1.0),
+                                ton::create_serialize_tl_object<ton::ton_api::dht_getSignedAddressList>());
+      }
     }
-  }
 
-  void got_result(td::uint32 idx, bool result) {
-    result_[idx] = result;
-    CHECK(pending_ > 0);
-    if (!--pending_) {
-      finish_query();
+    void got_result(td::uint32 idx, bool result) {
+      result_[idx] = result;
+      CHECK(pending_ > 0);
+      if (!--pending_) {
+        finish_query();
+      }
     }
-  }
 
-  void finish_query() {
-    std::vector<ton::tl_object_ptr<ton::ton_api::engine_validator_dhtServerStatus>> vec;
-    auto &n = dht_config_->nodes();
-    for (td::uint32 i = 0; i < n.size(); i++) {
-      auto &E = n.list().at(i);
-      vec.push_back(ton::create_tl_object<ton::ton_api::engine_validator_dhtServerStatus>(
-          E.adnl_id().compute_short_id().bits256_value(), result_[i] ? 1 : 0));
+    void finish_query() {
+      std::vector<ton::tl_object_ptr<ton::ton_api::engine_validator_dhtServerStatus>> vec;
+      auto &n = dht_config_->nodes();
+      for (td::uint32 i = 0; i < n.size(); i++) {
+        auto &E = n.list().at(i);
+        vec.push_back(ton::create_tl_object<ton::ton_api::engine_validator_dhtServerStatus>(
+                E.adnl_id().compute_short_id().bits256_value(), result_[i] ? 1 : 0));
+      }
+      promise_.set_value(
+              ton::create_serialize_tl_object<ton::ton_api::engine_validator_dhtServersStatus>(std::move(vec)));
+      stop();
     }
-    promise_.set_value(
-        ton::create_serialize_tl_object<ton::ton_api::engine_validator_dhtServersStatus>(std::move(vec)));
-    stop();
-  }
 
-  CheckDhtServerStatusQuery(std::shared_ptr<ton::dht::DhtGlobalConfig> dht_config, ton::adnl::AdnlNodeIdShort local_id,
-                            td::actor::ActorId<ton::adnl::Adnl> adnl, td::Promise<td::BufferSlice> promise)
-      : dht_config_(std::move(dht_config)), local_id_(local_id), adnl_(adnl), promise_(std::move(promise)) {
-  }
+    CheckDhtServerStatusQuery(std::shared_ptr<ton::dht::DhtGlobalConfig> dht_config,
+                              ton::adnl::AdnlNodeIdShort local_id,
+                              td::actor::ActorId<ton::adnl::Adnl> adnl, td::Promise<td::BufferSlice> promise)
+            : dht_config_(std::move(dht_config)), local_id_(local_id), adnl_(adnl), promise_(std::move(promise)) {
+    }
 
- private:
-  std::shared_ptr<ton::dht::DhtGlobalConfig> dht_config_;
+private:
+    std::shared_ptr<ton::dht::DhtGlobalConfig> dht_config_;
 
-  std::vector<bool> result_;
-  td::uint32 pending_;
+    std::vector<bool> result_;
+    td::uint32 pending_;
 
-  ton::adnl::AdnlNodeIdShort local_id_;
-  td::actor::ActorId<ton::adnl::Adnl> adnl_;
-  td::Promise<td::BufferSlice> promise_;
+    ton::adnl::AdnlNodeIdShort local_id_;
+    td::actor::ActorId<ton::adnl::Adnl> adnl_;
+    td::Promise<td::BufferSlice> promise_;
 };
 
 #if TON_USE_JEMALLOC
@@ -1277,12 +1280,15 @@ class JemallocStatsWriter : public td::actor::Actor {
 void ValidatorEngine::set_local_config(std::string str) {
   local_config_ = str;
 }
+
 void ValidatorEngine::set_global_config(std::string str) {
   global_config_ = str;
 }
+
 void ValidatorEngine::set_db_root(std::string db_root) {
   db_root_ = db_root;
 }
+
 void ValidatorEngine::schedule_shutdown(double at) {
   td::Timestamp ts = td::Timestamp::at_unix(at);
   if (ts.is_in_past()) {
@@ -1290,25 +1296,33 @@ void ValidatorEngine::schedule_shutdown(double at) {
   } else {
     LOG(INFO) << "Schedule shutdown for " << at << " (in " << ts.in() << "s)";
     ton::delay_action([]() {
-      LOG(WARNING) << "Shutting down as scheduled";
-      std::_Exit(0);
+        LOG(WARNING) << "Shutting down as scheduled";
+        std::_Exit(0);
     }, ts);
   }
 }
+
 void ValidatorEngine::start_up() {
   alarm_timestamp() = td::Timestamp::in(1.0 + td::Random::fast(0, 100) * 0.01);
+
+
+  const char *value = getenv("TON_PROMETHEUS_SHARE_CREDENTIALS");
+  allow_share_liteserver_credentials_ = bool(value);
+
+
 #if TON_USE_JEMALLOC
   td::actor::create_actor<JemallocStatsWriter>("mem-stat").release();
 #endif
 }
 
-void ValidatorEngine::update_prometheus_exporter_stats(){
+void ValidatorEngine::update_prometheus_exporter_stats() {
   auto PromId = prometheus_exporter_.get();
 
   auto P = td::PromiseCreator::lambda(
           [PromId](td::Result<std::vector<std::pair<std::string, std::string>>> R) {
               if (R.is_ok()) {
-                td::actor::send_closure(PromId, &ton::PrometheusExporterActor::set_validator_manager_stats, R.move_as_ok());
+                td::actor::send_closure(PromId, &ton::PrometheusExporterActor::set_validator_manager_stats,
+                                        R.move_as_ok());
               }
           });
   td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::prepare_stats, std::move(P));
@@ -1316,12 +1330,26 @@ void ValidatorEngine::update_prometheus_exporter_stats(){
   auto P2 = td::PromiseCreator::lambda(
           [PromId](td::Result<std::string> R) {
               if (R.is_ok()) {
-                td::actor::send_closure(PromId, &ton::PrometheusExporterActor::set_validator_manager_actor_stats, R.move_as_ok());
+                td::actor::send_closure(PromId, &ton::PrometheusExporterActor::set_validator_manager_actor_stats,
+                                        R.move_as_ok());
               }
           });
-  td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::prepare_actor_stats, std::move(P2));
-}
+  td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::prepare_actor_stats,
+                          std::move(P2));
 
+  if (allow_share_liteserver_credentials_){
+    std::string liteserver_credentials;
+    for (auto &ip: addrs_) {
+      for (auto &[t, e]: config_.liteservers) {
+        liteserver_credentials += "ton_liteserver_credentials{ip=\"" + ip.get_ip_str().str() + "\" port=\"" + std::to_string(t) + "\"} " +
+                                  keys_[e].ed25519_value().raw().to_hex() + "\n";
+      }
+    }
+
+    td::actor::send_closure(PromId, &ton::PrometheusExporterActor::set_liteserver_credentials,
+                            std::move(liteserver_credentials));
+  }
+}
 
 
 void ValidatorEngine::alarm() {
@@ -1330,11 +1358,11 @@ void ValidatorEngine::alarm() {
   if (started_) {
     if (!validator_manager_.empty()) {
       auto P = td::PromiseCreator::lambda(
-          [SelfId = actor_id(this)](td::Result<td::Ref<ton::validator::MasterchainState>> R) {
-            if (R.is_ok()) {
-              td::actor::send_closure(SelfId, &ValidatorEngine::got_state, R.move_as_ok());
-            }
-          });
+              [SelfId = actor_id(this)](td::Result<td::Ref<ton::validator::MasterchainState>> R) {
+                  if (R.is_ok()) {
+                    td::actor::send_closure(SelfId, &ValidatorEngine::got_state, R.move_as_ok());
+                  }
+              });
       td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::get_top_masterchain_state,
                               std::move(P));
     }
@@ -1350,7 +1378,7 @@ void ValidatorEngine::alarm() {
       auto val_set = state_->get_total_validator_set(0);
       auto e = val_set->export_vector();
       std::set<ton::PublicKeyHash> to_del;
-      for (auto &val : config_.validators) {
+      for (auto &val: config_.validators) {
         bool is_validator = false;
         if (val_set->is_validator(ton::NodeIdShort{val.first.bits256_value()})) {
           is_validator = true;
@@ -1360,7 +1388,7 @@ void ValidatorEngine::alarm() {
           continue;
         }
       }
-      for (auto &x : to_del) {
+      for (auto &x: to_del) {
         config_.config_del_validator_permanent_key(x);
         if (!validator_manager_.empty()) {
           td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::del_permanent_key, x,
@@ -1377,18 +1405,18 @@ void ValidatorEngine::alarm() {
         write_config([](td::Unit) {});
       }
 
-      if (prometheus_available_){
+      if (prometheus_available_) {
         update_prometheus_exporter_stats();
       }
     }
-    for (auto &x : config_.gc) {
+    for (auto &x: config_.gc) {
       if (running_gc_.count(x) == 0) {
         running_gc_.insert(x);
         keys_.erase(x);
 
         auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), x](td::Result<td::Unit> R) {
-          R.ensure();
-          td::actor::send_closure(SelfId, &ValidatorEngine::deleted_key, x);
+            R.ensure();
+            td::actor::send_closure(SelfId, &ValidatorEngine::deleted_key, x);
         });
         td::actor::send_closure(keyring_, &ton::keyring::Keyring::del_key, x, std::move(P));
       }
@@ -1479,10 +1507,10 @@ td::Status ValidatorEngine::load_global_config() {
   if (key_proof_ttl_ != 0) {
     validator_options_.write().set_key_proof_ttl(key_proof_ttl_);
   }
-  for (auto seq : unsafe_catchains_) {
+  for (auto seq: unsafe_catchains_) {
     validator_options_.write().add_unsafe_resync_catchain(seq);
   }
-  for (auto rot : unsafe_catchain_rotations_) {
+  for (auto rot: unsafe_catchain_rotations_) {
     validator_options_.write().add_unsafe_catchain_rotate(rot.first, rot.second.first, rot.second.second);
   }
   if (truncate_seqno_ > 0) {
@@ -1516,7 +1544,7 @@ td::Status ValidatorEngine::load_global_config() {
   }
 
   std::vector<ton::BlockIdExt> h;
-  for (auto &x : conf.validator_->hardforks_) {
+  for (auto &x: conf.validator_->hardforks_) {
     auto b = ton::create_block_id(x);
     if (!b.is_masterchain()) {
       return td::Status::Error(ton::ErrorCode::error,
@@ -1525,7 +1553,7 @@ td::Status ValidatorEngine::load_global_config() {
     if (!b.is_valid_full()) {
       return td::Status::Error(ton::ErrorCode::error, "[validator/hardforks] section contains invalid block_id");
     }
-    for (auto &y : h) {
+    for (auto &y: h) {
       if (y.is_valid() && y.seqno() >= b.seqno()) {
         y.invalidate();
       }
@@ -1543,42 +1571,42 @@ void ValidatorEngine::set_shard_check_function() {
     validator_options_.write().set_shard_check_function([](ton::ShardIdFull shard) -> bool { return true; });
   } else {
     std::vector<ton::ShardIdFull> shards = {ton::ShardIdFull(ton::masterchainId)};
-    for (const auto& s : config_.shards_to_monitor) {
+    for (const auto &s: config_.shards_to_monitor) {
       shards.push_back(s);
     }
     std::sort(shards.begin(), shards.end());
     shards.erase(std::unique(shards.begin(), shards.end()), shards.end());
     validator_options_.write().set_shard_check_function(
-        [shards = std::move(shards)](ton::ShardIdFull shard) -> bool {
-          for (auto s : shards) {
-            if (shard_intersects(shard, s)) {
-              return true;
-            }
-          }
-          return false;
-        });
+            [shards = std::move(shards)](ton::ShardIdFull shard) -> bool {
+                for (auto s: shards) {
+                  if (shard_intersects(shard, s)) {
+                    return true;
+                  }
+                }
+                return false;
+            });
   }
 }
 
 void ValidatorEngine::load_empty_local_config(td::Promise<td::Unit> promise) {
   auto ret_promise = td::PromiseCreator::lambda(
-      [SelfId = actor_id(this), promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-        if (R.is_error()) {
-          promise.set_error(R.move_as_error());
-        } else {
-          td::actor::send_closure(SelfId, &ValidatorEngine::write_config, std::move(promise));
-        }
-      });
+          [SelfId = actor_id(this), promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+              if (R.is_error()) {
+                promise.set_error(R.move_as_error());
+              } else {
+                td::actor::send_closure(SelfId, &ValidatorEngine::write_config, std::move(promise));
+              }
+          });
 
   td::MultiPromise mp;
   auto ig = mp.init_guard();
   ig.add_promise(std::move(ret_promise));
 
-  for (auto &addr : addrs_) {
+  for (auto &addr: addrs_) {
     config_
-        .config_add_network_addr(addr, addr, nullptr, std::vector<AdnlCategory>{0, 1, 2, 3},
-                                 std::vector<AdnlCategory>{})
-        .ensure();
+            .config_add_network_addr(addr, addr, nullptr, std::vector<AdnlCategory>{0, 1, 2, 3},
+                                     std::vector<AdnlCategory>{})
+            .ensure();
   }
 
   {
@@ -1601,7 +1629,7 @@ void ValidatorEngine::load_empty_local_config(td::Promise<td::Unit> promise) {
 }
 
 void ValidatorEngine::load_local_config(td::Promise<td::Unit> promise) {
-  for (ton::ShardIdFull shard : add_shard_cmds_) {
+  for (ton::ShardIdFull shard: add_shard_cmds_) {
     auto R = config_.config_add_shard(shard);
     if (R.is_error()) {
       LOG(WARNING) << "Cannot add shard " << shard.to_str() << " : " << R.move_as_error();
@@ -1634,26 +1662,26 @@ void ValidatorEngine::load_local_config(td::Promise<td::Unit> promise) {
   }
 
   auto ret_promise = td::PromiseCreator::lambda(
-      [SelfId = actor_id(this), promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-        if (R.is_error()) {
-          promise.set_error(R.move_as_error());
-        } else {
-          td::actor::send_closure(SelfId, &ValidatorEngine::write_config, std::move(promise));
-        }
-      });
+          [SelfId = actor_id(this), promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+              if (R.is_error()) {
+                promise.set_error(R.move_as_error());
+              } else {
+                td::actor::send_closure(SelfId, &ValidatorEngine::write_config, std::move(promise));
+              }
+          });
 
   td::MultiPromise mp;
   auto ig = mp.init_guard();
   ig.add_promise(std::move(ret_promise));
 
-  for (auto &addr : addrs_) {
+  for (auto &addr: addrs_) {
     config_
-        .config_add_network_addr(addr, addr, nullptr, std::vector<AdnlCategory>{0, 1, 2, 3},
-                                 std::vector<AdnlCategory>{})
-        .ensure();
+            .config_add_network_addr(addr, addr, nullptr, std::vector<AdnlCategory>{0, 1, 2, 3},
+                                     std::vector<AdnlCategory>{})
+            .ensure();
   }
 
-  for (auto &local_id : conf.local_ids_) {
+  for (auto &local_id: conf.local_ids_) {
     ton::PrivateKey pk{local_id->id_};
     keys_.emplace(pk.compute_short_id(), pk.compute_public_key());
     td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key, std::move(pk), false, ig.get_promise());
@@ -1662,31 +1690,31 @@ void ValidatorEngine::load_local_config(td::Promise<td::Unit> promise) {
   td::uint32 max_time = 2000000000;
 
   if (conf.dht_.size() > 0) {
-    for (auto &d : conf.dht_) {
+    for (auto &d: conf.dht_) {
       ton::ton_api::downcast_call(*d.get(), td::overloaded(
-                                                [&](ton::ton_api::dht_config_local &obj) {
-                                                  auto node_id = ton::adnl::AdnlNodeIdShort{obj.id_->id_};
-                                                  auto it = keys_.find(node_id.pubkey_hash());
-                                                  if (it == keys_.end()) {
-                                                    ig.get_promise().set_error(td::Status::Error(
-                                                        ton::ErrorCode::error, "cannot find private key for dht"));
-                                                    return;
-                                                  }
+              [&](ton::ton_api::dht_config_local &obj) {
+                  auto node_id = ton::adnl::AdnlNodeIdShort{obj.id_->id_};
+                  auto it = keys_.find(node_id.pubkey_hash());
+                  if (it == keys_.end()) {
+                    ig.get_promise().set_error(td::Status::Error(
+                            ton::ErrorCode::error, "cannot find private key for dht"));
+                    return;
+                  }
 
-                                                  config_.config_add_adnl_addr(node_id.pubkey_hash(), 0).ensure();
-                                                  config_.config_add_dht_node(node_id.pubkey_hash()).ensure();
-                                                },
-                                                [&](ton::ton_api::dht_config_random_local &obj) {
-                                                  for (td::int32 i = 0; i < obj.cnt_; i++) {
-                                                    auto pk = ton::PrivateKey{ton::privkeys::Ed25519::random()};
-                                                    keys_.emplace(pk.compute_short_id(), pk.compute_public_key());
-                                                    auto id = pk.compute_short_id();
-                                                    td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key,
-                                                                            std::move(pk), false, ig.get_promise());
-                                                    config_.config_add_adnl_addr(id, 0).ensure();
-                                                    config_.config_add_dht_node(id).ensure();
-                                                  }
-                                                }));
+                  config_.config_add_adnl_addr(node_id.pubkey_hash(), 0).ensure();
+                  config_.config_add_dht_node(node_id.pubkey_hash()).ensure();
+              },
+              [&](ton::ton_api::dht_config_random_local &obj) {
+                  for (td::int32 i = 0; i < obj.cnt_; i++) {
+                    auto pk = ton::PrivateKey{ton::privkeys::Ed25519::random()};
+                    keys_.emplace(pk.compute_short_id(), pk.compute_public_key());
+                    auto id = pk.compute_short_id();
+                    td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key,
+                                            std::move(pk), false, ig.get_promise());
+                    config_.config_add_adnl_addr(id, 0).ensure();
+                    config_.config_add_dht_node(id).ensure();
+                  }
+              }));
     }
   } else {
     auto pk = ton::PrivateKey{ton::privkeys::Ed25519::random()};
@@ -1698,35 +1726,35 @@ void ValidatorEngine::load_local_config(td::Promise<td::Unit> promise) {
   }
 
   if (conf.validators_.size() > 0) {
-    for (auto &val : conf.validators_) {
+    for (auto &val: conf.validators_) {
       ton::ton_api::downcast_call(
-          *val.get(), td::overloaded(
-                          [&](ton::ton_api::validator_config_local &obj) {
-                            auto id = ton::PublicKeyHash{obj.id_->id_};
-                            auto it = keys_.find(id);
-                            if (it == keys_.end()) {
-                              ig.get_promise().set_error(
-                                  td::Status::Error(ton::ErrorCode::error, "cannot find private key for dht"));
-                              return;
-                            }
+              *val.get(), td::overloaded(
+                      [&](ton::ton_api::validator_config_local &obj) {
+                          auto id = ton::PublicKeyHash{obj.id_->id_};
+                          auto it = keys_.find(id);
+                          if (it == keys_.end()) {
+                            ig.get_promise().set_error(
+                                    td::Status::Error(ton::ErrorCode::error, "cannot find private key for dht"));
+                            return;
+                          }
 
-                            config_.config_add_adnl_addr(id, 2).ensure();
-                            config_.config_add_validator_permanent_key(id, 0, max_time).ensure();
-                            config_.config_add_validator_temp_key(id, id, max_time).ensure();
-                            config_.config_add_validator_adnl_id(id, id, max_time).ensure();
-                          },
-                          [&](ton::ton_api::validator_config_random_local &obj) {
-                            auto pk = ton::PrivateKey{ton::privkeys::Ed25519::random()};
-                            keys_.emplace(pk.compute_short_id(), pk.compute_public_key());
-                            auto id = pk.compute_short_id();
-                            td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key, std::move(pk), false,
-                                                    ig.get_promise());
+                          config_.config_add_adnl_addr(id, 2).ensure();
+                          config_.config_add_validator_permanent_key(id, 0, max_time).ensure();
+                          config_.config_add_validator_temp_key(id, id, max_time).ensure();
+                          config_.config_add_validator_adnl_id(id, id, max_time).ensure();
+                      },
+                      [&](ton::ton_api::validator_config_random_local &obj) {
+                          auto pk = ton::PrivateKey{ton::privkeys::Ed25519::random()};
+                          keys_.emplace(pk.compute_short_id(), pk.compute_public_key());
+                          auto id = pk.compute_short_id();
+                          td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key, std::move(pk), false,
+                                                  ig.get_promise());
 
-                            config_.config_add_adnl_addr(id, 2).ensure();
-                            config_.config_add_validator_permanent_key(id, 0, max_time).ensure();
-                            config_.config_add_validator_temp_key(id, id, max_time).ensure();
-                            config_.config_add_validator_adnl_id(id, id, max_time).ensure();
-                          }));
+                          config_.config_add_adnl_addr(id, 2).ensure();
+                          config_.config_add_validator_permanent_key(id, 0, max_time).ensure();
+                          config_.config_add_validator_temp_key(id, id, max_time).ensure();
+                          config_.config_add_validator_adnl_id(id, id, max_time).ensure();
+                      }));
     }
   } else {
     // DO NOTHING
@@ -1741,26 +1769,26 @@ void ValidatorEngine::load_local_config(td::Promise<td::Unit> promise) {
     config_.config_add_full_node_adnl_id(adnl_short_id).ensure();
   }
 
-  for (auto &ls : conf.liteservers_) {
+  for (auto &ls: conf.liteservers_) {
     ton::ton_api::downcast_call(*ls.get(), td::overloaded(
-                                               [&](ton::ton_api::liteserver_config_local &cfg) {
-                                                 ton::PrivateKey pk{cfg.id_};
-                                                 keys_.emplace(pk.compute_short_id(), pk.compute_public_key());
-                                                 auto short_id = pk.compute_short_id();
-                                                 td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key,
-                                                                         std::move(pk), false, ig.get_promise());
-                                                 config_.config_add_lite_server(short_id, cfg.port_).ensure();
-                                               },
-                                               [&](ton::ton_api::liteserver_config_random_local &cfg) {
-                                                 auto pk = ton::PrivateKey{ton::privkeys::Ed25519::random()};
-                                                 auto short_id = pk.compute_short_id();
-                                                 td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key,
-                                                                         std::move(pk), false, ig.get_promise());
-                                                 config_.config_add_lite_server(short_id, cfg.port_).ensure();
-                                               }));
+            [&](ton::ton_api::liteserver_config_local &cfg) {
+                ton::PrivateKey pk{cfg.id_};
+                keys_.emplace(pk.compute_short_id(), pk.compute_public_key());
+                auto short_id = pk.compute_short_id();
+                td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key,
+                                        std::move(pk), false, ig.get_promise());
+                config_.config_add_lite_server(short_id, cfg.port_).ensure();
+            },
+            [&](ton::ton_api::liteserver_config_random_local &cfg) {
+                auto pk = ton::PrivateKey{ton::privkeys::Ed25519::random()};
+                auto short_id = pk.compute_short_id();
+                td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key,
+                                        std::move(pk), false, ig.get_promise());
+                config_.config_add_lite_server(short_id, cfg.port_).ensure();
+            }));
   }
 
-  for (auto &ci : conf.control_) {
+  for (auto &ci: conf.control_) {
     ton::PrivateKey pk{ci->priv_};
     keys_.emplace(pk.compute_short_id(), pk.compute_public_key());
     auto short_id = pk.compute_short_id();
@@ -1784,16 +1812,16 @@ void ValidatorEngine::load_config(td::Promise<td::Unit> promise) {
   }
   if (conf_data_R.is_error()) {
     auto P = td::PromiseCreator::lambda(
-        [name = local_config_, new_name = config_file_, promise = std::move(promise)](td::Result<td::Unit> R) {
-          if (R.is_error()) {
-            LOG(ERROR) << "failed to parse local config '" << name << "': " << R.move_as_error();
-            std::_Exit(2);
-          } else {
-            LOG(ERROR) << "created config file '" << new_name << "'";
-            LOG(ERROR) << "check it manually before continue";
-            std::_Exit(0);
-          }
-        });
+            [name = local_config_, new_name = config_file_, promise = std::move(promise)](td::Result<td::Unit> R) {
+                if (R.is_error()) {
+                  LOG(ERROR) << "failed to parse local config '" << name << "': " << R.move_as_error();
+                  std::_Exit(2);
+                } else {
+                  LOG(ERROR) << "created config file '" << new_name << "'";
+                  LOG(ERROR) << "check it manually before continue";
+                  std::_Exit(0);
+                }
+            });
 
     load_local_config(std::move(P));
     return;
@@ -1820,11 +1848,11 @@ void ValidatorEngine::load_config(td::Promise<td::Unit> promise) {
   auto ig = mp.init_guard();
   ig.add_promise(std::move(promise));
 
-  for (auto &key : config_.keys_refcnt) {
+  for (auto &key: config_.keys_refcnt) {
     td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key_short, key.first, get_key_promise(ig));
   }
 
-  for (ton::ShardIdFull shard : add_shard_cmds_) {
+  for (ton::ShardIdFull shard: add_shard_cmds_) {
     auto R = config_.config_add_shard(shard);
     if (R.is_error()) {
       LOG(WARNING) << "Cannot add shard " << shard.to_str() << " : " << R.move_as_error();
@@ -1852,14 +1880,14 @@ void ValidatorEngine::write_config(td::Promise<td::Unit> promise) {
 
 td::Promise<ton::PublicKey> ValidatorEngine::get_key_promise(td::MultiPromise::InitGuard &ig) {
   auto P = td::PromiseCreator::lambda(
-      [SelfId = actor_id(this), promise = ig.get_promise()](td::Result<ton::PublicKey> R) mutable {
-        if (R.is_error()) {
-          promise.set_error(R.move_as_error());
-        } else {
-          td::actor::send_closure(SelfId, &ValidatorEngine::got_key, R.move_as_ok());
-          promise.set_value(td::Unit());
-        }
-      });
+          [SelfId = actor_id(this), promise = ig.get_promise()](td::Result<ton::PublicKey> R) mutable {
+              if (R.is_error()) {
+                promise.set_error(R.move_as_error());
+              } else {
+                td::actor::send_closure(SelfId, &ValidatorEngine::got_key, R.move_as_ok());
+                promise.set_value(td::Unit());
+              }
+          });
   return std::move(P);
 }
 
@@ -1878,10 +1906,10 @@ void ValidatorEngine::start_adnl() {
   adnl_ = ton::adnl::Adnl::create(db_root_, keyring_.get());
   td::actor::send_closure(adnl_, &ton::adnl::Adnl::register_network_manager, adnl_network_manager_.get());
 
-  for (auto &addr : config_.addrs) {
+  for (auto &addr: config_.addrs) {
     add_addr(addr.first, addr.second);
   }
-  for (auto &adnl : config_.adnl_ids) {
+  for (auto &adnl: config_.adnl_ids) {
     add_adnl(adnl.first, adnl.second);
   }
 
@@ -1891,10 +1919,10 @@ void ValidatorEngine::start_adnl() {
 
 void ValidatorEngine::add_addr(const Config::Addr &addr, const Config::AddrCats &cats) {
   ton::adnl::AdnlCategoryMask cat_mask;
-  for (auto cat : cats.cats) {
+  for (auto cat: cats.cats) {
     cat_mask[cat] = true;
   }
-  for (auto cat : cats.priority_cats) {
+  for (auto cat: cats.priority_cats) {
     cat_mask[cat] = true;
   }
   if (!cats.proxy) {
@@ -1908,16 +1936,16 @@ void ValidatorEngine::add_addr(const Config::Addr &addr, const Config::AddrCats 
 
   td::uint32 ts = static_cast<td::uint32>(td::Clocks::system());
 
-  for (auto cat : cats.cats) {
+  for (auto cat: cats.cats) {
     ton::adnl::AdnlAddress x = ton::adnl::AdnlAddressImpl::create(
-        ton::create_tl_object<ton::ton_api::adnl_address_udp>(cats.in_addr.get_ipv4(), cats.in_addr.get_port()));
+            ton::create_tl_object<ton::ton_api::adnl_address_udp>(cats.in_addr.get_ipv4(), cats.in_addr.get_port()));
     addr_lists_[cat].add_addr(std::move(x));
     addr_lists_[cat].set_version(ts);
     addr_lists_[cat].set_reinit_date(ton::adnl::Adnl::adnl_start_time());
   }
-  for (auto cat : cats.priority_cats) {
+  for (auto cat: cats.priority_cats) {
     ton::adnl::AdnlAddress x = ton::adnl::AdnlAddressImpl::create(
-        ton::create_tl_object<ton::ton_api::adnl_address_udp>(cats.in_addr.get_ipv4(), cats.in_addr.get_port()));
+            ton::create_tl_object<ton::ton_api::adnl_address_udp>(cats.in_addr.get_ipv4(), cats.in_addr.get_port()));
     prio_addr_lists_[cat].add_addr(std::move(x));
     prio_addr_lists_[cat].set_version(ts);
     prio_addr_lists_[cat].set_reinit_date(ton::adnl::Adnl::adnl_start_time());
@@ -1944,7 +1972,7 @@ void ValidatorEngine::add_dht(ton::PublicKeyHash id) {
 }
 
 void ValidatorEngine::start_dht() {
-  for (auto &dht : config_.dht_ids) {
+  for (auto &dht: config_.dht_ids) {
     add_dht(dht);
   }
 
@@ -1976,7 +2004,7 @@ void ValidatorEngine::started_rldp() {
 void ValidatorEngine::start_overlays() {
   if (!default_dht_node_.is_zero()) {
     overlay_manager_ =
-        ton::overlay::Overlays::create(db_root_, keyring_.get(), adnl_.get(), dht_nodes_[default_dht_node_].get());
+            ton::overlay::Overlays::create(db_root_, keyring_.get(), adnl_.get(), dht_nodes_[default_dht_node_].get());
   }
   started_overlays();
 }
@@ -1991,13 +2019,13 @@ void ValidatorEngine::start_validator() {
   load_collator_options();
 
   validator_manager_ = ton::validator::ValidatorManagerFactory::create(
-      validator_options_, db_root_, keyring_.get(), adnl_.get(), rldp_.get(), overlay_manager_.get());
+          validator_options_, db_root_, keyring_.get(), adnl_.get(), rldp_.get(), overlay_manager_.get());
 
-  for (auto &v : config_.validators) {
+  for (auto &v: config_.validators) {
     td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::add_permanent_key, v.first,
                             [](td::Unit) {});
 
-    for (auto &t : v.second.temp_keys) {
+    for (auto &t: v.second.temp_keys) {
       td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::add_temp_key, t.first,
                               [](td::Unit) {});
     }
@@ -2005,7 +2033,8 @@ void ValidatorEngine::start_validator() {
 
 //  LOG(ERROR) << "set_block_publisher";
   if (publisher_temp_) {
-    td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::set_block_publisher, std::move(publisher_temp_));
+    td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::set_block_publisher,
+                            std::move(publisher_temp_));
   }
   started_validator();
 }
@@ -2021,28 +2050,29 @@ void ValidatorEngine::start_full_node() {
     td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key, std::move(pk), true, [](td::Unit) {});
     if (config_.full_node_slaves.size() > 0) {
       std::vector<std::pair<ton::adnl::AdnlNodeIdFull, td::IPAddress>> vec;
-      for (auto &x : config_.full_node_slaves) {
+      for (auto &x: config_.full_node_slaves) {
         vec.emplace_back(ton::adnl::AdnlNodeIdFull{x.key}, x.addr);
       }
       class Cb : public ton::adnl::AdnlExtClient::Callback {
-       public:
-        void on_ready() override {
-        }
-        void on_stop_ready() override {
-        }
+      public:
+          void on_ready() override {
+          }
+
+          void on_stop_ready() override {
+          }
       };
       full_node_client_ = ton::adnl::AdnlExtMultiClient::create(std::move(vec), std::make_unique<Cb>());
     }
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) {
-      R.ensure();
-      td::actor::send_closure(SelfId, &ValidatorEngine::started_full_node);
+        R.ensure();
+        td::actor::send_closure(SelfId, &ValidatorEngine::started_full_node);
     });
     full_node_ = ton::validator::fullnode::FullNode::create(
-        short_id, ton::adnl::AdnlNodeIdShort{config_.full_node}, validator_options_->zero_block_id().file_hash,
-        config_.full_node_config, keyring_.get(), adnl_.get(), rldp_.get(), rldp2_.get(),
-        default_dht_node_.is_zero() ? td::actor::ActorId<ton::dht::Dht>{} : dht_nodes_[default_dht_node_].get(),
-        overlay_manager_.get(), validator_manager_.get(), full_node_client_.get(), db_root_, std::move(P));
-    for (auto &v : config_.validators) {
+            short_id, ton::adnl::AdnlNodeIdShort{config_.full_node}, validator_options_->zero_block_id().file_hash,
+            config_.full_node_config, keyring_.get(), adnl_.get(), rldp_.get(), rldp2_.get(),
+            default_dht_node_.is_zero() ? td::actor::ActorId<ton::dht::Dht>{} : dht_nodes_[default_dht_node_].get(),
+            overlay_manager_.get(), validator_manager_.get(), full_node_client_.get(), db_root_, std::move(P));
+    for (auto &v: config_.validators) {
       td::actor::send_closure(full_node_, &ton::validator::fullnode::FullNode::add_permanent_key, v.first,
                               [](td::Unit) {});
     }
@@ -2069,7 +2099,7 @@ void ValidatorEngine::add_lite_server(ton::PublicKeyHash id, td::uint16 port) {
 }
 
 void ValidatorEngine::start_lite_server() {
-  for (auto &s : config_.liteservers) {
+  for (auto &s: config_.liteservers) {
     add_lite_server(s.second, static_cast<td::uint16>(s.first));
   }
 
@@ -2082,22 +2112,23 @@ void ValidatorEngine::started_lite_server() {
 
 void ValidatorEngine::add_control_interface(ton::PublicKeyHash id, td::uint16 port) {
   class Callback : public ton::adnl::Adnl::Callback {
-   public:
-    void receive_message(ton::adnl::AdnlNodeIdShort src, ton::adnl::AdnlNodeIdShort dst,
-                         td::BufferSlice data) override {
-    }
-    void receive_query(ton::adnl::AdnlNodeIdShort src, ton::adnl::AdnlNodeIdShort dst, td::BufferSlice data,
-                       td::Promise<td::BufferSlice> promise) override {
-      td::actor::send_closure(id_, &ValidatorEngine::process_control_query, port_, src, dst, std::move(data),
-                              std::move(promise));
-    }
+  public:
+      void receive_message(ton::adnl::AdnlNodeIdShort src, ton::adnl::AdnlNodeIdShort dst,
+                           td::BufferSlice data) override {
+      }
 
-    Callback(td::actor::ActorId<ValidatorEngine> id, td::uint16 port) : id_(id), port_(port) {
-    }
+      void receive_query(ton::adnl::AdnlNodeIdShort src, ton::adnl::AdnlNodeIdShort dst, td::BufferSlice data,
+                         td::Promise<td::BufferSlice> promise) override {
+        td::actor::send_closure(id_, &ValidatorEngine::process_control_query, port_, src, dst, std::move(data),
+                                std::move(promise));
+      }
 
-   private:
-    td::actor::ActorId<ValidatorEngine> id_;
-    td::uint16 port_;
+      Callback(td::actor::ActorId<ValidatorEngine> id, td::uint16 port) : id_(id), port_(port) {
+      }
+
+  private:
+      td::actor::ActorId<ValidatorEngine> id_;
+      td::uint16 port_;
   };
 
   td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_id, ton::adnl::AdnlNodeIdFull{keys_[id]},
@@ -2118,19 +2149,19 @@ void ValidatorEngine::start_control_interface() {
 
   std::vector<td::uint16> ports;
   auto P = td::PromiseCreator::lambda(
-      [SelfId = actor_id(this)](td::Result<td::actor::ActorOwn<ton::adnl::AdnlExtServer>> R) {
-        R.ensure();
-        td::actor::send_closure(SelfId, &ValidatorEngine::started_control_interface, R.move_as_ok());
-      });
+          [SelfId = actor_id(this)](td::Result<td::actor::ActorOwn<ton::adnl::AdnlExtServer>> R) {
+              R.ensure();
+              td::actor::send_closure(SelfId, &ValidatorEngine::started_control_interface, R.move_as_ok());
+          });
   td::actor::send_closure(adnl_, &ton::adnl::Adnl::create_ext_server, std::move(c_ids), std::move(ports), std::move(P));
 }
 
 void ValidatorEngine::started_control_interface(td::actor::ActorOwn<ton::adnl::AdnlExtServer> control_ext_server) {
   control_ext_server_ = std::move(control_ext_server);
-  for (auto &s : config_.controls) {
+  for (auto &s: config_.controls) {
     add_control_interface(s.second.key, static_cast<td::uint16>(s.first));
 
-    for (auto &p : s.second.clients) {
+    for (auto &p: s.second.clients) {
       add_control_process(s.second.key, static_cast<td::uint16>(s.first), p.first, p.second);
     }
   }
@@ -2138,19 +2169,21 @@ void ValidatorEngine::started_control_interface(td::actor::ActorOwn<ton::adnl::A
 }
 
 void ValidatorEngine::start_full_node_masters() {
-  for (auto &x : config_.full_node_masters) {
+  for (auto &x: config_.full_node_masters) {
     full_node_masters_.emplace(
-        static_cast<td::uint16>(x.first),
-        ton::validator::fullnode::FullNodeMaster::create(
-            ton::adnl::AdnlNodeIdShort{x.second}, static_cast<td::uint16>(x.first),
-            validator_options_->zero_block_id().file_hash, keyring_.get(), adnl_.get(), validator_manager_.get()));
+            static_cast<td::uint16>(x.first),
+            ton::validator::fullnode::FullNodeMaster::create(
+                    ton::adnl::AdnlNodeIdShort{x.second}, static_cast<td::uint16>(x.first),
+                    validator_options_->zero_block_id().file_hash, keyring_.get(), adnl_.get(),
+                    validator_manager_.get()));
   }
   started_full_node_masters();
 }
 
 void ValidatorEngine::started_full_node_masters() {
-  if (prometheus_available_){
-    prometheus_exporter_ = td::actor::create_actor<ton::PrometheusExporterActor>("PrometheusExporterActor", prometheus_port_);
+  if (prometheus_available_) {
+    prometheus_exporter_ = td::actor::create_actor<ton::PrometheusExporterActor>("PrometheusExporterActor",
+                                                                                 prometheus_port_);
     td::actor::send_closure(prometheus_exporter_, &ton::PrometheusExporterActor::run);
     if (!validator_manager_.empty()) {
       td::actor::send_closure(validator_manager_,
@@ -2457,10 +2490,10 @@ void ValidatorEngine::try_del_validator_adnl_addr(ton::PublicKeyHash perm, ton::
 void ValidatorEngine::reload_adnl_addrs() {
   addr_lists_.clear();
   prio_addr_lists_.clear();
-  for (auto &addr : config_.addrs) {
+  for (auto &addr: config_.addrs) {
     add_addr(addr.first, addr.second);
   }
-  for (auto &adnl : config_.adnl_ids) {
+  for (auto &adnl: config_.adnl_ids) {
     add_adnl(adnl.first, adnl.second);
   }
 }
@@ -2550,7 +2583,7 @@ void ValidatorEngine::try_del_proxy(td::uint32 ip, td::int32 port, std::vector<A
 
 void ValidatorEngine::load_custom_overlays_config() {
   custom_overlays_config_ =
-      ton::create_tl_object<ton::ton_api::engine_validator_customOverlaysConfig>();
+          ton::create_tl_object<ton::ton_api::engine_validator_customOverlaysConfig>();
   auto data_R = td::read_file(custom_overlays_config_file());
   if (data_R.is_error()) {
     return;
@@ -2568,7 +2601,7 @@ void ValidatorEngine::load_custom_overlays_config() {
     return;
   }
 
-  for (auto &overlay : custom_overlays_config_->overlays_) {
+  for (auto &overlay: custom_overlays_config_->overlays_) {
     td::actor::send_closure(full_node_, &ton::validator::fullnode::FullNode::add_custom_overlay,
                             ton::validator::fullnode::CustomOverlayParams::fetch(*overlay),
                             [](td::Result<td::Unit> R) { R.ensure(); });
@@ -2582,7 +2615,7 @@ td::Status ValidatorEngine::write_custom_overlays_config() {
 }
 
 void ValidatorEngine::add_custom_overlay_to_config(
-    ton::tl_object_ptr<ton::ton_api::engine_validator_customOverlay> overlay, td::Promise<td::Unit> promise) {
+        ton::tl_object_ptr<ton::ton_api::engine_validator_customOverlay> overlay, td::Promise<td::Unit> promise) {
   custom_overlays_config_->overlays_.push_back(std::move(overlay));
   TRY_STATUS_PROMISE(promise, write_custom_overlays_config());
   promise.set_result(td::Unit());
@@ -2603,7 +2636,7 @@ void ValidatorEngine::del_custom_overlay_from_config(std::string name, td::Promi
 
 static td::Result<td::Ref<ton::validator::CollatorOptions>> parse_collator_options(td::MutableSlice json_str) {
   td::Ref<ton::validator::CollatorOptions> ref{true};
-  ton::validator::CollatorOptions& opts = ref.write();
+  ton::validator::CollatorOptions &opts = ref.write();
 
   // Set default values (from_json leaves missing fields as is)
   ton::ton_api::engine_validator_collatorOptions f;
@@ -2614,7 +2647,7 @@ static td::Result<td::Ref<ton::validator::CollatorOptions>> parse_collator_optio
   f.dispatch_phase_3_max_total_ = opts.dispatch_phase_3_max_total;
   f.dispatch_phase_2_max_per_initiator_ = opts.dispatch_phase_2_max_per_initiator;
   f.dispatch_phase_3_max_per_initiator_ =
-      opts.dispatch_phase_3_max_per_initiator ? opts.dispatch_phase_3_max_per_initiator.value() : -1;
+          opts.dispatch_phase_3_max_per_initiator ? opts.dispatch_phase_3_max_per_initiator.value() : -1;
 
   TRY_RESULT_PREFIX(json, td::json_decode(json_str), "failed to parse json: ");
   TRY_STATUS_PREFIX(ton::ton_api::from_json(f, json.get_object()), "json does not fit TL scheme: ");
@@ -2646,11 +2679,11 @@ static td::Result<td::Ref<ton::validator::CollatorOptions>> parse_collator_optio
   } else {
     opts.dispatch_phase_3_max_per_initiator = {};
   }
-  for (const std::string& s : f.whitelist_) {
+  for (const std::string &s: f.whitelist_) {
     TRY_RESULT(addr, block::StdAddress::parse(s));
     opts.whitelist.emplace(addr.workchain, addr.addr);
   }
-  for (const std::string& s : f.prioritylist_) {
+  for (const std::string &s: f.prioritylist_) {
     TRY_RESULT(addr, block::StdAddress::parse(s));
     opts.prioritylist.emplace(addr.workchain, addr.addr);
   }
@@ -2678,21 +2711,21 @@ void ValidatorEngine::check_key(ton::PublicKeyHash id, td::Promise<td::Unit> pro
     return;
   }
   auto P = td::PromiseCreator::lambda(
-      [SelfId = actor_id(this), promise = std::move(promise)](td::Result<ton::PublicKey> R) mutable {
-        if (R.is_error()) {
-          promise.set_error(R.move_as_error());
-        } else {
-          td::actor::send_closure(SelfId, &ValidatorEngine::got_key, R.move_as_ok());
-          promise.set_value(td::Unit());
-        }
-      });
+          [SelfId = actor_id(this), promise = std::move(promise)](td::Result<ton::PublicKey> R) mutable {
+              if (R.is_error()) {
+                promise.set_error(R.move_as_error());
+              } else {
+                td::actor::send_closure(SelfId, &ValidatorEngine::got_key, R.move_as_ok());
+                promise.set_value(td::Unit());
+              }
+          });
   td::actor::send_closure(keyring_, &ton::keyring::Keyring::get_public_key, id, std::move(P));
 }
 
 td::BufferSlice ValidatorEngine::create_control_query_error(td::Status error) {
   return ton::serialize_tl_object(
-      ton::create_tl_object<ton::ton_api::engine_validator_controlQueryError>(error.code(), error.message().str()),
-      true);
+          ton::create_tl_object<ton::ton_api::engine_validator_controlQueryError>(error.code(), error.message().str()),
+          true);
 }
 
 void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_getTime &query, td::BufferSlice data,
@@ -2718,14 +2751,15 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_importPri
 
   auto pk = ton::PrivateKey{query.key_};
   auto P = td::PromiseCreator::lambda(
-      [promise = std::move(promise), hash = pk.compute_short_id()](td::Result<td::Unit> R) mutable {
-        if (R.is_error()) {
-          promise.set_value(create_control_query_error(R.move_as_error()));
-        } else {
-          promise.set_value(
-              ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_keyHash>(hash.tl()), true));
-        }
-      });
+          [promise = std::move(promise), hash = pk.compute_short_id()](td::Result<td::Unit> R) mutable {
+              if (R.is_error()) {
+                promise.set_value(create_control_query_error(R.move_as_error()));
+              } else {
+                promise.set_value(
+                        ton::serialize_tl_object(
+                                ton::create_tl_object<ton::ton_api::engine_validator_keyHash>(hash.tl()), true));
+              }
+          });
 
   td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key, std::move(pk), false, std::move(P));
 }
@@ -2756,12 +2790,12 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_exportPub
   }
 
   auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<ton::PublicKey> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error()));
-    } else {
-      auto pub = R.move_as_ok();
-      promise.set_value(ton::serialize_tl_object(pub.tl(), true));
-    }
+      if (R.is_error()) {
+        promise.set_value(create_control_query_error(R.move_as_error()));
+      } else {
+        auto pub = R.move_as_ok();
+        promise.set_value(ton::serialize_tl_object(pub.tl(), true));
+      }
   });
 
   td::actor::send_closure(keyring_, &ton::keyring::Keyring::get_public_key, ton::PublicKeyHash{query.key_hash_},
@@ -2782,14 +2816,15 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_generateK
   auto pk = ton::PrivateKey{ton::privkeys::Ed25519::random()};
 
   auto P = td::PromiseCreator::lambda(
-      [promise = std::move(promise), hash = pk.compute_short_id()](td::Result<td::Unit> R) mutable {
-        if (R.is_error()) {
-          promise.set_value(create_control_query_error(R.move_as_error()));
-        } else {
-          promise.set_value(
-              ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_keyHash>(hash.tl()), true));
-        }
-      });
+          [promise = std::move(promise), hash = pk.compute_short_id()](td::Result<td::Unit> R) mutable {
+              if (R.is_error()) {
+                promise.set_value(create_control_query_error(R.move_as_error()));
+              } else {
+                promise.set_value(
+                        ton::serialize_tl_object(
+                                ton::create_tl_object<ton::ton_api::engine_validator_keyHash>(hash.tl()), true));
+              }
+          });
 
   td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key, std::move(pk), false, std::move(P));
 }
@@ -2809,21 +2844,22 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addAdnlId
   TRY_RESULT_PROMISE(promise, cat, td::narrow_cast_safe<td::uint8>(query.category_));
 
   auto P = td::PromiseCreator::lambda(
-      [SelfId = actor_id(this), id, cat, promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-        if (R.is_error()) {
-          promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to get public key: ")));
-          return;
-        }
-        auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-          if (R.is_error()) {
-            promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to add adnl node: ")));
-          } else {
-            promise.set_value(
-                ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
-          }
-        });
-        td::actor::send_closure(SelfId, &ValidatorEngine::try_add_adnl_node, id, cat, std::move(P));
-      });
+          [SelfId = actor_id(this), id, cat, promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+              if (R.is_error()) {
+                promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to get public key: ")));
+                return;
+              }
+              auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+                  if (R.is_error()) {
+                    promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to add adnl node: ")));
+                  } else {
+                    promise.set_value(
+                            ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(),
+                                                     true));
+                  }
+              });
+              td::actor::send_closure(SelfId, &ValidatorEngine::try_add_adnl_node, id, cat, std::move(P));
+          });
 
   check_key(id, std::move(P));
 }
@@ -2842,21 +2878,22 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addDhtId 
   auto id = ton::PublicKeyHash{query.key_hash_};
 
   auto P = td::PromiseCreator::lambda(
-      [SelfId = actor_id(this), id, promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-        if (R.is_error()) {
-          promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to get public key: ")));
-          return;
-        }
-        auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-          if (R.is_error()) {
-            promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to add dht node: ")));
-          } else {
-            promise.set_value(
-                ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
-          }
-        });
-        td::actor::send_closure(SelfId, &ValidatorEngine::try_add_dht_node, id, std::move(P));
-      });
+          [SelfId = actor_id(this), id, promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+              if (R.is_error()) {
+                promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to get public key: ")));
+                return;
+              }
+              auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+                  if (R.is_error()) {
+                    promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to add dht node: ")));
+                  } else {
+                    promise.set_value(
+                            ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(),
+                                                     true));
+                  }
+              });
+              td::actor::send_closure(SelfId, &ValidatorEngine::try_add_dht_node, id, std::move(P));
+          });
 
   check_key(id, std::move(P));
 }
@@ -2876,22 +2913,23 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addValida
   auto id = ton::PublicKeyHash{query.key_hash_};
 
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), id, election_date = query.election_date_,
-                                       ttl = query.ttl_, promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to get public key: ")));
-      return;
-    }
-    auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+                                              ttl = query.ttl_, promise = std::move(promise)](
+          td::Result<td::Unit> R) mutable {
       if (R.is_error()) {
-        promise.set_value(
-            create_control_query_error(R.move_as_error_prefix("failed to add validator permanent key: ")));
-      } else {
-        promise.set_value(
-            ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to get public key: ")));
+        return;
       }
-    });
-    td::actor::send_closure(SelfId, &ValidatorEngine::try_add_validator_permanent_key, id, election_date, ttl,
-                            std::move(P));
+      auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+          if (R.is_error()) {
+            promise.set_value(
+                    create_control_query_error(R.move_as_error_prefix("failed to add validator permanent key: ")));
+          } else {
+            promise.set_value(
+                    ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+          }
+      });
+      td::actor::send_closure(SelfId, &ValidatorEngine::try_add_validator_permanent_key, id, election_date, ttl,
+                              std::move(P));
   });
 
   check_key(id, std::move(P));
@@ -2911,22 +2949,29 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addValida
   auto id = ton::PublicKeyHash{query.key_hash_};
 
   auto P =
-      td::PromiseCreator::lambda([SelfId = actor_id(this), perm_key = ton::PublicKeyHash{query.permanent_key_hash_}, id,
-                                  ttl = query.ttl_, promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-        if (R.is_error()) {
-          promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to get public key: ")));
-          return;
-        }
-        auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-          if (R.is_error()) {
-            promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to add validator temp key: ")));
-          } else {
-            promise.set_value(
-                ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
-          }
-        });
-        td::actor::send_closure(SelfId, &ValidatorEngine::try_add_validator_temp_key, perm_key, id, ttl, std::move(P));
-      });
+          td::PromiseCreator::lambda(
+                  [SelfId = actor_id(this), perm_key = ton::PublicKeyHash{query.permanent_key_hash_}, id,
+                          ttl = query.ttl_, promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+                      if (R.is_error()) {
+                        promise.set_value(
+                                create_control_query_error(R.move_as_error_prefix("failed to get public key: ")));
+                        return;
+                      }
+                      auto P = td::PromiseCreator::lambda(
+                              [promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+                                  if (R.is_error()) {
+                                    promise.set_value(create_control_query_error(
+                                            R.move_as_error_prefix("failed to add validator temp key: ")));
+                                  } else {
+                                    promise.set_value(
+                                            ton::serialize_tl_object(
+                                                    ton::create_tl_object<ton::ton_api::engine_validator_success>(),
+                                                    true));
+                                  }
+                              });
+                      td::actor::send_closure(SelfId, &ValidatorEngine::try_add_validator_temp_key, perm_key, id, ttl,
+                                              std::move(P));
+                  });
 
   check_key(id, std::move(P));
 }
@@ -2946,21 +2991,23 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addValida
   auto id = ton::PublicKeyHash{query.key_hash_};
 
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this),
-                                       perm_key = ton::PublicKeyHash{query.permanent_key_hash_}, id, ttl = query.ttl_,
-                                       promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to get public key: ")));
-      return;
-    }
-    auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+                                              perm_key = ton::PublicKeyHash{
+                                                      query.permanent_key_hash_}, id, ttl = query.ttl_,
+                                              promise = std::move(promise)](td::Result<td::Unit> R) mutable {
       if (R.is_error()) {
-        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to add validator adnl address: ")));
-      } else {
-        promise.set_value(
-            ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to get public key: ")));
+        return;
       }
-    });
-    td::actor::send_closure(SelfId, &ValidatorEngine::try_add_validator_adnl_addr, perm_key, id, ttl, std::move(P));
+      auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+          if (R.is_error()) {
+            promise.set_value(
+                    create_control_query_error(R.move_as_error_prefix("failed to add validator adnl address: ")));
+          } else {
+            promise.set_value(
+                    ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+          }
+      });
+      td::actor::send_closure(SelfId, &ValidatorEngine::try_add_validator_adnl_addr, perm_key, id, ttl, std::move(P));
   });
 
   check_key(id, std::move(P));
@@ -2981,20 +3028,21 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_changeFul
   auto id = ton::PublicKeyHash{query.adnl_id_};
 
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), id,
-                                       promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to get public key: ")));
-      return;
-    }
-    auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+                                              promise = std::move(promise)](td::Result<td::Unit> R) mutable {
       if (R.is_error()) {
-        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to change full node address: ")));
-      } else {
-        promise.set_value(
-            ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to get public key: ")));
+        return;
       }
-    });
-    td::actor::send_closure(SelfId, &ValidatorEngine::try_add_full_node_adnl_addr, id, std::move(P));
+      auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+          if (R.is_error()) {
+            promise.set_value(
+                    create_control_query_error(R.move_as_error_prefix("failed to change full node address: ")));
+          } else {
+            promise.set_value(
+                    ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+          }
+      });
+      td::actor::send_closure(SelfId, &ValidatorEngine::try_add_full_node_adnl_addr, id, std::move(P));
   });
 
   check_key(id, std::move(P));
@@ -3014,20 +3062,20 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addLitese
   auto id = ton::PublicKeyHash{query.key_hash_};
 
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), id, port = static_cast<td::uint16>(query.port_),
-                                       promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to get public key: ")));
-      return;
-    }
-    auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+                                              promise = std::move(promise)](td::Result<td::Unit> R) mutable {
       if (R.is_error()) {
-        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to add liteserver: ")));
-      } else {
-        promise.set_value(
-            ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to get public key: ")));
+        return;
       }
-    });
-    td::actor::send_closure(SelfId, &ValidatorEngine::try_add_liteserver, id, port, std::move(P));
+      auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+          if (R.is_error()) {
+            promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to add liteserver: ")));
+          } else {
+            promise.set_value(
+                    ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+          }
+      });
+      td::actor::send_closure(SelfId, &ValidatorEngine::try_add_liteserver, id, port, std::move(P));
   });
 
   check_key(id, std::move(P));
@@ -3047,20 +3095,20 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addContro
   auto id = ton::PublicKeyHash{query.key_hash_};
 
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), id, port = static_cast<td::uint16>(query.port_),
-                                       promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to get public key: ")));
-      return;
-    }
-    auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+                                              promise = std::move(promise)](td::Result<td::Unit> R) mutable {
       if (R.is_error()) {
-        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to add control interface: ")));
-      } else {
-        promise.set_value(
-            ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to get public key: ")));
+        return;
       }
-    });
-    td::actor::send_closure(SelfId, &ValidatorEngine::try_add_control_interface, id, port, std::move(P));
+      auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+          if (R.is_error()) {
+            promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to add control interface: ")));
+          } else {
+            promise.set_value(
+                    ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+          }
+      });
+      td::actor::send_closure(SelfId, &ValidatorEngine::try_add_control_interface, id, port, std::move(P));
   });
 
   check_key(id, std::move(P));
@@ -3080,12 +3128,12 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_delAdnlId
   auto id = ton::PublicKeyHash{query.key_hash_};
 
   auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to del adnl node: ")));
-    } else {
-      promise.set_value(
-          ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
-    }
+      if (R.is_error()) {
+        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to del adnl node: ")));
+      } else {
+        promise.set_value(
+                ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+      }
   });
 
   try_del_adnl_node(id, std::move(P));
@@ -3105,12 +3153,12 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_delDhtId 
   auto id = ton::PublicKeyHash{query.key_hash_};
 
   auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to del adnl node: ")));
-    } else {
-      promise.set_value(
-          ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
-    }
+      if (R.is_error()) {
+        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to del adnl node: ")));
+      } else {
+        promise.set_value(
+                ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+      }
   });
   try_del_dht_node(id, std::move(P));
 }
@@ -3130,12 +3178,13 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_delValida
   auto id = ton::PublicKeyHash{query.key_hash_};
 
   auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to del validator permanent key: ")));
-    } else {
-      promise.set_value(
-          ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
-    }
+      if (R.is_error()) {
+        promise.set_value(
+                create_control_query_error(R.move_as_error_prefix("failed to del validator permanent key: ")));
+      } else {
+        promise.set_value(
+                ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+      }
   });
   try_del_validator_permanent_key(id, std::move(P));
 }
@@ -3154,12 +3203,12 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_delValida
   auto id = ton::PublicKeyHash{query.key_hash_};
 
   auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to del validator temp key: ")));
-    } else {
-      promise.set_value(
-          ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
-    }
+      if (R.is_error()) {
+        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to del validator temp key: ")));
+      } else {
+        promise.set_value(
+                ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+      }
   });
   try_del_validator_temp_key(ton::PublicKeyHash{query.permanent_key_hash_}, id, std::move(P));
 }
@@ -3179,12 +3228,12 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_delValida
   auto id = ton::PublicKeyHash{query.key_hash_};
 
   auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to del validator adnl addr: ")));
-    } else {
-      promise.set_value(
-          ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
-    }
+      if (R.is_error()) {
+        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to del validator adnl addr: ")));
+      } else {
+        promise.set_value(
+                ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+      }
   });
   try_del_validator_adnl_addr(ton::PublicKeyHash{query.permanent_key_hash_}, id, std::move(P));
 }
@@ -3201,21 +3250,21 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addListen
   }
 
   auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to add listening port: ")));
-    } else {
-      promise.set_value(
-          ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
-    }
+      if (R.is_error()) {
+        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to add listening port: ")));
+      } else {
+        promise.set_value(
+                ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+      }
   });
 
   std::vector<td::uint8> cats;
-  for (auto cat : query.categories_) {
+  for (auto cat: query.categories_) {
     TRY_RESULT_PROMISE(promise, c, td::narrow_cast_safe<td::uint8>(cat));
     cats.push_back(c);
   }
   std::vector<td::uint8> prio_cats;
-  for (auto cat : query.priority_categories_) {
+  for (auto cat: query.priority_categories_) {
     TRY_RESULT_PROMISE(promise, c, td::narrow_cast_safe<td::uint8>(cat));
     prio_cats.push_back(c);
   }
@@ -3234,21 +3283,21 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_delListen
   }
 
   auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to del listening port: ")));
-    } else {
-      promise.set_value(
-          ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
-    }
+      if (R.is_error()) {
+        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to del listening port: ")));
+      } else {
+        promise.set_value(
+                ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+      }
   });
 
   std::vector<td::uint8> cats;
-  for (auto cat : query.categories_) {
+  for (auto cat: query.categories_) {
     TRY_RESULT_PROMISE(promise, c, td::narrow_cast_safe<td::uint8>(cat));
     cats.push_back(c);
   }
   std::vector<td::uint8> prio_cats;
-  for (auto cat : query.priority_categories_) {
+  for (auto cat: query.priority_categories_) {
     TRY_RESULT_PROMISE(promise, c, td::narrow_cast_safe<td::uint8>(cat));
     prio_cats.push_back(c);
   }
@@ -3273,21 +3322,21 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addProxy 
   }
 
   auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to add listening proxy: ")));
-    } else {
-      promise.set_value(
-          ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
-    }
+      if (R.is_error()) {
+        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to add listening proxy: ")));
+      } else {
+        promise.set_value(
+                ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+      }
   });
 
   std::vector<td::uint8> cats;
-  for (auto cat : query.categories_) {
+  for (auto cat: query.categories_) {
     TRY_RESULT_PROMISE(promise, c, td::narrow_cast_safe<td::uint8>(cat));
     cats.push_back(c);
   }
   std::vector<td::uint8> prio_cats;
-  for (auto cat : query.priority_categories_) {
+  for (auto cat: query.priority_categories_) {
     TRY_RESULT_PROMISE(promise, c, td::narrow_cast_safe<td::uint8>(cat));
     prio_cats.push_back(c);
   }
@@ -3307,21 +3356,21 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_delProxy 
   }
 
   auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to del listening proxy: ")));
-    } else {
-      promise.set_value(
-          ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
-    }
+      if (R.is_error()) {
+        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to del listening proxy: ")));
+      } else {
+        promise.set_value(
+                ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+      }
   });
 
   std::vector<td::uint8> cats;
-  for (auto cat : query.categories_) {
+  for (auto cat: query.categories_) {
     TRY_RESULT_PROMISE(promise, c, td::narrow_cast_safe<td::uint8>(cat));
     cats.push_back(c);
   }
   std::vector<td::uint8> prio_cats;
-  for (auto cat : query.priority_categories_) {
+  for (auto cat: query.priority_categories_) {
     TRY_RESULT_PROMISE(promise, c, td::narrow_cast_safe<td::uint8>(cat));
     prio_cats.push_back(c);
   }
@@ -3355,12 +3404,12 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_sign &que
                << " string=\n"
                << td::base64_encode(query.data_.as_slice());
   auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::BufferSlice> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error()));
-    } else {
-      promise.set_value(ton::serialize_tl_object(
-          ton::create_tl_object<ton::ton_api::engine_validator_signature>(R.move_as_ok()), true));
-    }
+      if (R.is_error()) {
+        promise.set_value(create_control_query_error(R.move_as_error()));
+      } else {
+        promise.set_value(ton::serialize_tl_object(
+                ton::create_tl_object<ton::ton_api::engine_validator_signature>(R.move_as_ok()), true));
+      }
   });
   td::actor::send_closure(keyring_, &ton::keyring::Keyring::sign_message, ton::PublicKeyHash{query.key_hash_},
                           std::move(query.data_), std::move(P));
@@ -3381,53 +3430,56 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_exportAll
   ton::PublicKey client_pubkey = ton::PublicKey{query.encryption_key_};
   if (!client_pubkey.is_ed25519()) {
     promise.set_value(
-        create_control_query_error(td::Status::Error(ton::ErrorCode::protoviolation, "encryption key is not Ed25519")));
+            create_control_query_error(
+                    td::Status::Error(ton::ErrorCode::protoviolation, "encryption key is not Ed25519")));
     return;
   }
 
   td::actor::send_closure(
-      keyring_, &ton::keyring::Keyring::export_all_private_keys,
-      [promise = std::move(promise),
-       client_pubkey = std::move(client_pubkey)](td::Result<std::vector<ton::PrivateKey>> R) mutable {
-        if (R.is_error()) {
-          promise.set_value(create_control_query_error(R.move_as_error()));
-          return;
-        }
-        // Private keys are encrypted using client-provided public key to avoid storing them in
-        // non-secure buffers (not td::SecureString)
-        std::vector<td::SecureString> serialized_keys;
-        size_t data_size = 32;
-        for (const ton::PrivateKey &key : R.ok()) {
-          serialized_keys.push_back(key.export_as_slice());
-          data_size += serialized_keys.back().size() + 4;
-        }
-        td::SecureString data{data_size};
-        td::MutableSlice slice = data.as_mutable_slice();
-        for (const td::SecureString &s : serialized_keys) {
-          td::uint32 size = td::narrow_cast_safe<td::uint32>(s.size()).move_as_ok();
-          CHECK(slice.size() >= size + 4);
-          slice.copy_from(td::Slice{reinterpret_cast<const td::uint8 *>(&size), 4});
-          slice.remove_prefix(4);
-          slice.copy_from(s.as_slice());
-          slice.remove_prefix(s.size());
-        }
-        CHECK(slice.size() == 32);
-        td::Random::secure_bytes(slice);
+          keyring_, &ton::keyring::Keyring::export_all_private_keys,
+          [promise = std::move(promise),
+                  client_pubkey = std::move(client_pubkey)](td::Result<std::vector<ton::PrivateKey>> R) mutable {
+              if (R.is_error()) {
+                promise.set_value(create_control_query_error(R.move_as_error()));
+                return;
+              }
+              // Private keys are encrypted using client-provided public key to avoid storing them in
+              // non-secure buffers (not td::SecureString)
+              std::vector<td::SecureString> serialized_keys;
+              size_t data_size = 32;
+              for (const ton::PrivateKey &key: R.ok()) {
+                serialized_keys.push_back(key.export_as_slice());
+                data_size += serialized_keys.back().size() + 4;
+              }
+              td::SecureString data{data_size};
+              td::MutableSlice slice = data.as_mutable_slice();
+              for (const td::SecureString &s: serialized_keys) {
+                td::uint32 size = td::narrow_cast_safe<td::uint32>(s.size()).move_as_ok();
+                CHECK(slice.size() >= size + 4);
+                slice.copy_from(td::Slice{reinterpret_cast<const td::uint8 *>(&size), 4});
+                slice.remove_prefix(4);
+                slice.copy_from(s.as_slice());
+                slice.remove_prefix(s.size());
+              }
+              CHECK(slice.size() == 32);
+              td::Random::secure_bytes(slice);
 
-        auto r_encryptor = client_pubkey.create_encryptor();
-        if (r_encryptor.is_error()) {
-          promise.set_value(create_control_query_error(r_encryptor.move_as_error_prefix("cannot create encryptor: ")));
-          return;
-        }
-        auto encryptor = r_encryptor.move_as_ok();
-        auto r_encrypted = encryptor->encrypt(data.as_slice());
-        if (r_encryptor.is_error()) {
-          promise.set_value(create_control_query_error(r_encrypted.move_as_error_prefix("cannot encrypt data: ")));
-          return;
-        }
-        promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_exportedPrivateKeys>(
-            r_encrypted.move_as_ok()));
-      });
+              auto r_encryptor = client_pubkey.create_encryptor();
+              if (r_encryptor.is_error()) {
+                promise.set_value(
+                        create_control_query_error(r_encryptor.move_as_error_prefix("cannot create encryptor: ")));
+                return;
+              }
+              auto encryptor = r_encryptor.move_as_ok();
+              auto r_encrypted = encryptor->encrypt(data.as_slice());
+              if (r_encryptor.is_error()) {
+                promise.set_value(
+                        create_control_query_error(r_encrypted.move_as_error_prefix("cannot encrypt data: ")));
+                return;
+              }
+              promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_exportedPrivateKeys>(
+                      r_encrypted.move_as_ok()));
+          });
 }
 
 void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_setVerbosity &query, td::BufferSlice data,
@@ -3439,7 +3491,8 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_setVerbos
 
   if (query.verbosity_ < 0 || query.verbosity_ > 10) {
     promise.set_value(
-        create_control_query_error(td::Status::Error(ton::ErrorCode::error, "verbosity should be in range [0..10]")));
+            create_control_query_error(
+                    td::Status::Error(ton::ErrorCode::error, "verbosity should be in range [0..10]")));
     return;
   }
 
@@ -3457,23 +3510,24 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_getStats 
 
   if (validator_manager_.empty()) {
     promise.set_value(
-        create_control_query_error(td::Status::Error(ton::ErrorCode::notready, "validator manager not started")));
+            create_control_query_error(td::Status::Error(ton::ErrorCode::notready, "validator manager not started")));
     return;
   }
 
   auto P = td::PromiseCreator::lambda(
-      [promise = std::move(promise)](td::Result<std::vector<std::pair<std::string, std::string>>> R) mutable {
-        if (R.is_error()) {
-          promise.set_value(create_control_query_error(R.move_as_error()));
-        } else {
-          auto r = R.move_as_ok();
-          std::vector<ton::tl_object_ptr<ton::ton_api::engine_validator_oneStat>> vec;
-          for (auto &s : r) {
-            vec.push_back(ton::create_tl_object<ton::ton_api::engine_validator_oneStat>(s.first, s.second));
-          }
-          promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_stats>(std::move(vec)));
-        }
-      });
+          [promise = std::move(promise)](td::Result<std::vector<std::pair<std::string, std::string>>> R) mutable {
+              if (R.is_error()) {
+                promise.set_value(create_control_query_error(R.move_as_error()));
+              } else {
+                auto r = R.move_as_ok();
+                std::vector<ton::tl_object_ptr<ton::ton_api::engine_validator_oneStat>> vec;
+                for (auto &s: r) {
+                  vec.push_back(ton::create_tl_object<ton::ton_api::engine_validator_oneStat>(s.first, s.second));
+                }
+                promise.set_value(
+                        ton::create_serialize_tl_object<ton::ton_api::engine_validator_stats>(std::move(vec)));
+              }
+          });
   td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::prepare_stats, std::move(P));
 }
 
@@ -3494,11 +3548,11 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_createEle
   }
 
   std::vector<ton::PublicKeyHash> v;
-  for (auto &x : config_.validators) {
+  for (auto &x: config_.validators) {
     if (x.second.election_date == static_cast<ton::UnixTime>(query.election_date_)) {
       if (x.second.temp_keys.size() == 0 || x.second.adnl_ids.size() == 0) {
         promise.set_value(
-            create_control_query_error(td::Status::Error(ton::ErrorCode::notready, "prev bid is partial")));
+                create_control_query_error(td::Status::Error(ton::ErrorCode::notready, "prev bid is partial")));
         return;
       }
       v.push_back(x.first);
@@ -3510,7 +3564,7 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_createEle
   td::actor::create_actor<ValidatorElectionBidCreator>("bidcreate", query.election_date_, query.election_addr_,
                                                        query.wallet_, fift_dir_, std::move(v), actor_id(this),
                                                        keyring_.get(), std::move(promise))
-      .release();
+          .release();
 }
 
 void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_checkDhtServers &query, td::BufferSlice data,
@@ -3535,7 +3589,7 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_checkDhtS
 
   td::actor::create_actor<CheckDhtServerStatusQuery>("pinger", dht_config_, ton::adnl::AdnlNodeIdShort{query.id_},
                                                      adnl_.get(), std::move(promise))
-      .release();
+          .release();
 }
 
 void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_createProposalVote &query, td::BufferSlice data,
@@ -3561,7 +3615,7 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_createPro
 
   td::actor::create_actor<ValidatorProposalVoteCreator>("votecreate", std::move(query.vote_), fift_dir_, actor_id(this),
                                                         keyring_.get(), std::move(promise))
-      .release();
+          .release();
 }
 
 void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_createComplaintVote &query, td::BufferSlice data,
@@ -3587,7 +3641,7 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_createCom
 
   td::actor::create_actor<ValidatorPunishVoteCreator>("votecomplaintcreate", query.election_id_, std::move(query.vote_),
                                                       fift_dir_, actor_id(this), keyring_.get(), std::move(promise))
-      .release();
+          .release();
 }
 
 void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_importCertificate &query, td::BufferSlice data,
@@ -3606,7 +3660,7 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_importCer
     return;
   }
   auto r = ton::overlay::Certificate::create(std::move(query.cert_));
-  if(r.is_error()) {
+  if (r.is_error()) {
     promise.set_value(create_control_query_error(r.move_as_error_prefix("Invalid certificate: ")));
   }
   //TODO force Overlays::update_certificate to return result
@@ -3621,16 +3675,17 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_importCer
       });
   */
   td::actor::send_closure(overlay_manager_, &ton::overlay::Overlays::update_certificate,
-                            ton::adnl::AdnlNodeIdShort{query.local_id_->id_},
-                            ton::overlay::OverlayIdShort{query.overlay_id_},
-                            ton::PublicKeyHash{query.signed_key_->key_hash_},
-                            r.move_as_ok());
+                          ton::adnl::AdnlNodeIdShort{query.local_id_->id_},
+                          ton::overlay::OverlayIdShort{query.overlay_id_},
+                          ton::PublicKeyHash{query.signed_key_->key_hash_},
+                          r.move_as_ok());
   promise.set_value(
-            ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true)
+          ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true)
   );
 }
 
-void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_importShardOverlayCertificate &query, td::BufferSlice data,
+void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_importShardOverlayCertificate &query,
+                                        td::BufferSlice data,
                                         ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise) {
   if (!(perm & ValidatorEnginePermissions::vep_modify)) {
     promise.set_value(create_control_query_error(td::Status::Error(ton::ErrorCode::error, "not authorized")));
@@ -3646,23 +3701,24 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_importSha
     return;
   }
   auto r = ton::overlay::Certificate::create(std::move(query.cert_));
-  if(r.is_error()) {
+  if (r.is_error()) {
     promise.set_value(create_control_query_error(r.move_as_error_prefix("Invalid certificate: ")));
   }
   auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to import cert: ")));
-    } else {
-      promise.set_value(
-          ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
-    }
+      if (R.is_error()) {
+        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to import cert: ")));
+      } else {
+        promise.set_value(
+                ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+      }
   });
   ton::ShardIdFull shard_id{ton::WorkchainId{query.workchain_}, static_cast<ton::ShardId>(query.shard_)};
   td::actor::send_closure(full_node_, &ton::validator::fullnode::FullNode::import_shard_overlay_certificate,
-                            shard_id, ton::PublicKeyHash{query.signed_key_->key_hash_}, r.move_as_ok(), std::move(P));
+                          shard_id, ton::PublicKeyHash{query.signed_key_->key_hash_}, r.move_as_ok(), std::move(P));
 }
 
-void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_signShardOverlayCertificate &query, td::BufferSlice data,
+void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_signShardOverlayCertificate &query,
+                                        td::BufferSlice data,
                                         ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise) {
   if (!(perm & ValidatorEnginePermissions::vep_modify)) {
     promise.set_value(create_control_query_error(td::Status::Error(ton::ErrorCode::error, "not authorized")));
@@ -3679,14 +3735,15 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_signShard
   }
   ton::ShardIdFull shard_id{ton::WorkchainId{query.workchain_}, static_cast<ton::ShardId>(query.shard_)};
   auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<td::BufferSlice> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to import cert: ")));
-    } else {
-      promise.set_value(R.move_as_ok());
-    }
+      if (R.is_error()) {
+        promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to import cert: ")));
+      } else {
+        promise.set_value(R.move_as_ok());
+      }
   });
   td::actor::send_closure(full_node_, &ton::validator::fullnode::FullNode::sign_shard_overlay_certificate,
-                            shard_id, ton::PublicKeyHash{query.signed_key_->key_hash_}, query.expire_at_, query.max_size_, std::move(P));
+                          shard_id, ton::PublicKeyHash{query.signed_key_->key_hash_}, query.expire_at_, query.max_size_,
+                          std::move(P));
 }
 
 
@@ -3709,13 +3766,13 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_getOverla
 
   td::actor::send_closure(overlay_manager_, &ton::overlay::Overlays::get_stats,
                           [promise = std::move(promise)](
-                              td::Result<ton::tl_object_ptr<ton::ton_api::engine_validator_overlaysStats>> R) mutable {
-                            if (R.is_ok()) {
-                              promise.set_value(ton::serialize_tl_object(R.move_as_ok(), true));
-                            } else {
-                              promise.set_value(create_control_query_error(
-                                  td::Status::Error(ton::ErrorCode::notready, "overlay manager not ready")));
-                            }
+                                  td::Result<ton::tl_object_ptr<ton::ton_api::engine_validator_overlaysStats>> R) mutable {
+                              if (R.is_ok()) {
+                                promise.set_value(ton::serialize_tl_object(R.move_as_ok(), true));
+                              } else {
+                                promise.set_value(create_control_query_error(
+                                        td::Status::Error(ton::ErrorCode::notready, "overlay manager not ready")));
+                              }
                           });
 }
 
@@ -3728,17 +3785,17 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_getActorT
 
   if (validator_manager_.empty()) {
     promise.set_value(
-        create_control_query_error(td::Status::Error(ton::ErrorCode::notready, "validator manager not started")));
+            create_control_query_error(td::Status::Error(ton::ErrorCode::notready, "validator manager not started")));
     return;
   }
 
   auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<std::string> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error()));
-    } else {
-      auto r = R.move_as_ok();
-      promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_textStats>(std::move(r)));
-    }
+      if (R.is_error()) {
+        promise.set_value(create_control_query_error(R.move_as_error()));
+      } else {
+        auto r = R.move_as_ok();
+        promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_textStats>(std::move(r)));
+      }
   });
   td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::prepare_actor_stats,
                           std::move(P));
@@ -3753,46 +3810,55 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_getPerfTi
 
   if (validator_manager_.empty()) {
     promise.set_value(
-        create_control_query_error(td::Status::Error(ton::ErrorCode::notready, "validator manager not started")));
+            create_control_query_error(td::Status::Error(ton::ErrorCode::notready, "validator manager not started")));
     return;
   }
 
   auto P = td::PromiseCreator::lambda(
-      [promise = std::move(promise), query = std::move(query)](td::Result<std::vector<ton::validator::PerfTimerStats>> R) mutable {
-        const std::vector<int> times{60, 300, 3600};
-        double now = td::Time::now();
-        if (R.is_error()) {
-          promise.set_value(create_control_query_error(R.move_as_error()));
-        } else {
-          auto r = R.move_as_ok();
-          std::vector<ton::tl_object_ptr<ton::ton_api::engine_validator_perfTimerStatsByName>> by_name;
-          for (const auto &stats : r) {
-            if (stats.name == query.name_ || query.name_.empty()) {
-              std::vector<ton::tl_object_ptr<ton::ton_api::engine_validator_onePerfTimerStat>> by_time;
-              for (const auto &t : times) {
-                double min = std::numeric_limits<double>::lowest();
-                double max = std::numeric_limits<double>::max();
-                double sum = 0;
-                int cnt = 0;
-                for (const auto &stat : stats.stats) {
-                  double time = stat.first;
-                  double duration = stat.second;
-                  if (now - time <= static_cast<double>(t)) {
-                    min = td::min<double>(min, duration);
-                    max = td::max<double>(max, duration);
-                    sum += duration;
-                    ++cnt;
+          [promise = std::move(promise), query = std::move(query)](
+                  td::Result<std::vector<ton::validator::PerfTimerStats>> R) mutable {
+              const std::vector<int> times{60, 300, 3600};
+              double now = td::Time::now();
+              if (R.is_error()) {
+                promise.set_value(create_control_query_error(R.move_as_error()));
+              } else {
+                auto r = R.move_as_ok();
+                std::vector<ton::tl_object_ptr<ton::ton_api::engine_validator_perfTimerStatsByName>> by_name;
+                for (const auto &stats: r) {
+                  if (stats.name == query.name_ || query.name_.empty()) {
+                    std::vector<ton::tl_object_ptr<ton::ton_api::engine_validator_onePerfTimerStat>> by_time;
+                    for (const auto &t: times) {
+                      double min = std::numeric_limits<double>::lowest();
+                      double max = std::numeric_limits<double>::max();
+                      double sum = 0;
+                      int cnt = 0;
+                      for (const auto &stat: stats.stats) {
+                        double time = stat.first;
+                        double duration = stat.second;
+                        if (now - time <= static_cast<double>(t)) {
+                          min = td::min<double>(min, duration);
+                          max = td::max<double>(max, duration);
+                          sum += duration;
+                          ++cnt;
+                        }
+                      }
+                      by_time.push_back(ton::create_tl_object<ton::ton_api::engine_validator_onePerfTimerStat>(t, min,
+                                                                                                               sum /
+                                                                                                               static_cast<double>(cnt),
+                                                                                                               max));
+                    }
+                    by_name.push_back(
+                            ton::create_tl_object<ton::ton_api::engine_validator_perfTimerStatsByName>(stats.name,
+                                                                                                       std::move(
+                                                                                                               by_time)));
                   }
                 }
-                by_time.push_back(ton::create_tl_object<ton::ton_api::engine_validator_onePerfTimerStat>(t, min, sum / static_cast<double>(cnt), max));
+                promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_perfTimerStats>(
+                        std::move(by_name)));
               }
-              by_name.push_back(ton::create_tl_object<ton::ton_api::engine_validator_perfTimerStatsByName>(stats.name, std::move(by_time)));
-            }
-          }
-          promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_perfTimerStats>(std::move(by_name)));
-        }
-      });
-  td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::prepare_perf_timer_stats, std::move(P));
+          });
+  td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::prepare_perf_timer_stats,
+                          std::move(P));
 }
 
 void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_getShardOutQueueSize &query,
@@ -3805,7 +3871,7 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_getShardO
 
   if (validator_manager_.empty()) {
     promise.set_value(
-        create_control_query_error(td::Status::Error(ton::ErrorCode::notready, "validator manager not started")));
+            create_control_query_error(td::Status::Error(ton::ErrorCode::notready, "validator manager not started")));
     return;
   }
 
@@ -3816,7 +3882,7 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_getShardO
   }
   td::optional<ton::ShardIdFull> dest;
   if (query.flags_ & 1) {
-    dest = ton::ShardIdFull{query.dest_wc_, (ton::ShardId)query.dest_shard_};
+    dest = ton::ShardIdFull{query.dest_wc_, (ton::ShardId) query.dest_shard_};
     if (!dest.value().is_valid_ext()) {
       promise.set_value(create_control_query_error(td::Status::Error(ton::ErrorCode::error, "invalid shard")));
       return;
@@ -3824,68 +3890,73 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_getShardO
   }
 
   td::actor::send_closure(
-      validator_manager_, &ton::validator::ValidatorManagerInterface::get_block_by_seqno_from_db,
-      ton::AccountIdPrefixFull{block_id.workchain, block_id.shard}, block_id.seqno,
-      [=, promise = std::move(promise),
-       manager = validator_manager_.get()](td::Result<ton::validator::ConstBlockHandle> R) mutable {
-        if (R.is_error()) {
-          promise.set_value(create_control_query_error(R.move_as_error()));
-          return;
-        }
-        auto handle = R.move_as_ok();
-        if (handle->id().id != block_id) {
-          promise.set_value(create_control_query_error(td::Status::Error(ton::ErrorCode::notready, "no such block")));
-          return;
-        }
-        if (!dest) {
-          td::actor::send_closure(
-              manager, &ton::validator::ValidatorManagerInterface::get_out_msg_queue_size, handle->id(),
-              [promise = std::move(promise)](td::Result<td::uint64> R) mutable {
-                if (R.is_error()) {
-                  promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to get queue size: ")));
-                } else {
-                  promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_shardOutQueueSize>(
-                      R.move_as_ok()));
-                }
-              });
-          return;
-        }
-        td::actor::send_closure(
-            manager, &ton::validator::ValidatorManagerInterface::get_shard_state_from_db, handle,
-            [=, promise = std::move(promise)](td::Result<td::Ref<ton::validator::ShardState>> R) mutable {
-              auto res = [&]() -> td::Result<td::BufferSlice> {
-                TRY_RESULT(state, std::move(R));
-                TRY_RESULT(outq_descr, state->message_queue());
-                block::gen::OutMsgQueueInfo::Record qinfo;
-                if (!tlb::unpack_cell(outq_descr->root_cell(), qinfo)) {
-                  return td::Status::Error(ton::ErrorCode::error, "invalid message queue");
-                }
-                auto queue = std::make_unique<vm::AugmentedDictionary>(qinfo.out_queue->prefetch_ref(0), 352,
-                                                                       block::tlb::aug_OutMsgQueue);
-                if (dest) {
-                  td::BitArray<96> prefix;
-                  td::BitPtr ptr = prefix.bits();
-                  ptr.store_int(dest.value().workchain, 32);
-                  ptr.advance(32);
-                  ptr.store_uint(dest.value().shard, 64);
-                  if (!queue->cut_prefix_subdict(prefix.bits(), 32 + dest.value().pfx_len())) {
-                    return td::Status::Error(ton::ErrorCode::error, "invalid message queue");
-                  }
-                }
-                int size = 0;
-                queue->check_for_each([&](td::Ref<vm::CellSlice>, td::ConstBitPtr, int) -> bool {
-                  ++size;
-                  return true;
-                });
-                return ton::create_serialize_tl_object<ton::ton_api::engine_validator_shardOutQueueSize>(size);
-              }();
-              if (res.is_error()) {
-                promise.set_value(create_control_query_error(res.move_as_error()));
-              } else {
-                promise.set_value(res.move_as_ok());
+          validator_manager_, &ton::validator::ValidatorManagerInterface::get_block_by_seqno_from_db,
+          ton::AccountIdPrefixFull{block_id.workchain, block_id.shard}, block_id.seqno,
+          [=, promise = std::move(promise),
+                  manager = validator_manager_.get()](td::Result<ton::validator::ConstBlockHandle> R) mutable {
+              if (R.is_error()) {
+                promise.set_value(create_control_query_error(R.move_as_error()));
+                return;
               }
-            });
-      });
+              auto handle = R.move_as_ok();
+              if (handle->id().id != block_id) {
+                promise.set_value(
+                        create_control_query_error(td::Status::Error(ton::ErrorCode::notready, "no such block")));
+                return;
+              }
+              if (!dest) {
+                td::actor::send_closure(
+                        manager, &ton::validator::ValidatorManagerInterface::get_out_msg_queue_size, handle->id(),
+                        [promise = std::move(promise)](td::Result<td::uint64> R) mutable {
+                            if (R.is_error()) {
+                              promise.set_value(
+                                      create_control_query_error(R.move_as_error_prefix("failed to get queue size: ")));
+                            } else {
+                              promise.set_value(
+                                      ton::create_serialize_tl_object<ton::ton_api::engine_validator_shardOutQueueSize>(
+                                              R.move_as_ok()));
+                            }
+                        });
+                return;
+              }
+              td::actor::send_closure(
+                      manager, &ton::validator::ValidatorManagerInterface::get_shard_state_from_db, handle,
+                      [=, promise = std::move(promise)](td::Result<td::Ref<ton::validator::ShardState>> R) mutable {
+                          auto res = [&]() -> td::Result<td::BufferSlice> {
+                              TRY_RESULT(state, std::move(R));
+                              TRY_RESULT(outq_descr, state->message_queue());
+                              block::gen::OutMsgQueueInfo::Record qinfo;
+                              if (!tlb::unpack_cell(outq_descr->root_cell(), qinfo)) {
+                                return td::Status::Error(ton::ErrorCode::error, "invalid message queue");
+                              }
+                              auto queue = std::make_unique<vm::AugmentedDictionary>(qinfo.out_queue->prefetch_ref(0),
+                                                                                     352,
+                                                                                     block::tlb::aug_OutMsgQueue);
+                              if (dest) {
+                                td::BitArray<96> prefix;
+                                td::BitPtr ptr = prefix.bits();
+                                ptr.store_int(dest.value().workchain, 32);
+                                ptr.advance(32);
+                                ptr.store_uint(dest.value().shard, 64);
+                                if (!queue->cut_prefix_subdict(prefix.bits(), 32 + dest.value().pfx_len())) {
+                                  return td::Status::Error(ton::ErrorCode::error, "invalid message queue");
+                                }
+                              }
+                              int size = 0;
+                              queue->check_for_each([&](td::Ref<vm::CellSlice>, td::ConstBitPtr, int) -> bool {
+                                  ++size;
+                                  return true;
+                              });
+                              return ton::create_serialize_tl_object<ton::ton_api::engine_validator_shardOutQueueSize>(
+                                      size);
+                          }();
+                          if (res.is_error()) {
+                            promise.set_value(create_control_query_error(res.move_as_error()));
+                          } else {
+                            promise.set_value(res.move_as_ok());
+                          }
+                      });
+          });
 }
 
 void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_setExtMessagesBroadcastDisabled &query,
@@ -3907,11 +3978,11 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_setExtMes
   config_.full_node_config.ext_messages_broadcast_disabled_ = query.disabled_;
   td::actor::send_closure(full_node_, &ton::validator::fullnode::FullNode::set_config, config_.full_node_config);
   write_config([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error()));
-    } else {
-      promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_success>());
-    }
+      if (R.is_error()) {
+        promise.set_value(create_control_query_error(R.move_as_error()));
+      } else {
+        promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_success>());
+      }
   });
 }
 
@@ -3930,7 +4001,7 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addCustom
   auto &overlay = query.overlay_;
   std::vector<ton::adnl::AdnlNodeIdShort> nodes;
   std::map<ton::adnl::AdnlNodeIdShort, int> senders;
-  for (const auto &node : overlay->nodes_) {
+  for (const auto &node: overlay->nodes_) {
     nodes.emplace_back(node->adnl_id_);
     if (node->msg_sender_) {
       senders[ton::adnl::AdnlNodeIdShort{node->adnl_id_}] = node->msg_sender_priority_;
@@ -3938,23 +4009,23 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addCustom
   }
   auto params = ton::validator::fullnode::CustomOverlayParams::fetch(*query.overlay_);
   td::actor::send_closure(
-      full_node_, &ton::validator::fullnode::FullNode::add_custom_overlay, std::move(params),
-      [SelfId = actor_id(this), overlay = std::move(query.overlay_),
-       promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-        if (R.is_error()) {
-          promise.set_value(create_control_query_error(R.move_as_error()));
-          return;
-        }
-        td::actor::send_closure(
-            SelfId, &ValidatorEngine::add_custom_overlay_to_config, std::move(overlay),
-            [promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+          full_node_, &ton::validator::fullnode::FullNode::add_custom_overlay, std::move(params),
+          [SelfId = actor_id(this), overlay = std::move(query.overlay_),
+                  promise = std::move(promise)](td::Result<td::Unit> R) mutable {
               if (R.is_error()) {
                 promise.set_value(create_control_query_error(R.move_as_error()));
                 return;
               }
-              promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_success>());
-            });
-      });
+              td::actor::send_closure(
+                      SelfId, &ValidatorEngine::add_custom_overlay_to_config, std::move(overlay),
+                      [promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+                          if (R.is_error()) {
+                            promise.set_value(create_control_query_error(R.move_as_error()));
+                            return;
+                          }
+                          promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_success>());
+                      });
+          });
 }
 
 void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_delCustomOverlay &query, td::BufferSlice data,
@@ -3968,22 +4039,22 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_delCustom
     return;
   }
   td::actor::send_closure(
-      full_node_, &ton::validator::fullnode::FullNode::del_custom_overlay, query.name_,
-      [SelfId = actor_id(this), name = query.name_, promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-        if (R.is_error()) {
-          promise.set_value(create_control_query_error(R.move_as_error()));
-          return;
-        }
-        td::actor::send_closure(
-            SelfId, &ValidatorEngine::del_custom_overlay_from_config, std::move(name),
-            [promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+          full_node_, &ton::validator::fullnode::FullNode::del_custom_overlay, query.name_,
+          [SelfId = actor_id(this), name = query.name_, promise = std::move(promise)](td::Result<td::Unit> R) mutable {
               if (R.is_error()) {
                 promise.set_value(create_control_query_error(R.move_as_error()));
                 return;
               }
-              promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_success>());
-            });
-      });
+              td::actor::send_closure(
+                      SelfId, &ValidatorEngine::del_custom_overlay_from_config, std::move(name),
+                      [promise = std::move(promise)](td::Result<td::Unit> R) mutable {
+                          if (R.is_error()) {
+                            promise.set_value(create_control_query_error(R.move_as_error()));
+                            return;
+                          }
+                          promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_success>());
+                      });
+          });
 }
 
 void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_showCustomOverlays &query,
@@ -3999,7 +4070,7 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_showCusto
   }
 
   promise.set_value(
-      ton::serialize_tl_object<ton::ton_api::engine_validator_customOverlaysConfig>(custom_overlays_config_, true));
+          ton::serialize_tl_object<ton::ton_api::engine_validator_customOverlaysConfig>(custom_overlays_config_, true));
 }
 
 void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_setStateSerializerEnabled &query,
@@ -4022,11 +4093,11 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_setStateS
                           validator_options_);
   config_.state_serializer_enabled = query.enabled_;
   write_config([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error()));
-    } else {
-      promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_success>());
-    }
+      if (R.is_error()) {
+        promise.set_value(create_control_query_error(R.move_as_error()));
+      } else {
+        promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_success>());
+      }
   });
 }
 
@@ -4073,7 +4144,7 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_getCollat
     promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_jsonConfig>("{}"));
   } else {
     promise.set_value(
-        ton::create_serialize_tl_object<ton::ton_api::engine_validator_jsonConfig>(r_data.ok().as_slice().str()));
+            ton::create_serialize_tl_object<ton::ton_api::engine_validator_jsonConfig>(r_data.ok().as_slice().str()));
   }
 }
 
@@ -4088,15 +4159,16 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_getAdnlSt
     return;
   }
   td::actor::send_closure(
-      adnl_, &ton::adnl::Adnl::get_stats, query.all_,
-      [promise = std::move(promise)](td::Result<ton::tl_object_ptr<ton::ton_api::adnl_stats>> R) mutable {
-        if (R.is_ok()) {
-          promise.set_value(ton::serialize_tl_object(R.move_as_ok(), true));
-        } else {
-          promise.set_value(
-              create_control_query_error(td::Status::Error(ton::ErrorCode::notready, "failed to get adnl stats")));
-        }
-      });
+          adnl_, &ton::adnl::Adnl::get_stats, query.all_,
+          [promise = std::move(promise)](td::Result<ton::tl_object_ptr<ton::ton_api::adnl_stats>> R) mutable {
+              if (R.is_ok()) {
+                promise.set_value(ton::serialize_tl_object(R.move_as_ok(), true));
+              } else {
+                promise.set_value(
+                        create_control_query_error(
+                                td::Status::Error(ton::ErrorCode::notready, "failed to get adnl stats")));
+              }
+          });
 }
 
 void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addShard &query,
@@ -4123,11 +4195,12 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addShard 
                             validator_options_);
   }
   write_config([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error()));
-    } else {
-      promise.set_value(ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
-    }
+      if (R.is_error()) {
+        promise.set_value(create_control_query_error(R.move_as_error()));
+      } else {
+        promise.set_value(
+                ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+      }
   });
 }
 
@@ -4159,11 +4232,12 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_delShard 
                             validator_options_);
   }
   write_config([promise = std::move(promise)](td::Result<td::Unit> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error()));
-    } else {
-      promise.set_value(ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
-    }
+      if (R.is_error()) {
+        promise.set_value(create_control_query_error(R.move_as_error()));
+      } else {
+        promise.set_value(
+                ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+      }
   });
 }
 
@@ -4201,7 +4275,7 @@ void ValidatorEngine::process_control_query(td::uint16 port, ton::adnl::AdnlNode
   auto f = F.move_as_ok();
 
   ton::ton_api::downcast_call(*f, [&](auto &obj) {
-    run_control_query(obj, std::move(data), src.pubkey_hash(), it->second, std::move(promise));
+      run_control_query(obj, std::move(data), src.pubkey_hash(), it->second, std::move(promise));
   });
 }
 
@@ -4220,12 +4294,12 @@ void ValidatorEngine::run() {
   started_keyring_ = true;
 
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) {
-    if (R.is_error()) {
-      LOG(ERROR) << "failed to parse config: " << R.move_as_error();
-      std::_Exit(2);
-    } else {
-      td::actor::send_closure(SelfId, &ValidatorEngine::start);
-    }
+      if (R.is_error()) {
+        LOG(ERROR) << "failed to parse config: " << R.move_as_error();
+        std::_Exit(2);
+      } else {
+        td::actor::send_closure(SelfId, &ValidatorEngine::start);
+      }
   });
   load_config(std::move(P));
 }
@@ -4254,14 +4328,19 @@ void ValidatorEngine::get_current_validator_perm_key(td::Promise<std::pair<ton::
 }
 
 std::atomic<bool> need_stats_flag{false};
+
 void need_stats(int sig) {
   need_stats_flag.store(true);
 }
+
 std::atomic<bool> rotate_logs_flags{false};
+
 void force_rotate_logs(int sig) {
   rotate_logs_flags.store(true);
 }
+
 std::atomic<bool> need_scheduler_status_flag{false};
+
 void need_scheduler_status(int sig) {
   need_scheduler_status_flag.store(true);
 }
@@ -4277,7 +4356,7 @@ void dump_memprof_stats() {
   size_t total_size = 0;
   size_t other_size = 0;
   int cnt = 0;
-  for (auto &info : v) {
+  for (auto &info: v) {
     if (cnt++ < 50) {
       LOG(WARNING) << td::format::as_size(info.size) << td::format::as_array(info.backtrace);
     } else {
@@ -4316,8 +4395,8 @@ int main(int argc, char *argv[]) {
   td::actor::ActorOwn<ValidatorEngine> x;
   td::unique_ptr<td::LogInterface> logger_;
   SCOPE_EXIT {
-    td::log_interface = td::default_log_interface;
-  };
+                 td::log_interface = td::default_log_interface;
+             };
 
   LOG_STATUS(td::change_maximize_rlimit(td::RlimitType::nofile, 786432));
 
@@ -4326,296 +4405,314 @@ int main(int argc, char *argv[]) {
   td::OptionParser p;
   p.set_description("validator or full node for TON network");
   p.add_option('v', "verbosity", "set verbosity level", [&](td::Slice arg) {
-    int v = VERBOSITY_NAME(FATAL) + (td::to_integer<int>(arg));
-    SET_VERBOSITY_LEVEL(v);
+      int v = VERBOSITY_NAME(FATAL) + (td::to_integer<int>(arg));
+      SET_VERBOSITY_LEVEL(v);
   });
   p.add_option('V', "version", "shows validator-engine build information", [&]() {
-    std::cout << "validator-engine build information: [ Commit: " << GitMetadata::CommitSHA1()
-              << ", Date: " << GitMetadata::CommitDate() << "]\n";
-    std::exit(0);
+      std::cout << "validator-engine build information: [ Commit: " << GitMetadata::CommitSHA1()
+                << ", Date: " << GitMetadata::CommitDate() << "]\n";
+      std::exit(0);
   });
   p.add_option('h', "help", "prints_help", [&]() {
-    char b[10240];
-    td::StringBuilder sb(td::MutableSlice{b, 10000});
-    sb << p;
-    std::cout << sb.as_cslice().c_str();
-    std::exit(2);
+      char b[10240];
+      td::StringBuilder sb(td::MutableSlice{b, 10000});
+      sb << p;
+      std::cout << sb.as_cslice().c_str();
+      std::exit(2);
   });
   p.add_option('C', "global-config", "file to read global config", [&](td::Slice fname) {
-    acts.push_back(
-        [&x, fname = fname.str()]() { td::actor::send_closure(x, &ValidatorEngine::set_global_config, fname); });
+      acts.push_back(
+              [&x, fname = fname.str()]() { td::actor::send_closure(x, &ValidatorEngine::set_global_config, fname); });
   });
   p.add_option('c', "local-config", "file to read local config", [&](td::Slice fname) {
-    acts.push_back(
-        [&x, fname = fname.str()]() { td::actor::send_closure(x, &ValidatorEngine::set_local_config, fname); });
+      acts.push_back(
+              [&x, fname = fname.str()]() { td::actor::send_closure(x, &ValidatorEngine::set_local_config, fname); });
   });
   p.add_checked_option('I', "ip", "ip:port of instance", [&](td::Slice arg) {
-    td::IPAddress addr;
-    TRY_STATUS(addr.init_host_port(arg.str()));
-    acts.push_back([&x, addr]() { td::actor::send_closure(x, &ValidatorEngine::add_ip, addr); });
-    return td::Status::OK();
+      td::IPAddress addr;
+      TRY_STATUS(addr.init_host_port(arg.str()));
+      acts.push_back([&x, addr]() { td::actor::send_closure(x, &ValidatorEngine::add_ip, addr); });
+      return td::Status::OK();
   });
   p.add_option('D', "db", "root for dbs", [&](td::Slice fname) {
-    acts.push_back([&x, fname = fname.str()]() { td::actor::send_closure(x, &ValidatorEngine::set_db_root, fname); });
+      acts.push_back([&x, fname = fname.str()]() { td::actor::send_closure(x, &ValidatorEngine::set_db_root, fname); });
   });
   p.add_option('f', "fift-dir", "directory with fift scripts", [&](td::Slice fname) {
-    acts.push_back([&x, fname = fname.str()]() { td::actor::send_closure(x, &ValidatorEngine::set_fift_dir, fname); });
+      acts.push_back(
+              [&x, fname = fname.str()]() { td::actor::send_closure(x, &ValidatorEngine::set_fift_dir, fname); });
   });
   p.add_option('d', "daemonize", "set SIGHUP", [&]() {
 #if TD_DARWIN || TD_LINUX
-    close(0);
-    setsid();
+      close(0);
+      setsid();
 #endif
-    td::set_signal_handler(td::SignalType::HangUp, force_rotate_logs).ensure();
+      td::set_signal_handler(td::SignalType::HangUp, force_rotate_logs).ensure();
   });
   std::string session_logs_file;
   p.add_option('l', "logname", "log to file", [&](td::Slice fname) {
-    if (session_logs_file.empty()) {
-      session_logs_file = fname.str() + ".session-stats";
-    }
-    logger_ = td::TsFileLog::create(fname.str()).move_as_ok();
-    td::log_interface = logger_.get();
+      if (session_logs_file.empty()) {
+        session_logs_file = fname.str() + ".session-stats";
+      }
+      logger_ = td::TsFileLog::create(fname.str()).move_as_ok();
+      td::log_interface = logger_.get();
   });
   p.add_checked_option('s', "state-ttl", "state will be gc'd after this time (in seconds) default=86400",
                        [&](td::Slice fname) {
-                         auto v = td::to_double(fname);
-                         if (v <= 0) {
-                           return td::Status::Error("state-ttl should be positive");
-                         }
-                         acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_state_ttl, v); });
-                         return td::Status::OK();
+                           auto v = td::to_double(fname);
+                           if (v <= 0) {
+                             return td::Status::Error("state-ttl should be positive");
+                           }
+                           acts.push_back(
+                                   [&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_state_ttl, v); });
+                           return td::Status::OK();
                        });
   p.add_checked_option('m', "mempool-num", "Maximal number of mempool external message", [&](td::Slice fname) {
-    auto v = td::to_double(fname);
-    if (v < 0) {
-      return td::Status::Error("mempool-num should be non-negative");
-    }
-    acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_max_mempool_num, v); });
-    return td::Status::OK();
+      auto v = td::to_double(fname);
+      if (v < 0) {
+        return td::Status::Error("mempool-num should be non-negative");
+      }
+      acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_max_mempool_num, v); });
+      return td::Status::OK();
   });
   p.add_checked_option('b', "block-ttl", "blocks will be gc'd after this time (in seconds) default=86400",
                        [&](td::Slice fname) {
-                         auto v = td::to_double(fname);
-                         if (v <= 0) {
-                           return td::Status::Error("block-ttl should be positive");
-                         }
-                         acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_block_ttl, v); });
-                         return td::Status::OK();
+                           auto v = td::to_double(fname);
+                           if (v <= 0) {
+                             return td::Status::Error("block-ttl should be positive");
+                           }
+                           acts.push_back(
+                                   [&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_block_ttl, v); });
+                           return td::Status::OK();
                        });
   p.add_checked_option(
-      'A', "archive-ttl", "archived blocks will be deleted after this time (in seconds) default=7*86400",
-      [&](td::Slice fname) {
-        auto v = td::to_double(fname);
-        if (v <= 0) {
-          return td::Status::Error("archive-ttl should be positive");
-        }
-        acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_archive_ttl, v); });
-        return td::Status::OK();
-      });
+          'A', "archive-ttl", "archived blocks will be deleted after this time (in seconds) default=7*86400",
+          [&](td::Slice fname) {
+              auto v = td::to_double(fname);
+              if (v <= 0) {
+                return td::Status::Error("archive-ttl should be positive");
+              }
+              acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_archive_ttl, v); });
+              return td::Status::OK();
+          });
   p.add_checked_option(
-      'K', "key-proof-ttl", "key blocks will be deleted after this time (in seconds) default=365*86400*10",
-      [&](td::Slice fname) {
-        auto v = td::to_double(fname);
-        if (v <= 0) {
-          return td::Status::Error("key-proof-ttl should be positive");
-        }
-        acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_key_proof_ttl, v); });
-        return td::Status::OK();
-      });
+          'K', "key-proof-ttl", "key blocks will be deleted after this time (in seconds) default=365*86400*10",
+          [&](td::Slice fname) {
+              auto v = td::to_double(fname);
+              if (v <= 0) {
+                return td::Status::Error("key-proof-ttl should be positive");
+              }
+              acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_key_proof_ttl, v); });
+              return td::Status::OK();
+          });
   p.add_checked_option('S', "sync-before", "in initial sync download all blocks for last given seconds default=3600",
                        [&](td::Slice fname) {
-                         auto v = td::to_double(fname);
-                         if (v <= 0) {
-                           return td::Status::Error("sync-before should be positive");
-                         }
-                         acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_sync_ttl, v); });
-                         return td::Status::OK();
+                           auto v = td::to_double(fname);
+                           if (v <= 0) {
+                             return td::Status::Error("sync-before should be positive");
+                           }
+                           acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_sync_ttl, v); });
+                           return td::Status::OK();
                        });
   p.add_option('T', "truncate-db", "truncate db (with specified seqno as new top masterchain block seqno)",
                [&](td::Slice fname) {
-                 auto v = td::to_integer<ton::BlockSeqno>(fname);
-                 acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_truncate_seqno, v); });
+                   auto v = td::to_integer<ton::BlockSeqno>(fname);
+                   acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_truncate_seqno, v); });
                });
   p.add_option('\0', "session-logs", "file for validator session stats (default: {logname}.session-stats)",
                [&](td::Slice fname) { session_logs_file = fname.str(); });
   acts.push_back([&]() { td::actor::send_closure(x, &ValidatorEngine::set_session_logs_file, session_logs_file); });
   p.add_checked_option(
-      'U', "unsafe-catchain-restore", "use SLOW and DANGEROUS catchain recover method", [&](td::Slice id) {
-        TRY_RESULT(seq, td::to_integer_safe<ton::CatchainSeqno>(id));
-        acts.push_back([&x, seq]() { td::actor::send_closure(x, &ValidatorEngine::add_unsafe_catchain, seq); });
-        return td::Status::OK();
-      });
+          'U', "unsafe-catchain-restore", "use SLOW and DANGEROUS catchain recover method", [&](td::Slice id) {
+              TRY_RESULT(seq, td::to_integer_safe<ton::CatchainSeqno>(id));
+              acts.push_back([&x, seq]() { td::actor::send_closure(x, &ValidatorEngine::add_unsafe_catchain, seq); });
+              return td::Status::OK();
+          });
   p.add_checked_option('F', "unsafe-catchain-rotate", "use forceful and DANGEROUS catchain rotation",
                        [&](td::Slice params) {
-                         auto pos1 = params.find(':');
-                         TRY_RESULT(b_seq, td::to_integer_safe<ton::BlockSeqno>(params.substr(0, pos1)));
-                         params = params.substr(++pos1, params.size());
-                         auto pos2 = params.find(':');
-                         TRY_RESULT(cc_seq, td::to_integer_safe<ton::CatchainSeqno>(params.substr(0, pos2)));
-                         params = params.substr(++pos2, params.size());
-                         auto h = std::stoi(params.substr(0, params.size()).str());
-                         acts.push_back([&x, b_seq, cc_seq, h]() {
-                           td::actor::send_closure(x, &ValidatorEngine::add_unsafe_catchain_rotation, b_seq, cc_seq, h);
-                         });
-                         return td::Status::OK();
+                           auto pos1 = params.find(':');
+                           TRY_RESULT(b_seq, td::to_integer_safe<ton::BlockSeqno>(params.substr(0, pos1)));
+                           params = params.substr(++pos1, params.size());
+                           auto pos2 = params.find(':');
+                           TRY_RESULT(cc_seq, td::to_integer_safe<ton::CatchainSeqno>(params.substr(0, pos2)));
+                           params = params.substr(++pos2, params.size());
+                           auto h = std::stoi(params.substr(0, params.size()).str());
+                           acts.push_back([&x, b_seq, cc_seq, h]() {
+                               td::actor::send_closure(x, &ValidatorEngine::add_unsafe_catchain_rotation, b_seq, cc_seq,
+                                                       h);
+                           });
+                           return td::Status::OK();
                        });
   p.add_option('M', "not-all-shards", "monitor only a necessary set of shards instead of all", [&]() {
-    acts.push_back([&x]() { td::actor::send_closure(x, &ValidatorEngine::set_not_all_shards); });
+      acts.push_back([&x]() { td::actor::send_closure(x, &ValidatorEngine::set_not_all_shards); });
   });
   p.add_checked_option(
-      '\0', "add-shard", "add shard to monitor (same as addshard in validator console), format: 0:8000000000000000",
-      [&](td::Slice arg) -> td::Status {
-        std::string str = arg.str();
-        int wc;
-        unsigned long long shard;
-        if (sscanf(str.c_str(), "%d:%016llx", &wc, &shard) != 2) {
-          return td::Status::Error(PSTRING() << "invalid shard " << str);
-        }
-        acts.push_back([=, &x]() {
-          td::actor::send_closure(x, &ValidatorEngine::add_shard_cmd, ton::ShardIdFull{wc, (ton::ShardId)shard});
-        });
-        return td::Status::OK();
-      });
+          '\0', "add-shard", "add shard to monitor (same as addshard in validator console), format: 0:8000000000000000",
+          [&](td::Slice arg) -> td::Status {
+              std::string str = arg.str();
+              int wc;
+              unsigned long long shard;
+              if (sscanf(str.c_str(), "%d:%016llx", &wc, &shard) != 2) {
+                return td::Status::Error(PSTRING() << "invalid shard " << str);
+              }
+              acts.push_back([=, &x]() {
+                  td::actor::send_closure(x, &ValidatorEngine::add_shard_cmd,
+                                          ton::ShardIdFull{wc, (ton::ShardId) shard});
+              });
+              return td::Status::OK();
+          });
   td::uint32 threads = 7;
   p.add_checked_option(
-      't', "threads", PSTRING() << "number of threads (default=" << threads << ")", [&](td::Slice arg) {
-        td::int32 v;
-        try {
-          v = std::stoi(arg.str());
-        } catch (...) {
-          return td::Status::Error(ton::ErrorCode::error, "bad value for --threads: not a number");
-        }
-        if (v <= 0) {
-          return td::Status::Error(ton::ErrorCode::error, "bad value for --threads: should be > 0");
-        }
-        if (v > 127) {
-          LOG(WARNING) << "`--threads " << v << "` is too big, effective value will be 127";
-          v = 127;
-        }
-        threads = v;
-        return td::Status::OK();
-      });
+          't', "threads", PSTRING() << "number of threads (default=" << threads << ")", [&](td::Slice arg) {
+              td::int32 v;
+              try {
+                v = std::stoi(arg.str());
+              } catch (...) {
+                return td::Status::Error(ton::ErrorCode::error, "bad value for --threads: not a number");
+              }
+              if (v <= 0) {
+                return td::Status::Error(ton::ErrorCode::error, "bad value for --threads: should be > 0");
+              }
+              if (v > 127) {
+                LOG(WARNING) << "`--threads " << v << "` is too big, effective value will be 127";
+                v = 127;
+              }
+              threads = v;
+              return td::Status::OK();
+          });
   p.add_checked_option('u', "user", "change user", [&](td::Slice user) { return td::change_user(user.str()); });
   p.add_checked_option('\0', "shutdown-at", "stop validator at the given time (unix timestamp)", [&](td::Slice arg) {
-    TRY_RESULT(at, td::to_integer_safe<td::uint32>(arg));
-    acts.push_back([&x, at]() { td::actor::send_closure(x, &ValidatorEngine::schedule_shutdown, (double)at); });
-    return td::Status::OK();
+      TRY_RESULT(at, td::to_integer_safe<td::uint32>(arg));
+      acts.push_back([&x, at]() { td::actor::send_closure(x, &ValidatorEngine::schedule_shutdown, (double) at); });
+      return td::Status::OK();
   });
   p.add_checked_option('\0', "celldb-compress-depth",
                        "optimize celldb by storing cells of depth X with whole subtrees (experimental, default: 0)",
                        [&](td::Slice arg) {
-                         TRY_RESULT(value, td::to_integer_safe<td::uint32>(arg));
-                         acts.push_back([&x, value]() {
-                           td::actor::send_closure(x, &ValidatorEngine::set_celldb_compress_depth, value);
-                         });
-                         return td::Status::OK();
+                           TRY_RESULT(value, td::to_integer_safe<td::uint32>(arg));
+                           acts.push_back([&x, value]() {
+                               td::actor::send_closure(x, &ValidatorEngine::set_celldb_compress_depth, value);
+                           });
+                           return td::Status::OK();
                        });
   p.add_checked_option(
-      '\0', "max-archive-fd",
-      "limit for a number of open file descriptirs in archive manager. 0 is unlimited (default)",
-      [&](td::Slice s) -> td::Status {
-        TRY_RESULT(v, td::to_integer_safe<size_t>(s));
-        acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_max_open_archive_files, v); });
-        return td::Status::OK();
-      });
+          '\0', "max-archive-fd",
+          "limit for a number of open file descriptirs in archive manager. 0 is unlimited (default)",
+          [&](td::Slice s) -> td::Status {
+              TRY_RESULT(v, td::to_integer_safe<size_t>(s));
+              acts.push_back(
+                      [&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_max_open_archive_files, v); });
+              return td::Status::OK();
+          });
   p.add_checked_option(
-      '\0', "archive-preload-period", "open archive slices for the past X second on startup (default: 0)",
-      [&](td::Slice s) -> td::Status {
-        auto v = td::to_double(s);
-        if (v < 0) {
-          return td::Status::Error("sync-before should be non-negative");
-        }
-        acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_archive_preload_period, v); });
-        return td::Status::OK();
-      });
+          '\0', "archive-preload-period", "open archive slices for the past X second on startup (default: 0)",
+          [&](td::Slice s) -> td::Status {
+              auto v = td::to_double(s);
+              if (v < 0) {
+                return td::Status::Error("sync-before should be non-negative");
+              }
+              acts.push_back(
+                      [&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_archive_preload_period, v); });
+              return td::Status::OK();
+          });
   p.add_option('\0', "enable-precompiled-smc",
                "enable exectuion of precompiled contracts (experimental, disabled by default)",
                []() { block::precompiled::set_precompiled_execution_enabled(true); });
   p.add_option('\0', "disable-rocksdb-stats", "disable gathering rocksdb statistics (enabled by default)", [&]() {
-    acts.push_back([&x]() { td::actor::send_closure(x, &ValidatorEngine::set_disable_rocksdb_stats, true); });
+      acts.push_back([&x]() { td::actor::send_closure(x, &ValidatorEngine::set_disable_rocksdb_stats, true); });
   });
   p.add_option('\0', "nonfinal-ls", "enable special LS queries to non-finalized blocks", [&]() {
-    acts.push_back([&x]() { td::actor::send_closure(x, &ValidatorEngine::set_nonfinal_ls_queries_enabled); });
+      acts.push_back([&x]() { td::actor::send_closure(x, &ValidatorEngine::set_nonfinal_ls_queries_enabled); });
   });
   p.add_checked_option(
-      '\0', "celldb-cache-size", "block cache size for RocksDb in CellDb, in bytes (default: 1G)",
-      [&](td::Slice s) -> td::Status {
-        TRY_RESULT(v, td::to_integer_safe<td::uint64>(s));
-        if (v == 0) {
-          return td::Status::Error("celldb-cache-size should be positive");
-        }
-        acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_celldb_cache_size, v); });
-        return td::Status::OK();
-      });
+          '\0', "celldb-cache-size", "block cache size for RocksDb in CellDb, in bytes (default: 1G)",
+          [&](td::Slice s) -> td::Status {
+              TRY_RESULT(v, td::to_integer_safe<td::uint64>(s));
+              if (v == 0) {
+                return td::Status::Error("celldb-cache-size should be positive");
+              }
+              acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_celldb_cache_size, v); });
+              return td::Status::OK();
+          });
   p.add_option('\0', "celldb-direct-io",
                "enable direct I/O mode for RocksDb in CellDb (doesn't apply when celldb cache is < 30G)", [&]() {
-                 acts.push_back([&x]() { td::actor::send_closure(x, &ValidatorEngine::set_celldb_direct_io, true); });
-               });
+              acts.push_back([&x]() { td::actor::send_closure(x, &ValidatorEngine::set_celldb_direct_io, true); });
+          });
   p.add_option('\0', "celldb-preload-all",
                "preload all cells from CellDb on startup (recommended to use with big enough celldb-cache-size and "
                "celldb-direct-io)",
                [&]() {
-                 acts.push_back([&x]() { td::actor::send_closure(x, &ValidatorEngine::set_celldb_preload_all, true); });
+                   acts.push_back(
+                           [&x]() { td::actor::send_closure(x, &ValidatorEngine::set_celldb_preload_all, true); });
                });
 
   p.add_option(
-      '\0', "celldb-in-memory",
-      "store all cells in-memory, much faster but requires a lot of RAM. RocksDb is still used as persistent storage",
-      [&]() {
-        acts.push_back([&x]() { td::actor::send_closure(x, &ValidatorEngine::set_celldb_in_memory, true); });
-      });
+          '\0', "celldb-in-memory",
+          "store all cells in-memory, much faster but requires a lot of RAM. RocksDb is still used as persistent storage",
+          [&]() {
+              acts.push_back([&x]() { td::actor::send_closure(x, &ValidatorEngine::set_celldb_in_memory, true); });
+          });
   p.add_checked_option(
-      '\0', "catchain-max-block-delay", "delay before creating a new catchain block, in seconds (default: 0.4)",
-      [&](td::Slice s) -> td::Status {
-        auto v = td::to_double(s);
-        if (v < 0) {
-          return td::Status::Error("catchain-max-block-delay should be non-negative");
-        }
-        acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_catchain_max_block_delay, v); });
-        return td::Status::OK();
-      });
+          '\0', "catchain-max-block-delay", "delay before creating a new catchain block, in seconds (default: 0.4)",
+          [&](td::Slice s) -> td::Status {
+              auto v = td::to_double(s);
+              if (v < 0) {
+                return td::Status::Error("catchain-max-block-delay should be non-negative");
+              }
+              acts.push_back(
+                      [&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_catchain_max_block_delay, v); });
+              return td::Status::OK();
+          });
   p.add_checked_option(
-      '\0', "catchain-max-block-delay-slow", "max extended catchain block delay (for too long rounds), (default: 1.0)",
-      [&](td::Slice s) -> td::Status {
-        auto v = td::to_double(s);
-        if (v < 0) {
-          return td::Status::Error("catchain-max-block-delay-slow should be non-negative");
-        }
-        acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_catchain_max_block_delay_slow, v); });
-        return td::Status::OK();
-      });
+          '\0', "catchain-max-block-delay-slow",
+          "max extended catchain block delay (for too long rounds), (default: 1.0)",
+          [&](td::Slice s) -> td::Status {
+              auto v = td::to_double(s);
+              if (v < 0) {
+                return td::Status::Error("catchain-max-block-delay-slow should be non-negative");
+              }
+              acts.push_back([&x, v]() {
+                  td::actor::send_closure(x, &ValidatorEngine::set_catchain_max_block_delay_slow, v);
+              });
+              return td::Status::OK();
+          });
   p.add_checked_option('P', "publish", "publish blocks/states to message queue <endpoint>", [&](td::Slice arg) {
-    // TODO: zmq/rmq/kafka/etc choice
-    acts.push_back([&x, endpoint = arg.str()](){ td::actor::send_closure(x, &ValidatorEngine::set_block_publisher, std::make_unique<ton::validator::BlockParser>(std::make_unique<ton::validator::BlockPublisherKafka>(endpoint))); });
-    return td::Status::OK();
+      // TODO: zmq/rmq/kafka/etc choice
+      acts.push_back([&x, endpoint = arg.str()]() {
+          td::actor::send_closure(x, &ValidatorEngine::set_block_publisher,
+                                  std::make_unique<ton::validator::BlockParser>(
+                                          std::make_unique<ton::validator::BlockPublisherKafka>(endpoint)));
+      });
+      return td::Status::OK();
   });
 
   p.add_option(
-      '\0', "fast-state-serializer",
-      "faster persistent state serializer, but requires more RAM",
-      [&]() {
-        acts.push_back(
-            [&x]() { td::actor::send_closure(x, &ValidatorEngine::set_fast_state_serializer_enabled, true); });
-      });
+          '\0', "fast-state-serializer",
+          "faster persistent state serializer, but requires more RAM",
+          [&]() {
+              acts.push_back(
+                      [&x]() {
+                          td::actor::send_closure(x, &ValidatorEngine::set_fast_state_serializer_enabled, true);
+                      });
+          });
   p.add_option(
-      '\0', "collect-validator-telemetry",
-      "store validator telemetry from private block overlay to a given file (json format)",
-      [&](td::Slice s) {
-        acts.push_back(
-            [&x, s = s.str()]() {
-              td::actor::send_closure(x, &ValidatorEngine::set_validator_telemetry_filename, s);
-            });
-      });
+          '\0', "collect-validator-telemetry",
+          "store validator telemetry from private block overlay to a given file (json format)",
+          [&](td::Slice s) {
+              acts.push_back(
+                      [&x, s = s.str()]() {
+                          td::actor::send_closure(x, &ValidatorEngine::set_validator_telemetry_filename, s);
+                      });
+          });
   p.add_option(
-      '\0', "prometheus-exporter-port",
-      "enable and set prometheus-exporter on specific http port",
-      [&](td::Slice s) {
-        acts.push_back(
-            [&x, s = s.str()]() {
-              td::uint32 port = std::stoi(s);
-              td::actor::send_closure(x, &ValidatorEngine::set_prometheus_port, port);
-            });
-      });
+          '\0', "prometheus-exporter-port",
+          "enable and set prometheus-exporter on specific http port",
+          [&](td::Slice s) {
+              acts.push_back(
+                      [&x, s = s.str()]() {
+                          td::uint32 port = std::stoi(s);
+                          td::actor::send_closure(x, &ValidatorEngine::set_prometheus_port, port);
+                      });
+          });
   auto S = p.run(argc, argv);
   if (S.is_error()) {
     LOG(ERROR) << "failed to parse options: " << S.move_as_error();
@@ -4629,14 +4726,14 @@ int main(int argc, char *argv[]) {
   td::actor::Scheduler scheduler({threads});
 
   scheduler.run_in_context([&] {
-    vm::init_vm().ensure();
+      vm::init_vm().ensure();
 
-    x = td::actor::create_actor<ValidatorEngine>("validator-engine");
-    for (auto &act : acts) {
-      act();
-    }
-    acts.clear();
-    td::actor::send_closure(x, &ValidatorEngine::run);
+      x = td::actor::create_actor<ValidatorEngine>("validator-engine");
+      for (auto &act: acts) {
+        act();
+      }
+      acts.clear();
+      td::actor::send_closure(x, &ValidatorEngine::run);
   });
   while (scheduler.run(1)) {
     if (need_stats_flag.exchange(false)) {

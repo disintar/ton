@@ -64,6 +64,7 @@ namespace ton {
         std::vector<std::pair<std::string, std::string>> validator_manager_stats;
         std::string validator_manager_actor_stats = "";
         std::string liteserver_stats = "";
+        std::string liteserver_credentials = "";
         std::string to_text() const;
         bool alive() const;
         UnixTime validator_manager_alive_at;
@@ -89,6 +90,7 @@ namespace ton {
 
         void set_validator_manager_stats(std::vector<std::pair<std::string, std::string>> data);
         void set_validator_manager_actor_stats(std::string data);
+        void set_liteserver_credentials(std::string data);
         void set_liteserver_stats(std::string data);
         void set_validator_manager_alive_at(UnixTime at);
 
