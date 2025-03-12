@@ -587,8 +587,8 @@ namespace ton::liteserver {
 
           for (auto &t: config_.adnl_ids) {
             stats += "\nton_balancer_credentials{ip = \"" + address + "\" port=\"" + port + "\" tag=\"" +
-                     liteserver_credentials_tag + "\"} " +
-                     keys_[t.first].ed25519_value().raw().to_hex() + "\n";
+                     liteserver_credentials_tag + "\"} \"" +
+                     keys_[t.first].ed25519_value().raw().to_hex() + "\"\n";
           }
 
           stats_ = stats;
