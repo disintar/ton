@@ -564,6 +564,7 @@ namespace ton::liteserver {
 
           prometheus_exporter_ = td::actor::create_actor<ton::PrometheusExporterActor>("PrometheusExporterActor",
                                                                                        8321);
+          td::actor::send_closure(prometheus_exporter_, &ton::PrometheusExporterActor::run);
           adnl_network_manager_ = adnl::AdnlNetworkManager::create((td::uint16) adnl_address_.get_port());
           keyring_ = ton::keyring::Keyring::create(db_root_ + "/keyring");
           adnl_ = adnl::Adnl::create("", keyring_.get());
@@ -587,13 +588,13 @@ namespace ton::liteserver {
           for (auto &t: config_.adnl_ids) {
             stats += "\nton_balancer_credentials{ip = \"" + address + "\" port=\"" + port + "\" tag=\"" +
                      liteserver_credentials_tag + "\"} " +
-                     keys_[t.first].ed25519_value().raw().to_hex();
+                     keys_[t.first].ed25519_value().raw().to_hex() + "\n";
           }
 
           stats_ = stats;
         }
 
-        void get_stats() {
+        std::string get_stats() {
           std::string final_status = stats_;
           final_status += "ton_balancer_best_time " + std::to_string(std::get<0>(best_time)) + "\n";
           final_status += "ton_balancer_available_servers " + std::to_string(uptodate_private_ls.size()) + "\n";
@@ -631,6 +632,7 @@ namespace ton::liteserver {
           }
 
           query_statuses_.clear();
+          return final_status;
         }
 
         td::Status init_dht() {
@@ -1642,6 +1644,10 @@ namespace ton::liteserver {
           alarm_timestamp() = td::Timestamp::in(auto_in);
           cur_alarm++;
           if (cur_alarm * auto_in >= 1) {
+            td::actor::send_closure(prometheus_exporter_,
+                                    &ton::PrometheusExporterActor::set_liteserver_stats,
+                                    get_stats());
+
             LOG(INFO) << "Clear usage, RPS: " << rps;
             rps = 0;
             usage.clear();
