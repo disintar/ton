@@ -1,6 +1,6 @@
 
-set(LITESERVER_DAEMON_SOURCE lite-server-daemon.cpp lite-server-config.hpp ../blockchain-indexer/json.hpp)
-set(LITEPROXY_SOURCE adnl-lite-proxy.cpp lite-server-config.hpp ../blockchain-indexer/json.hpp)
+set(LITESERVER_DAEMON_SOURCE lite-server-daemon.cpp lite-server-config.hpp ../blockchain-indexer/json.hpp ../validator-engine/prometheus/PrometheusExporterActor.h ../validator-engine/prometheus/PrometheusExporterActor.cpp)
+set(LITEPROXY_SOURCE adnl-lite-proxy.cpp lite-server-config.hpp ../blockchain-indexer/json.hpp ../validator-engine/prometheus/PrometheusExporterActor.h ../validator-engine/prometheus/PrometheusExporterActor.cpp)
 
 add_executable(lite-server ${LITESERVER_DAEMON_SOURCE})
 add_executable(lite-proxy ${LITEPROXY_SOURCE})

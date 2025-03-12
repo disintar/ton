@@ -47,6 +47,7 @@
 #include "td/utils/Time.h"
 #include "tl-utils/lite-utils.hpp"
 #include "tl/TlObject.h"
+#include "validator-engine/prometheus/PrometheusExporterActor.h"
 
 using ValidUntil = td::int64;
 using RateLimit = td::int32;
@@ -65,6 +66,16 @@ static std::string string_block_id(ton::tl_object_ptr<ton::lite_api::tonNode_blo
 
 static std::string string_block_id_simple(ton::tl_object_ptr<ton::lite_api::tonNode_blockId> &B) {
   return "(" + std::to_string(B->workchain_) + ":" + std::to_string(B->shard_) + ":" + std::to_string(B->seqno_) + ")";
+}
+
+double percentile(std::vector<double> &data, double percent) {
+  if (data.empty()) return 0.0;
+  std::sort(data.begin(), data.end());
+  double k = (percent / 100.0) * (data.size() - 1);
+  size_t f = static_cast<size_t>(k);
+  size_t c = f + 1;
+  if (c >= data.size()) return data[f];
+  return data[f] + (k - f) * (data[c] - data[f]);
 }
 
 std::string time_to_human(unsigned ts) {  // todo: move from explorer
@@ -551,6 +562,8 @@ namespace ton::liteserver {
           LOG(INFO) << "Start LiteProxy: " << address_;
           LOG(INFO) << "Start ADNL: " << adnl_address_;
 
+          prometheus_exporter_ = td::actor::create_actor<ton::PrometheusExporterActor>("PrometheusExporterActor",
+                                                                                       8321);
           adnl_network_manager_ = adnl::AdnlNetworkManager::create((td::uint16) adnl_address_.get_port());
           keyring_ = ton::keyring::Keyring::create(db_root_ + "/keyring");
           adnl_ = adnl::Adnl::create("", keyring_.get());
@@ -561,6 +574,63 @@ namespace ton::liteserver {
                                   std::move(cat_mask), 0);
 
           load_config();
+        }
+
+        void set_stats() {
+          std::string port = std::to_string(address_.get_port());
+          std::string address = address_.get_ip_str().str();
+
+          const char *value = getenv("TON_PROMETHEUS_SHARE_CREDENTIALS");
+          std::string liteserver_credentials_tag = value;
+          std::string stats = "";
+
+          for (auto &t: config_.adnl_ids) {
+            stats += "\nton_balancer_credentials{ip = \"" + address + "\" port=\"" + port + "\" tag=\"" +
+                     liteserver_credentials_tag + "\"} " +
+                     keys_[t.first].ed25519_value().raw().to_hex();
+          }
+
+          stats_ = stats;
+        }
+
+        void get_stats() {
+          std::string final_status = stats_;
+          final_status += "ton_balancer_best_time " + std::to_string(std::get<0>(best_time)) + "\n";
+          final_status += "ton_balancer_available_servers " + std::to_string(uptodate_private_ls.size()) + "\n";
+          int success_count = 0, fail_count = 0;
+          std::vector<double> elapsed_times;
+
+          for (const auto &[success, elapsed, _]: query_statuses_) {
+            if (success) success_count++;
+            else fail_count++;
+            elapsed_times.push_back(elapsed);
+          }
+
+          double avg_elapsed = elapsed_times.empty() ? 0.0 :
+                               std::accumulate(elapsed_times.begin(), elapsed_times.end(), 0.0) / elapsed_times.size();
+
+          double p70_elapsed = percentile(elapsed_times, 70.0);
+          double p90_elapsed = percentile(elapsed_times, 90.0);
+
+          auto sorted_queries = query_statuses_;
+          std::sort(sorted_queries.begin(), sorted_queries.end(),
+                    [](const auto &a, const auto &b) { return std::get<1>(a) > std::get<1>(b); });
+
+          final_status += "ton_balancer_success_count " + std::to_string(success_count) + "\n";
+          final_status += "ton_balancer_fail_count " + std::to_string(fail_count) + "\n";
+          final_status += "ton_balancer_elapsed_avg " + std::to_string(avg_elapsed) + "\n";
+          final_status += "ton_balancer_elapsed_p70 " + std::to_string(p70_elapsed) + "\n";
+          final_status += "ton_balancer_elapsed_p90 " + std::to_string(p90_elapsed) + "\n";
+
+          size_t top_n = std::min(sorted_queries.size(), static_cast<size_t>(5));
+          for (size_t i = 0; i < top_n; ++i) {
+            const auto &[success, elapsed, query] = sorted_queries[i];
+            final_status += "ton_balancer_top_query_elapsed{query=\"" + query + "\",success=\""
+                            + (success ? "true" : "false") + "\"} "
+                            + std::to_string(elapsed) + "\n";
+          }
+
+          query_statuses_.clear();
         }
 
         td::Status init_dht() {
@@ -857,13 +927,15 @@ namespace ton::liteserver {
             LOG(WARNING) << "[checkItemPublished] Cache new item: " << root_hash.to_hex() << " category " << category;
             publish_items.push_front(new_item);
           } else {
-            LOG(WARNING) << "[checkItemPublished] Cache item: " << root_hash.to_hex() << " category " << category << " founded!";
+            LOG(WARNING)
+            << "[checkItemPublished] Cache item: " << root_hash.to_hex() << " category " << category << " founded!";
           }
 
           promise.set_value(create_serialize_tl_object<ton::lite_api::liteServer_itemPublished>(founded));
         }
 
-        void publish_call(adnl::AdnlNodeIdShort dst, td::BufferSlice data, std::time_t started_at, td::Timer elapsed, bool is_cache) {
+        void publish_call(adnl::AdnlNodeIdShort dst, td::BufferSlice data, std::time_t started_at, td::Timer elapsed,
+                          bool is_cache) {
           auto elapsed_t = elapsed.elapsed();
           auto F = fetch_tl_object<lite_api::liteServer_query>(data.clone(), true);
           if (F.is_ok()) {
@@ -876,7 +948,7 @@ namespace ton::liteserver {
               nlohmann::json answer;
               answer["dst"] = dst.bits256_value().to_hex();
               auto q = lite_query_name_by_id(query_obj->get_id());
-              if (is_cache){
+              if (is_cache) {
                 answer["q"] = q + "_cache";
               } else {
                 answer["q"] = q;
@@ -951,6 +1023,7 @@ namespace ton::liteserver {
 
               if (refire + 1 > allowed_refire) {
                 LOG(ERROR) << "Too deep refire";
+                query_statuses_.push_back({false, elapsed.elapsed(), compiled_query});
                 auto res = create_serialize_tl_object<lite_api::liteServer_error>(error->code_,
                                                                                   error->message_ +
                                                                                   " : tried over all nodes");
@@ -973,6 +1046,7 @@ namespace ton::liteserver {
             } else {
               LOG(INFO)
               << "Query to: " << server_adnl << " success, Query: " << compiled_query << " Elapsed: " << elapsed;
+              query_statuses_.push_back({false, elapsed.elapsed(), compiled_query});
               td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, data.clone(), started_at,
                                       elapsed, false);
               process_cache(std::move(data), res.clone(), compiled_query, elapsed);
@@ -1383,7 +1457,7 @@ namespace ton::liteserver {
                                     std::string params;
 
                                     for (const auto &param: q.param_list_) {
-                                      params += param + " ";
+                                      params += std::to_string(param) + " ";
                                     }
 
                                     query_compiled = " Query: getConfigParams(" + string_block_id(q.id_) + ", mode: "
@@ -1582,6 +1656,11 @@ namespace ton::liteserver {
             stats_data_.clear();
             LOG(ERROR) << "Stat cache too large, clear";
           }
+
+          if (query_statuses_.size() > 10000) {
+            query_statuses_.clear();
+            LOG(ERROR) << "Query statuses too large, clear";
+          }
         }
 
         void update_server_stats() {
@@ -1682,6 +1761,8 @@ namespace ton::liteserver {
 
             td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key_short, key.first, std::move(P));
           }
+
+          set_stats();
         }
 
     private:
@@ -1726,6 +1807,9 @@ namespace ton::liteserver {
         std::map<ton::adnl::AdnlNodeIdShort, int> usage;
         long long rps;
         std::map<BlockSeqno, WaitList<td::actor::Actor, td::Unit>> shard_client_waiters_;
+        std::string stats_;
+        td::actor::ActorOwn<ton::PrometheusExporterActor> prometheus_exporter_;
+        std::vector<std::tuple<bool, double, std::string>> query_statuses_;
     };
 }  // namespace ton::liteserver
 

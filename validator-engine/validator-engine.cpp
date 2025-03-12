@@ -1308,6 +1308,7 @@ void ValidatorEngine::start_up() {
 
   const char *value = getenv("TON_PROMETHEUS_SHARE_CREDENTIALS");
   allow_share_liteserver_credentials_ = bool(value);
+  liteserver_credentials_tag_ = value;
 
 
 #if TON_USE_JEMALLOC
@@ -1337,11 +1338,12 @@ void ValidatorEngine::update_prometheus_exporter_stats() {
   td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::prepare_actor_stats,
                           std::move(P2));
 
-  if (allow_share_liteserver_credentials_){
+  if (allow_share_liteserver_credentials_) {
     std::string liteserver_credentials;
     for (auto &ip: addrs_) {
       for (auto &[t, e]: config_.liteservers) {
-        liteserver_credentials += "ton_liteserver_credentials{ip=\"" + ip.get_ip_str().str() + "\" port=\"" + std::to_string(t) + "\"} " +
+        liteserver_credentials += "ton_liteserver_credentials{ip=\"" + ip.get_ip_str().str() + "\" port=\"" +
+                                  std::to_string(t) + "\" tag=\"" + liteserver_credentials_tag_ + "\"} " +
                                   keys_[e].ed25519_value().raw().to_hex() + "\n";
       }
     }
