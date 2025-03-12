@@ -711,6 +711,8 @@ namespace ton::liteserver {
 
         void created_ext_server(td::actor::ActorOwn<adnl::AdnlExtServer> server) {
           LOG(INFO) << "Server started";
+
+          set_stats();
           lite_proxy_ = std::move(server);
           td::actor::send_closure(actor_id(this), &LiteProxy::init_users);
           td::actor::send_closure(actor_id(this), &LiteProxy::init_private_servers);
@@ -1761,8 +1763,6 @@ namespace ton::liteserver {
 
             td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key_short, key.first, std::move(P));
           }
-
-          set_stats();
         }
 
     private:
