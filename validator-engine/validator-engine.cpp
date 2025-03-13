@@ -1343,8 +1343,8 @@ void ValidatorEngine::update_prometheus_exporter_stats() {
     for (auto &ip: addrs_) {
       for (auto &[t, e]: config_.liteservers) {
         liteserver_credentials += "ton_liteserver_credentials{ip=\"" + ip.get_ip_str().str() + "\" port=\"" +
-                                  std::to_string(t) + "\" tag=\"" + liteserver_credentials_tag_ + "\"} \"" +
-                                  keys_[e].ed25519_value().raw().to_hex() + "\"\n";
+                                  std::to_string(t) + "\" tag=\"" + liteserver_credentials_tag_ + "\" pubkey=\"" +
+                                  keys_[e].ed25519_value().raw().to_hex() + "\"} 1\n";
       }
     }
 
