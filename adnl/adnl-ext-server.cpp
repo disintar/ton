@@ -63,12 +63,14 @@ td::Status AdnlInboundConnection::process_init_packet(td::BufferSlice data) {
 void AdnlInboundConnection::inited_crypto(td::Result<td::BufferSlice> R) {
   if (R.is_error()) {
     LOG(ERROR) << "failed to init crypto: " << R.move_as_error();
+    buffered_fd_.close();
     stop();
     return;
   }
   auto S = init_crypto(R.move_as_ok().as_slice());
   if (S.is_error()) {
     LOG(ERROR) << "failed to init crypto (2): " << R.move_as_error();
+    buffered_fd_.close();
     stop();
     return;
   }
