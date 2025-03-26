@@ -38,10 +38,18 @@ enum class AdnlLocalIdMode : td::uint32 { direct_only = 1, drop_from_net = 2 };
 
 class AdnlNetworkManager;
 
+class AdnlInboundConnectionCallback {
+public:
+    virtual void connection_inited(AdnlNodeIdShort connection_id, std::string ip_address) = 0;
+    virtual void connection_stopped(AdnlNodeIdShort connection_id, std::string ip_address) = 0;
+    virtual ~AdnlInboundConnectionCallback() = default;
+};
+
 class AdnlExtServer : public td::actor::Actor {
  public:
   virtual void add_local_id(AdnlNodeIdShort id) = 0;
   virtual void add_tcp_port(td::uint16 port) = 0;
+  virtual void set_connection_callback(std::shared_ptr<adnl::AdnlInboundConnectionCallback> callback) = 0;
   virtual ~AdnlExtServer() = default;
 };
 

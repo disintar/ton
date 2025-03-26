@@ -172,9 +172,15 @@ void AdnlExtServerImpl::accepted(td::SocketFd fd) {
     connection_count++;
 
     LOG(INFO) << "Accept from: " << addr << " connections: " << connection_count;
-    td::actor::create_actor<AdnlInboundConnection>(td::actor::ActorOptions().with_name("inconn").with_poll(),
-                                                   std::move(fd), peer_table_, actor_id(this))
-            .release();
+    if (!connection_callback_){
+      td::actor::create_actor<AdnlInboundConnection>(td::actor::ActorOptions().with_name("inconn").with_poll(),
+                                                     std::move(fd), peer_table_, actor_id(this))
+              .release();
+    } else {
+      td::actor::create_actor<AdnlInboundConnection>(td::actor::ActorOptions().with_name("inconn").with_poll(),
+                                                     std::move(fd), peer_table_, actor_id(this), connection_callback_)
+              .release();
+    }
   }
 }
 

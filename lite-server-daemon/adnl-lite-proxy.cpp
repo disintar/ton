@@ -631,6 +631,14 @@ namespace ton::liteserver {
                             + std::to_string(elapsed) + "\n";
           }
 
+          long long total_connections = 0;
+          for (auto &c : connections_count_){
+            total_connections += c.second;
+            final_status += "ton_balancer_connections{adnl_short=\"" + c.first.bits256_value().to_hex() + "\"} " + std::to_string(c.second) + "\n";
+          }
+
+          final_status += "\nton_balancer_total_connection " + std::to_string(total_connections) + "\n";
+
           query_statuses_.clear();
           return final_status;
         }
@@ -1641,6 +1649,19 @@ namespace ton::liteserver {
           shard_client_waiters_[seqno].waiting_.emplace_back(timeout, 0, std::move(promise));
         }
 
+        void connection_inited(adnl::AdnlNodeIdShort connection_id, std::string ip_address) {
+          connections_count_[connection_id] += 1;
+        }
+
+        void connection_stopped(adnl::AdnlNodeIdShort connection_id, std::string ip_address) {
+          auto it = connections_count_.find(connection_id);
+          if (it != connections_count_.end()) {
+            if (--(it->second) <= 0) {
+              connections_count_.erase(it);
+            }
+          }
+        }
+
         void alarm() override {
           double auto_in = 0.2;
           alarm_timestamp() = td::Timestamp::in(auto_in);
@@ -1716,6 +1737,29 @@ namespace ton::liteserver {
                                   std::make_unique<Cb>(actor_id(this)));
 
           td::actor::send_closure(lite_proxy_, &adnl::AdnlExtServer::add_local_id, id);
+
+          class InboundCb : public adnl::AdnlInboundConnectionCallback {
+          private:
+              td::actor::ActorId<LiteProxy> id_;
+
+          public:
+              void connection_inited(adnl::AdnlNodeIdShort connection_id, std::string ip_address) {
+                LOG(ERROR) << "Got connection from: " << connection_id << " at " << ip_address;
+                td::actor::send_closure(id_, &LiteProxy::connection_inited, connection_id, std::move(ip_address));
+              };
+
+              void connection_stopped(adnl::AdnlNodeIdShort connection_id, std::string ip_address) {
+                LOG(ERROR) << "Stopped connection from: " << connection_id << " at " << ip_address;
+                td::actor::send_closure(id_, &LiteProxy::connection_stopped, connection_id, std::move(ip_address));
+              };
+
+              InboundCb(td::actor::ActorId<LiteProxy> id) : id_(std::move(id)) {
+              }
+          };
+
+          td::actor::send_closure(lite_proxy_, &adnl::AdnlExtServer::set_connection_callback,
+                                  std::make_shared<InboundCb>(actor_id(this)));
+
           LOG(INFO) << "Will fire in 1.0";
           alarm_timestamp() = td::Timestamp::in(1.0);
         }
@@ -1802,6 +1846,7 @@ namespace ton::liteserver {
         std::map<adnl::AdnlNodeIdShort, std::tuple<ton::UnixTime, ton::BlockSeqno>> private_servers_status_;
         std::map<adnl::AdnlNodeIdShort, td::actor::ActorOwn<LiteServerClient>> private_servers_;
         std::map<adnl::AdnlNodeIdShort, td::actor::ActorOwn<LiteServerClient>> private_servers_lazy_clients_;
+        std::map<adnl::AdnlNodeIdShort, long long> connections_count_;
         td::IPAddress address_;
         td::IPAddress adnl_address_;
         std::shared_ptr<td::RocksDb> ratelimitdb;

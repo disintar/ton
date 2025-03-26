@@ -37,20 +37,13 @@ class AdnlExtServerImpl;
 
 class AdnlInboundConnection : public AdnlExtConnection {
  public:
-  class Callback {
-    public:
-        virtual void connection_inited(AdnlNodeIdShort connection_id, std::string ip_address) = 0;
-        virtual void connection_stopped(AdnlNodeIdShort connection_id, std::string ip_address) = 0;
-        virtual ~Callback() = default;
-  };
-
   AdnlInboundConnection(td::SocketFd fd, td::actor::ActorId<AdnlPeerTable> peer_table,
                         td::actor::ActorId<AdnlExtServerImpl> ext_server)
       : AdnlExtConnection(std::move(fd), nullptr, false), peer_table_(peer_table), ext_server_(ext_server) {
   }
 
   AdnlInboundConnection(td::SocketFd fd, td::actor::ActorId<AdnlPeerTable> peer_table,
-                        td::actor::ActorId<AdnlExtServerImpl> ext_server, std::unique_ptr<Callback> callback)
+                        td::actor::ActorId<AdnlExtServerImpl> ext_server, std::shared_ptr<AdnlInboundConnectionCallback> callback)
       : AdnlExtConnection(std::move(fd), nullptr, false), peer_table_(peer_table), callback_(std::move(callback)), ext_server_(ext_server) {
     callback_available = true;
     local_address_.init_peer_address(buffered_fd_);
@@ -70,7 +63,7 @@ class AdnlInboundConnection : public AdnlExtConnection {
 
  private:
   td::actor::ActorId<AdnlPeerTable> peer_table_;
-  std::unique_ptr<Callback> callback_;
+  std::shared_ptr<AdnlInboundConnectionCallback> callback_;
   bool callback_available = false;
   td::actor::ActorId<AdnlExtServerImpl> ext_server_;
   AdnlNodeIdShort local_id_;
@@ -86,6 +79,9 @@ class AdnlExtServerImpl : public AdnlExtServer {
   void add_local_id(AdnlNodeIdShort id) override;
   void accepted(td::SocketFd fd);
   void stop(std::string ip_addr);
+  void set_connection_callback(std::shared_ptr<AdnlInboundConnectionCallback> callback){
+    connection_callback_ = std::move(callback);
+  }
   void decrypt_init_packet(AdnlNodeIdShort dst, td::BufferSlice data, td::Promise<td::BufferSlice> promise);
 
   void start_up() override {
@@ -116,6 +112,7 @@ class AdnlExtServerImpl : public AdnlExtServer {
 
  private:
   td::actor::ActorId<AdnlPeerTable> peer_table_;
+  std::shared_ptr<AdnlInboundConnectionCallback> connection_callback_;
   std::set<AdnlNodeIdShort> local_ids_;
   std::set<td::uint16> ports_;
   std::map<td::uint16, td::actor::ActorOwn<td::TcpInfiniteListener>> listeners_;
