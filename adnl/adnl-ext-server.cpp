@@ -72,6 +72,11 @@ void AdnlInboundConnection::inited_crypto(td::Result<td::BufferSlice> R) {
     init_stop();
     return;
   }
+
+  if (callback_available){
+    callback_->connection_inited(local_id_, local_address_.get_ip_host());
+  }
+
   send(td::BufferSlice());
   resume_read();
   notify();
