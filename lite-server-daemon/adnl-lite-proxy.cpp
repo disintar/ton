@@ -1651,7 +1651,7 @@ namespace ton::liteserver {
 
         void allow_connection(adnl::AdnlNodeIdShort connection_id, std::string ip_address, td::Promise<bool> P) {
           auto it = connections_count_.find(connection_id);
-          if (it != connections_count_.end() && (connections_count_[connection_id] > 200)) {
+          if (it != connections_count_.end() && (it->second > 200)) {
             P.set_value(false);
           } else {
             P.set_value(true);
@@ -1757,12 +1757,10 @@ namespace ton::liteserver {
               }
 
               void connection_inited(adnl::AdnlNodeIdShort connection_id, std::string ip_address) {
-                LOG(ERROR) << "Got connection from: " << connection_id << " at " << ip_address;
                 td::actor::send_closure(id_, &LiteProxy::connection_inited, connection_id, std::move(ip_address));
               };
 
               void connection_stopped(adnl::AdnlNodeIdShort connection_id, std::string ip_address) {
-                LOG(ERROR) << "Stopped connection from: " << connection_id << " at " << ip_address;
                 td::actor::send_closure(id_, &LiteProxy::connection_stopped, connection_id, std::move(ip_address));
               };
 
