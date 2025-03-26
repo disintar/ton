@@ -1649,6 +1649,15 @@ namespace ton::liteserver {
           shard_client_waiters_[seqno].waiting_.emplace_back(timeout, 0, std::move(promise));
         }
 
+        void allow_connection(adnl::AdnlNodeIdShort connection_id, std::string ip_address, td::Promise<bool> P) {
+          auto it = connections_count_.find(connection_id);
+          if (it != connections_count_.end() && (connections_count_[connection_id] > 200)) {
+            P.set_value(false);
+          } else {
+            P.set_value(true);
+          }
+        }
+
         void connection_inited(adnl::AdnlNodeIdShort connection_id, std::string ip_address) {
           connections_count_[connection_id] += 1;
         }
@@ -1743,6 +1752,10 @@ namespace ton::liteserver {
               td::actor::ActorId<LiteProxy> id_;
 
           public:
+              void allow_connection(adnl::AdnlNodeIdShort connection_id, std::string ip_address, td::Promise<bool> P){
+                td::actor::send_closure(id_, &LiteProxy::allow_connection, connection_id, std::move(ip_address), std::move(P));
+              }
+
               void connection_inited(adnl::AdnlNodeIdShort connection_id, std::string ip_address) {
                 LOG(ERROR) << "Got connection from: " << connection_id << " at " << ip_address;
                 td::actor::send_closure(id_, &LiteProxy::connection_inited, connection_id, std::move(ip_address));

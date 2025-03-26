@@ -52,14 +52,14 @@ class AdnlInboundConnection : public AdnlExtConnection {
   td::Status process_packet(td::BufferSlice data) override;
   td::Status process_init_packet(td::BufferSlice data) override;
   td::Status process_custom_packet(td::BufferSlice &data, bool &processed) override;
+  void allow_connection(bool allow);
   void inited_crypto(td::Result<td::BufferSlice> R);
-  void init_stop(){
+
+  ~AdnlInboundConnection() override {
     if (callback_available){
       callback_->connection_stopped(local_id_, local_address_.get_ip_host());
     }
-
-    stop();
-  };
+  }
 
  private:
   td::actor::ActorId<AdnlPeerTable> peer_table_;

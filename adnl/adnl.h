@@ -40,6 +40,7 @@ class AdnlNetworkManager;
 
 class AdnlInboundConnectionCallback {
 public:
+    virtual void allow_connection(AdnlNodeIdShort connection_id, std::string ip_address, td::Promise<bool> P) = 0;
     virtual void connection_inited(AdnlNodeIdShort connection_id, std::string ip_address) = 0;
     virtual void connection_stopped(AdnlNodeIdShort connection_id, std::string ip_address) = 0;
     virtual ~AdnlInboundConnectionCallback() = default;

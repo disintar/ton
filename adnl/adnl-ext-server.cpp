@@ -60,21 +60,40 @@ td::Status AdnlInboundConnection::process_init_packet(td::BufferSlice data) {
   return td::Status::OK();
 }
 
+void AdnlInboundConnection::allow_connection(bool allow){
+  callback_->connection_inited(local_id_, local_address_.get_ip_host());
+
+  if (!allow){
+    stop();
+  }
+};
+
 void AdnlInboundConnection::inited_crypto(td::Result<td::BufferSlice> R) {
   if (R.is_error()) {
     LOG(ERROR) << "failed to init crypto: " << R.move_as_error();
-    init_stop();
+    stop();
     return;
   }
   auto S = init_crypto(R.move_as_ok().as_slice());
   if (S.is_error()) {
     LOG(ERROR) << "failed to init crypto (2): " << R.move_as_error();
-    init_stop();
+    stop();
     return;
   }
 
   if (callback_available){
-    callback_->connection_inited(local_id_, local_address_.get_ip_host());
+    auto P = td::PromiseCreator::lambda(
+            [SelfId = actor_id(this)](td::Result<bool> R) mutable {
+                if (R.is_error()) {
+                  td::actor::send_closure(SelfId, &AdnlInboundConnection::allow_connection, false);
+                  return;
+                }
+                auto handle = R.move_as_ok();
+                td::actor::send_closure(SelfId, &AdnlInboundConnection::allow_connection, handle);
+            });
+
+
+    callback_->allow_connection(local_id_, local_address_.get_ip_host(), std::move(P));
   }
 
   send(td::BufferSlice());
