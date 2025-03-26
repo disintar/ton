@@ -37,21 +37,44 @@ class AdnlExtServerImpl;
 
 class AdnlInboundConnection : public AdnlExtConnection {
  public:
+  class Callback {
+    public:
+        virtual void connection_inited(AdnlNodeIdShort connection_id, std::string ip_address) = 0;
+        virtual void connection_stopped(AdnlNodeIdShort connection_id, std::string ip_address) = 0;
+        virtual ~Callback() = default;
+  };
+
   AdnlInboundConnection(td::SocketFd fd, td::actor::ActorId<AdnlPeerTable> peer_table,
                         td::actor::ActorId<AdnlExtServerImpl> ext_server)
       : AdnlExtConnection(std::move(fd), nullptr, false), peer_table_(peer_table), ext_server_(ext_server) {
+  }
+
+  AdnlInboundConnection(td::SocketFd fd, td::actor::ActorId<AdnlPeerTable> peer_table,
+                        td::actor::ActorId<AdnlExtServerImpl> ext_server, std::unique_ptr<Callback> callback)
+      : AdnlExtConnection(std::move(fd), nullptr, false), peer_table_(peer_table), callback_(std::move(callback)), ext_server_(ext_server) {
+    callback_available = true;
+    local_address_.init_peer_address(buffered_fd_);
   }
 
   td::Status process_packet(td::BufferSlice data) override;
   td::Status process_init_packet(td::BufferSlice data) override;
   td::Status process_custom_packet(td::BufferSlice &data, bool &processed) override;
   void inited_crypto(td::Result<td::BufferSlice> R);
-  void init_stop();
+  void init_stop(){
+    if (callback_available){
+      callback_->connection_stopped(local_id_, local_address_.get_ip_host());
+    }
+
+    stop();
+  };
 
  private:
   td::actor::ActorId<AdnlPeerTable> peer_table_;
+  std::unique_ptr<Callback> callback_;
+  bool callback_available = false;
   td::actor::ActorId<AdnlExtServerImpl> ext_server_;
   AdnlNodeIdShort local_id_;
+  td::IPAddress local_address_;
 
   td::SecureString nonce_;
   AdnlNodeIdShort remote_id_ = AdnlNodeIdShort::zero();

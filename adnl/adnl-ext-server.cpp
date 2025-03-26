@@ -63,15 +63,13 @@ td::Status AdnlInboundConnection::process_init_packet(td::BufferSlice data) {
 void AdnlInboundConnection::inited_crypto(td::Result<td::BufferSlice> R) {
   if (R.is_error()) {
     LOG(ERROR) << "failed to init crypto: " << R.move_as_error();
-    buffered_fd_.close();
-    stop();
+    init_stop();
     return;
   }
   auto S = init_crypto(R.move_as_ok().as_slice());
   if (S.is_error()) {
     LOG(ERROR) << "failed to init crypto (2): " << R.move_as_error();
-    buffered_fd_.close();
-    stop();
+    init_stop();
     return;
   }
   send(td::BufferSlice());
@@ -172,15 +170,11 @@ void AdnlExtServerImpl::accepted(td::SocketFd fd) {
 
     auto &connection_count = ip_connection_count_[addr];
     connection_count++;
-    if (connection_count > 50){
-      LOG(INFO) << "Accept from: " << addr << " connections: " << connection_count << " TOO LARGE!";
-      // fd.close();
-    } else {
-      LOG(INFO) << "Accept from: " << addr << " connections: " << connection_count;
-      td::actor::create_actor<AdnlInboundConnection>(td::actor::ActorOptions().with_name("inconn").with_poll(),
-                                                     std::move(fd), peer_table_, actor_id(this))
-              .release();
-    }
+
+    LOG(INFO) << "Accept from: " << addr << " connections: " << connection_count;
+    td::actor::create_actor<AdnlInboundConnection>(td::actor::ActorOptions().with_name("inconn").with_poll(),
+                                                   std::move(fd), peer_table_, actor_id(this))
+            .release();
   }
 }
 
