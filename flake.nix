@@ -15,7 +15,7 @@
     ];
 
     # Import TON package based on host and kind
-    ton = { host, system, kind }: let
+    tonSrc = { host, system, kind }: let
       p = host.hostPlatform;
       pkgname = if p.isLinux then
         if p.isx86 then "linux-x86-64-${kind}.nix"
@@ -34,7 +34,7 @@
     };
 
     # Extend TON to build Python bindings
-    tonPython = ton: python: ton.overrideAttrs (prev: {
+    tonWithPython = ton: python: ton.overrideAttrs (prev: {
       buildInputs = prev.buildInputs ++ [ python ];
       cmakeFlags = prev.cmakeFlags ++ [
         "-DTON_USE_PYTHON=1"
@@ -53,7 +53,7 @@
       outputs = [ "out" ];
     });
 
-    # Host packages with gcc8 overlay applied
+    # Host pkgs with gcc8 overlay
     hostPkgs = system:
       import nixpkgs-stable {
         inherit system;
@@ -61,32 +61,34 @@
       };
 
   in flake-utils.lib.eachDefaultSystem (system: let
-      host     = hostPkgs system;
-      tonk     = kind: ton { inherit host system kind; };
-      tonOldPy = ton: python: (tonPython ton python).overrideAttrs (prev: {
-        dontPatchELF = true;
-        preFixup = ''
-          patchelf --remove-rpath $out/*/*
-        '';
-      });
+      host   = hostPkgs system;
+      # create TON builds for 'static' and 'tonlib'
+      tonStatic = tonSrc { inherit host system; kind = "static"; };
+      tonLib    = tonSrc { inherit host system; kind = "tonlib"; };
+      # apply Python extension
+      tonStaticPy39  = tonWithPython tonStatic host.python39;
+      tonLibPy39     = tonWithPython tonLib    host.python39;
+      tonLibPy310    = tonWithPython tonLib    host.python310;
+      tonLibPy311    = tonWithPython tonLib    host.python311;
+      tonLibPy312    = tonWithPython tonLib    host.python312;
     in {
       packages = {
-        ton-static     = tonk "static";
-        ton-tonlib     = tonk "tonlib";
-        ton-python-39  = tonOldPy ton-tonlib host.python39;
-        ton-python-310 = tonOldPy ton-tonlib host.python310;
-        ton-python-311 = tonOldPy ton-tonlib host.python311;
-        ton-python-312 = tonOldPy ton-tonlib host.python312;
+        "ton-static"    = tonStatic;
+        "ton-tonlib"    = tonLib;
+        "ton-python-39"  = tonLibPy39;
+        "ton-python-310" = tonLibPy310;
+        "ton-python-311" = tonLibPy311;
+        "ton-python-312" = tonLibPy312;
       };
 
       devShells.default = host.mkShell {
-        inputsFrom = [ packages.ton-tonlib ];
+        inputsFrom = [ packages."ton-tonlib" ];
         shellHook = ''
-          export cmakeFlags="${host.lib.concatStringsSep " " packages.ton-tonlib.cmakeFlags}"
+          export cmakeFlags="${host.lib.concatStringsSep " " packages."ton-tonlib".cmakeFlags}"
         '';
       };
 
-      defaultPackage = packages.ton-python-39;
+      defaultPackage = packages."ton-python-39";
     }
   );
 }
