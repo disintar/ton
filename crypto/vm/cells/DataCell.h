@@ -21,6 +21,7 @@
 #include "td/utils/Span.h"
 #include "td/utils/ThreadSafeCounter.h"
 #include "vm/cells/Cell.h"
+#include <new>
 
 namespace vm {
 

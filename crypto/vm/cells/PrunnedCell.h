@@ -19,6 +19,7 @@
 #pragma once
 
 #include "vm/cells/DataCell.h"
+#include <new>
 
 namespace vm {
 struct PrunnedCellInfo {
