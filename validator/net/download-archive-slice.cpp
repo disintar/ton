@@ -167,7 +167,7 @@ void DownloadArchiveSlice::got_archive_info(td::BufferSlice data) {
 
   ton_api::downcast_call(*f.get(), td::overloaded(
                                        [&](const ton_api::tonNode_archiveNotFound &obj) {
-                                         auto error_message = "remote db not found in member " + download_from_.bits256_value().to_hex();
+                                         auto error_message = "remote db not found in member " + download_from_.serialize();
 
                                          if (original_zero_download_){
                                            error_message += " (not random, ";
