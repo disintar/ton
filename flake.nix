@@ -33,10 +33,10 @@
 
         tonPython = host: tonDerivation: python:
           tonDerivation.overrideAttrs (previousAttrs: {
-            buildInputs       = previousAttrs.buildInputs       ++ [ python ];
-            nativeBuildInputs = previousAttrs.nativeBuildInputs ++ [ host.gcc8 ];
+             buildInputs       = (previousAttrs.buildInputs       or []) ++ [ python ];
+            nativeBuildInputs = (previousAttrs.nativeBuildInputs or []) ++ [ host.gcc8 ];
 
-            cmakeFlags = previousAttrs.cmakeFlags ++ [
+            cmakeFlags = (previousAttrs.cmakeFlags or []) ++ [
               "-DTON_USE_PYTHON=1"
               "-DPython_ROOT_DIR=${python}"
               "-DPython_EXECUTABLE=${python.pythonForBuild.interpreter}"
@@ -44,7 +44,7 @@
               "-DPython_LIBRARY=${python}/lib/python${python.pythonVersion}"
             ];
 
-            configureFlags = previousAttrs.configureFlags ++ [
+            configureFlags = (previousAttrs.configureFlags or []) ++ [
               "-DCMAKE_C_COMPILER=${host.gcc8}/bin/gcc"
               "-DCMAKE_CXX_COMPILER=${host.gcc8}/bin/g++"
             ];
