@@ -249,7 +249,7 @@ td::Result<std::shared_ptr<DhtUpdateRule>> DhtUpdateRuleSignature::create() {
 
 td::Status DhtUpdateRuleAnybody::check_value(const DhtValue &value) {
   if (value.value().size() > DhtValue::max_value_size()) {
-    return td::Status::Error(ErrorCode::protoviolation, "too big value");
+    return td::Status::Error(ErrorCode::protoviolation, "too big value, size: " + std::to_string(value.value().size()));
   }
   if (value.signature().size() > 0) {
     return td::Status::Error(ErrorCode::protoviolation, "cannot have signature in DhtUpdateRuleAnybody");
@@ -273,7 +273,8 @@ td::Result<std::shared_ptr<DhtUpdateRule>> DhtUpdateRuleAnybody::create() {
 
 td::Status DhtUpdateRuleOverlayNodes::check_value(const DhtValue &value) {
   if (value.value().size() > DhtValue::max_value_size()) {
-    return td::Status::Error(ErrorCode::protoviolation, "too big value");
+    return td::Status::Error(ErrorCode::protoviolation, "too big value, size: " + std::to_string(value.value().size()
+    ));
   }
   if (value.signature().size() > 0) {
     return td::Status::Error(ErrorCode::protoviolation, "cannot have signature in DhtUpdateRuleOverlayNodes");
