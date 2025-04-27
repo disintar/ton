@@ -2930,30 +2930,30 @@ void ValidatorManagerImpl::prepare_stats(td::Promise<std::vector<std::pair<std::
   }
 
   vec.emplace_back("start_time", td::to_string(started_at_));
-  for (int iter = 0; iter < 2; ++iter) {
-    td::StringBuilder sb;
-    td::uint32 total = 0;
-    for (const auto &p : (iter ? total_ls_queries_error_ : total_ls_queries_ok_)) {
-      sb << lite_query_name_by_id(p.first) << ":" << p.second << " ";
-      total += p.second;
-    }
-    sb << "TOTAL:" << total;
-    vec.emplace_back(PSTRING() << "total.ls_queries_" << (iter ? "error" : "ok"), sb.as_cslice().str());
-  }
-  vec.emplace_back("total.ext_msg_check",
-                   PSTRING() << "ok:" << total_check_ext_messages_ok_ << " error:" << total_check_ext_messages_error_);
-  vec.emplace_back("total.collated_blocks.master", PSTRING() << "ok:" << total_collated_blocks_master_ok_
-                                                             << " error:" << total_collated_blocks_master_error_);
-  vec.emplace_back("total.collated_blocks.shard", PSTRING() << "ok:" << total_collated_blocks_shard_ok_
-                                                            << " error:" << total_collated_blocks_shard_error_);
-  vec.emplace_back("total.validated_blocks.master", PSTRING() << "ok:" << total_validated_blocks_master_ok_
-                                                              << " error:" << total_validated_blocks_master_error_);
-  vec.emplace_back("total.validated_blocks.shard", PSTRING() << "ok:" << total_validated_blocks_shard_ok_
-                                                             << " error:" << total_validated_blocks_shard_error_);
-  if (is_validator()) {
-    vec.emplace_back("active_validator_groups", PSTRING() << "master:" << active_validator_groups_master_
-                                                          << " shard:" << active_validator_groups_shard_);
-  }
+//  for (int iter = 0; iter < 2; ++iter) {
+//    td::StringBuilder sb;
+//    td::uint32 total = 0;
+//    for (const auto &p : (iter ? total_ls_queries_error_ : total_ls_queries_ok_)) {
+//      sb << lite_query_name_by_id(p.first) << ":" << p.second << " ";
+//      total += p.second;
+//    }
+//    sb << "TOTAL:" << total;
+//    vec.emplace_back(PSTRING() << "total.ls_queries_" << (iter ? "error" : "ok"), sb.as_cslice().str());
+//  }
+//  vec.emplace_back("total.ext_msg_check",
+//                   PSTRING() << "ok:" << total_check_ext_messages_ok_ << " error:" << total_check_ext_messages_error_);
+//  vec.emplace_back("total.collated_blocks.master", PSTRING() << "ok:" << total_collated_blocks_master_ok_
+//                                                             << " error:" << total_collated_blocks_master_error_);
+//  vec.emplace_back("total.collated_blocks.shard", PSTRING() << "ok:" << total_collated_blocks_shard_ok_
+//                                                            << " error:" << total_collated_blocks_shard_error_);
+//  vec.emplace_back("total.validated_blocks.master", PSTRING() << "ok:" << total_validated_blocks_master_ok_
+//                                                              << " error:" << total_validated_blocks_master_error_);
+//  vec.emplace_back("total.validated_blocks.shard", PSTRING() << "ok:" << total_validated_blocks_shard_ok_
+//                                                             << " error:" << total_validated_blocks_shard_error_);
+//  if (is_validator()) {
+//    vec.emplace_back("active_validator_groups", PSTRING() << "master:" << active_validator_groups_master_
+//                                                          << " shard:" << active_validator_groups_shard_);
+//  }
 
   bool serializer_enabled = opts_->get_state_serializer_enabled();
   if (is_validator() && last_masterchain_state_.not_null() && last_masterchain_state_->get_global_id() == -239) {
