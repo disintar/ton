@@ -34,7 +34,8 @@
         tonPython = host: tonDerivation: python:
           tonDerivation.overrideAttrs (previousAttrs: {
             buildInputs       = (previousAttrs.buildInputs       or []) ++ [ python ];
-            nativeBuildInputs = (previousAttrs.nativeBuildInputs or []) ++ [ host.gcc8 ];
+            nativeBuildInputs = (previousAttrs.nativeBuildInputs or []) ++
+                   (if host.lib.system.isLinux then [ host.gcc8 ] else []);
 
             cmakeFlags = (previousAttrs.cmakeFlags or []) ++ [
               "-DTON_USE_PYTHON=1"
@@ -44,10 +45,11 @@
               "-DPython_LIBRARY=${python}/lib/python${python.pythonVersion}"
             ];
 
-            configureFlags = (previousAttrs.configureFlags or []) ++ [
-              "-DCMAKE_C_COMPILER=${host.gcc8}/bin/gcc"
-              "-DCMAKE_CXX_COMPILER=${host.gcc8}/bin/g++"
-            ];
+            configureFlags = (previousAttrs.configureFlags or []) ++
+                    (if host.lib.system.isLinux then [
+                      "-DCMAKE_C_COMPILER=${host.gcc8}/bin/gcc"
+                      "-DCMAKE_CXX_COMPILER=${host.gcc8}/bin/g++"
+                    ] else []);
 
             doCheck    = false;
             ninjaFlags = "python_ton";
