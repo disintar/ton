@@ -49,11 +49,13 @@ class DataCell final : public Cell {
     return td::bitstring::bits_load_ulong(src, depth_bits) & 0xffff;
   }
 
-  static void clear(DataCell* ptr) noexcept {
+  static void operator delete(void* pv, std::destroying_delete_t ddt) noexcept {
+    auto* ptr = static_cast<DataCell*>(pv);
     bool allocated_in_arena = ptr->allocated_in_arena_;
     ptr->~DataCell();
     if (!allocated_in_arena) {
-      ::operator delete(ptr, std::destroying_delete_t{});  // forward the tag
+      // forward the exact tag we received
+      ::operator delete(pv, ddt);
     }
   }
 
