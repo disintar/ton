@@ -205,7 +205,7 @@ class InferTypesAndCallsAndFieldsVisitor final {
       case ast_try_catch_statement:
         return process_try_catch_statement(v->as<ast_try_catch_statement>(), std::move(flow));
       case ast_empty_statement:
-        return flow;
+        return std::move(flow);
       default:
         return process_expression_statement(reinterpret_cast<AnyExprV>(v), std::move(flow));
     }
@@ -371,7 +371,7 @@ class InferTypesAndCallsAndFieldsVisitor final {
       }
     }
 
-    return flow;
+    return std::move(flow);
   }
 
   // handle (and dig recursively) into `var lhs = rhs`
@@ -1135,7 +1135,7 @@ class InferTypesAndCallsAndFieldsVisitor final {
       }
       flow = process_any_statement(item, std::move(flow));
     }
-    return flow;
+    return std::move(flow);
   }
 
   FlowContext process_return_statement(V<ast_return_statement> v, FlowContext&& flow) {
@@ -1149,7 +1149,7 @@ class InferTypesAndCallsAndFieldsVisitor final {
     if (!cur_f->declared_return_type) {
       return_statements.push_back(v->get_return_value());   // for future unification
     }
-    return flow;
+    return std::move(flow);
   }
 
   FlowContext process_if_statement(V<ast_if_statement> v, FlowContext&& flow) {
@@ -1203,7 +1203,7 @@ class InferTypesAndCallsAndFieldsVisitor final {
     flow = infer_any_expr(v->get_thrown_code(), std::move(flow), false).out_flow;
     flow = infer_any_expr(v->get_thrown_arg(), std::move(flow), false).out_flow;
     flow.mark_unreachable(UnreachableKind::ThrowStatement);
-    return flow;
+    return std::move(flow);
   }
 
   FlowContext process_assert_statement(V<ast_assert_statement> v, FlowContext&& flow) {
@@ -1221,7 +1221,7 @@ class InferTypesAndCallsAndFieldsVisitor final {
       flow.register_known_type(SinkExpression(var_ref), catch_var_type);
     }
     assign_inferred_type(catch_var, catch_var_type);
-    return flow;
+    return std::move(flow);
   }
 
   FlowContext process_try_catch_statement(V<ast_try_catch_statement> v, FlowContext&& flow) {

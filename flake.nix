@@ -33,7 +33,7 @@
 
         tonPython = host: tonDerivation: python:
           tonDerivation.overrideAttrs (previousAttrs: {
-             buildInputs       = (previousAttrs.buildInputs       or []) ++ [ python ];
+            buildInputs       = (previousAttrs.buildInputs       or []) ++ [ python ];
             nativeBuildInputs = (previousAttrs.nativeBuildInputs or []) ++ [ host.gcc8 ];
 
             cmakeFlags = (previousAttrs.cmakeFlags or []) ++ [
