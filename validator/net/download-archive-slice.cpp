@@ -47,7 +47,7 @@ DownloadArchiveSlice::DownloadArchiveSlice(
     , adnl_(adnl)
     , client_(client)
     , promise_(std::move(promise)) {
-  if (!download_from_.is_zero()){
+  if (!download_from.is_zero()){
     original_zero_download_ = false;
   }
 }
@@ -97,27 +97,40 @@ void DownloadArchiveSlice::start_up() {
           td::actor::send_closure(SelfId, &DownloadArchiveSlice::abort_query,
                                   td::Status::Error(ErrorCode::notready, "no nodes"));
         } else {
-          td::actor::send_closure(SelfId, &DownloadArchiveSlice::got_node_to_download, vec[0]);
+          td::actor::send_closure(SelfId, &DownloadArchiveSlice::got_node_to_download, vec);
         }
       }
     });
 
-    td::actor::send_closure(overlays_, &overlay::Overlays::get_overlay_random_peers, local_id_, overlay_id_, 1,
+    td::actor::send_closure(overlays_, &overlay::Overlays::get_overlay_random_peers, local_id_, overlay_id_, 30,
                             std::move(P));
   } else {
-    got_node_to_download(download_from_);
+    std::vector<adnl::AdnlNodeIdShort> tmp;
+    tmp.emplace_back(download_from_);
+    got_node_to_download(std::move(tmp));
   }
 }
 
-void DownloadArchiveSlice::got_node_to_download(adnl::AdnlNodeIdShort download_from) {
-  download_from_ = download_from;
+void DownloadArchiveSlice::got_node_to_download(std::vector<adnl::AdnlNodeIdShort> download_from) {
+  download_from_list_ = std::move(download_from);
+  try_download(0);
+}
 
-  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::BufferSlice> R) {
-    if (R.is_error()) {
-      td::actor::send_closure(SelfId, &DownloadArchiveSlice::abort_query, R.move_as_error());
-    } else {
-      td::actor::send_closure(SelfId, &DownloadArchiveSlice::got_archive_info, R.move_as_ok());
-    }
+void DownloadArchiveSlice::try_download(int index){
+  download_from_ = download_from_list_[index];
+
+  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this),
+                                       index,
+                                       total_nodes = static_cast<int>(download_from_list_.size())](td::Result<td::BufferSlice> R) {
+      if (R.is_error()) {
+        if (index + 1 >= total_nodes) {
+          td::actor::send_closure(SelfId, &DownloadArchiveSlice::abort_query, R.move_as_error());
+        } else {
+          td::actor::send_closure(SelfId, &DownloadArchiveSlice::try_download, index + 1);
+        }
+      } else {
+        td::actor::send_closure(SelfId, &DownloadArchiveSlice::got_archive_info, R.move_as_ok());
+      }
   });
 
   td::BufferSlice q;
@@ -136,6 +149,7 @@ void DownloadArchiveSlice::got_node_to_download(adnl::AdnlNodeIdShort download_f
                             td::Timestamp::in(3.0), std::move(P));
   }
 }
+
 
 void DownloadArchiveSlice::got_archive_info(td::BufferSlice data) {
   auto F = fetch_tl_object<ton_api::tonNode_ArchiveInfo>(std::move(data), true);
@@ -157,7 +171,7 @@ void DownloadArchiveSlice::got_archive_info(td::BufferSlice data) {
                                            error_message += " (random, ";
                                          }
 
-                                         if (client_.empty()){
+                                         if (!client_.empty()){
                                            error_message += " client)";
                                          } else {
                                            error_message += " overlay)";

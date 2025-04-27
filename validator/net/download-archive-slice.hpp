@@ -45,10 +45,11 @@ class DownloadArchiveSlice : public td::actor::Actor {
   void finish_query();
 
   void start_up() override;
-  void got_node_to_download(adnl::AdnlNodeIdShort node);
+  void got_node_to_download(std::vector<adnl::AdnlNodeIdShort> node);
   void got_archive_info(td::BufferSlice data);
   void get_archive_slice();
   void got_archive_slice(td::BufferSlice data);
+  void try_download(int index);
 
   static constexpr td::uint32 slice_size() {
     return 1 << 21;
@@ -67,6 +68,7 @@ class DownloadArchiveSlice : public td::actor::Actor {
   bool original_zero_download_ = true;
 
   adnl::AdnlNodeIdShort download_from_ = adnl::AdnlNodeIdShort::zero();
+  std::vector<adnl::AdnlNodeIdShort> download_from_list_;
 
   td::Timestamp timeout_;
   td::actor::ActorId<ValidatorManagerInterface> validator_manager_;
