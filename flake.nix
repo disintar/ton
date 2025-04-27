@@ -11,54 +11,56 @@
 
   outputs = { self, nixpkgs-stable, nixpkgs-trunk, flake-compat, flake-utils }:
     let
-      ton = { host, system, kind }:
-        let
-          p = host.hostPlatform;
-          pkgname =
-            if p.isLinux then
-              if p.isx86 then "linux-x86-64-${kind}.nix"
-              else if p.isAarch64 then "linux-arm64-${kind}.nix"
-              else throw "unsupported platform"
-            else if p.isDarwin then "macos-${kind}.nix"
-            else throw "unsupported platform";
-          _ = builtins.trace "Using package: ${pkgname}" null;
-          pkg = ./assembly/nix/${pkgname};
-        in
-        import pkg {
-          pkgs = host;
-          inherit system;
-          src = host.nix-gitignore.gitignoreRecursiveSource [ ] ./.;
-        };
-      tonPython = ton: python: ton.overrideAttrs (previousAttrs:
-        {
-          buildInputs = previousAttrs.buildInputs ++ [ python ];
-          nativeBuildInputs = previousAttrs.nativeBuildInputs ++ [ host.gcc8 ];
+        ton = { host, system, kind }:
+          let
+            p       = host.hostPlatform;
+            pkgname = if p.isLinux then
+                        if p.isx86      then "linux-x86-64-${kind}.nix"
+                        else if p.isAarch64 then "linux-arm64-${kind}.nix"
+                        else throw "unsupported platform"
+                      else if p.isDarwin then
+                        "macos-${kind}.nix"
+                      else
+                        throw "unsupported platform";
+            _   = builtins.trace "Using package: ${pkgname}" null;
+            pkg = ./assembly/nix/${pkgname};
+          in
+          import pkg {
+            pkgs   = host;
+            inherit system;
+            src    = host.nix-gitignore.gitignoreRecursiveSource [] ./.;
+          };
 
-          cmakeFlags = previousAttrs.cmakeFlags ++ [
-            "-DTON_USE_PYTHON=1"
-            "-DPython_ROOT_DIR=${python}"
-            "-DPython_EXECUTABLE=${python.pythonForBuild.interpreter}"
-            "-DPython_INCLUDE_DIR=${python}/include/python${python.pythonVersion}"
-            "-DPython_LIBRARY=${python}/lib/python${python.pythonVersion}"
-          ];
+        tonPython = host: tonDerivation: python:
+          tonDerivation.overrideAttrs (previousAttrs: {
+            buildInputs       = previousAttrs.buildInputs       ++ [ python ];
+            nativeBuildInputs = previousAttrs.nativeBuildInputs ++ [ host.gcc8 ];
 
-          configureFlags = previousAttrs.configureFlags ++ [
-                      "-DCMAKE_C_COMPILER=${host.gcc8}/bin/gcc"
-                      "-DCMAKE_CXX_COMPILER=${host.gcc8}/bin/g++"
-          ];
+            cmakeFlags = previousAttrs.cmakeFlags ++ [
+              "-DTON_USE_PYTHON=1"
+              "-DPython_ROOT_DIR=${python}"
+              "-DPython_EXECUTABLE=${python.pythonForBuild.interpreter}"
+              "-DPython_INCLUDE_DIR=${python}/include/python${python.pythonVersion}"
+              "-DPython_LIBRARY=${python}/lib/python${python.pythonVersion}"
+            ];
 
-          doCheck = false;
+            configureFlags = previousAttrs.configureFlags ++ [
+              "-DCMAKE_C_COMPILER=${host.gcc8}/bin/gcc"
+              "-DCMAKE_CXX_COMPILER=${host.gcc8}/bin/g++"
+            ];
 
-          ninjaFlags = "python_ton";
+            doCheck    = false;
+            ninjaFlags = "python_ton";
 
-          installPhase = ''
-            runHook preInstall
-            cmake --install . --component tvm-python
-            runHook postInstall
-          '';
+            installPhase = ''
+              runHook preInstall
+              cmake --install . --component tvm-python
+              runHook postInstall
+            '';
 
-          outputs = [ "out" ];
-        });
+            outputs = [ "out" ];
+          });
+
       hostPkgs = system:
         import nixpkgs-stable {
           inherit system;
@@ -75,7 +77,7 @@
             inherit system;
             inherit kind;
           };
-          tonOldGlibcPython = ton: python: (tonPython ton python).overrideAttrs (previousAttrs: {
+          tonOldGlibcPython = ton: python: (tonPython host ton python).overrideAttrs (previousAttrs: {
             dontPatchELF = true;
             preFixup = ''
               patchelf --remove-rpath $out/*/*
@@ -113,10 +115,10 @@
           packages = rec {
             ton-static = tonk "static";
             ton-tonlib = tonk "tonlib";
-            ton-python-39 = tonPython ton-static host.python39;
-            ton-python-310 = tonPython ton-static host.python310;
-            ton-python-311 = tonPython ton-static host.python311;
-            ton-python-312 = tonPython ton-static host.python312;
+            ton-python-39 = tonPython host ton-static host.python39;
+            ton-python-310 = tonPython host ton-static host.python310;
+            ton-python-311 = tonPython host ton-static host.python311;
+            ton-python-312 = tonPython host ton-static host.python312;
           };
           devShells.default =
             host.mkShell {
