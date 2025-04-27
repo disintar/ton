@@ -142,7 +142,7 @@ void DownloadArchiveSlice::try_download(int index){
   }
   if (client_.empty()) {
     td::actor::send_closure(overlays_, &overlay::Overlays::send_query, download_from_, local_id_, overlay_id_,
-                            "get_archive_info", std::move(P), td::Timestamp::in(5.0), std::move(q));
+                            "get_archive_info", std::move(P), td::Timestamp::in(15.0), std::move(q));
   } else {
     td::actor::send_closure(client_, &adnl::AdnlExtClient::send_query, "get_archive_info",
                             create_serialize_tl_object_suffix<ton_api::tonNode_query>(std::move(q)),
