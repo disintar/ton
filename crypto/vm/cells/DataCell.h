@@ -21,7 +21,6 @@
 #include "td/utils/Span.h"
 #include "td/utils/ThreadSafeCounter.h"
 #include "vm/cells/Cell.h"
-#include <new>
 
 namespace vm {
 
@@ -49,13 +48,11 @@ class DataCell final : public Cell {
     return td::bitstring::bits_load_ulong(src, depth_bits) & 0xffff;
   }
 
-  static void operator delete(void* pv, std::destroying_delete_t ddt) noexcept {
-    auto* ptr = static_cast<DataCell*>(pv);
+  void operator delete(DataCell* ptr, std::destroying_delete_t) {
     bool allocated_in_arena = ptr->allocated_in_arena_;
     ptr->~DataCell();
     if (!allocated_in_arena) {
-      // forward the exact tag we received
-      ::operator delete(pv, ddt);
+      ::operator delete(ptr);
     }
   }
 

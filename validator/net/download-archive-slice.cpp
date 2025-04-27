@@ -143,9 +143,10 @@ void DownloadArchiveSlice::got_archive_info(td::BufferSlice data) {
   auto f = F.move_as_ok();
 
   bool fail = false;
+
   ton_api::downcast_call(*f.get(), td::overloaded(
                                        [&](const ton_api::tonNode_archiveNotFound &obj) {
-                                         abort_query(td::Status::Error(ErrorCode::notready, "remote db not found"));
+                                         abort_query(td::Status::Error(ErrorCode::notready, "remote db not found in member " + download_from_.bits256_value().to_hex()));
                                          fail = true;
                                        },
                                        [&](const ton_api::tonNode_archiveInfo &obj) { archive_id_ = obj.id_; }));

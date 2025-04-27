@@ -19,7 +19,6 @@
 #pragma once
 
 #include "vm/cells/DataCell.h"
-#include <new>
 
 namespace vm {
 struct PrunnedCellInfo {
@@ -38,12 +37,11 @@ class PrunnedCell final : public Cell {
     return extra_;
   }
 
-  static void operator delete(void* pv, std::destroying_delete_t ddt) noexcept {
-    auto* ptr = static_cast<PrunnedCell*>(pv);
+  void operator delete(PrunnedCell* ptr, std::destroying_delete_t) {
     bool allocated_in_arena = ptr->info_.allocated_in_arena_;
     ptr->~PrunnedCell();
     if (!allocated_in_arena) {
-      ::operator delete(pv, ddt);
+      ::operator delete(ptr);
     }
   }
 
