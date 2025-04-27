@@ -306,7 +306,7 @@ void OverlayImpl::send_random_peers_cont(adnl::AdnlNodeIdShort src, OverlayNode 
     vec.emplace_back(node.tl());
   }
 
-  td::uint32 max_iterations = nodes_to_send() + 16;
+  td::uint32 max_iterations = nodes_to_send() + 70;
   for (td::uint32 i = 0; i < max_iterations && vec.size() < nodes_to_send(); i++) {
     auto P = get_random_peer(true);
     if (P) {
@@ -421,7 +421,7 @@ void OverlayImpl::update_neighbours(td::uint32 nodes_to_change) {
     return;
   }
   td::uint32 iter = 0;
-  while (iter++ < 10 && (nodes_to_change > 0 || peer_list_.neighbours_.size() < max_neighbours())) {
+  while (iter++ < max_neighbours() + 10 && (nodes_to_change > 0 || peer_list_.neighbours_.size() < max_neighbours())) {
     auto X = peer_list_.peers_.get_random();
     if (!X) {
       break;
