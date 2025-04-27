@@ -102,7 +102,7 @@ void DownloadArchiveSlice::start_up() {
       }
     });
 
-    td::actor::send_closure(overlays_, &overlay::Overlays::get_overlay_random_peers, local_id_, overlay_id_, 30,
+    td::actor::send_closure(overlays_, &overlay::Overlays::get_overlay_random_peers, local_id_, overlay_id_, 50,
                             std::move(P));
   } else {
     std::vector<adnl::AdnlNodeIdShort> tmp;
@@ -118,6 +118,10 @@ void DownloadArchiveSlice::got_node_to_download(std::vector<adnl::AdnlNodeIdShor
 
 void DownloadArchiveSlice::try_download(int index){
   download_from_ = download_from_list_[index];
+
+  if (index > 0){
+    LOG(WARNING) << "Try to download from random node #" << index << " : " << download_from_;
+  }
 
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this),
                                        index,
@@ -146,7 +150,7 @@ void DownloadArchiveSlice::try_download(int index){
   } else {
     td::actor::send_closure(client_, &adnl::AdnlExtClient::send_query, "get_archive_info",
                             create_serialize_tl_object_suffix<ton_api::tonNode_query>(std::move(q)),
-                            td::Timestamp::in(3.0), std::move(P));
+                            td::Timestamp::in(15.0), std::move(P));
   }
 }
 
