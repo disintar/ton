@@ -38,11 +38,11 @@ class PrunnedCell final : public Cell {
     return extra_;
   }
 
-  void operator delete(PrunnedCell* ptr, std::destroying_delete_t) {
+  static void clear(PrunnedCell* ptr) noexcept {
     bool allocated_in_arena = ptr->info_.allocated_in_arena_;
     ptr->~PrunnedCell();
     if (!allocated_in_arena) {
-      ::operator delete(ptr);
+      ::operator delete(ptr, std::destroying_delete_t{});
     }
   }
 
