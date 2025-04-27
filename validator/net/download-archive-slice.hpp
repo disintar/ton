@@ -64,6 +64,7 @@ class DownloadArchiveSlice : public td::actor::Actor {
   overlay::OverlayIdShort overlay_id_;
   td::uint64 offset_ = 0;
   td::uint64 archive_id_;
+  bool original_zero_download_ = true;
 
   adnl::AdnlNodeIdShort download_from_ = adnl::AdnlNodeIdShort::zero();
 

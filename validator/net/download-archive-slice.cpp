@@ -47,6 +47,9 @@ DownloadArchiveSlice::DownloadArchiveSlice(
     , adnl_(adnl)
     , client_(client)
     , promise_(std::move(promise)) {
+  if (!download_from_.is_zero()){
+    original_zero_download_ = false;
+  }
 }
 
 void DownloadArchiveSlice::abort_query(td::Status reason) {
@@ -126,11 +129,11 @@ void DownloadArchiveSlice::got_node_to_download(adnl::AdnlNodeIdShort download_f
   }
   if (client_.empty()) {
     td::actor::send_closure(overlays_, &overlay::Overlays::send_query, download_from_, local_id_, overlay_id_,
-                            "get_archive_info", std::move(P), td::Timestamp::in(3.0), std::move(q));
+                            "get_archive_info", std::move(P), td::Timestamp::in(5.0), std::move(q));
   } else {
     td::actor::send_closure(client_, &adnl::AdnlExtClient::send_query, "get_archive_info",
                             create_serialize_tl_object_suffix<ton_api::tonNode_query>(std::move(q)),
-                            td::Timestamp::in(1.0), std::move(P));
+                            td::Timestamp::in(3.0), std::move(P));
   }
 }
 
@@ -146,7 +149,21 @@ void DownloadArchiveSlice::got_archive_info(td::BufferSlice data) {
 
   ton_api::downcast_call(*f.get(), td::overloaded(
                                        [&](const ton_api::tonNode_archiveNotFound &obj) {
-                                         abort_query(td::Status::Error(ErrorCode::notready, "remote db not found in member " + download_from_.bits256_value().to_hex()));
+                                         auto error_message = "remote db not found in member " + download_from_.bits256_value().to_hex();
+
+                                         if (original_zero_download_){
+                                           error_message += " (not random, ";
+                                         } else {
+                                           error_message += " (random, ";
+                                         }
+
+                                         if (client_.empty()){
+                                           error_message += " client)";
+                                         } else {
+                                           error_message += " overlay)";
+                                         }
+
+                                         abort_query(td::Status::Error(ErrorCode::notready, error_message));
                                          fail = true;
                                        },
                                        [&](const ton_api::tonNode_archiveInfo &obj) { archive_id_ = obj.id_; }));
