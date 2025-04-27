@@ -161,16 +161,7 @@ class ValidatorManager : public ValidatorManagerInterface {
 
   virtual void try_get_static_file(FileHash file_hash, td::Promise<td::BufferSlice> promise) = 0;
 
-  virtual void allow_block_data_gc(BlockIdExt block_id, bool is_archive, td::Promise<bool> promise) = 0;
   virtual void allow_block_state_gc(BlockIdExt block_id, td::Promise<bool> promise) = 0;
-  virtual void allow_zero_state_file_gc(BlockIdExt block_id, td::Promise<bool> promise) = 0;
-  virtual void allow_persistent_state_file_gc(BlockIdExt block_id, BlockIdExt masterchain_block_id,
-                                              td::Promise<bool> promise) = 0;
-  virtual void allow_block_signatures_gc(BlockIdExt block_id, td::Promise<bool> promise) = 0;
-  virtual void allow_block_proof_gc(BlockIdExt block_id, bool is_archive, td::Promise<bool> promise) = 0;
-  virtual void allow_block_proof_link_gc(BlockIdExt block_id, bool is_archive, td::Promise<bool> promise) = 0;
-  virtual void allow_block_candidate_gc(BlockIdExt block_id, td::Promise<bool> promise) = 0;
-  virtual void allow_block_info_gc(BlockIdExt block_id, td::Promise<bool> promise) = 0;
 
   virtual void archive(BlockHandle handle, td::Promise<td::Unit> promise) = 0;
 
@@ -207,7 +198,7 @@ class ValidatorManager : public ValidatorManagerInterface {
       td::Promise<tl_object_ptr<lite_api::liteServer_nonfinal_validatorGroups>> promise) = 0;
   virtual void update_lite_server_state(BlockIdExt shard_client, td::Ref<MasterchainState> state) = 0;
 
-  virtual void add_lite_query_stats(int lite_query_id) {
+  virtual void add_lite_query_stats(int lite_query_id, bool success) {
   }
   virtual void add_lite_query_stats_extended(int lite_query_id, adnl::AdnlNodeIdShort dst, long start_at, long end_at,
                                              bool success) {
@@ -228,9 +219,9 @@ class ValidatorManager : public ValidatorManagerInterface {
   }  ///TODO: make it pure virtual
 
   virtual void record_collate_query_stats(BlockIdExt block_id, double work_time, double cpu_work_time,
-                                          CollationStats stats) {
+                                          td::optional<CollationStats> stats) {
   }
-  virtual void record_validate_query_stats(BlockIdExt block_id, double work_time, double cpu_work_time) {
+  virtual void record_validate_query_stats(BlockIdExt block_id, double work_time, double cpu_work_time, bool success) {
   }
 
   virtual void add_persistent_state_description(td::Ref<PersistentStateDescription> desc) = 0;

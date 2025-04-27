@@ -85,7 +85,7 @@ namespace ton {
           command = url_s.substr(pos + 1);
         }
 
-        LOG(WARNING) << "[Prometheus Exporter] Received request: " << method << " " << url << " command: " << command;
+//        LOG(WARNING) << "[Prometheus Exporter] Received request: " << method << " " << url << " command: " << command;
 
         if (*upload_data_size != 0) {
           *upload_data_size = 0;
@@ -120,7 +120,7 @@ namespace ton {
           MHD_Result ret = MHD_queue_response(connection, alive ? MHD_HTTP_OK : MHD_HTTP_INTERNAL_SERVER_ERROR, response);
           MHD_destroy_response(response);
 
-          LOG(WARNING) << "[Prometheus Exporter] Response queued with status: " << ret;
+//          LOG(WARNING) << "[Prometheus Exporter] Response queued with status: " << ret;
           return ret;
         } else if (command == "metrics") {
           std::string status_text;
@@ -138,14 +138,14 @@ namespace ton {
           MHD_add_response_header(response, "Content-Type", "text/plain");
 
           if (!response) {
-            LOG(WARNING) << "Failed to create response";
+            LOG(WARNING) << "[Prometheus Exporter] Failed to create response";
             return MHD_NO;
           }
 
           MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
           MHD_destroy_response(response);
 
-          LOG(WARNING) << "[Prometheus Exporter] Response queued with status: " << ret;
+//          LOG(WARNING) << "[Prometheus Exporter] Response queued with status: " << ret;
           return ret;
         } else {
           std::string status_text = "ready";
@@ -158,7 +158,7 @@ namespace ton {
           MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
           MHD_destroy_response(response);
 
-          LOG(WARNING) << "[Prometheus Exporter] Response queued with status: " << ret;
+//          LOG(WARNING) << "[Prometheus Exporter] Response queued with status: " << ret;
           return ret;
         }
       } catch (...) {

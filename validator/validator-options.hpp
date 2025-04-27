@@ -139,6 +139,12 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   bool get_celldb_in_memory() const override {
     return celldb_in_memory_;
   }
+  bool get_celldb_v2() const override {
+    return celldb_v2_;
+  }
+  bool get_celldb_disable_bloom_filter() const override {
+    return celldb_disable_bloom_filter_;
+  }
   td::optional<double> get_catchain_max_block_delay() const override {
     return catchain_max_block_delay_;
   }
@@ -153,6 +159,9 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   }
   bool get_fast_state_serializer_enabled() const override {
     return fast_state_serializer_enabled_;
+  }
+  double get_catchain_broadcast_speed_multiplier() const override {
+    return catchain_broadcast_speed_multipliers_;
   }
 
   void set_zero_block_id(BlockIdExt block_id) override {
@@ -234,6 +243,12 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   void set_celldb_in_memory(bool value) override {
     celldb_in_memory_ = value;
   }
+  void set_celldb_v2(bool value) override {
+    celldb_v2_ = value;
+  }
+  void set_celldb_disable_bloom_filter(bool value) override {
+    celldb_disable_bloom_filter_ = value;
+  }
   void set_catchain_max_block_delay(double value) override {
     catchain_max_block_delay_ = value;
   }
@@ -248,6 +263,9 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   }
   void set_fast_state_serializer_enabled(bool value) override {
     fast_state_serializer_enabled_ = value;
+  }
+  void set_catchain_broadcast_speed_multiplier(double value) override {
+    catchain_broadcast_speed_multipliers_ = value;
   }
 
   ValidatorManagerOptionsImpl *make_copy() const override {
@@ -298,10 +316,13 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   bool celldb_direct_io_ = false;
   bool celldb_preload_all_ = false;
   bool celldb_in_memory_ = false;
+  bool celldb_v2_ = false;
+  bool celldb_disable_bloom_filter_ = false;
   td::optional<double> catchain_max_block_delay_, catchain_max_block_delay_slow_;
   bool state_serializer_enabled_ = true;
   td::Ref<CollatorOptions> collator_options_{true};
   bool fast_state_serializer_enabled_ = false;
+  double catchain_broadcast_speed_multipliers_;
 };
 
 }  // namespace validator

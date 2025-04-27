@@ -377,8 +377,8 @@ class ValidatorManagerImpl : public ValidatorManager {
   void get_block_data(BlockHandle handle, td::Promise<td::BufferSlice> promise) override;
   void check_zero_state_exists(BlockIdExt block_id, td::Promise<bool> promise) override;
   void get_zero_state(BlockIdExt block_id, td::Promise<td::BufferSlice> promise) override;
-  void check_persistent_state_exists(BlockIdExt block_id, BlockIdExt masterchain_block_id,
-                                     td::Promise<bool> promise) override;
+  void get_persistent_state_size(BlockIdExt block_id, BlockIdExt masterchain_block_id,
+                                 td::Promise<td::uint64> promise) override;
   void get_persistent_state(BlockIdExt block_id, BlockIdExt masterchain_block_id,
                             td::Promise<td::BufferSlice> promise) override;
   void get_persistent_state_slice(BlockIdExt block_id, BlockIdExt masterchain_block_id, td::int64 offset,
@@ -569,30 +569,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   }
 
  public:
-  void allow_delete(BlockIdExt block_id, td::Promise<bool> promise);
-  void allow_archive(BlockIdExt block_id, td::Promise<bool> promise);
-  void allow_block_data_gc(BlockIdExt block_id, bool is_archive, td::Promise<bool> promise) override {
-    allow_archive(block_id, std::move(promise));
-  }
   void allow_block_state_gc(BlockIdExt block_id, td::Promise<bool> promise) override;
-  void allow_zero_state_file_gc(BlockIdExt block_id, td::Promise<bool> promise) override {
-    promise.set_result(false);
-  }
-  void allow_persistent_state_file_gc(BlockIdExt block_id, BlockIdExt masterchain_block_id,
-                                      td::Promise<bool> promise) override;
-  void allow_block_signatures_gc(BlockIdExt block_id, td::Promise<bool> promise) override {
-    allow_archive(block_id, std::move(promise));
-  }
-  void allow_block_proof_gc(BlockIdExt block_id, bool is_archive, td::Promise<bool> promise) override {
-    allow_archive(block_id, std::move(promise));
-  }
-  void allow_block_proof_link_gc(BlockIdExt block_id, bool is_archive, td::Promise<bool> promise) override {
-    allow_archive(block_id, std::move(promise));
-  }
-  void allow_block_candidate_gc(BlockIdExt block_id, td::Promise<bool> promise) override {
-    allow_block_state_gc(block_id, std::move(promise));
-  }
-  void allow_block_info_gc(BlockIdExt block_id, td::Promise<bool> promise) override;
   void archive(BlockHandle handle, td::Promise<td::Unit> promise) override {
     td::actor::send_closure(db_, &Db::archive, std::move(handle), std::move(promise));
   }
@@ -659,8 +636,9 @@ class ValidatorManagerImpl : public ValidatorManager {
       td::optional<ShardIdFull> shard,
       td::Promise<tl_object_ptr<lite_api::liteServer_nonfinal_validatorGroups>> promise) override;
 
-  void add_lite_query_stats(int lite_query_id) override {
+  void add_lite_query_stats(int lite_query_id, bool success) override {
     ++ls_stats_[lite_query_id];
+    ++(success ? total_ls_queries_ok_ : total_ls_queries_error_)[lite_query_id];
   }
 
   void set_block_publisher(std::unique_ptr<BlockParser> publisher) override {
@@ -738,9 +716,6 @@ class ValidatorManagerImpl : public ValidatorManager {
   double state_ttl() const {
     return opts_->state_ttl();
   }
-  double block_ttl() const {
-    return opts_->block_ttl();
-  }
   double max_mempool_num() const {
     return opts_->max_mempool_num();
   }
@@ -756,7 +731,7 @@ class ValidatorManagerImpl : public ValidatorManager {
 
   void got_persistent_state_descriptions(std::vector<td::Ref<PersistentStateDescription>> descs);
   void add_persistent_state_description_impl(td::Ref<PersistentStateDescription> desc);
-  td::Ref<PersistentStateDescription> get_block_persistent_state(BlockIdExt block_id);
+  td::Ref<PersistentStateDescription> get_block_persistent_state_to_download(BlockIdExt block_id);
 
  private:
   bool need_monitor(ShardIdFull shard) const {
@@ -769,6 +744,16 @@ class ValidatorManagerImpl : public ValidatorManager {
   td::Timestamp log_ls_stats_at_;
   std::map<int, td::uint32> ls_stats_;  // lite_api ID -> count, 0 for unknown
   td::uint32 ls_stats_check_ext_messages_{0};
+
+  UnixTime started_at_ = (UnixTime)td::Clocks::system();
+  std::map<int, td::uint64> total_ls_queries_ok_, total_ls_queries_error_;  // lite_api ID -> count, 0 for unknown
+  td::uint64 total_check_ext_messages_ok_{0}, total_check_ext_messages_error_{0};
+  td::uint64 total_collated_blocks_master_ok_{0}, total_collated_blocks_master_error_{0};
+  td::uint64 total_validated_blocks_master_ok_{0}, total_validated_blocks_master_error_{0};
+  td::uint64 total_collated_blocks_shard_ok_{0}, total_collated_blocks_shard_error_{0};
+  td::uint64 total_validated_blocks_shard_ok_{0}, total_validated_blocks_shard_error_{0};
+
+  size_t active_validator_groups_master_{0}, active_validator_groups_shard_{0};
 
   td::actor::ActorOwn<CandidatesBuffer> candidates_buffer_;
 
@@ -783,9 +768,14 @@ class ValidatorManagerImpl : public ValidatorManager {
   std::queue<BlockIdExt> recorded_block_stats_lru_;
 
   void record_collate_query_stats(BlockIdExt block_id, double work_time, double cpu_work_time,
-                                  CollationStats stats) override;
-  void record_validate_query_stats(BlockIdExt block_id, double work_time, double cpu_work_time) override;
+                                  td::optional<CollationStats> stats) override;
+  void record_validate_query_stats(BlockIdExt block_id, double work_time, double cpu_work_time, bool success) override;
   RecordedBlockStats &new_block_stats_record(BlockIdExt block_id);
+
+  void register_stats_provider(
+      td::uint64 idx, std::string prefix,
+      std::function<void(td::Promise<std::vector<std::pair<std::string, std::string>>>)> callback) override;
+  void unregister_stats_provider(td::uint64 idx) override;
 
   std::map<PublicKeyHash, td::actor::ActorOwn<ValidatorTelemetry>> validator_telemetry_;
 
@@ -793,6 +783,10 @@ class ValidatorManagerImpl : public ValidatorManager {
 
   std::map<BlockSeqno, td::Ref<PersistentStateDescription>> persistent_state_descriptions_;
   std::map<BlockIdExt, td::Ref<PersistentStateDescription>> persistent_state_blocks_;
+
+  std::map<td::uint64,
+           std::pair<std::string, std::function<void(td::Promise<std::vector<std::pair<std::string, std::string>>>)>>>
+      stats_providers_;
 };
 
 }  // namespace validator

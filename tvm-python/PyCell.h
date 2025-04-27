@@ -18,7 +18,11 @@ class PyCell {
     my_cell = cell;
   }
 
-  explicit PyCell() = default;
+  explicit PyCell() {
+    vm::CellBuilder cb;
+    cb.finalize_to(my_cell);
+  };
+
   ~PyCell() = default;
   std::string get_hash() const;
   int get_depth() const;

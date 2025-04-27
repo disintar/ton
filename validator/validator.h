@@ -20,6 +20,7 @@
 
 #include <vector>
 #include <deque>
+#include <functional>
 
 #include "td/actor/actor.h"
 
@@ -105,6 +106,7 @@ struct ValidatorManagerOptions : public td::CntObject {
   virtual std::string get_session_logs_file() const = 0;
   virtual td::uint32 get_celldb_compress_depth() const = 0;
   virtual bool get_celldb_in_memory() const = 0;
+  virtual bool get_celldb_v2() const = 0;
   virtual size_t get_max_open_archive_files() const = 0;
   virtual double get_archive_preload_period() const = 0;
   virtual bool get_disable_rocksdb_stats() const = 0;
@@ -112,11 +114,13 @@ struct ValidatorManagerOptions : public td::CntObject {
   virtual td::optional<td::uint64> get_celldb_cache_size() const = 0;
   virtual bool get_celldb_direct_io() const = 0;
   virtual bool get_celldb_preload_all() const = 0;
+  virtual bool get_celldb_disable_bloom_filter() const = 0;
   virtual td::optional<double> get_catchain_max_block_delay() const = 0;
   virtual td::optional<double> get_catchain_max_block_delay_slow() const = 0;
   virtual bool get_state_serializer_enabled() const = 0;
   virtual td::Ref<CollatorOptions> get_collator_options() const = 0;
   virtual bool get_fast_state_serializer_enabled() const = 0;
+  virtual double get_catchain_broadcast_speed_multiplier() const = 0;
 
   virtual void set_zero_block_id(BlockIdExt block_id) = 0;
   virtual void set_init_block_id(BlockIdExt block_id) = 0;
@@ -144,11 +148,14 @@ struct ValidatorManagerOptions : public td::CntObject {
   virtual void set_celldb_direct_io(bool value) = 0;
   virtual void set_celldb_preload_all(bool value) = 0;
   virtual void set_celldb_in_memory(bool value) = 0;
+  virtual void set_celldb_v2(bool value) = 0;
+  virtual void set_celldb_disable_bloom_filter(bool value) = 0;
   virtual void set_catchain_max_block_delay(double value) = 0;
   virtual void set_catchain_max_block_delay_slow(double value) = 0;
   virtual void set_state_serializer_enabled(bool value) = 0;
   virtual void set_collator_options(td::Ref<CollatorOptions> value) = 0;
   virtual void set_fast_state_serializer_enabled(bool value) = 0;
+  virtual void set_catchain_broadcast_speed_multiplier(double value) = 0;
 
   static td::Ref<ValidatorManagerOptions> create(
       BlockIdExt zero_block_id, BlockIdExt init_block_id,
@@ -225,8 +232,8 @@ class ValidatorManagerInterface : public td::actor::Actor {
   virtual void get_block_data(BlockHandle handle, td::Promise<td::BufferSlice> promise) = 0;
   virtual void check_zero_state_exists(BlockIdExt block_id, td::Promise<bool> promise) = 0;
   virtual void get_zero_state(BlockIdExt block_id, td::Promise<td::BufferSlice> promise) = 0;
-  virtual void check_persistent_state_exists(BlockIdExt block_id, BlockIdExt masterchain_block_id,
-                                             td::Promise<bool> promise) = 0;
+  virtual void get_persistent_state_size(BlockIdExt block_id, BlockIdExt masterchain_block_id,
+                                         td::Promise<td::uint64> promise) = 0;
   virtual void get_persistent_state(BlockIdExt block_id, BlockIdExt masterchain_block_id,
                                     td::Promise<td::BufferSlice> promise) = 0;
   virtual void get_persistent_state_slice(BlockIdExt block_id, BlockIdExt masterchain_block_id, td::int64 offset,
@@ -307,6 +314,13 @@ class ValidatorManagerInterface : public td::actor::Actor {
   virtual void get_out_msg_queue_size(BlockIdExt block_id, td::Promise<td::uint64> promise) = 0;
 
   virtual void update_options(td::Ref<ValidatorManagerOptions> opts) = 0;
+
+  virtual void register_stats_provider(
+      td::uint64 idx, std::string prefix,
+      std::function<void(td::Promise<std::vector<std::pair<std::string, std::string>>>)> callback) {
+  }
+  virtual void unregister_stats_provider(td::uint64 idx) {
+  }
 };
 
 }  // namespace validator

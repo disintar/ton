@@ -378,6 +378,25 @@ PYBIND11_MODULE(python_ton, m) {
       .def("emulate_transaction", &PyEmulator::emulate_transaction, py::arg("shard_account_cell"),
            py::arg("message_cell"), py::arg("unixtime") = "0", py::arg("lt") = "0", py::arg("vm_ver") = 1,
            py::arg("force_uninit") = false)
+      .def("aemulate_transaction",
+           [](PyEmulator &self,
+              const PyCell& shard_account_cell,
+              const PyCell& message_cell,
+              const std::string& unixtime,
+              const std::string& lt,
+              int vm_ver,
+              bool force_uninit) {
+               return async_wrapper([=, &self]() {
+                   return self.emulate_transaction(
+                           shard_account_cell, message_cell, unixtime, lt, vm_ver, force_uninit);
+               });
+           },
+           py::arg("shard_account_cell"),
+           py::arg("message_cell"),
+           py::arg("unixtime") = "0",
+           py::arg("lt") = "0",
+           py::arg("vm_ver") = 1,
+           py::arg("force_uninit") = false)
       .def("emulate_tick_tock_transaction", &PyEmulator::emulate_tick_tock_transaction, py::arg("shard_account_boc"),
            py::arg("is_tock"), py::arg("unixtime") = "0", py::arg("lt") = "0", py::arg("vm_ver") = 1)
       .def_property("vm_log", &PyEmulator::get_vm_log, &PyEmulator::dummy_set)

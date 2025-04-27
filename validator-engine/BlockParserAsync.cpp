@@ -333,8 +333,20 @@ namespace ton::validator {
             data["account"]["storage_stat"]["used"] = {
                     {"cells",        block::tlb::t_VarUInteger_7.as_uint(su.cells.write())},
                     {"bits",         block::tlb::t_VarUInteger_7.as_uint(su.bits.write())},
-                    {"public_cells", block::tlb::t_VarUInteger_7.as_uint(su.public_cells.write())},
             };
+
+            if (si.storage_extra->prefetch_ulong(3) == 1) {
+              block::gen::StorageExtraInfo::Record_storage_extra_info sei;
+              CHECK(tlb::unpack(si.storage_extra.write(), sei));
+
+              data["account"]["storage_stat"]["used"]["extra_empty"] = false;
+
+              td::Bits256 b;
+              sei.dict_hash->export_bits(b);
+              data["account"]["storage_stat"]["used"]["dict_hash"] = b.to_hex();
+            } else {
+              data["account"]["storage_stat"]["used"]["extra_empty"] = true;
+            }
 
             data["account"]["storage"] = {{"last_trans_lt", as.last_trans_lt}};
 

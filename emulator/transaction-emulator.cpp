@@ -11,25 +11,25 @@ namespace emulator {
 td::Result<std::unique_ptr<TransactionEmulator::EmulationResult>> TransactionEmulator::emulate_transaction(
     block::Account&& account, td::Ref<vm::Cell> msg_root, ton::UnixTime utime, ton::LogicalTime lt, int trans_type,
     int vm_ver) {
-  td::Ref<vm::Cell> old_mparams;
-  std::vector<block::StoragePrices> storage_prices;
-  block::StoragePhaseConfig storage_phase_cfg{&storage_prices};
-  block::ComputePhaseConfig compute_phase_cfg;
-  block::ActionPhaseConfig action_phase_cfg;
-  td::RefInt256 masterchain_create_fee, basechain_create_fee;
 
-  if (!utime) {
-    utime = unixtime_;
-  }
-  if (!utime) {
-    utime = (unsigned)std::time(nullptr);
-  }
+    td::Ref<vm::Cell> old_mparams;
+    std::vector<block::StoragePrices> storage_prices;
+    block::StoragePhaseConfig storage_phase_cfg{&storage_prices};
+    block::ComputePhaseConfig compute_phase_cfg;
+    block::ActionPhaseConfig action_phase_cfg;
+    block::SerializeConfig serialize_config;
+    td::RefInt256 masterchain_create_fee, basechain_create_fee;
+    
+    if (!utime) {
+      utime = unixtime_;
+    }
+    if (!utime) {
+      utime = (unsigned)std::time(nullptr);
+    }
 
-    auto fetch_res = block::FetchConfigParams::fetch_config_params(*config_, prev_blocks_info_, &old_mparams,
-                                                                   &storage_prices, &storage_phase_cfg,
-                                                                   &rand_seed_, &compute_phase_cfg,
-                                                                   &action_phase_cfg, &masterchain_create_fee,
-                                                                   &basechain_create_fee, account.workchain, utime);
+    auto fetch_res = block::FetchConfigParams::fetch_config_params(
+        *config_, prev_blocks_info_, &old_mparams, &storage_prices, &storage_phase_cfg, &rand_seed_, &compute_phase_cfg,
+        &action_phase_cfg, &serialize_config, &masterchain_create_fee, &basechain_create_fee, account.workchain, utime);
     if(fetch_res.is_error()) {
         return fetch_res.move_as_error_prefix("cannot fetch config params ");
     }
@@ -68,10 +68,9 @@ td::Result<std::unique_ptr<TransactionEmulator::EmulationResult>> TransactionEmu
                                                                                elapsed);
   }
 
-  if (!trans->serialize()) {
-    return td::Status::Error(-669,
-                             "cannot serialize new transaction for smart contract "s + trans->account.addr.to_hex());
-  }
+    if (!trans->serialize(serialize_config)) {
+      return td::Status::Error(-669,"cannot serialize new transaction for smart contract "s + trans->account.addr.to_hex());
+    }
 
   auto trans_root = trans->commit(account);
   if (trans_root.is_null()) {
@@ -147,7 +146,7 @@ td::Result<TransactionEmulator::EmulationSuccess> TransactionEmulator::emulate_t
         return td::Status::Error("account hash mismatch");
       }
 
-      return emulation_result;
+      return std::move(emulation_result);
 
     } else if (auto emulation_not_accepted_ptr = dynamic_cast<EmulationExternalNotAccepted*>(emulation.get())) {
       return td::Status::Error( PSTRING()

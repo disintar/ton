@@ -773,6 +773,14 @@ bool CellSlice::prefetch_maybe_ref(Ref<vm::Cell>& res) const {
   }
 }
 
+std::vector<Ref<Cell>> CellSlice::prefetch_all_refs() const {
+  std::vector<Ref<Cell>> res(size_refs());
+  for (unsigned i = 0; i < size_refs(); ++i) {
+    res[i] = prefetch_ref(i);
+  }
+  return res;
+}
+
 bool CellSlice::fetch_maybe_ref(Ref<vm::Cell>& res) {
   auto z = prefetch_ulong(1);
   if (!z) {
@@ -1024,6 +1032,13 @@ bool CellSlice::print_rec(std::ostream& os, int* limit, int indent) const {
 bool CellSlice::print_rec(std::ostream& os, int indent) const {
   int limit = default_recursive_print_limit;
   return print_rec(os, &limit, indent);
+}
+
+bool CellSlice::print_rec(td::StringBuilder& sb, int indent) const {
+  std::ostringstream ss;
+  auto result = print_rec(ss, indent);
+  sb << ss.str();
+  return result;
 }
 
 bool CellSlice::print_rec(int limit, std::ostream& os, int indent) const {

@@ -326,7 +326,7 @@ void ArchiveImporter::download_shard_archive(ShardIdFull shard_prefix) {
       td::Timestamp::in(3600.0),
       [SelfId = actor_id(this), seqno = start_import_seqno_, shard_prefix](td::Result<std::string> R) {
         if (R.is_error()) {
-          LOG(WARNING) << "Failed to download archive slice #" << seqno << " for shard " << shard_prefix.to_str();
+          LOG(WARNING) << "Failed to download archive slice #" << seqno << " for shard " << shard_prefix.to_str() << " error: " << R.move_as_error().to_string();
           delay_action(
               [=]() { td::actor::send_closure(SelfId, &ArchiveImporter::download_shard_archive, shard_prefix); },
               td::Timestamp::in(2.0));
@@ -513,6 +513,7 @@ void ArchiveImporter::abort_query(td::Status error) {
       td::unlink(f).ignore();
     }
     promise_.set_error(std::move(error));
+    stop();
     return;
   }
   LOG(INFO) << "Archive import: " << error;

@@ -193,8 +193,8 @@ json parse_state_init(vm::CellSlice state_init) {
   LOG(DEBUG) << "TLB unpacked " << t;
 
   if (is_good) {
-    if ((int)state_init_parsed.split_depth->prefetch_ulong(1) == 1) {
-      auto sd = state_init_parsed.split_depth.write();
+    if ((int)state_init_parsed.fixed_prefix_length->prefetch_ulong(1) == 1) {
+      auto sd = state_init_parsed.fixed_prefix_length.write();
       sd.skip_first(1);
       answer["split_depth"] = (int)sd.prefetch_ulong(5);
 
@@ -566,7 +566,7 @@ std::string parse_status_change(char type) {
 json parse_storage_used_short(vm::CellSlice storage_used_short) {
   json answer;
 
-  block::gen::StorageUsedShort::Record ss;
+  block::gen::StorageUsed::Record ss;
   CHECK(tlb::unpack(storage_used_short, ss));
 
   answer = {

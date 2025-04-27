@@ -107,6 +107,8 @@ class VmState final : public VmStateInterface {
   int global_version{0};
   size_t chksgn_counter = 0;
   int loaded_cells_count{0};
+  size_t get_extra_balance_counter = 0;
+  long long free_gas_consumed = 0;
   std::unique_ptr<ParentVmState> parent = nullptr;
   VmDumper vm_dumper;
 
@@ -164,7 +166,10 @@ class VmState final : public VmStateInterface {
     bls_g2_multiexp_coef2_gas_price = 22840,
 
     bls_pairing_base_gas_price = 20000,
-    bls_pairing_element_gas_price = 11800
+    bls_pairing_element_gas_price = 11800,
+
+    get_extra_balance_cheap_count = 5,
+    get_extra_balance_cheap_max_gas_price = 200
   };
   VmState();
   VmState(Ref<CellSlice> _code, int global_version, Ref<Stack> _stack, const GasLimits& _gas, int flags = 0, Ref<Cell> _data = {},
@@ -242,6 +247,9 @@ class VmState final : public VmStateInterface {
       consume_stack_gas((unsigned)stk->depth());
     }
   }
+  void consume_free_gas(long long amount) {
+    free_gas_consumed += amount;
+  }
   GasLimits get_gas_limits() const {
     return gas;
   }
@@ -255,6 +263,7 @@ class VmState final : public VmStateInterface {
       td::ConstBitPtr hash) override;  // may throw a dictionary exception; returns nullptr if library is not found
   void register_cell_load(const CellHash& cell_hash) override;
   void reset_loaded_cells();
+  bool register_cell_load_free(const CellHash& cell_hash);
   void register_cell_create() override;
   bool init_cp(int new_cp);
   bool set_cp(int new_cp);
@@ -449,8 +458,14 @@ class VmState final : public VmStateInterface {
       ++chksgn_counter;
       if (chksgn_counter > chksgn_free_count) {
         consume_gas(chksgn_gas_price);
+      } else {
+        consume_free_gas(chksgn_gas_price);
       }
     }
+  }
+  bool register_get_extra_balance_call() {
+    ++get_extra_balance_counter;
+    return get_extra_balance_counter <= get_extra_balance_cheap_count;
   }
 
  private:

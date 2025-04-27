@@ -218,8 +218,9 @@ DhtKeyId DhtValue::key_id() const {
 }
 
 td::Status DhtUpdateRuleSignature::check_value(const DhtValue &value) {
-  if (value.value().size() > DhtValue::max_value_size()) {
-    return td::Status::Error(ErrorCode::protoviolation, "too big value");
+  auto orig_size = value.value().size();
+  if (orig_size > DhtValue::max_value_size()) {
+    return td::Status::Error(ErrorCode::protoviolation, "too big value, size: " + std::to_string(orig_size));
   }
   TRY_RESULT(E, value.key().public_key().create_encryptor());
   auto tl = value.tl();

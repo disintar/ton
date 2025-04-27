@@ -126,7 +126,7 @@ namespace ton {
               q = query_obj_->get_id();
             }
 
-            td::actor::send_closure(manager_, &ValidatorManager::add_lite_query_stats, q);
+            td::actor::send_closure(manager_, &ValidatorManager::add_lite_query_stats, q, false);
           } else {
             td::actor::send_closure(manager_, &ValidatorManager::add_lite_query_stats_extended, query_obj_->get_id(),
                                     dst_,
@@ -180,7 +180,7 @@ namespace ton {
 
         bool LiteQuery::finish_query(td::BufferSlice result, bool skip_cache_update) {
           if (dst_.is_zero()) {
-            td::actor::send_closure(manager_, &ValidatorManager::add_lite_query_stats, query_obj_->get_id());
+            td::actor::send_closure(manager_, &ValidatorManager::add_lite_query_stats, query_obj_->get_id(), true);
           } else {
             td::actor::send_closure(manager_, &ValidatorManager::add_lite_query_stats_extended, query_obj_->get_id(),
                                     dst_,
@@ -1740,27 +1740,29 @@ void LiteQuery::perform_runSmcMethod(BlockIdExt blkid, WorkchainId workchain, St
             tuple.push_back(block::CurrencyCollection::zero().as_vm_tuple());  // in_msg_value:[Integer (Maybe Cell)]
             tuple.push_back(td::zero_refint());                                // storage_fees:Integer
 
-            // [ wc:Integer shard:Integer seqno:Integer root_hash:Integer file_hash:Integer] = BlockId;
-            // [ last_mc_blocks:[BlockId...]
-            //   prev_key_block:BlockId ] : PrevBlocksInfo
-            auto info = config->get_prev_blocks_info();
-            tuple.push_back(info.is_ok() ? info.move_as_ok() : vm::StackEntry());
-          }
-          if (config && config->get_global_version() >= 6) {
-            tuple.push_back(
-                    vm::StackEntry::maybe(config->get_unpacked_config_tuple(now)));  // unpacked_config_tuple:[...]
-            tuple.push_back(due_payment);                                                    // due_payment:Integer
-            // precomiled_gas_usage:(Maybe Integer)
-            td::optional<block::PrecompiledContractsConfig::Contract> precompiled;
-            if (my_code.not_null()) {
-              precompiled = config->get_precompiled_contracts_config().get_contract(my_code->get_hash().bits());
-            }
-            tuple.push_back(precompiled ? td::make_refint(precompiled.value().gas_usage) : vm::StackEntry());
-          }
-          auto tuple_ref = td::make_cnt_ref<std::vector<vm::StackEntry>>(std::move(tuple));
-          LOG(DEBUG) << "SmartContractInfo initialized with " << vm::StackEntry(tuple_ref).to_string();
-          return vm::make_tuple_ref(std::move(tuple_ref));
-        }
+    // [ wc:Integer shard:Integer seqno:Integer root_hash:Integer file_hash:Integer] = BlockId;
+    // [ last_mc_blocks:[BlockId...]
+    //   prev_key_block:BlockId ] : PrevBlocksInfo
+    auto info = config->get_prev_blocks_info();
+    tuple.push_back(info.is_ok() ? info.move_as_ok() : vm::StackEntry());
+  }
+  if (config && config->get_global_version() >= 6) {
+    tuple.push_back(vm::StackEntry::maybe(config->get_unpacked_config_tuple(now)));  // unpacked_config_tuple:[...]
+    tuple.push_back(due_payment);                                                    // due_payment:Integer
+    // precompiled_gas_usage:(Maybe Integer)
+    td::optional<block::PrecompiledContractsConfig::Contract> precompiled;
+    if (my_code.not_null()) {
+      precompiled = config->get_precompiled_contracts_config().get_contract(my_code->get_hash().bits());
+    }
+    tuple.push_back(precompiled ? td::make_refint(precompiled.value().gas_usage) : vm::StackEntry());
+  }
+  if (config && config->get_global_version() >= 11) {
+    tuple.push_back(block::transaction::Transaction::prepare_in_msg_params_tuple(nullptr, {}, {}));
+  }
+  auto tuple_ref = td::make_cnt_ref<std::vector<vm::StackEntry>>(std::move(tuple));
+  LOG(DEBUG) << "SmartContractInfo initialized with " << vm::StackEntry(tuple_ref).to_string();
+  return vm::make_tuple_ref(std::move(tuple_ref));
+}
 
 void LiteQuery::finish_runSmcMethod(td::BufferSlice shard_proof, td::BufferSlice state_proof, Ref<vm::Cell> acc_root,
                                     UnixTime gen_utime, LogicalTime gen_lt) {
@@ -4091,7 +4093,7 @@ void LiteQuery::finish_getDispatchQueueMessages(StdSmcAddress addr, LogicalTime 
       fatal_error(r_messages_boc.move_as_error());
       return;
     }
-    messages_boc = std::move(messages_boc);
+    messages_boc = r_messages_boc.move_as_ok();
   }
   LOG(INFO) << "getDispatchQueueMessages(" << blk_id_.to_str() << ", " << mode_ << ") query completed";
   auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_dispatchQueueMessages>(
