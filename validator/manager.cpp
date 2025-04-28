@@ -2960,7 +2960,7 @@ void ValidatorManagerImpl::prepare_stats(td::Promise<std::vector<std::pair<std::
   if (is_validator() && last_masterchain_state_.not_null() && last_masterchain_state_->get_global_id() == -239) {
     serializer_enabled = false;
   }
-  vec.emplace_back("stateserializerenabled", serializer_enabled ? "true" : "false");
+  vec.emplace_back("ton_node_stateserializerenabled ", serializer_enabled ? "1" : "0");
 
   merger.make_promise("").set_value(std::move(vec));
 
