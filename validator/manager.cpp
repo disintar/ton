@@ -2951,7 +2951,8 @@ void ValidatorManagerImpl::prepare_stats(td::Promise<std::vector<std::pair<std::
 //  vec.emplace_back("total.validated_blocks.shard", PSTRING() << "ok:" << total_validated_blocks_shard_ok_
 //                                                             << " error:" << total_validated_blocks_shard_error_);
 //  if (is_validator()) {
-//    vec.emplace_back("active_validator_groups", PSTRING() << "master:" << active_validator_groups_master_
+//    vec.emplace_back("active_validator_groups", PSTRING() << "master:" << active_validator_groups_
+//    master_
 //                                                          << " shard:" << active_validator_groups_shard_);
 //  }
 
