@@ -127,11 +127,11 @@ void DownloadArchiveSlice::try_download(int index){
                                        index,
                                        total_nodes = static_cast<int>(download_from_list_.size())](td::Result<td::BufferSlice> R) {
       if (R.is_error()) {
-//        if (index + 1 >= total_nodes) {
+        if (index + 1 >= total_nodes) {
           td::actor::send_closure(SelfId, &DownloadArchiveSlice::abort_query, R.move_as_error());
-//        } else {
-//          td::actor::send_closure(SelfId, &DownloadArchiveSlice::try_download, index + 1);
-//        }
+        } else {
+          td::actor::send_closure(SelfId, &DownloadArchiveSlice::try_download, index + 1);
+        }
       } else {
         td::actor::send_closure(SelfId, &DownloadArchiveSlice::got_archive_info, R.move_as_ok());
       }
@@ -145,17 +145,12 @@ void DownloadArchiveSlice::try_download(int index){
                                                                          create_tl_shard_id(shard_prefix_));
   }
   if (client_.empty()) {
-    if (index > 0){
-      td::actor::send_closure(overlays_, &overlay::Overlays::send_query, download_from_, local_id_, overlay_id_,
-                              "get_archive_info", std::move(P), td::Timestamp::in(15.0), std::move(q));
-    } else {
-      td::actor::send_closure(overlays_, &overlay::Overlays::send_query, download_from_, local_id_, overlay_id_,
-                              "get_archive_info", std::move(P), td::Timestamp::in(15.0), std::move(q));
-    }
+    td::actor::send_closure(overlays_, &overlay::Overlays::send_query, download_from_, local_id_, overlay_id_,
+                            "get_archive_info", std::move(P), td::Timestamp::in(5.0), std::move(q));
   } else {
     td::actor::send_closure(client_, &adnl::AdnlExtClient::send_query, "get_archive_info",
                             create_serialize_tl_object_suffix<ton_api::tonNode_query>(std::move(q)),
-                            td::Timestamp::in(15.0), std::move(P));
+                            td::Timestamp::in(3.0), std::move(P));
   }
 }
 
