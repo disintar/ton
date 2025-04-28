@@ -127,11 +127,11 @@ void DownloadArchiveSlice::try_download(int index){
                                        index,
                                        total_nodes = static_cast<int>(download_from_list_.size())](td::Result<td::BufferSlice> R) {
       if (R.is_error()) {
-        if (index + 1 >= total_nodes) {
+//        if (index + 1 >= total_nodes) {
           td::actor::send_closure(SelfId, &DownloadArchiveSlice::abort_query, R.move_as_error());
-        } else {
-          td::actor::send_closure(SelfId, &DownloadArchiveSlice::try_download, index + 1);
-        }
+//        } else {
+//          td::actor::send_closure(SelfId, &DownloadArchiveSlice::try_download, index + 1);
+//        }
       } else {
         td::actor::send_closure(SelfId, &DownloadArchiveSlice::got_archive_info, R.move_as_ok());
       }
