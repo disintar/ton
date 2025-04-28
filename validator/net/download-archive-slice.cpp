@@ -102,7 +102,7 @@ void DownloadArchiveSlice::start_up() {
       }
     });
 
-    td::actor::send_closure(overlays_, &overlay::Overlays::get_overlay_random_peers, local_id_, overlay_id_, 50,
+    td::actor::send_closure(overlays_, &overlay::Overlays::get_overlay_random_peers, local_id_, overlay_id_, 1,
                             std::move(P));
   } else {
     std::vector<adnl::AdnlNodeIdShort> tmp;
