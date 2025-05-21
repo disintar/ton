@@ -18,5 +18,6 @@ py::dict parse_token_data(const PyCell& codeCell);
 PyCell run_asm(const std::string& code, const std::string& base_path);
 PyCellSlice pack_address(const std::string& address);
 std::string parse_chunked_data(vm::CellSlice& cs);
+std::string parse_shard_account(PyCell &shard_account);
 
 #endif  //TON_PYTOOLS_H

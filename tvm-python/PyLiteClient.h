@@ -95,15 +95,15 @@ namespace pylite {
                               std::shared_ptr<OutputQueue> output_queue_, double timeout_);
 
         void conn_ready() {
-            connected = true;
+          connected = true;
         }
 
         void conn_closed() {
-            connected = false;
+          connected = false;
         }
 
         void get_connected() {
-            output_queue->writer_put(ResponseWrapper(std::make_unique<Connected>(Connected(connected))));
+          output_queue->writer_put(ResponseWrapper(std::make_unique<Connected>(Connected(connected))));
         }
 
         void send_message(vm::Ref<vm::Cell> message);
@@ -152,8 +152,8 @@ namespace pylite {
         void run();
 
         void exit() {
-            client.reset();
-            hangup();
+          client.reset();
+          hangup();
         };
 
     private:
@@ -184,61 +184,61 @@ namespace pylite {
         PyLiteClient(std::string ipv4, int port, PyPublicKey public_key, double timeout_ = 5,
                      unsigned long long threads = 5)
                 : timeout(timeout_) {
-            scheduler_.init_with_new_infos({{threads}});
-            response_obj_ = std::make_shared<OutputQueue>();
-            response_obj_->init();
+          scheduler_.init_with_new_infos({{threads}});
+          response_obj_ = std::make_shared<OutputQueue>();
+          response_obj_->init();
 
-            scheduler_.run_in_context([&] {
-                engine = td::actor::create_actor<LiteClientActorEngine>("LiteClientActorEngine", ipv4, port,
-                                                                        std::move(public_key.key), response_obj_,
-                                                                        timeout_);
+          scheduler_.run_in_context([&] {
+              engine = td::actor::create_actor<LiteClientActorEngine>("LiteClientActorEngine", ipv4, port,
+                                                                      std::move(public_key.key), response_obj_,
+                                                                      timeout_);
 
-                scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::run); });
-            });
-            scheduler_thread_ = td::thread([&] { scheduler_.run(); });
+              scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::run); });
+          });
+          scheduler_thread_ = td::thread([&] { scheduler_.run(); });
         };
 
         ~PyLiteClient() {
-            scheduler_.run_in_context_external([&] { engine.reset(); });
-            scheduler_.run_in_context_external([] { td::actor::SchedulerContext::get()->stop(); });
-            scheduler_thread_.join();
+          scheduler_.run_in_context_external([&] { engine.reset(); });
+          scheduler_.run_in_context_external([] { td::actor::SchedulerContext::get()->stop(); });
+          scheduler_thread_.join();
         }
 
         bool get_connected() {
-            scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::get_connected); });
-            auto response = wait_response();
-            Connected *connected = static_cast<Connected *>(response.get());
-            return connected->connected;
+          scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::get_connected); });
+          auto response = wait_response();
+          Connected *connected = static_cast<Connected *>(response.get());
+          return connected->connected;
         }
 
         std::int32_t get_time() {
-            scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::get_time); });
-            auto response = wait_response();
-            GetTimeResponse *time = dynamic_cast<GetTimeResponse *>(response.get());
-            if (time->success) {
-                return time->now;
-            } else {
-                throw std::logic_error(time->error_message);
-            }
+          scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::get_time); });
+          auto response = wait_response();
+          GetTimeResponse *time = dynamic_cast<GetTimeResponse *>(response.get());
+          if (time->success) {
+            return time->now;
+          } else {
+            throw std::logic_error(time->error_message);
+          }
         }
 
         int send_message(PyCell &cell) {
-            scheduler_.run_in_context_external(
-                    [&] { send_closure(engine, &LiteClientActorEngine::send_message, cell.my_cell); });
-            auto response = wait_response();
-            if (response->success) {
-                SuccessBufferSlice *answer = dynamic_cast<SuccessBufferSlice *>(response.get());
-                auto R = ton::fetch_tl_object < ton::lite_api::liteServer_sendMsgStatus >
-                         (std::move(answer->obj->clone()), true);
-                if (R.is_error()) {
-                    throw_lite_error(answer->obj->clone());
-                } else {
-                    return R.move_as_ok()->status_;
-                }
+          scheduler_.run_in_context_external(
+                  [&] { send_closure(engine, &LiteClientActorEngine::send_message, cell.my_cell); });
+          auto response = wait_response();
+          if (response->success) {
+            SuccessBufferSlice *answer = dynamic_cast<SuccessBufferSlice *>(response.get());
+            auto R = ton::fetch_tl_object < ton::lite_api::liteServer_sendMsgStatus >
+                     (std::move(answer->obj->clone()), true);
+            if (R.is_error()) {
+              throw_lite_error(answer->obj->clone());
             } else {
-                throw std::logic_error(response->error_message);
+              return R.move_as_ok()->status_;
             }
-            return 0;
+          } else {
+            throw std::logic_error(response->error_message);
+          }
+          return 0;
         }
 
         std::unique_ptr<ton::lite_api::liteServer_masterchainInfoExt> get_MasterchainInfoExt();
@@ -252,13 +252,15 @@ namespace pylite {
         block::TransactionList::Info get_Transactions(int count, int workchain, std::string address_string,
                                                       unsigned long long lt, std::string hash_int_string);
 
-        PyCell get_OneTransaction(ton::BlockIdExt blkid, int workchain, std::string address_string, unsigned long long lt);
+        PyCell
+        get_OneTransaction(ton::BlockIdExt blkid, int workchain, std::string address_string, unsigned long long lt);
 
         TestNode::BlockHdrInfo get_BlockHeader(ton::BlockIdExt blkid, int mode);
 
         TestNode::BlockHdrInfo lookupBlock(int mode, ton::BlockId block, long long lt, long long time);
 
         PyCell get_Block(ton::BlockIdExt blkid);
+
         std::string get_ParsedBlockInfo(ton::BlockId blkid);
 
         PyDict get_Libraries(std::vector<std::string> libs);
@@ -273,24 +275,26 @@ namespace pylite {
         bool wait_connected(double wait);
 
         bool dummy_wait(int wait) {
-            py::gil_scoped_release release;
-            sleep(wait);
-            return false;
+          py::gil_scoped_release release;
+          sleep(wait);
+          return false;
         };
 
         std::unique_ptr<ton::lite_api::liteServer_masterchainInfoExt> wait_masterchain_seqno(int seqno, int tm);
 
         // Admin functions
-        std::tuple<PubKeyHex, ShortKeyHex> admin_AddUser(std::string pubkey, td::int64 valid_until, td::int32 ratelimit);
+        std::tuple<PubKeyHex, ShortKeyHex>
+        admin_AddUser(std::string pubkey, td::int64 valid_until, td::int32 ratelimit);
+
         int admin_checkItemPublished(std::string root_hash, td::int64 category);
 
         std::vector<std::tuple<ShortKeyHex, int, td::int64, td::int64, bool>> admin_getStatData();
 
         void stop() {
-            scheduler_.run_in_context_external([&] { engine.reset(); });
-            scheduler_.run_in_context_external([] { td::actor::SchedulerContext::get()->stop(); });
-            scheduler_thread_.join();
-            scheduler_.stop();
+          scheduler_.run_in_context_external([&] { engine.reset(); });
+          scheduler_.run_in_context_external([] { td::actor::SchedulerContext::get()->stop(); });
+          scheduler_thread_.join();
+          scheduler_.stop();
         }
 
     private:

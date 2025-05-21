@@ -4,6 +4,7 @@
 #include <string>
 #include "vm/vmstate.h"
 #include "td/utils/base64.h"
+#include "blockchain-indexer/json-utils.hpp"
 #include <utility>
 #include "vm/boc.h"
 #include "vm/cellslice.h"
@@ -147,7 +148,7 @@ std::string PyCellSlice::toString() const {
   return "<CellSlice " + t + ">";
 }
 
-std::string fetch_string(vm::CellSlice &cs, unsigned int text_size, bool convert_to_utf8) {
+std::string fetch_string_limited(vm::CellSlice &cs, unsigned int text_size, bool convert_to_utf8) {
   if (convert_to_utf8) {
     std::string text;
     while (text_size > 0) {
@@ -199,7 +200,7 @@ std::string PyCellSlice::load_string(unsigned int text_size, bool convert_to_utf
     throw std::invalid_argument("Not enough bits in cell slice");
   }
 
-  return fetch_string(my_cell_slice, text_size, convert_to_utf8);
+  return fetch_string_limited(my_cell_slice, text_size, convert_to_utf8);
 }
 
 std::string PyCellSlice::load_addr() {
@@ -372,68 +373,6 @@ std::string PyCellSlice::dump_as_tlb(std::string tlb_type) const {
 
   auto output = ss.str();
   return output;
-}
-
-std::string fetch_string(vm::CellSlice &cs, bool convert_to_utf8 = true) {
-  if (convert_to_utf8) {
-    auto text_size = cs.size() / 8;
-
-    std::string text;
-
-    while (text_size > 0) {
-      auto first_byte = cs.fetch_ulong(8);
-
-      // Determine the number of bytes for the UTF-8 character
-      size_t char_size = 0;
-      if ((first_byte & 0x80) == 0) {
-        char_size = 1;
-      } else if ((first_byte & 0xE0) == 0xC0) {
-        char_size = 2;
-      } else if ((first_byte & 0xF0) == 0xE0) {
-        char_size = 3;
-      } else if ((first_byte & 0xF8) == 0xF0) {
-        char_size = 4;
-      } else {
-        // Handle invalid UTF-8 sequence or adjust as needed
-        char_size = 1;
-      }
-
-      std::ostringstream utf8Stream;
-      utf8Stream << static_cast<char>(first_byte);
-      for (size_t i = 1; i < char_size; ++i) {
-        auto next_byte = cs.fetch_ulong(8);
-        utf8Stream << static_cast<char>(next_byte);
-      }
-      text += utf8Stream.str();
-      text_size -= char_size;
-    }
-
-    return text;
-  } else {
-    const unsigned int text_size = cs.size() / 8;
-
-    td::BufferSlice s(text_size);
-    cs.fetch_bytes((td::uint8 *)s.data(), text_size);
-
-    return s.as_slice().str();
-  }
-}
-
-std::string parse_snake_data_string(vm::CellSlice &cs, bool convert_to_utf8) {
-  bool has_next_ref = cs.have_refs();
-  std::string text = fetch_string(cs, convert_to_utf8);
-  vm::CellSlice rcf = cs;
-
-  while (has_next_ref) {
-    rcf = load_cell_slice(rcf.prefetch_ref());
-    auto x = fetch_string(rcf, convert_to_utf8);
-
-    text += x;
-
-    has_next_ref = rcf.have_refs();
-  }
-
-  return text;
 }
 
 std::string PyCellSlice::load_snake_string() {

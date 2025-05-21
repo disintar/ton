@@ -130,7 +130,6 @@ bool PyEmulator::emulate_transaction(const PyCell &shard_account_cell, const PyC
         }
     }
 
-    py::gil_scoped_release release;
     auto result = emulator->emulate_transaction(std::move(account), message_cell.my_cell, now, lt,
                                                 block::transaction::Transaction::tr_ord, vm_ver);
 
@@ -168,8 +167,6 @@ bool PyEmulator::emulate_transaction(const PyCell &shard_account_cell, const PyC
 
 bool PyEmulator::emulate_tick_tock_transaction(const PyCell &shard_account_boc, bool is_tock,
                                                const std::string &unixtime, const std::string &lt_str, int vm_ver) {
-
-    py::gil_scoped_release release;
     auto shard_account_cell = shard_account_boc.my_cell;
 
     if (shard_account_cell.is_null()) {

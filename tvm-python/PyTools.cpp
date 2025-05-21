@@ -1,6 +1,8 @@
 // Copyright 2023 Disintar LLP / andrey@head-labs.com
 
 #include "third-party/pybind11/include/pybind11/pybind11.h"
+#include "blockchain-indexer/json.hpp"
+#include "blockchain-indexer/json-utils.hpp"
 #include <string>
 #include "td/utils/base64.h"
 #include <utility>
@@ -46,10 +48,12 @@
 #include "PyCell.h"
 
 namespace py = pybind11;
+using json = nlohmann::json;
+
 using namespace pybind11::literals;  // to bring in the `_a` literal'
 
-std::string code_disassemble(const td::Ref<vm::Cell>& codeCell, const std::string& basePath,
-                             const td::Ref<vm::Cell>& vmlibsCell) {
+std::string code_disassemble(const td::Ref<vm::Cell> &codeCell, const std::string &basePath,
+                             const td::Ref<vm::Cell> &vmlibsCell) {
   fift::Fift::Config config;
 
   config.source_lookup = fift::SourceLookup(std::make_unique<fift::OsFileLoader>());
@@ -103,13 +107,13 @@ std::string code_disassemble(const td::Ref<vm::Cell>& codeCell, const std::strin
 
       return disasm_out;
     }
-  } catch (const std::exception& e) {
+  } catch (const std::exception &e) {
     std::cerr << "Disasm error: " << e.what();
     throw std::invalid_argument("Error in disassembler");
   }
 }
 
-std::string code_dissemble_str(const std::string& code, const std::string& basePath, const PyCell& vmlibs) {
+std::string code_dissemble_str(const std::string &code, const std::string &basePath, const PyCell &vmlibs) {
   auto codeCell = parse_string_to_cell(code);
   if (vmlibs.is_null()) {
     return code_disassemble(std::move(codeCell.my_cell), basePath, {});
@@ -119,7 +123,7 @@ std::string code_dissemble_str(const std::string& code, const std::string& baseP
   }
 }
 
-std::string code_dissemble_cell(const PyCell& codeCell, const std::string& basePath, const PyCell& vmlibs) {
+std::string code_dissemble_cell(const PyCell &codeCell, const std::string &basePath, const PyCell &vmlibs) {
   if (vmlibs.is_null()) {
     return code_disassemble(codeCell.my_cell, basePath, {});
   } else {
@@ -128,7 +132,7 @@ std::string code_dissemble_cell(const PyCell& codeCell, const std::string& baseP
   }
 }
 
-std::string parse_chunked_data(vm::CellSlice& cs) {
+std::string parse_chunked_data(vm::CellSlice &cs) {
   vm::Dictionary dict{cs, 32};
 
   std::string slice;
@@ -145,10 +149,10 @@ std::string parse_chunked_data(vm::CellSlice& cs) {
 }
 
 std::string onchain_hash_key_to_string(std::string hash) {
-  std::vector<td::string> s = {"uri",      "name",         "description", "image",  "image_data", "symbol",
-                               "decimals", "amount_style", "render_type", "jetton", "master",     "address"};
+  std::vector<td::string> s = {"uri", "name", "description", "image", "image_data", "symbol",
+                               "decimals", "amount_style", "render_type", "jetton", "master", "address"};
 
-  for (const auto& it : s) {
+  for (const auto &it: s) {
     td::Bits256 tmp;
     td::sha256(td::Slice(it), tmp.as_slice());
 
@@ -160,7 +164,7 @@ std::string onchain_hash_key_to_string(std::string hash) {
   return hash;
 }
 
-py::dict parse_token_data(const PyCell& codeCell) {
+py::dict parse_token_data(const PyCell &codeCell) {
   try {
     auto cell = codeCell.my_cell;
     auto cs = load_cell_slice(cell);
@@ -223,14 +227,14 @@ py::dict parse_token_data(const PyCell& codeCell) {
     } else {
       throw std::invalid_argument("Not valid prefix, must be 0x00 / 0x01");
     }
-  } catch (const vm::VmError& e) {
+  } catch (const vm::VmError &e) {
     throw std::runtime_error(e.get_msg());
-  } catch (const std::exception& e) {
+  } catch (const std::exception &e) {
     throw std::invalid_argument("Can't parse token data");
   }
 }
 
-PyCellSlice pack_address(const std::string& address) {
+PyCellSlice pack_address(const std::string &address) {
   auto paddr_parse = block::StdAddress::parse(address);
 
   if (paddr_parse.is_ok()) {
@@ -245,3 +249,94 @@ PyCellSlice pack_address(const std::string& address) {
     throw std::invalid_argument("Parse address error: not valid address");
   }
 }
+
+std::string parse_shard_account(PyCell &shard_account) {
+  block::gen::ShardAccount::Record sa;
+
+  if (!tlb::unpack_cell(shard_account.my_cell, sa)) {
+    throw std::invalid_argument("Cell is invalid ShardAccount::Record");
+  }
+
+  json data;
+
+  data["account"] = {{"last_trans_hash", sa.last_trans_hash.to_hex()},
+                     {"last_trans_lt",   sa.last_trans_lt}};
+
+  auto account_cell = load_cell_slice(sa.account);
+  auto acc_tag = block::gen::t_Account.get_tag(account_cell);
+
+  if (acc_tag == block::gen::t_Account.account) {
+    data["account"]["type"] = "account";
+    block::gen::Account::Record_account acc;
+    block::gen::StorageInfo::Record si;
+    block::gen::AccountStorage::Record as;
+    block::gen::StorageUsed::Record su;
+    block::gen::CurrencyCollection::Record balance;
+
+    if (!tlb::unpack(account_cell, acc)) {
+      throw std::invalid_argument("Cell is invalid Account::Record_account");
+    }
+
+    if (!tlb::unpack(acc.storage.write(), as)) {
+      throw std::invalid_argument("Cell is invalid StorageInfo::Record");
+    };
+
+    if (!tlb::unpack(acc.storage_stat.write(), si)) {
+      throw std::invalid_argument("Cell is invalid AccountStorage::Record");
+    };
+
+    if (!tlb::unpack(si.used.write(), su)) {
+      throw std::invalid_argument("Cell is invalid StorageUsed::Record");
+    };
+
+    if (!tlb::unpack(as.balance.write(), balance)) {
+      throw std::invalid_argument("Cell is invalid CurrencyCollection::Record ");
+    };
+
+    data["account"]["addr"] = parse_address(acc.addr.write());
+    std::string due_payment;
+
+    if (si.due_payment->prefetch_ulong(1) > 0) {
+      auto due = si.due_payment.write();
+      due.fetch_bits(1);  // maybe
+      due_payment = block::tlb::t_Grams.as_integer(due)->to_dec_string();
+    }
+
+    data["account"]["storage_stat"] = {{"last_paid",   si.last_paid},
+                                       {"due_payment", due_payment}};
+
+    data["account"]["storage_stat"]["used"] = {
+            {"cells", block::tlb::t_VarUInteger_7.as_uint(su.cells.write())},
+            {"bits",  block::tlb::t_VarUInteger_7.as_uint(su.bits.write())},
+    };
+
+    data["account"]["storage"] = {{"last_trans_lt", as.last_trans_lt}};
+
+    std::vector<std::tuple<int, std::string>> dummy;
+    data["account"]["storage"]["balance"] = {
+            {"grams", block::tlb::t_Grams.as_integer(balance.grams)->to_dec_string()},
+            {"extra", balance.other->have_refs() ? parse_extra_currency(balance.other->prefetch_ref()) : dummy}};
+
+    auto tag = block::gen::t_AccountState.get_tag(as.state.write());
+
+    if (tag == block::gen::t_AccountState.account_uninit) {
+      data["account"]["state"] = {{"type", "uninit"}};
+    } else if (tag == block::gen::t_AccountState.account_active) {
+      block::gen::AccountState::Record_account_active active_account;
+      CHECK(tlb::unpack(as.state.write(), active_account));
+
+      data["account"]["state"] = {{"type",       "active"},
+                                  {"state_init", parse_state_init(active_account.x.write())}};
+
+    } else if (tag == block::gen::t_AccountState.account_frozen) {
+      block::gen::AccountState::Record_account_frozen f{};
+      CHECK(tlb::unpack(as.state.write(), f))
+      data["account"]["state"] = {{"type",       "frozen"},
+                                  {"state_hash", f.state_hash.to_hex()}};
+    }
+  } else {
+    data["account"]["type"] = "account_none";
+  }
+
+  return data.dump(-1);
+};

@@ -30,6 +30,8 @@ std::vector<std::tuple<int, std::string>> parse_extra_currency(const Ref<vm::Cel
 std::map<std::string, std::variant<int, std::string>> parse_anycast(vm::CellSlice anycast);
 
 std::string dump_as_boc(Ref<vm::Cell> root_cell);
+std::string fetch_string(vm::CellSlice &cs, bool convert_to_utf8 = true);
+std::string parseblock_snake_data_string(vm::CellSlice &cs, bool convert_to_utf8);
 
 json parse_address(vm::CellSlice address);
 

@@ -399,6 +399,23 @@ PYBIND11_MODULE(python_ton, m) {
            py::arg("force_uninit") = false)
       .def("emulate_tick_tock_transaction", &PyEmulator::emulate_tick_tock_transaction, py::arg("shard_account_boc"),
            py::arg("is_tock"), py::arg("unixtime") = "0", py::arg("lt") = "0", py::arg("vm_ver") = 1)
+      .def("aemulate_tick_tock_transaction",
+           [](PyEmulator &self,
+              const PyCell& shard_account_boc,
+              bool is_tock,
+              const std::string& unixtime,
+              const std::string& lt,
+              int vm_ver) {
+               return async_wrapper([=, &self]() {
+                   return self.emulate_tick_tock_transaction(
+                           shard_account_boc, is_tock, unixtime, lt, vm_ver);
+               });
+           },
+           py::arg("shard_account_boc"),
+           py::arg("is_tock"),
+           py::arg("unixtime") = "0",
+           py::arg("lt") = "0",
+           py::arg("vm_ver") = 1)
       .def_property("vm_log", &PyEmulator::get_vm_log, &PyEmulator::dummy_set)
       .def_property("elapsed_time", &PyEmulator::get_elapsed_time, &PyEmulator::dummy_set)
       .def_property("transaction_cell", &PyEmulator::get_transaction_cell, &PyEmulator::dummy_set)
@@ -571,8 +588,8 @@ PYBIND11_MODULE(python_ton, m) {
       .def_readonly("req_count", &pylite::BlockTransactionsExt::req_count)
       .def_readonly("incomplete", &pylite::BlockTransactionsExt::incomplete)
       .def_readonly("transactions", &pylite::BlockTransactionsExt::transactions);
-
   m.def("create_new_mnemo", create_new_mnemo);
+  m.def("parse_shard_account", parse_shard_account);
   m.def("get_bip39_words", get_bip39_words);
   m.def("ipv4_int_to_str", pylite::ipv4_int_to_str);
   m.def("shard_parent", shard_parent);

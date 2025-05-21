@@ -261,7 +261,7 @@ std::string map_to_utf8(const long long val) {
   return converter.to_bytes(static_cast<char32_t>(val));
 }
 
-std::string fetch_string(vm::CellSlice &cs, bool convert_to_utf8 = true) {
+std::string fetch_string(vm::CellSlice &cs, bool convert_to_utf8) {
   if (convert_to_utf8) {
     auto text_size = cs.size() / 8;
 
