@@ -2,7 +2,7 @@
 
 { pkgs ? import <nixpkgs> { inherit system; }
 , lib ? pkgs.lib
-, stdenv ? pkgs.gcc13Stdenv
+, stdenv ? pkgs.stdenv.overrideCC pkgs.clang_16
 , system ? builtins.currentSystem
 , src ? ./.
 }:
@@ -48,7 +48,7 @@ stdenv.mkDerivation {
     "-DCMAKE_CTEST_ARGUMENTS=--timeout;1800"
     "-DCMAKE_CXX_FLAGS=-w"
     "-DCMAKE_C_FLAGS=-w"
-    "-DCMAKE_CXX_STANDARD=23"
+    "-DCMAKE_CXX_STANDARD=20"
     "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-unused-but-set-variable"
   ];
 

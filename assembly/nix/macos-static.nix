@@ -53,7 +53,7 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
     "-DCMAKE_CTEST_ARGUMENTS=--timeout;1800"
     "-DCMAKE_CXX_FLAGS=-w"
     "-DCMAKE_C_FLAGS=-w"
-    "-DCMAKE_CXX_STANDARD=23"
+    "-DCMAKE_CXX_STANDARD=20"
   ];
 
   LDFLAGS = [
