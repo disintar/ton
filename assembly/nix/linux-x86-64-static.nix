@@ -19,7 +19,7 @@ stdenv.mkDerivation {
 
   nativeBuildInputs = with pkgs;
     [
-      cmake ninja git pkg-config
+      cmake clang_16 ninja git pkg-config
     ];
 
   buildInputs = with pkgs;
@@ -41,6 +41,8 @@ stdenv.mkDerivation {
     "-DCMAKE_LINK_SEARCH_START_STATIC=ON"
     "-DCMAKE_LINK_SEARCH_END_STATIC=ON"
     "-DMHD_FOUND=1"
+    "-DCMAKE_C_COMPILER=${pkgs.clang_16}/bin/clang"
+    "-DCMAKE_CXX_COMPILER=${pkgs.clang_16}/bin/clang++"
     "-DMHD_INCLUDE_DIR=${microhttpdmy}/usr/local/include"
     "-DMHD_LIBRARY=${microhttpdmy}/usr/local/lib/libmicrohttpd.a"
     "-DCMAKE_CTEST_ARGUMENTS=--timeout;1800"
