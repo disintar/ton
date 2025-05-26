@@ -48,7 +48,7 @@ pkgs.llvmPackages_16.stdenv.mkDerivation {
     "-DMHD_LIBRARY=${microhttpdmy}/usr/local/lib/libmicrohttpd.a"
     "-DCMAKE_CXX_FLAGS=-w"
     "-DCMAKE_C_FLAGS=-w"
-    "-DCMAKE_CXX_STANDARD=20"
+    "-DCMAKE_CXX_STANDARD=23"
     "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-unused-but-set-variable"
   ];
 
