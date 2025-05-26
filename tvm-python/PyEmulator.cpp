@@ -259,6 +259,6 @@ PyCell PyEmulator::get_account_cell() {
     return PyCell(account_cell);
 }
 
-PyCell PyEmulator::get_actions_cell() {
+PyCell PyEmulator::get_actions_cell() {`
     return PyCell(actions_cell);
 }
