@@ -1,77 +1,71 @@
-# export NIX_PATH=nixpkgs=https://github.com/nixOS/nixpkgs/archive/23.11.tar.gz
-# copy linux-x86-64-tonlib.nix to git root directory and execute:
-# nix-build linux-x86-64-tonlib.nix
-{
-  pkgs ? import <nixpkgs> { inherit system; }
-, lib ? pkgs.lib
-, stdenv ? pkgs.stdenv
-, system ? builtins.currentSystem
-, src ? ./.
-}:
+{ system ? builtins.currentSystem }:
+
 let
-          nixos1909 = (import (builtins.fetchTarball {
-            url = "https://channels.nixos.org/nixos-19.09/nixexprs.tar.xz";
-            sha256 = "1vp1h2gkkrckp8dzkqnpcc6xx5lph5d2z46sg2cwzccpr8ay58zy";
-          }) { inherit system; });
-          glibc227 = nixos1909.glibc // { pname = "glibc"; };
-          stdenv227 = let
-            cc = pkgs.wrapCCWith {
-              cc = nixos1909.buildPackages.gcc-unwrapped;
-              libc = glibc227;
-              bintools = pkgs.binutils.override { libc = glibc227; };
-            };
-          in (pkgs.overrideCC pkgs.stdenv cc);
+  pkgs = import <nixpkgs> { inherit system; };
+
+  nixos1909 = import (builtins.fetchTarball {
+    url = "https://channels.nixos.org/nixos-19.09/nixexprs.tar.xz";
+    sha256 = "1vp1h2gkkrckp8dzkqnpcc6xx5lph5d2z46sg2cwzccpr8ay58zy";
+  }) { inherit system; };
+
+  glibc227 = nixos1909.glibc // { pname = "glibc"; };
+
+  cc = pkgs.wrapCCWith {
+    cc = nixos1909.buildPackages.gcc-unwrapped;
+    libc = glibc227;
+    bintools = pkgs.binutils.override { libc = glibc227; };
+  };
+
+  stdenv227 = pkgs.overrideCC pkgs.stdenv cc;
+
   staticLibs = import ./static-libs.nix { inherit pkgs; };
-in
-stdenv227.mkDerivation {
+
+in stdenv227.mkDerivation {
   pname = "ton";
   version = "dev-lib";
+  src = ./.; # если используешь в git-репозитории
 
-  inherit src;
+  nativeBuildInputs = with pkgs; [ cmake ninja git pkg-config ];
 
-  nativeBuildInputs = with pkgs;
-    [ cmake ninja git pkg-config ];
-
-  buildInputs = with pkgs;
-    [
-      pkgsStatic.openssl
-      pkgsStatic.zlib
-       pkgsStatic.libmicrohttpd.dev
-       pkgsStatic.secp256k1
-      staticLibs.staticBoost
-      staticLibs.staticLibrdkafka
-      pkgsStatic.lz4
-      (pkgsStatic.libsodium.overrideAttrs (oldAttrs: {
-        # https://github.com/jedisct1/libsodium/issues/292#issuecomment-137135369
-        configureFlags = oldAttrs.configureFlags ++ [ " --disable-pie" ];
-        hardeningDisable = oldAttrs.hardeningDisable ++ [ "pie" ];
-      }))
-    ];
+  buildInputs = with pkgs; [
+    pkgsStatic.openssl
+    pkgsStatic.zlib
+    pkgsStatic.libmicrohttpd.dev
+    pkgsStatic.secp256k1
+    pkgsStatic.lz4
+    staticLibs.staticBoost
+    staticLibs.staticLibrdkafka
+    (pkgsStatic.libsodium.overrideAttrs (oldAttrs: {
+      configureFlags = oldAttrs.configureFlags ++ [ "--disable-pie" ];
+      hardeningDisable = oldAttrs.hardeningDisable ++ [ "pie" ];
+    }))
+  ];
 
   dontAddStaticConfigureFlags = false;
 
   cmakeFlags = [
     "-DTON_USE_ABSEIL=ON"
     "-DNIX=ON"
-    "-DCMAKE_CXX_FLAGS=-w"
-    "-DCMAKE_C_FLAGS=-w"
+    "-DCMAKE_C_COMPILER=${cc}/bin/cc"
+    "-DCMAKE_CXX_COMPILER=${cc}/bin/c++"
     "-DCMAKE_CXX_STANDARD=20"
-    "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-unused-but-set-variable"
+    "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-unused-but-set-variable -w"
+    "-DCMAKE_C_FLAGS=-w"
   ];
 
   LDFLAGS = [
-     "-static-libgcc" "-static-libstdc++" "-fPIC"
+    "-static-libgcc"
+    "-static-libstdc++"
+    "-fPIC"
   ];
 
-  ninjaFlags = [
-    "tonlibjson" "emulator"
-  ];
+  ninjaFlags = [ "tonlibjson" "emulator" ];
 
   preConfigure = ''
-      echo ">>> linux-x86-64-tonlib.nix Checking compiler:"
-      echo "CC = $(which cc)"
-      echo "CXX = $(which c++)"
-      cc --version
-      c++ --version
+    echo ">>> linux-x86-64-tonlib.nix Checking compiler:"
+    echo "CC = $(which cc)"
+    echo "CXX = $(which c++)"
+    cc --version
+    c++ --version
   '';
 }
