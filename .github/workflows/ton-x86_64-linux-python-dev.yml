@@ -52,7 +52,7 @@ jobs:
       - name: Install deps
         run: |
           sudo apt update -y
-          sudo apt install -y git curl xz-utils
+          sudo apt install -y git curl xz-utils which
 
       - uses: actions/checkout@v4
         with:
