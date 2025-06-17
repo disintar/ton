@@ -56,6 +56,15 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
     "tonlibjson" "emulator"
   ];
 
+
+  preConfigure = ''
+      echo ">>> macos-tonlib.nix Checking compiler:"
+      echo "CC = $(which cc)"
+      echo "CXX = $(which c++)"
+      cc --version
+      c++ --version
+  '';
+
   preFixup = ''
       if [[ -n "$bin" ]]; then
         for fn in "$bin"/bin/*; do

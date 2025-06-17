@@ -53,4 +53,12 @@ stdenv.mkDerivation {
   LDFLAGS = [
      "-static-libgcc" "-static-libstdc++" "-static"
   ];
+
+  preConfigure = ''
+      echo ">>> linux-arm64-static.nix Checking compiler:"
+      echo "CC = $(which cc)"
+      echo "CXX = $(which c++)"
+      cc --version
+      c++ --version
+  '';
 }

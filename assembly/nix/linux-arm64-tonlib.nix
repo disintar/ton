@@ -59,4 +59,12 @@ pkgs.llvmPackages_16.stdenv.mkDerivation {
   ninjaFlags = [
     "tonlibjson" "emulator"
   ];
+
+  preConfigure = ''
+      echo ">>> linux-arm64-tonlib.nix Checking compiler:"
+      echo "CC = $(which cc)"
+      echo "CXX = $(which c++)"
+      cc --version
+      c++ --version
+  '';
 }

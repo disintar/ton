@@ -80,9 +80,8 @@ stdenv.mkDerivation {
     "-static-libgcc" "-static-libstdc++" "-static"
   ];
 
-  # Проверка, какой компилятор реально используется
   preConfigure = ''
-    echo ">>> Checking compiler:"
+    echo ">>> linux-x86-64-static.nix Checking compiler:"
     echo "CC = $(which cc)"
     echo "CXX = $(which c++)"
     cc --version

@@ -66,4 +66,12 @@ stdenv227.mkDerivation {
   ninjaFlags = [
     "tonlibjson" "emulator"
   ];
+
+  preConfigure = ''
+      echo ">>> linux-x86-64-tonlib.nix Checking compiler:"
+      echo "CC = $(which cc)"
+      echo "CXX = $(which c++)"
+      cc --version
+      c++ --version
+  '';
 }

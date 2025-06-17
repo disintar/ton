@@ -61,6 +61,14 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
     "-framework CoreFoundation"
   ];
 
+  preConfigure = ''
+      echo ">>> macos-static.nix Checking compiler:"
+      echo "CC = $(which cc)"
+      echo "CXX = $(which c++)"
+      cc --version
+      c++ --version
+  '';
+
   postInstall = ''
      moveToOutput bin "$bin"
   '';
