@@ -1,35 +1,41 @@
 # export NIX_PATH=nixpkgs=https://github.com/nixOS/nixpkgs/archive/23.05.tar.gz
 
-{ pkgs ? import <nixpkgs> { inherit system; }
-, lib ? pkgs.lib
-, stdenv ? pkgs.stdenv.overrideCC pkgs.clang_16
-, system ? builtins.currentSystem
-, src ? ./.
-}:
+{ system ? builtins.currentSystem }:
+
 let
+  pkgs = import <nixpkgs> {
+    inherit system;
+  };
+
+  # Переопределяем stdenv с Clang
+  stdenv = pkgs.overrideCC pkgs.stdenv pkgs.clang_16;
+
+  # Импорты сторонних библиотек
   microhttpdmy = (import ./microhttpd.nix) { inherit pkgs; };
   staticLibs = import ./static-libs.nix { inherit pkgs; };
+
 in
-with import microhttpdmy;
 stdenv.mkDerivation {
   pname = "ton";
   version = "dev-bin";
+  src = ./.; # или передай снаружи
 
-  inherit src;
+  nativeBuildInputs = with pkgs; [
+    clang_16 cmake ninja git pkg-config
+  ];
 
-  nativeBuildInputs = with pkgs;
-    [
-      cmake clang_16 ninja git pkg-config
-    ];
-
-  buildInputs = with pkgs;
-    [
-      pkgsStatic.openssl microhttpdmy pkgsStatic.zlib pkgsStatic.libsodium.dev pkgsStatic.secp256k1 glibc.static
-      staticLibs.staticBoost
-      staticLibs.staticLibrdkafka
-      staticLibs.staticLZ4
-      staticLibs.staticLibiconv
-    ];
+  buildInputs = with pkgs; [
+    pkgsStatic.openssl
+    microhttpdmy
+    pkgsStatic.zlib
+    pkgsStatic.libsodium.dev
+    pkgsStatic.secp256k1
+    glibc.static
+    staticLibs.staticBoost
+    staticLibs.staticLibrdkafka
+    staticLibs.staticLZ4
+    staticLibs.staticLibiconv
+  ];
 
   makeStatic = true;
   doCheck = true;
@@ -41,15 +47,14 @@ stdenv.mkDerivation {
     "-DCMAKE_LINK_SEARCH_START_STATIC=ON"
     "-DCMAKE_LINK_SEARCH_END_STATIC=ON"
     "-DMHD_FOUND=1"
-    "-DCMAKE_C_COMPILER=${pkgs.clang_16}/bin/clang"
-    "-DCMAKE_CXX_COMPILER=${pkgs.clang_16}/bin/clang++"
     "-DMHD_INCLUDE_DIR=${microhttpdmy}/usr/local/include"
     "-DMHD_LIBRARY=${microhttpdmy}/usr/local/lib/libmicrohttpd.a"
-    "-DCMAKE_CTEST_ARGUMENTS=--timeout;1800"
-    "-DCMAKE_CXX_FLAGS=-w"
-    "-DCMAKE_C_FLAGS=-w"
+    "-DCMAKE_C_COMPILER=clang"
+    "-DCMAKE_CXX_COMPILER=clang++"
     "-DCMAKE_CXX_STANDARD=20"
-    "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-unused-but-set-variable"
+    "-DCMAKE_CXX_FLAGS=-std=c++20 -Wno-deprecated-declarations -Wno-unused-but-set-variable -w"
+    "-DCMAKE_C_FLAGS=-w"
+    "-DCMAKE_CTEST_ARGUMENTS=--timeout;1800"
   ];
 
   NIX_CFLAGS_COMPILE = [
@@ -58,9 +63,9 @@ stdenv.mkDerivation {
     "-I${pkgsStatic.zlib}/include"
     "-I${pkgsStatic.libsodium.dev}/include"
     "-I${pkgsStatic.secp256k1}/include"
-    "-I${staticBoost}/include"
-    "-I${staticLibrdkafka}/include"
-    "-I${staticLz4}/include"
+    "-I${staticLibs.staticBoost}/include"
+    "-I${staticLibs.staticLibrdkafka}/include"
+    "-I${staticLibs.staticLZ4}/include"
   ];
 
   LDFLAGS = [
@@ -69,9 +74,18 @@ stdenv.mkDerivation {
     "-L${pkgsStatic.zlib}/lib"
     "-L${pkgsStatic.libsodium.dev}/lib"
     "-L${pkgsStatic.secp256k1}/lib"
-    "-L${staticBoost}/lib"
-    "-L${staticLibrdkafka}/lib"
-    "-L${staticLz4}/lib"
+    "-L${staticLibs.staticBoost}/lib"
+    "-L${staticLibs.staticLibrdkafka}/lib"
+    "-L${staticLibs.staticLZ4}/lib"
     "-static-libgcc" "-static-libstdc++" "-static"
   ];
+
+  # Проверка, какой компилятор реально используется
+  preConfigure = ''
+    echo ">>> Checking compiler:"
+    echo "CC = $(which cc)"
+    echo "CXX = $(which c++)"
+    cc --version
+    c++ --version
+  '';
 }
