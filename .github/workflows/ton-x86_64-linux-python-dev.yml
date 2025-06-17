@@ -79,7 +79,7 @@ jobs:
 
       - name: Compile
         run: nix build .?submodules=1#packages.x86_64-linux.ton-python-${{ matrix.python }}
-          --print-build-logs --system x86_64-linux -o result-x86_64
+          --print-build-logs --show-trace --system x86_64-linux -o result-x86_64
 
       - name: Copy binaries
         run: |

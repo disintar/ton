@@ -53,7 +53,7 @@ jobs:
 
     - name: Compile
       run: nix build .?submodules=1#packages."$TARGET_SYSTEM".ton-python-${{ matrix.python }}
-           --print-build-logs
+           --print-build-logs --show-trace
 
     - name: Copy binaries
       run: |
