@@ -60,7 +60,7 @@ clangStdenv.mkDerivation {
     "-DCPPKAFKA_BUILD_SHARED=0"
     "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-unused-but-set-variable"
     "-DCMAKE_PREFIX_PATH=${staticLibs.staticLibrdkafka}"
-    "-DRdKafka_ROOT=${staticLibs.staticLibrdkafka}"
+    "-DRDKAFKA_ROOT=${staticLibs.staticLibrdkafka}"
     "-DCPPKAFKA_RDKAFKA_STATIC_LIB=ON"
   ];
 

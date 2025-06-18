@@ -63,8 +63,6 @@ pkgs.llvmPackages_14.stdenv.mkDerivation {
 
   preConfigure = ''
       echo ">>> macos-static.nix Checking compiler:"
-      echo "CC = $(command -v cc)"
-      echo "CXX = $(command -v c++)""
       cc --version
       c++ --version
   '';
