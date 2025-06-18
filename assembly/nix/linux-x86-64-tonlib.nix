@@ -61,6 +61,7 @@ clangStdenv.mkDerivation {
     "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-unused-but-set-variable"
     "-DRDKAFKA_ROOT_DIR=${staticLibs.staticLibrdkafka}"
     "-DCPPKAFKA_RDKAFKA_STATIC_LIB=ON"
+    "-DCPPKAFKA_CMAKE_VERBOSE=ON"
   ];
 
   LDFLAGS = [
@@ -77,5 +78,8 @@ clangStdenv.mkDerivation {
     echo "CXX = $(command -v c++)"
     cc --version
     c++ --version
+    echo "========== FILES IN RDKAFKA =========="
+    find ${staticLibs.staticLibrdkafka}
+    echo "======================================="
   '';
 }
