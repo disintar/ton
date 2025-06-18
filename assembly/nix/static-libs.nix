@@ -20,6 +20,10 @@ let
         "--disable-shared"
       ];
 
+      postPatch = ''
+        echo "# skipped" > third-party/cppkafka/cmake/FindRdKafka.cmake
+      '';
+
       preConfigure = (oldAttrs.preConfigure or "") + ''
         echo "[DEBUG] Contents of source dir before configure:"
         find . -maxdepth 2
