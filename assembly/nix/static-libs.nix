@@ -19,16 +19,6 @@ let
         "--enable-static"
         "--disable-shared"
       ];
-
-      preConfigure = (oldAttrs.preConfigure or "") + ''
-        echo "[DEBUG] Contents of source dir before configure:"
-        find . -maxdepth 2
-      '';
-
-      postInstall = (oldAttrs.postInstall or "") + ''
-        echo "[DEBUG] Installed to: $out"
-        find $out -type f | sort
-      '';
     });
 
   staticLZ4 = (pkgs.lz4.override { enableStatic = true; enableShared = false; }).dev;
