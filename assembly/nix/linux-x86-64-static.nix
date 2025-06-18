@@ -82,8 +82,8 @@ stdenv.mkDerivation {
 
   preConfigure = ''
     echo ">>> linux-x86-64-static.nix Checking compiler:"
-    echo "CC = $(which cc)"
-    echo "CXX = $(which c++)"
+    echo "CC = $(command -v cc)"
+    echo "CXX = $(command -v c++)""
     cc --version
     c++ --version
   '';
