@@ -72,7 +72,7 @@ clangStdenv.mkDerivation {
     "tonlibjson" "emulator"
   ];
 
-  patches = (oldAttrs.patches or []) ++ [
+  patches = [
     ./rdkafka-cmake-try-compile-log.patch
   ];
 
