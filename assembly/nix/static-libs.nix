@@ -14,12 +14,19 @@ let
   });
 
   # Override librdkafka to build static libraries
-    staticLibrdkafka = pkgs.rdkafka.overrideAttrs (oldAttrs: {
-      configureFlags = (oldAttrs.configureFlags or []) ++ [
-        "--enable-static"
-        "--disable-shared"
-      ];
-    });
+  staticLibrdkafka = pkgs.rdkafka.overrideAttrs (oldAttrs: {
+    configureFlags = (oldAttrs.configureFlags or []) ++ [
+      "--enable-static"
+      "--disable-shared"
+    ];
+
+    postInstall = ''
+      ${oldAttrs.postInstall or ""}
+
+      echo ">>> Copying headers from include/librdkafka to include/"
+      cp -v ${placeholder "out"}/include/librdkafka/*.h ${placeholder "out"}/include/
+    '';
+  });
 
   staticLZ4 = (pkgs.lz4.override { enableStatic = true; enableShared = false; }).dev;
   staticLibiconv = (pkgs.libiconv.override { enableStatic = true; enableShared = false; });

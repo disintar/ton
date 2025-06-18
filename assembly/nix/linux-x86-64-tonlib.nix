@@ -79,7 +79,6 @@ clangStdenv.mkDerivation {
     cc --version
     c++ --version
 
-    cp -v ${staticLibs.staticLibrdkafka}/include/librdkafka/*.h ${staticLibs.staticLibrdkafka}/include/
     echo "========== FILES IN RDKAFKA =========="
     find ${staticLibs.staticLibrdkafka}
     echo "======================================="
