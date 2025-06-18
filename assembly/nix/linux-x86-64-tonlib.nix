@@ -72,9 +72,24 @@ clangStdenv.mkDerivation {
     "tonlibjson" "emulator"
   ];
 
-  patches = [
-    ./rdkafka-cmake-try-compile-log.patch
-  ];
+
+    postPatch = ''
+      substituteInPlace third-party/cppkafka/cmake/FindRdKafka.cmake \
+        --replace "try_compile(RdKafka_FOUND" "try_compile(RdKafka_FOUND\n\
+      set(_try_compile_dir \"\${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/CMakeTmp\")\n\
+      message(STATUS \"try_compile RdKafka_FOUND = \${RdKafka_FOUND}\")\n\
+      message(STATUS \"Try compile output dir: \${_try_compile_dir}\")\n\
+      if (NOT RdKafka_FOUND)\n\
+        file(GLOB _error_logs \"\${_try_compile_dir}/CMakeError.log\")\n\
+        foreach (_log \${_error_logs})\n\
+          message(STATUS \"---- Begin CMakeError.log ----\")\n\
+          file(READ \"\${_log}\" _log_contents)\n\
+          string(REPLACE \"\n\" \"\n  \" _log_contents \"\${_log_contents}\")\n\
+          message(STATUS \"  \${_log_contents}\")\n\
+          message(STATUS \"---- End CMakeError.log ----\")\n\
+        endforeach()\n\
+      endif()"
+    '';
 
   preConfigure = ''
     echo ">>> linux-x86-64-tonlib.nix Checking compiler:"
