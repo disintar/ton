@@ -30,19 +30,19 @@ let
 
       postFixup = (oldAttrs.postFixup or "") + ''
         mkdir -p $dev/lib/pkgconfig
-        cat > $dev/lib/pkgconfig/rdkafka.pc <<EOF
-    prefix=$out
-    exec_prefix=\${prefix}
-    libdir=\${prefix}/lib
-    includedir=\${prefix}/include
+        cat > $dev/lib/pkgconfig/rdkafka.pc <<'EOF'
+      prefix=$out
+      exec_prefix=${prefix}
+      libdir=${exec_prefix}/lib
+      includedir=${prefix}/include
 
-    Name: rdkafka
-    Description: The Apache Kafka C/C++ client library
-    Version: ${oldAttrs.version}
+      Name: rdkafka
+      Description: The Apache Kafka C/C++ client library
+      Version=${oldAttrs.version}
 
-    Libs: -L\${libdir} -lrdkafka
-    Cflags: -I\${includedir}/librdkafka
-    EOF
+      Libs: -L${libdir} -lrdkafka
+      Cflags: -I${includedir}/librdkafka
+      EOF
       '';
     });
   staticLZ4 = (pkgs.lz4.override { enableStatic = true; enableShared = false; }).dev;
