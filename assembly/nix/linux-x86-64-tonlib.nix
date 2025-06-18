@@ -73,6 +73,10 @@ clangStdenv.mkDerivation {
     "tonlibjson" "emulator"
   ];
 
+  postPatch = ''
+    echo "# skipped" > third-party/cppkafka/cmake/FindRdKafka.cmake
+  '';
+
   preConfigure = ''
     echo ">>> linux-x86-64-tonlib.nix Checking compiler:"
     echo "CC = $(command -v cc)"
