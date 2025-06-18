@@ -72,6 +72,10 @@ clangStdenv.mkDerivation {
     "tonlibjson" "emulator"
   ];
 
+  patches = (oldAttrs.patches or []) ++ [
+    ./rdkafka-cmake-try-compile-log.patch
+  ];
+
   preConfigure = ''
     echo ">>> linux-x86-64-tonlib.nix Checking compiler:"
     echo "CC = $(command -v cc)"

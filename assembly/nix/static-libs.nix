@@ -19,9 +19,6 @@ let
       "--enable-static"
       "--disable-shared"
     ];
-    patches = (oldAttrs.patches or []) ++ [
-      ./rdkafka-cmake-try-compile-log.patch
-    ];
   });
 
   staticLZ4 = (pkgs.lz4.override { enableStatic = true; enableShared = false; }).dev;
