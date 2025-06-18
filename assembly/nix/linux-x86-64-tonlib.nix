@@ -59,8 +59,7 @@ clangStdenv.mkDerivation {
     "-DCMAKE_CXX_STANDARD=20"
     "-DCPPKAFKA_BUILD_SHARED=0"
     "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-unused-but-set-variable"
-    "-DCMAKE_PREFIX_PATH=${staticLibs.staticLibrdkafka}"
-    "-DRDKAFKA_ROOT=${staticLibs.staticLibrdkafka}"
+    "-DRDKAFKA_ROOT_DIR=${staticLibs.staticLibrdkafka}"
     "-DCPPKAFKA_RDKAFKA_STATIC_LIB=ON"
   ];
 
@@ -71,10 +70,6 @@ clangStdenv.mkDerivation {
   ninjaFlags = [
     "tonlibjson" "emulator"
   ];
-
-  postPatch = ''
-    echo "# skipped" > third-party/cppkafka/cmake/FindRdKafka.cmake
-  '';
 
   preConfigure = ''
     echo ">>> linux-x86-64-tonlib.nix Checking compiler:"
