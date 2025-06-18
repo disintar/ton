@@ -1,8 +1,8 @@
 diff --git a/third-party/cppkafka/cmake/FindRdKafka.cmake b/third-party/cppkafka/cmake/FindRdKafka.cmake
-index 1234567..89abcde 100644
 --- a/third-party/cppkafka/cmake/FindRdKafka.cmake
 +++ b/third-party/cppkafka/cmake/FindRdKafka.cmake
-@@ -75,6 +75,19 @@ try_compile(RdKafka_FOUND ${CMAKE_CURRENT_BINARY_DIR}
+@@ -52,3 +52,13 @@
+ try_compile(RdKafka_FOUND ${CMAKE_CURRENT_BINARY_DIR}
              SOURCES ${FILE_NAME}
              CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${RdKafka_INCLUDE_DIR}")
 
@@ -19,6 +19,3 @@ index 1234567..89abcde 100644
 +    message(STATUS "---- End CMakeError.log ----")
 +  endforeach()
 +endif()
-
- if (RdKafka_FOUND)
-     add_library(RdKafka::rdkafka ${RDKAFKA_LIBRARY_TYPE} IMPORTED GLOBAL)
