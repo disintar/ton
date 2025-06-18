@@ -57,6 +57,7 @@ clangStdenv.mkDerivation {
     "-DCMAKE_CXX_FLAGS=-w"
     "-DCMAKE_C_FLAGS=-w"
     "-DCMAKE_CXX_STANDARD=20"
+    "-DCPPKAFKA_BUILD_SHARED=0"
     "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-unused-but-set-variable"
     "-DCMAKE_PREFIX_PATH=${staticLibs.staticLibrdkafka}"
   ];
