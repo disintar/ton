@@ -57,8 +57,6 @@ clangStdenv.mkDerivation {
     "-DCMAKE_CXX_STANDARD=20"
     "-DCPPKAFKA_BUILD_SHARED=0"
     "-DRDKAFKA_ROOT_DIR=${staticLibs.staticLibrdkafka}"
-    "-DCMAKE_C_FLAGS=-w"
-    "-DCMAKE_CXX_FLAGS=-w"
     "-DCPPKAFKA_RDKAFKA_STATIC_LIB=ON"
     "-DCPPKAFKA_CMAKE_VERBOSE=ON"
     "-DCMAKE_INCLUDE_PATH=${glibc227}/include"
