@@ -60,6 +60,8 @@ clangStdenv.mkDerivation {
     "-DRDKAFKA_ROOT_DIR=${staticLibs.staticLibrdkafka}"
     "-DCPPKAFKA_RDKAFKA_STATIC_LIB=ON"
     "-DCPPKAFKA_CMAKE_VERBOSE=ON"
+    "-DDCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+    "-DCPLUS_INCLUDE_PATH=${glibc227}/include/"
   ];
 
   LDFLAGS = [
