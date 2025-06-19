@@ -16,7 +16,7 @@ in
 stdenv.mkDerivation {
   pname = "ton";
   version = "dev-bin";
-  src = ./.; # или передай снаружи
+  src = ./.;
 
   nativeBuildInputs = with pkgs; [
     clang_16 cmake ninja git pkg-config
@@ -78,29 +78,6 @@ stdenv.mkDerivation {
     "-DCMAKE_CXX_FLAGS=-std=c++20 -Wno-deprecated-declarations -Wno-unused-but-set-variable -w"
     "-DCMAKE_C_FLAGS=-w"
     "-DCMAKE_CTEST_ARGUMENTS=--timeout;1800"
-  ];
-
-  NIX_CFLAGS_COMPILE = [
-    "-I${microhttpdmy}/usr/local/include"
-    "-I${pkgsStatic.openssl}/include"
-    "-I${pkgsStatic.zlib}/include"
-    "-I${pkgsStatic.libsodium.dev}/include"
-    "-I${pkgsStatic.secp256k1}/include"
-    "-I${staticLibs.staticBoost}/include"
-    "-I${staticLibs.staticLibrdkafka}/include"
-    "-I${staticLibs.staticLZ4}/include"
-  ];
-
-  LDFLAGS = [
-    "-L${microhttpdmy}/usr/local/lib"
-    "-L${pkgsStatic.openssl}/lib"
-    "-L${pkgsStatic.zlib}/lib"
-    "-L${pkgsStatic.libsodium.dev}/lib"
-    "-L${pkgsStatic.secp256k1}/lib"
-    "-L${staticLibs.staticBoost}/lib"
-    "-L${staticLibs.staticLibrdkafka}/lib"
-    "-L${staticLibs.staticLZ4}/lib"
-    "-static-libgcc" "-static-libstdc++" "-static"
   ];
 
   preConfigure = ''
