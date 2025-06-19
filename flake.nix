@@ -80,10 +80,10 @@
           packages = rec {
             ton-static = tonk "static";
             ton-tonlib = tonk "tonlib";
-            ton-python-39 = tonOldGlibcPython ton-static host.python39;
-            ton-python-310 = tonOldGlibcPython ton-static host.python310;
-            ton-python-311 = tonOldGlibcPython ton-static host.python311;
-            ton-python-312 = tonOldGlibcPython ton-static host.python312;
+            ton-python-39 = tonPython ton-static host.python39;
+            ton-python-310 = tonPython ton-static host.python310;
+            ton-python-311 = tonPython ton-static host.python311;
+            ton-python-312 = tonPython ton-static host.python312;
           };
           devShells.default =
             host.mkShell {
