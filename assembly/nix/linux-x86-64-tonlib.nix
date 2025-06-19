@@ -73,18 +73,16 @@ clangStdenv.mkDerivation {
   ];
 
 
-  postPatch = ''
-      sed -i '/CMAKE_FLAGS.*-DINCLUDE_DIRECTORIES=.*")$/a\
-    \
-    message(STATUS "try_compile RdKafka_FOUND = ''${RdKafka_FOUND}")\
-    if (NOT RdKafka_FOUND)\
-      message(STATUS "Rd kafka not found, compile error.")\
-      file(READ "''${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/CMakeTmp/CMakeError.log" _rdk_err)\
-      message(FATAL_ERROR "Failed to find valid rdkafka version.\n\nCompiler errors:\n\n''${_rdk_err}")' \
+    postPatch = ''
+      sed -i '/CMAKE_FLAGS.*-DINCLUDE_DIRECTORIES=.*")$/a \
+    message(STATUS "try_compile RdKafka_FOUND = ''${RdKafka_FOUND}") \
+    if(NOT RdKafka_FOUND) \
+      message(STATUS "Rd kafka not found, compile error.") \
+      file(READ "''${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/CMakeTmp/CMakeError.log" _rdk_err) \
+      message(FATAL_ERROR "Failed to find valid rdkafka version.\n\nCompiler errors:\n\n''${_rdk_err}") \
     endif()' \
         third-party/cppkafka/cmake/FindRdKafka.cmake
-  '';
-
+    '';
 
   preConfigure = ''
     echo ">>> linux-x86-64-tonlib.nix Checking compiler:"
