@@ -1,6 +1,12 @@
 # export NIX_PATH=nixpkgs=https://github.com/nixOS/nixpkgs/archive/23.05.tar.gz
 
-{ system ? builtins.currentSystem }:
+{
+  pkgs ? import <nixpkgs> { inherit system; }
+, lib ? pkgs.lib
+, stdenv ? pkgs.stdenv
+, system ? builtins.currentSystem
+, src ? ./.
+}:
 
 let
   pkgs = import <nixpkgs> {
