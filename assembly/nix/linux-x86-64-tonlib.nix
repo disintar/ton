@@ -14,14 +14,16 @@ let
 
   glibc227 = nixos1909.glibc // { pname = "glibc"; };
 
-  clangStdenv = let
-    cc = pkgs.wrapCCWith {
-      cc = pkgs.clang_16;
-      libc = glibc227;
-      bintools = pkgs.binutils.override { libc = glibc227; };
-    };
-  in pkgs.overrideCC pkgs.stdenv cc;
+  clangWrapped = pkgs.wrapCCWith {
+    cc      = pkgs.clang_16;
+    libc    = glibc227;
+    # ensure headers are found
+    cflags  = [ "-isystem ${glibc227.dev}/include" ];
+    # ensure static libs (libpthread, etc.) are found
+    ldflags = [ "-L${glibc227}/lib" "--sysroot=${glibc227}" ];
+  };
 
+  clangStdenv = pkgs.overrideCC pkgs.stdenv clangWrapped;
   staticLibs = import ./static-libs.nix { inherit pkgs; };
 
 in
