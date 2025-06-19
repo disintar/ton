@@ -58,9 +58,8 @@ clangStdenv.mkDerivation {
     "-DCPPKAFKA_BUILD_SHARED=0"
     "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-unused-but-set-variable"
     "-DRDKAFKA_ROOT_DIR=${staticLibs.staticLibrdkafka}"
-    "-DCMAKE_SYSROOT=${glibc227}"
-    "-DCMAKE_C_FLAGS=-w --sysroot=${glibc227}"
-    "-DCMAKE_CXX_FLAGS=-w --sysroot=${glibc227}"
+    "-DCMAKE_C_FLAGS=-w -I${glibc227}/include -L${glibc227}/lib -pthread"
+    "-DCMAKE_CXX_FLAGS=-w -I${glibc227}/include -L${glibc227}/lib -pthread"
     "-DCPPKAFKA_RDKAFKA_STATIC_LIB=ON"
     "-DCPPKAFKA_CMAKE_VERBOSE=ON"
   ];
