@@ -77,18 +77,15 @@ clangStdenv.mkDerivation {
     sed -i '/CMAKE_FLAGS.*-DINCLUDE_DIRECTORIES=.*")$/a\
   \
   # ——— debug try_compile result ———\
-  set(_try_compile_dir "''${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/CMakeTmp")\
   message(STATUS "try_compile RdKafka_FOUND = ''${RdKafka_FOUND}")\
-  message(STATUS "Try compile output dir: ''${_try_compile_dir}")\
   if (NOT RdKafka_FOUND)\
-    file(GLOB _error_logs "''${_try_compile_dir}/CMakeError.log")\
-    foreach (_log ''${_error_logs})\
-      message(STATUS "---- Begin CMakeError.log ----")\
-      file(READ "''${_log}" _log_contents)\
-      string(REPLACE "\n" "\n  " _log_contents "''${_log_contents}")\
-      message(STATUS "  ''${_log_contents}")\
-      message(STATUS "---- End CMakeError.log ----")\
-    endforeach()\
+    file(READ "''${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/CMakeTmp/CMakeError.log" _rdk_err)\
+    message(FATAL_ERROR
+            "Failed to find valid rdkafka version.\n"
+            "------------------- compiler errors -------------------\n"
+            "''${_rdk_err}\n"
+            "-------------------------------------------------------\n"
+    )
   endif()' \
       third-party/cppkafka/cmake/FindRdKafka.cmake
   '';
