@@ -7,10 +7,8 @@ let
     inherit system;
   };
 
-  # Переопределяем stdenv с Clang
   stdenv = pkgs.overrideCC pkgs.stdenv pkgs.clang_16;
 
-  # Импорты сторонних библиотек
   microhttpdmy = (import ./microhttpd.nix) { inherit pkgs; };
   staticLibs = import ./static-libs.nix { inherit pkgs; };
 
@@ -39,6 +37,31 @@ stdenv.mkDerivation {
 
   makeStatic = true;
   doCheck = true;
+
+  postPatch = ''
+  sed -i '/CMAKE_FLAGS.*-DINCLUDE_DIRECTORIES=.*")$/a \
+    message(STATUS "RdKafka version test failed, gathering CMakeError.log…") \
+    set(_rdk_err_log \"\") \
+    foreach(_p \
+      \"''${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/CMakeTmp/CMakeError.log\" \
+      \"''${CMAKE_CURRENT_BINARY_DIR}/../CMakeFiles/CMakeTmp/CMakeError.log\" \
+      \"''${CMAKE_BINARY_DIR}/CMakeFiles/CMakeTmp/CMakeError.log\" \
+      \"''${CMAKE_BINARY_DIR}/CMakeFiles/CMakeError.log\" \
+      \"''${CMAKE_BINARY_DIR}/CMakeError.log\" \
+    ) \
+      if(EXISTS \"''${_p}\") \
+        set(_rdk_err_log \"''${_p}\") \
+        break() \
+      endif() \
+    endforeach() \
+    if(_rdk_err_log) \
+      file(READ \"''${_rdk_err_log}\" _rdk_err) \
+    else() \
+      set(_rdk_err \"ERROR: could not locate CMakeError.log to show actual compile errors\") \
+    endif() \
+    message(FATAL_ERROR \"Failed to find valid rdkafka version.\n\nCompiler errors (from ''${_rdk_err_log}):\n\n''${_rdk_err}\")' \
+    third-party/cppkafka/cmake/FindRdKafka.cmake
+'';
 
   cmakeFlags = [
     "-DTON_USE_ABSEIL=OFF"
