@@ -76,7 +76,7 @@ clangStdenv.mkDerivation {
   postPatch = ''
       sed -i '/CMAKE_FLAGS.*-DINCLUDE_DIRECTORIES=.*")$/a\
     \
-    message(STATUS "try_compile RdKafka_FOUND = ${RdKafka_FOUND}")\
+    message(STATUS "try_compile RdKafka_FOUND = ''${RdKafka_FOUND}")\
     if (NOT RdKafka_FOUND)\
       message(STATUS "Rd kafka not found, compile error.")\
       file(READ "''${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/CMakeTmp/CMakeError.log" _rdk_err)\
