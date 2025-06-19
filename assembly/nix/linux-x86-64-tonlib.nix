@@ -36,6 +36,7 @@ clangStdenv.mkDerivation {
   ];
 
   buildInputs = with pkgs; [
+    glibc227
     pkgsStatic.openssl
     pkgsStatic.zlib
     pkgsStatic.libmicrohttpd.dev
@@ -59,9 +60,6 @@ clangStdenv.mkDerivation {
     "-DRDKAFKA_ROOT_DIR=${staticLibs.staticLibrdkafka}"
     "-DCPPKAFKA_RDKAFKA_STATIC_LIB=ON"
     "-DCPPKAFKA_CMAKE_VERBOSE=ON"
-    "-DCMAKE_SYSROOT=${glibc227}"
-    "-DCMAKE_INCLUDE_PATH=${glibc227}/include"
-    "-DCMAKE_LIBRARY_PATH=${glibc227}/lib"
   ];
 
   LDFLAGS = [
