@@ -1,6 +1,8 @@
-{ system     ? builtins.currentSystem
-, pkgs
-, src       ? ./.
+{ pkgs ? import <nixpkgs> { inherit system; }
+, lib ? pkgs.lib
+, stdenv ? pkgs.stdenv
+, system ? builtins.currentSystem
+, src ? ./.
 }:
 
 let
@@ -27,38 +29,17 @@ stdenv.mkDerivation {
     pkgsStatic.secp256k1
     glibc.static
     staticLibs.staticBoost
+    libmicrohttpd.dev
     staticLibs.staticLibrdkafka
     staticLibs.staticLZ4
-    staticLibs.staticLibiconv
   ];
 
   makeStatic = true;
   doCheck     = true;
 
-  postPatch = ''
-    sed -i '/CMAKE_FLAGS.*-DINCLUDE_DIRECTORIES=.*")$/a \
-      message(STATUS "RdKafka version test failed, gathering CMakeError.log…") \
-      set(_rdk_err_log "") \
-      foreach(_p \
-        "''${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/CMakeTmp/CMakeError.log" \
-        "''${CMAKE_CURRENT_BINARY_DIR}/../CMakeFiles/CMakeTmp/CMakeError.log" \
-        "''${CMAKE_BINARY_DIR}/CMakeFiles/CMakeTmp/CMakeError.log" \
-        "''${CMAKE_BINARY_DIR}/CMakeFiles/CMakeError.log" \
-        "''${CMAKE_BINARY_DIR}/CMakeError.log" \
-      ) \
-        if(EXISTS "''${_p}") \
-          set(_rdk_err_log "''${_p}") \
-          break() \
-        endif() \
-      endforeach() \
-      if(_rdk_err_log) \
-        file(READ "''${_rdk_err_log}" _rdk_err) \
-      else() \
-        set(_rdk_err "ERROR: could not locate CMakeError.log to show actual compile errors") \
-      endif() \
-      message(FATAL_ERROR "Failed to find valid rdkafka version.\n\nCompiler errors (from ''${_rdk_err_log}):\n\n''${_rdk_err}")'
-      third-party/cppkafka/cmake/FindRdKafka.cmake
-  '';
+  LDFLAGS = [
+    "-static-libgcc" "-static-libstdc++" "-fPIC" "-pthread"
+  ];
 
   cmakeFlags = [
     "-DTON_USE_ABSEIL=OFF"
@@ -69,10 +50,10 @@ stdenv.mkDerivation {
     "-DMHD_FOUND=1"
     "-DMHD_INCLUDE_DIR=${microhttpdmy}/usr/local/include"
     "-DMHD_LIBRARY=${microhttpdmy}/usr/local/lib/libmicrohttpd.a"
-    "-DCMAKE_C_COMPILER=clang"
-    "-DCMAKE_CXX_COMPILER=clang++"
-    "-DCMAKE_CXX_STANDARD=20"
-    "-DCMAKE_CXX_FLAGS=-std=c++20 -Wno-deprecated-declarations -Wno-unused-but-set-variable -w"
+    "-DCMAKE_C_COMPILER=${pkgs.clang_16}/bin/clang"
+    "-DCMAKE_CXX_COMPILER=${pkgs.clang_16}/bin/clang++"
+    "-DCMAKE_CXX_STANDARD=23"
+    "-DCMAKE_CXX_FLAGS=-w"
     "-DCMAKE_C_FLAGS=-w"
     "-DCMAKE_CTEST_ARGUMENTS=--timeout;1800"
   ];

@@ -33,6 +33,7 @@ clangStdenv.mkDerivation {
 
   nativeBuildInputs = with pkgs; [
     cmake ninja git pkg-config
+    glibc227.dev
   ];
 
   buildInputs = with pkgs; [
@@ -41,8 +42,10 @@ clangStdenv.mkDerivation {
     pkgsStatic.libmicrohttpd.dev
     pkgsStatic.secp256k1
     staticLibs.staticBoost
+    pkgs.kernelHeaders
     staticLibs.staticLibrdkafka
     pkgsStatic.lz4
+    glibc227
     (pkgsStatic.libsodium.overrideAttrs (oldAttrs: {
       configureFlags = oldAttrs.configureFlags ++ [ "--disable-pie" ];
       hardeningDisable = oldAttrs.hardeningDisable ++ [ "pie" ];
@@ -52,9 +55,6 @@ clangStdenv.mkDerivation {
   dontAddStaticConfigureFlags = false;
 
   preConfigure = ''
-    unset NIX_CFLAGS_COMPILE
-    unset NIX_CXXFLAGS_COMPILE
-
     echo ">>> linux-x86-64-tonlib.nix Checking compiler:"
     echo "CC = $(command -v cc)"
     echo "CXX = $(command -v c++)"
@@ -65,16 +65,15 @@ clangStdenv.mkDerivation {
     find ${staticLibs.staticLibrdkafka}
     echo "======================================="
 
-    export CC=${pkgs.clang}/bin/clang
-    export CXX=${pkgs.clang}/bin/clang++
-
-    # glibc-2.27 headers
-    glibcInc=${glibc227}/include
-
     export CPPFLAGS="-isystem ''${glibcInc}"
-    export CFLAGS="$CPPFLAGS -w"
-    export CXXFLAGS="$CPPFLAGS -w -std=c++23 -Wno-deprecated-declarations -Wno-unused-but-set-variable"
-  '';
+    export CFLAGS="$CPPFLAGS -w -mcpu=x86-64 -march=x86-64 -isystem ${glibc227.dev}/include"
+    export CXXFLAGS="$CPPFLAGS -w -std=c++23 -Wno-deprecated-declarations -Wno-unused-but-set-variable -mcpu=x86-64 -march=x86-64 -isystem ${glibc227.dev}/include"
+    export CPATH="${glibc227.dev}/include"
+
+    echo "CFLAGS / CXXFLAGS"
+    echo $CFLAGS
+    echo $CXXFLAGS
+    '';
 
   cmakeFlags = [
     "-DTON_USE_ABSEIL=ON"
@@ -83,44 +82,23 @@ clangStdenv.mkDerivation {
     "-DCMAKE_C_COMPILER=${pkgs.clang_16}/bin/clang"
     "-DCMAKE_CXX_COMPILER=${pkgs.clang_16}/bin/clang++"
     "-DCPPKAFKA_BUILD_SHARED=0"
-    "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-unused-but-set-variable"
+    "-DCMAKE_CXX_FLAGS=\${CXXFLAGS}"
+    "-DCMAKE_SYSTEM_PROCESSOR=x86_64"
+    "-DHAVE_ARM64_CRC32C=0"
+    "-DHAVE_NEON=0"
+    "-DHAVE_F_FULLFSYNC=0"
+    "-DCMAKE_C_FLAGS=\${CFLAGS}"
     "-DRDKAFKA_ROOT_DIR=${staticLibs.staticLibrdkafka}"
     "-DCPPKAFKA_RDKAFKA_STATIC_LIB=ON"
     "-DCPPKAFKA_CMAKE_VERBOSE=ON"
   ];
 
   LDFLAGS = [
-    "-static-libgcc" "-static-libstdc++" "-fPIC"
+    "-static-libgcc" "-static-libstdc++" "-fPIC" "-pthread"
   ];
 
   ninjaFlags = [
     "tonlibjson" "emulator"
   ];
-
-  postPatch = ''
-  sed -i '/CMAKE_FLAGS.*-DINCLUDE_DIRECTORIES=.*")$/a \
-    message(STATUS "RdKafka version test failed, gathering CMakeError.log…") \
-    set(_rdk_err_log \"\") \
-    foreach(_p \
-      \"''${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/CMakeTmp/CMakeError.log\" \
-      \"''${CMAKE_CURRENT_BINARY_DIR}/../CMakeFiles/CMakeTmp/CMakeError.log\" \
-      \"''${CMAKE_BINARY_DIR}/CMakeFiles/CMakeTmp/CMakeError.log\" \
-      \"''${CMAKE_BINARY_DIR}/CMakeFiles/CMakeError.log\" \
-      \"''${CMAKE_BINARY_DIR}/CMakeError.log\" \
-    ) \
-      if(EXISTS \"''${_p}\") \
-        set(_rdk_err_log \"''${_p}\") \
-        break() \
-      endif() \
-    endforeach() \
-    if(_rdk_err_log) \
-      file(READ \"''${_rdk_err_log}\" _rdk_err) \
-    else() \
-      set(_rdk_err \"ERROR: could not locate CMakeError.log to show actual compile errors\") \
-    endif() \
-    message(FATAL_ERROR \"Failed to find valid rdkafka version.\n\nCompiler errors (from ''${_rdk_err_log}):\n\n''${_rdk_err}\")' \
-    third-party/cppkafka/cmake/FindRdKafka.cmake
-'';
-
 
 }
