@@ -52,6 +52,9 @@ clangStdenv.mkDerivation {
   dontAddStaticConfigureFlags = false;
 
   preConfigure = ''
+    unset NIX_CFLAGS_COMPILE
+    unset NIX_CXXFLAGS_COMPILE
+
     echo ">>> linux-x86-64-tonlib.nix Checking compiler:"
     echo "CC = $(command -v cc)"
     echo "CXX = $(command -v c++)"
