@@ -14,16 +14,14 @@ let
 
   glibc227 = nixos1909.glibc // { pname = "glibc"; };
 
-  clangWrapped = pkgs.wrapCCWith {
-    cc      = pkgs.clang_16;
-    libc    = glibc227;
-    # ensure headers are found
-    cflags  = [ "-isystem ${glibc227.dev}/include" ];
-    # ensure static libs (libpthread, etc.) are found
-    ldflags = [ "-L${glibc227}/lib" "--sysroot=${glibc227}" ];
-  };
+  clangStdenv = let
+    cc = pkgs.wrapCCWith {
+      cc = pkgs.clang_16;
+      libc = glibc227;
+      bintools = pkgs.binutils.override { libc = glibc227; };
+    };
+  in pkgs.overrideCC pkgs.stdenv cc;
 
-  clangStdenv = pkgs.overrideCC pkgs.stdenv clangWrapped;
   staticLibs = import ./static-libs.nix { inherit pkgs; };
 
 in
@@ -38,7 +36,6 @@ clangStdenv.mkDerivation {
   ];
 
   buildInputs = with pkgs; [
-    glibc227
     pkgsStatic.openssl
     pkgsStatic.zlib
     pkgsStatic.libmicrohttpd.dev
@@ -54,16 +51,39 @@ clangStdenv.mkDerivation {
 
   dontAddStaticConfigureFlags = false;
 
+  preConfigure = ''
+    echo ">>> linux-x86-64-tonlib.nix Checking compiler:"
+    echo "CC = $(command -v cc)"
+    echo "CXX = $(command -v c++)"
+    cc --version
+    c++ --version
+
+    echo "========== FILES IN RDKAFKA =========="
+    find ${staticLibs.staticLibrdkafka}
+    echo "======================================="
+
+    export CC=${pkgs.clang}/bin/clang
+    export CXX=${pkgs.clang}/bin/clang++
+
+    # glibc-2.27 headers
+    glibcInc=${glibc227}/include
+
+    export CPPFLAGS="-isystem ''${glibcInc}"
+    export CFLAGS="$CPPFLAGS -w"
+    export CXXFLAGS="$CPPFLAGS -w -std=c++23 -Wno-deprecated-declarations -Wno-unused-but-set-variable"
+  '';
+
   cmakeFlags = [
     "-DTON_USE_ABSEIL=ON"
     "-DNIX=ON"
-    "-DCMAKE_CXX_STANDARD=20"
+    "-DCMAKE_CXX_STANDARD=23"
+    "-DCMAKE_C_COMPILER=${pkgs.clang_16}/bin/clang"
+    "-DCMAKE_CXX_COMPILER=${pkgs.clang_16}/bin/clang++"
     "-DCPPKAFKA_BUILD_SHARED=0"
+    "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-unused-but-set-variable"
     "-DRDKAFKA_ROOT_DIR=${staticLibs.staticLibrdkafka}"
     "-DCPPKAFKA_RDKAFKA_STATIC_LIB=ON"
     "-DCPPKAFKA_CMAKE_VERBOSE=ON"
-    "-DDCMAKE_EXPORT_COMPILE_COMMANDS=ON"
-    "-DCPLUS_INCLUDE_PATH=${glibc227}/include/"
   ];
 
   LDFLAGS = [
@@ -99,15 +119,5 @@ clangStdenv.mkDerivation {
     third-party/cppkafka/cmake/FindRdKafka.cmake
 '';
 
-  preConfigure = ''
-    echo ">>> linux-x86-64-tonlib.nix Checking compiler:"
-    echo "CC = $(command -v cc)"
-    echo "CXX = $(command -v c++)"
-    cc --version
-    c++ --version
 
-    echo "========== FILES IN RDKAFKA =========="
-    find ${staticLibs.staticLibrdkafka}
-    echo "======================================="
-  '';
 }
