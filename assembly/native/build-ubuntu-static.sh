@@ -118,11 +118,11 @@ if [ ! -d "../3pp/librdkafka" ]; then
   ./configure --enable-static --disable-shared
   make -j$(nproc)
   test $? -eq 0 || { echo "Can't compile librdkafka"; exit 1; }
-  make install
+  rdkafkaRoot=$(pwd)
   cd $buildir
 else
   cd ../3pp/librdkafka/
-  make install
+  rdkafkaRoot=$(pwd)
   cd $buildir
   echo "Using compiled librdkafka"
 fi
@@ -131,6 +131,7 @@ cmake -GNinja .. \
 -DPORTABLE=1 \
 -DCMAKE_BUILD_TYPE=Release \
 -DOPENSSL_FOUND=1 \
+-DRDKAFKA_ROOT=$rdkafkaRoot \
 -DOPENSSL_INCLUDE_DIR=$opensslPath/include \
 -DOPENSSL_CRYPTO_LIBRARY=$opensslPath/libcrypto.a \
 -DZLIB_FOUND=1 \
