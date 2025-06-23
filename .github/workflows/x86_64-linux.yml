@@ -27,7 +27,7 @@ jobs:
       - name: Install system libraries
         run: |
           sudo apt update
-          sudo apt install -y build-essential git cmake ninja-build zlib1g-dev libsecp256k1-dev libmicrohttpd-dev libsodium-dev liblz4-dev ccache
+          sudo apt install -y build-essential git cmake ninja-build automake libtool texinfo autoconf libc++-dev libc++abi-dev ccache libboost-all-dev pkg-config
           sudo apt remove libgsl-dev
           mkdir ~/.ccache 3pp
 
