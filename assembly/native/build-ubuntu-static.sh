@@ -115,14 +115,16 @@ fi
 if [ ! -d "../3pp/librdkafka" ]; then
   git clone https://github.com/confluentinc/librdkafka.git ../3pp/librdkafka
   cd ../3pp/librdkafka
-  ./configure --enable-static --disable-shared
+  STAGING="$(pwd)/install"
+  ./configure --prefix="$STAGING" --enable-static --disable-shared
   make -j$(nproc)
   test $? -eq 0 || { echo "Can't compile librdkafka"; exit 1; }
-  rdkafkaRoot=$(pwd)
+  make install
+  rdkafkaRoot=$(pwd)/install
   cd $buildir
 else
   cd ../3pp/librdkafka/
-  rdkafkaRoot=$(pwd)
+  rdkafkaRoot=$(pwd)/install
   cd $buildir
   echo "Using compiled librdkafka"
 fi
