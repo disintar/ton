@@ -61,9 +61,8 @@ jobs:
         run: |
           git submodule sync --recursive
           git submodule update
-          cp assembly/native/build-ubuntu-static.sh .
-          chmod +x build-ubuntu-static.sh
-          ./build-ubuntu-static.sh
+          chmod +x  assembly/native/build-ubuntu-static.sh
+          ./assembly/native/build-ubuntu-static.sh
           ccache -sp
 
       - name: Save cache TON
