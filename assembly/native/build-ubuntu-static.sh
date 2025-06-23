@@ -1,7 +1,7 @@
-#/bin/bash
+#!/bin/bash
 
 #sudo apt-get update
-#sudo apt-get install -y build-essential git cmake ninja-build automake libtool texinfo autoconf libc++-dev libc++abi-dev ccache
+#sudo apt-get install -y build-essential git cmake ninja-build automake libtool texinfo autoconf libc++-dev libc++abi-dev ccache libboost-all-dev pkg-config
 
 with_artifacts=false
 with_ccache=false
@@ -60,7 +60,7 @@ if [ ! -d "../3pp/libsodium" ]; then
   ./configure --with-pic --enable-static
   make -j$(nproc)
   test $? -eq 0 || { echo "Can't compile libsodium"; exit 1; }
-  cd ../../../build
+  cd ../../build
 else
   sodiumPath=$(pwd)/../3pp/libsodium/libsodium-1.0.18
   echo "Using compiled libsodium"
@@ -103,10 +103,25 @@ if [ ! -d "../3pp/libmicrohttpd" ]; then
   ./configure --enable-static --disable-tests --disable-benchmark --disable-shared --disable-https --with-pic
   make -j$(nproc)
   test $? -eq 0 || { echo "Can't compile libmicrohttpd"; exit 1; }
-  cd ../../../build
+  cd ../../build
 else
   libmicrohttpdPath=$(pwd)/../3pp/libmicrohttpd/libmicrohttpd-1.0.1
   echo "Using compiled libmicrohttpd"
+fi
+
+if [ ! -d "../3pp/librdkafka" ]; then
+  git clone https://github.com/confluentinc/librdkafka.git ../3pp/librdkafka
+  cd ../3pp/librdkafka
+  ./configure --enable-static --disable-shared
+  make -j$(nproc)
+  test $? -eq 0 || { echo "Can't compile librdkafka"; exit 1; }
+  make install
+  cd ../../build
+else
+  cd ../3pp/librdkafka/
+  make install
+  cd ../../build
+  echo "Using compiled librdkafka"
 fi
 
 cmake -GNinja .. \
@@ -126,12 +141,13 @@ cmake -GNinja .. \
 -DMHD_LIBRARY=$libmicrohttpdPath/src/microhttpd/.libs/libmicrohttpd.a \
 -DLZ4_FOUND=1 \
 -DLZ4_INCLUDE_DIRS=$lz4Path/lib \
--DLZ4_LIBRARIES=$lz4Path/lib/liblz4.a
+-DLZ4_LIBRARIES=$lz4Path/lib/liblz4.a \
+-DTON_USE_PYTHON=1
 
 
 test $? -eq 0 || { echo "Can't configure ton"; exit 1; }
 
-ninja tonlibjson emulator
+ninja python_ton
 test $? -eq 0 || { echo "Can't compile tonlibjson and emulator"; exit 1; }
 
 cd ..
