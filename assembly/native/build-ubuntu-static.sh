@@ -27,8 +27,10 @@ fi
 if [ ! -d "build" ]; then
   mkdir build
   cd build
+  buildir=`pwd`
 else
   cd build
+  buildir=`pwd`
   rm -rf .ninja* CMakeCache.txt
 fi
 
@@ -43,7 +45,8 @@ lz4Path=`pwd`
 git checkout v1.9.4
 CFLAGS="-fPIC" make -j$(nproc)
 test $? -eq 0 || { echo "Can't compile lz4"; exit 1; }
-cd ../../build
+cd $buildir
+
 else
   lz4Path=$(pwd)/../3pp/lz4
   echo "Using compiled lz4"
@@ -60,7 +63,7 @@ if [ ! -d "../3pp/libsodium" ]; then
   ./configure --with-pic --enable-static
   make -j$(nproc)
   test $? -eq 0 || { echo "Can't compile libsodium"; exit 1; }
-  cd ../../build
+  cd $buildir
 else
   sodiumPath=$(pwd)/../3pp/libsodium/libsodium-1.0.18
   echo "Using compiled libsodium"
@@ -74,7 +77,7 @@ if [ ! -d "../3pp/openssl_3" ]; then
   ./config
   make build_libs -j$(nproc)
   test $? -eq 0 || { echo "Can't compile openssl_3"; exit 1; }
-  cd ../../build
+  cd $buildir
 else
   opensslPath=$(pwd)/../3pp/openssl_3
   echo "Using compiled openssl_3"
@@ -87,7 +90,7 @@ if [ ! -d "../3pp/zlib" ]; then
   ./configure --static
   make -j$(nproc)
   test $? -eq 0 || { echo "Can't compile zlib"; exit 1; }
-  cd ../../build
+  cd $buildir
 else
   zlibPath=$(pwd)/../3pp/zlib
   echo "Using compiled zlib"
@@ -103,7 +106,7 @@ if [ ! -d "../3pp/libmicrohttpd" ]; then
   ./configure --enable-static --disable-tests --disable-benchmark --disable-shared --disable-https --with-pic
   make -j$(nproc)
   test $? -eq 0 || { echo "Can't compile libmicrohttpd"; exit 1; }
-  cd ../../build
+  cd $buildir
 else
   libmicrohttpdPath=$(pwd)/../3pp/libmicrohttpd/libmicrohttpd-1.0.1
   echo "Using compiled libmicrohttpd"
@@ -116,11 +119,11 @@ if [ ! -d "../3pp/librdkafka" ]; then
   make -j$(nproc)
   test $? -eq 0 || { echo "Can't compile librdkafka"; exit 1; }
   make install
-  cd ../../build
+  cd $buildir
 else
   cd ../3pp/librdkafka/
   make install
-  cd ../../build
+  cd $buildir
   echo "Using compiled librdkafka"
 fi
 
