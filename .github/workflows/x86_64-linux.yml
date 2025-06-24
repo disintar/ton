@@ -15,6 +15,10 @@ jobs:
         include:
           - python: "3.12"
             py: "312"
+          - python: "3.10"
+            py: "312"
+          - python: "3.13"
+            py: "312"
     runs-on: arc-runner-set
 
     steps:
@@ -95,9 +99,12 @@ jobs:
           name: ${{ env.RELEASE_NAME }}
           path: artifacts
 
+      - name: Install GitHub CLI
+        uses: cli/cli-action@v2
+
       - name: Upload artifacts
         run:
-          gh release delete -y "x86_64-linux" || true
-          gh release create --notes "" "x86_64-linux" artifacts/*
+          gh release delete -y "$RELEASE_NAME" || true
+          gh release create --notes "" "$RELEASE_NAME" artifacts/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
