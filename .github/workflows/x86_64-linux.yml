@@ -99,8 +99,8 @@ jobs:
           name: ${{ env.RELEASE_NAME }}
           path: artifacts
 
-      - name: Upload artifacts
-        run:
+      - name: Create release
+        run: |
           gh release delete -y "$RELEASE_NAME" || true
           gh release create --notes "" "$RELEASE_NAME" artifacts/*
         env:
