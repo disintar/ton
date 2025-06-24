@@ -116,8 +116,9 @@ fi
 cmake -GNinja .. \
       -DPORTABLE=1 \
       -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_C_FLAGS="-w -static-libgcc -I${libmicrohttpdPath}/src/include" \
-      -DCMAKE_CXX_FLAGS="-w -I${libmicrohttpdPath}/src/include -static-libgcc -static-libstdc++" \
+      -DCMAKE_C_FLAGS="-w -static -static-libgcc -I${libmicrohttpdPath}/src/include" \
+      -DCMAKE_CXX_FLAGS="-w -I${libmicrohttpdPath}/src/include -static -static-libgcc -static-libstdc++" \
+      -DCMAKE_EXE_LINKER_FLAGS="-static -latomic" \
       -DOPENSSL_FOUND=1 \
       -DRDKAFKA_ROOT=$rdkafkaRoot \
       -DOPENSSL_INCLUDE_DIR=$opensslPath/include \
