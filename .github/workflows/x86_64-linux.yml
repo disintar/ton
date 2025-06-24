@@ -10,13 +10,27 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        include:
+          - python: "3.10"
+            py: "310"
+          - python: "3.12"
+            py: "312"
+          - python: "3.13"
+            py: "313"
+    runs-on: arc-runner-set
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v3
         with:
           submodules: 'recursive'
+
+      - name: "Install Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
 
       - name: Date Stamp
         shell: bash
@@ -65,6 +79,11 @@ jobs:
           ./assembly/native/build-ubuntu-static.sh
           ccache -sp
 
+      - run: |
+          export KERNEL=linux
+          echo "TARGET_SYSTEM=x86_64-$KERNEL" >> $GITHUB_ENV
+          echo "RELEASE_NAME=ton-cpython-${{ matrix.py }}-x86_64-$KERNEL" >> $GITHUB_ENV
+
       - name: Save cache TON
         uses: actions/cache/save@v4
         with:
@@ -78,13 +97,8 @@ jobs:
           key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-22.04-portable-libs-ccache-${{ steps.date-stamp.outputs.timestamp }}
           restore-keys: ${{ runner.os }}-${{ runner.arch }}-ubuntu-22.04-portable-libs-ccache
 
-      - name: Build TON libs
-        run: |
-          cp assembly/native/build-ubuntu-portable-libs.sh .
-          chmod +x build-ubuntu-portable-libs.sh
-          ./build-ubuntu-portable-libs.sh -a -c
-          cp ./artifacts/libtonlibjson.so appimages/artifacts/
-          cp ./artifacts/libemulator.so appimages/artifacts/
+      - name: Simple binary test
+        run: cd artifacts; python3 -c 'import python_ton'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@master

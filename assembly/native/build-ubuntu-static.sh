@@ -3,26 +3,10 @@
 #sudo apt-get update
 #sudo apt-get install -y build-essential git cmake ninja-build automake libtool texinfo autoconf libc++-dev libc++abi-dev ccache libboost-all-dev pkg-config
 
-with_artifacts=false
-with_ccache=false
-
-while getopts 'tac' flag; do
-  case "${flag}" in
-    a) with_artifacts=true ;;
-    c) with_ccache=true ;;
-    *) break
-       ;;
-  esac
-done
-
-if [ "$with_ccache" = true ]; then
-  mkdir -p ~/.ccache
-  export CCACHE_DIR=~/.ccache
-  ccache -M 0
-  test $? -eq 0 || { echo "ccache not installed"; exit 1; }
-else
-  export CCACHE_DISABLE=1
-fi
+mkdir -p ~/.ccache
+export CCACHE_DIR=~/.ccache
+ccache -M 0
+test $? -eq 0 || { echo "ccache not installed"; exit 1; }
 
 if [ ! -d "build" ]; then
   mkdir build
