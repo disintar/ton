@@ -96,8 +96,8 @@ libmicrohttpdPath=$(cd $THIRD/libmicrohttpd && pwd)
 cmake -GNinja .. \
   -DPORTABLE=1 \
   -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_C_FLAGS="-w -static-libgcc -I${libmicrohttpdPath}/src/include" \
-  -DCMAKE_CXX_FLAGS="-w -I${libmicrohttpdPath}/src/include -static-libgcc -static-libstdc++" \
+  -DCMAKE_C_FLAGS="-w -I${libmicrohttpdPath}/src/include" \
+  -DCMAKE_CXX_FLAGS="-w -I${libmicrohttpdPath}/src/include" \
   -DOPENSSL_FOUND=1 \
   -DOPENSSL_INCLUDE_DIR=${opensslPath}/include \
   -DOPENSSL_CRYPTO_LIBRARY=${opensslPath}/libcrypto.a \
