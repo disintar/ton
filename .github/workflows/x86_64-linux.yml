@@ -13,12 +13,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - python: "3.10"
-            py: "310"
           - python: "3.12"
             py: "312"
-          - python: "3.13"
-            py: "313"
     runs-on: arc-runner-set
 
     steps:
@@ -56,20 +52,20 @@ jobs:
         uses: actions/cache@v4
         with:
           path: 3pp
-          key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-22.04-3pp-${{ hashFiles('**/assembly/native/build-ubuntu-appimages.sh') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-ubuntu-22.04-3pp
 
       - name: Cache OpenSSL
         id: cache-openssl
         uses: actions/cache@v4
         with:
           path: openssl_3
-          key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-22.04-openssl_3-${{ hashFiles('**/assembly/native/build-ubuntu-appimages.sh') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-ubuntu-22.04-openssl_3
 
       - name: Restore cache TON
         uses: actions/cache/restore@v4
         with:
           path: ~/.ccache
-          key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-22.04-portable-ccache
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-ubuntu-22.04-static-ccache
 
       - name: Build TON
         run: |
@@ -88,14 +84,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/.ccache
-          key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-22.04-portable-ccache-${{ steps.date-stamp.outputs.timestamp }}
-
-      - name: Save/Restore cache TON libs
-        uses: actions/cache@v4
-        with:
-          path: ~/.ccache
-          key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-22.04-portable-libs-ccache-${{ steps.date-stamp.outputs.timestamp }}
-          restore-keys: ${{ runner.os }}-${{ runner.arch }}-ubuntu-22.04-portable-libs-ccache
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-ubuntu-22.04-static-ccache
 
       - name: Simple binary test
         run: cd artifacts; python3 -c 'import python_ton'
