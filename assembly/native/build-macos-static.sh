@@ -11,14 +11,14 @@ else
 fi
 buildir=$(pwd)
 
-# ccache
 brew install ninja pkg-config automake libtool autoconf texinfo wget ccache  llvm@16
+
 mkdir -p ~/.ccache
 export CCACHE_DIR=~/.ccache
 ccache -M 0
 
-export CC=/usr/local/opt/llvm@16/bin/clang
-export CXX=/usr/local/opt/llvm@16/bin/clang++
+export CC="$(brew --prefix llvm@16)/bin/clang"
+export CXX="$(brew --prefix llvm@16)/bin/clang++"
 
 mkdir -p ../3pp
 # 3pp root
