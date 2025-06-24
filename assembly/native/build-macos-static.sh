@@ -20,6 +20,7 @@ ccache -M 0
 export CC=/usr/local/opt/llvm@16/bin/clang
 export CXX=/usr/local/opt/llvm@16/bin/clang++
 
+mkdir -p ../3pp
 # 3pp root
 THIRD=../3pp
 mkdir -p $THIRD

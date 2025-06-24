@@ -19,7 +19,7 @@ jobs:
             py: "310"
           - python: "3.13"
             py: "313"
-    runs-on: arc-runner-set
+    runs-on: macos-14
 
     steps:
       - name: Check out repository
@@ -38,43 +38,30 @@ jobs:
         run: |
           echo "timestamp=$(date -u "+%Y%m%d%H%M_%S")" >> "$GITHUB_OUTPUT"
 
-      - name: Install system libraries
-        run: |
-          sudo apt update
-          sudo apt install -y build-essential git cmake ninja-build automake libtool texinfo autoconf libc++-dev libc++abi-dev ccache libboost-all-dev pkg-config wget gh
-          sudo apt remove libgsl-dev
-          mkdir ~/.ccache 3pp
-
-      - name: Install clang-16
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 16 clang
-
       - name: Restore cache TON
         uses: actions/cache/restore@v4
         with:
           path: ~/.ccache
-          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-ubuntu-22.04-static-ccache
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-macos-14-static-ccache
 
       - name: Build TON
         run: |
           git submodule sync --recursive
           git submodule update
-          chmod +x  assembly/native/build-ubuntu-static.sh
-          ./assembly/native/build-ubuntu-static.sh
+          chmod +x  assembly/native/build-macos-static.sh
+          ./assembly/native/build-macos-static.sh
           ccache -sp
 
       - run: |
-          export KERNEL=linux
+          export KERNEL=darwin
           echo "TARGET_SYSTEM=x86_64-$KERNEL" >> $GITHUB_ENV
-          echo "RELEASE_NAME=ton-cpython-${{ matrix.py }}-x86_64-$KERNEL" >> $GITHUB_ENV
+          echo "RELEASE_NAME=ton-cpython-${{ matrix.py }}-aarch64-$KERNEL" >> $GITHUB_ENV
 
       - name: Save cache TON
         uses: actions/cache/save@v4
         with:
           path: ~/.ccache
-          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-ubuntu-22.04-static-ccache
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-macos-14-static-ccache
 
       - name: Simple binary test
         run: cd artifacts; python3 -c 'import python_ton'
