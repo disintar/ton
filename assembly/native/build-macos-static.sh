@@ -11,7 +11,7 @@ else
 fi
 buildir=$(pwd)
 
-brew install ninja pkg-config automake libtool autoconf texinfo wget ccache  llvm@16
+brew install ninja pkg-config automake libtool autoconf texinfo wget ccache  llvm@16 boost
 
 mkdir -p ~/.ccache
 export CCACHE_DIR=~/.ccache
