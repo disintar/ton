@@ -130,36 +130,36 @@ else
 fi
 
 cmake -GNinja .. \
--DPORTABLE=1 \
--DCMAKE_BUILD_TYPE=Release \
--DOPENSSL_FOUND=1 \
--DRDKAFKA_ROOT=$rdkafkaRoot \
--DOPENSSL_INCLUDE_DIR=$opensslPath/include \
--DOPENSSL_CRYPTO_LIBRARY=$opensslPath/libcrypto.a \
--DZLIB_FOUND=1 \
--DZLIB_INCLUDE_DIR=$zlibPath \
--DZLIB_LIBRARIES=$zlibPath/libz.a \
--DSODIUM_FOUND=1 \
--DSODIUM_INCLUDE_DIR=$sodiumPath/src/libsodium/include \
--DSODIUM_LIBRARY_RELEASE=$sodiumPath/src/libsodium/.libs/libsodium.a \
--DMHD_FOUND=1 \
--DMHD_INCLUDE_DIR=$libmicrohttpdPath/src/include \
--DMHD_LIBRARY=$libmicrohttpdPath/src/microhttpd/.libs/libmicrohttpd.a \
--DLZ4_FOUND=1 \
--DLZ4_INCLUDE_DIRS=$lz4Path/lib \
--DLZ4_LIBRARIES=$lz4Path/lib/liblz4.a \
--DTON_USE_PYTHON=1
+      -DPORTABLE=1 \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_C_FLAGS="-w -static-libgcc -I${libmicrohttpdPath}/src/include" \
+      -DCMAKE_CXX_FLAGS="-w -I${libmicrohttpdPath}/src/include -static-libgcc -static-libstdc++" \
+      -DOPENSSL_FOUND=1 \
+      -DRDKAFKA_ROOT=$rdkafkaRoot \
+      -DOPENSSL_INCLUDE_DIR=$opensslPath/include \
+      -DOPENSSL_CRYPTO_LIBRARY=$opensslPath/libcrypto.a \
+      -DZLIB_FOUND=1 \
+      -DZLIB_INCLUDE_DIR=$zlibPath \
+      -DZLIB_LIBRARIES=$zlibPath/libz.a \
+      -DSODIUM_FOUND=1 \
+      -DSODIUM_INCLUDE_DIR=$sodiumPath/src/libsodium/include \
+      -DSODIUM_LIBRARY_RELEASE=$sodiumPath/src/libsodium/.libs/libsodium.a \
+      -DMHD_FOUND=1 \
+      -DMHD_INCLUDE_DIR=$libmicrohttpdPath/src/include \
+      -DMHD_LIBRARY=$libmicrohttpdPath/src/microhttpd/.libs/libmicrohttpd.a \
+      -DLZ4_FOUND=1 \
+      -DLZ4_INCLUDE_DIRS=$lz4Path/lib \
+      -DLZ4_LIBRARIES=$lz4Path/lib/liblz4.a \
+      -DTON_USE_PYTHON=1
 
 
 test $? -eq 0 || { echo "Can't configure ton"; exit 1; }
 
 ninja python_ton
+
 test $? -eq 0 || { echo "Can't compile tonlibjson and emulator"; exit 1; }
 
 cd ..
 
 mkdir artifacts
-mv build/tonlib/libtonlibjson.so.0.5 build/tonlib/libtonlibjson.so
-cp build/tonlib/libtonlibjson.so \
-   build/emulator/libemulator.so \
-   artifacts
+cp ./build/tvm-python/python_ton.cpython-312-x86_64-linux-gnu.so ./artifacts
