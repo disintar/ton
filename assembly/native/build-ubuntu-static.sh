@@ -162,4 +162,4 @@ test $? -eq 0 || { echo "Can't compile tonlibjson and emulator"; exit 1; }
 cd ..
 
 mkdir artifacts
-cp ./build/tvm-python/python_ton.cpython-312-x86_64-linux-gnu.so ./artifacts
+mv ./build/tvm-python/*.so ./artifacts
