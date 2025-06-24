@@ -1,4 +1,4 @@
-name: x86-64-linux
+name: aarch64-macos
 
 on:
   push:
