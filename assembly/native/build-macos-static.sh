@@ -116,7 +116,7 @@ cmake -GNinja .. \
   -DRDKAFKA_ROOT=${rdkafkaRoot} \
   -DTON_USE_PYTHON=1
 
-ninja python_ton
+ninja -j$(sysctl -n hw.ncpu) python_ton
 
 mkdir -p ../artifacts
 mv ./tvm-python/*.so ../artifacts/
