@@ -116,8 +116,8 @@ fi
 cmake -GNinja .. \
       -DPORTABLE=1 \
       -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_C_FLAGS="-w -static -I${libmicrohttpdPath}/src/include" \
-      -DCMAKE_CXX_FLAGS="-w -I${libmicrohttpdPath}/src/include -static" \
+      -DCMAKE_C_FLAGS="-w -static-libgcc -latomic -I${libmicrohttpdPath}/src/include" \
+      -DCMAKE_CXX_FLAGS="-w -I${libmicrohttpdPath}/src/include -static-libgcc -static-libstdc++ -latomic" \
       -DCMAKE_EXE_LINKER_FLAGS="-static -latomic" \
       -DOPENSSL_FOUND=1 \
       -DRDKAFKA_ROOT=$rdkafkaRoot \
@@ -140,7 +140,7 @@ cmake -GNinja .. \
 
 test $? -eq 0 || { echo "Can't configure ton"; exit 1; }
 
-ninja -j$(nproc) python_ton
+ninja libtonlibjson.so libemulator.so python_ton
 
 cd ..
 mkdir artifacts
