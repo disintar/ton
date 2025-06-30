@@ -26,7 +26,7 @@ if [ ! -d "../3pp/openssl_3" ]; then
   cd ../3pp/openssl_3
   opensslPath=`pwd`
   git checkout openssl-3.1.4
-  ./config  no-shared
+  ./config
   make build_libs -j$(nproc)
   test $? -eq 0 || { echo "Can't compile openssl_3"; exit 1; }
   cd $buildir
