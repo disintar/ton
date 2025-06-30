@@ -59,17 +59,27 @@ jobs:
       - name: Restore 3pp
         uses: actions/cache/restore@v4
         with:
-          path: /tmp/3pp/
+          path: /tmp/3pp_clear/
           key: ${{ steps.third-party-key.outputs.key }}
 
       - name: Build 3pp
         run: |
           ./assembly/native/build-3pp.sh
 
+      - name: Check 3pp build status
+        id: check-third-party
+        run: |
+          if grep -q "$NEED_CACHE=true" /tmp/3pp/3pp_status.txt; then
+            echo "cache=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Save 3pp
+        if: steps.check-third-party.outputs.cache == 'true'
         uses: actions/cache/save@v4
         with:
-          path: /tmp/3pp/
+          path: /tmp/3pp_clear/
           key: ${{ steps.third-party-key.outputs.key }}
 
       - name: Restore ccache

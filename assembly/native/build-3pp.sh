@@ -5,115 +5,123 @@ set -e
 export THIRD_PARTY_DIR="/tmp/3pp"
 mkdir -p "$THIRD_PARTY_DIR"
 
+export THIRD_PARTY_CLEAR="/tmp/3pp_clear"
+mkdir -p "$THIRD_PARTY_CLEAR"
+
+NEED_CACHE=false
+
 # ==================== LZ4 ====================
 if [ ! -d "$THIRD_PARTY_DIR/lz4" ]; then
+  NEED_CACHE=true
   git clone https://github.com/lz4/lz4.git "$THIRD_PARTY_DIR/lz4"
   cd "$THIRD_PARTY_DIR/lz4"
-  export LZ4_PATH=$(pwd)
   git checkout v1.9.4
-  CFLAGS="-fPIC" make -j$(nproc)
-  echo "Compiled LZ4"
+  make -j$(nproc) PREFIX="$THIRD_PARTY_CLEAR/lz4"
+  make install PREFIX="$THIRD_PARTY_CLEAR/lz4"
+  echo "Compiled and installed LZ4"
 else
-  export LZ4_PATH="$THIRD_PARTY_DIR/lz4"
-  echo "Using compiled LZ4"
+  echo "Using existing LZ4 source"
 fi
+
+export LZ4_PATH="$THIRD_PARTY_CLEAR/lz4"
 
 # ==================== Libsodium ====================
 if [ ! -d "$THIRD_PARTY_DIR/libsodium" ]; then
+  NEED_CACHE=true
   mkdir -p "$THIRD_PARTY_DIR/libsodium"
   wget -O "$THIRD_PARTY_DIR/libsodium/libsodium-1.0.18.tar.gz" https://github.com/jedisct1/libsodium/releases/download/1.0.18-RELEASE/libsodium-1.0.18.tar.gz
   cd "$THIRD_PARTY_DIR/libsodium"
   tar xf libsodium-1.0.18.tar.gz
   cd libsodium-1.0.18
-  export SODIUM_PATH=$(pwd)
-  ./configure --with-pic --enable-static
+  ./configure --with-pic --enable-static --prefix="$THIRD_PARTY_CLEAR/libsodium"
   make -j$(nproc)
-  echo "Compiled libsodium"
+  make install
+  echo "Compiled and installed libsodium"
 else
-  export SODIUM_PATH="$THIRD_PARTY_DIR/libsodium/libsodium-1.0.18"
-  echo "Using compiled libsodium"
+  echo "Using existing libsodium source"
 fi
+
+export SODIUM_PATH="$THIRD_PARTY_CLEAR/libsodium"
 
 # ==================== OpenSSL ====================
 if [ ! -d "$THIRD_PARTY_DIR/openssl_3" ]; then
+  NEED_CACHE=true
   git clone https://github.com/openssl/openssl "$THIRD_PARTY_DIR/openssl_3"
   cd "$THIRD_PARTY_DIR/openssl_3"
-  export OPENSSL_PATH=$(pwd)
   git checkout openssl-3.1.4
-  ./config
+  ./config --prefix="$THIRD_PARTY_CLEAR/openssl" --openssldir="$THIRD_PARTY_CLEAR/openssl" no-shared
   make build_libs -j$(nproc)
-  echo "Compiled OpenSSL"
+  make install_sw
+  echo "Compiled and installed OpenSSL"
 else
-  export OPENSSL_PATH="$THIRD_PARTY_DIR/openssl_3"
-  echo "Using compiled OpenSSL"
+  echo "Using existing OpenSSL source"
 fi
+
+export OPENSSL_PATH="$THIRD_PARTY_CLEAR/openssl"
 
 # ==================== Zlib ====================
 if [ ! -d "$THIRD_PARTY_DIR/zlib" ]; then
+  NEED_CACHE=true
   git clone https://github.com/madler/zlib.git "$THIRD_PARTY_DIR/zlib"
   cd "$THIRD_PARTY_DIR/zlib"
-  export ZLIB_PATH=$(pwd)
-  ./configure --static
+  ./configure --static --prefix="$THIRD_PARTY_CLEAR/zlib"
   make -j$(nproc)
-  echo "Compiled zlib"
+  make install
+  echo "Compiled and installed zlib"
 else
-  export ZLIB_PATH="$THIRD_PARTY_DIR/zlib"
-  echo "Using compiled zlib"
+  echo "Using existing zlib source"
 fi
+
+export ZLIB_PATH="$THIRD_PARTY_CLEAR/zlib"
 
 # ==================== Libmicrohttpd ====================
 if [ ! -d "$THIRD_PARTY_DIR/libmicrohttpd" ]; then
+  NEED_CACHE=true
   mkdir -p "$THIRD_PARTY_DIR/libmicrohttpd"
   wget -O "$THIRD_PARTY_DIR/libmicrohttpd/libmicrohttpd-1.0.1.tar.gz" https://ftpmirror.gnu.org/libmicrohttpd/libmicrohttpd-1.0.1.tar.gz
   cd "$THIRD_PARTY_DIR/libmicrohttpd"
   tar xf libmicrohttpd-1.0.1.tar.gz
   cd libmicrohttpd-1.0.1
-  export LIBMICROHTTPD_PATH=$(pwd)
-  ./configure --enable-static --disable-tests --disable-benchmark --disable-shared --disable-https --with-pic
+  ./configure --enable-static --disable-tests --disable-benchmark --disable-shared --disable-https --with-pic --prefix="$THIRD_PARTY_CLEAR/libmicrohttpd"
   make -j$(nproc)
-  echo "Compiled libmicrohttpd"
+  make install
+  echo "Compiled and installed libmicrohttpd"
 else
-  export LIBMICROHTTPD_PATH="$THIRD_PARTY_DIR/libmicrohttpd/libmicrohttpd-1.0.1"
-  echo "Using compiled libmicrohttpd"
+  echo "Using existing libmicrohttpd source"
 fi
+
+export LIBMICROHTTPD_PATH="$THIRD_PARTY_CLEAR/libmicrohttpd"
 
 # ==================== librdkafka ====================
 if [ ! -d "$THIRD_PARTY_DIR/librdkafka" ]; then
+  NEED_CACHE=true
   git clone https://github.com/confluentinc/librdkafka.git "$THIRD_PARTY_DIR/librdkafka"
   cd "$THIRD_PARTY_DIR/librdkafka"
-  export RDKAFKA_ROOT="$THIRD_PARTY_DIR/librdkafka/install"
-  ./configure --prefix="$RDKAFKA_ROOT" --enable-static --disable-shared
+  ./configure --prefix="$THIRD_PARTY_CLEAR/librdkafka" --enable-static --disable-shared
   make -j$(nproc)
   make install
-  echo "Compiled librdkafka"
+  echo "Compiled and installed librdkafka"
 else
-  export RDKAFKA_ROOT="$THIRD_PARTY_DIR/librdkafka/install"
-  echo "Using compiled librdkafka"
+  echo "Using existing librdkafka source"
 fi
 
+export RDKAFKA_ROOT="$THIRD_PARTY_CLEAR/librdkafka"
+
 # ==================== Exported variables summary ====================
-: '
-Exported variables for use in CMake or other build scripts:
-
-export LZ4_PATH            - Path to compiled LZ4
-export SODIUM_PATH         - Path to compiled libsodium
-export OPENSSL_PATH        - Path to compiled OpenSSL
-export ZLIB_PATH           - Path to compiled zlib
-export LIBMICROHTTPD_PATH  - Path to compiled libmicrohttpd
-export RDKAFKA_ROOT        - Installation prefix for librdkafka
-export THIRD_PARTY_DIR     - Root directory for all 3rd-party sources
-'
-
-echo "export LZ4_PATH=$LZ4_PATH"            >> /tmp/3pp/3pp_env.sh
-echo "export SODIUM_PATH=$SODIUM_PATH"      >> /tmp/3pp/3pp_env.sh
-echo "export OPENSSL_PATH=$OPENSSL_PATH"    >> /tmp/3pp/3pp_env.sh
-echo "export OPENSSL_ROOT_DIR=$OPENSSL_ROOT_DIR" >> /tmp/3pp/3pp_env.sh
-echo "export OPENSSL_CRYPTO_LIBRARY=$OPENSSL_CRYPTO_LIBRARY" >> /tmp/3pp/3pp_env.sh
-echo "export OPENSSL_SSL_LIBRARY=$OPENSSL_SSL_LIBRARY" >> /tmp/3pp/3pp_env.sh
-echo "export OPENSSL_INCLUDE_DIR=$OPENSSL_INCLUDE_DIR" >> /tmp/3pp/3pp_env.sh
-echo "export ZLIB_PATH=$ZLIB_PATH"          >> /tmp/3pp/3pp_env.sh
+echo "export LZ4_PATH=$LZ4_PATH"                     >> /tmp/3pp/3pp_env.sh
+echo "export SODIUM_PATH=$SODIUM_PATH"               >> /tmp/3pp/3pp_env.sh
+echo "export OPENSSL_PATH=$OPENSSL_PATH"             >> /tmp/3pp/3pp_env.sh
+echo "export ZLIB_PATH=$ZLIB_PATH"                   >> /tmp/3pp/3pp_env.sh
 echo "export LIBMICROHTTPD_PATH=$LIBMICROHTTPD_PATH" >> /tmp/3pp/3pp_env.sh
-echo "export RDKAFKA_ROOT=$RDKAFKA_ROOT"    >> /tmp/3pp/3pp_env.sh
-echo "export THIRD_PARTY_DIR=$THIRD_PARTY_DIR" >> /tmp/3pp/3pp_env.sh
+echo "export RDKAFKA_ROOT=$RDKAFKA_ROOT"            >> /tmp/3pp/3pp_env.sh
+echo "export THIRD_PARTY_DIR=$THIRD_PARTY_DIR"      >> /tmp/3pp/3pp_env.sh
+echo "export THIRD_PARTY_CLEAR=$THIRD_PARTY_CLEAR"  >> /tmp/3pp/3pp_env.sh
 
-echo "✅ All 3rd party dependencies prepared successfully."
+echo "✅ All 3rd party dependencies prepared and installed into $THIRD_PARTY_CLEAR."
+
+if [ "$NEED_CACHE" = true ]; then
+  echo "Need to build 3pp"
+  echo "NEED_CACHE=true" >> /tmp/3pp/3pp_status.txt
+else
+  echo "NEED_CACHE=false" >> /tmp/3pp/3pp_status.txt
+fi
