@@ -19,7 +19,7 @@ jobs:
 #            py: "310"
 #          - python: "3.13"
 #            py: "313"
-    runs-on: Ubuntu
+    runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
