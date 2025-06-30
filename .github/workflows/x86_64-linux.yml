@@ -27,6 +27,14 @@ jobs:
         with:
           submodules: 'recursive'
 
+      - name: Install Ubuntu packages
+        run: |
+          sudo apt-get update -y
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq \
+            build-essential git cmake ninja-build automake libtool texinfo autoconf \
+            libc++-dev libc++abi-dev ccache libboost-all-dev pkg-config wget gh \
+            liblz4-dev libsodium-dev zlib1g-dev libmicrohttpd-dev librdkafka-dev
+
       - name: Build Openssl
         run: |
           ./assembly/native/build-ubuntu-openssl.sh
@@ -41,14 +49,6 @@ jobs:
         id: date-stamp
         run: |
           echo "timestamp=$(date -u "+%Y%m%d%H%M_%S")" >> "$GITHUB_OUTPUT"
-
-      - name: Install Ubuntu packages
-        run: |
-          sudo apt-get update -y
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq \
-            build-essential git cmake ninja-build automake libtool texinfo autoconf \
-            libc++-dev libc++abi-dev ccache libboost-all-dev pkg-config wget gh \
-            liblz4-dev libsodium-dev zlib1g-dev libmicrohttpd-dev librdkafka-dev
 
       - name: Install clang-16
         run: |
