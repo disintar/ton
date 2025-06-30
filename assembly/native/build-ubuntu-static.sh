@@ -11,7 +11,7 @@ else
   echo "⚠️  /tmp/3pp/3pp_env.sh not found, skipping source"
 fi
 
-echo "Variables: "
+echo "=========== Variables ==========="
 echo "LZ4_PATH=$LZ4_PATH"
 echo "SODIUM_PATH=$SODIUM_PATH"
 echo "OPENSSL_PATH=$OPENSSL_PATH"
@@ -19,6 +19,10 @@ echo "ZLIB_PATH=$ZLIB_PATH"
 echo "LIBMICROHTTPD_PATH=$LIBMICROHTTPD_PATH"
 echo "RDKAFKA_ROOT=$RDKAFKA_ROOT"
 echo "THIRD_PARTY_DIR=$THIRD_PARTY_DIR"
+
+echo "Openssl: "
+find $OPENSSL_PATH
+echo "================================="
 
 set -e  # Exit on first error
 set -o pipefail
