@@ -1,12 +1,6 @@
 cmake_minimum_required(VERSION 3.0.2 FATAL_ERROR)
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 
-set(_saved_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
-set(CMAKE_FIND_LIBRARY_SUFFIXES .a ${CMAKE_FIND_LIBRARY_SUFFIXES})
-find_library(ATOMIC_LIB atomic REQUIRED)
-set(CMAKE_FIND_LIBRARY_SUFFIXES ${_saved_SUFFIXES})
-
-
 if (NOT Python_FOUND)
     find_package(Python REQUIRED Development)
 endif ()
@@ -75,6 +69,7 @@ pybind11_add_module(python_ton ${PYTHON_EMULATOR_SOURCE})
 target_link_options(python_ton PRIVATE
         -static-libstdc++
         -static-libgcc
+        -latomic
 )
 
 target_link_libraries(python_ton PRIVATE

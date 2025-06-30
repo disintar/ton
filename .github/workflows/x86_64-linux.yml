@@ -33,7 +33,7 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq \
             build-essential git cmake ninja-build automake libtool texinfo autoconf \
             libc++-dev libc++abi-dev ccache libboost-all-dev pkg-config wget gh \
-            liblz4-dev libsodium-dev libmicrohttpd-dev librdkafka-dev
+            liblz4-dev libsodium-dev libmicrohttpd-dev librdkafka-dev libatomic1 libatomic1-dev
 
       - name: "Install Python"
         uses: actions/setup-python@v5
