@@ -66,10 +66,9 @@ cmake -GNinja .. \
   -DBUILD_SHARED_LIBS=OFF \
   -DCMAKE_CXX_FLAGS="-w -Bstatic /usr/lib/gcc/x86_64-linux-gnu/11/libatomic.a -static-libgcc -static-libstdc++ -latomic" \
   -DCMAKE_EXE_LINKER_FLAGS="-static -latomic" \
-  -DTON_USE_PYTHON=1
+  -DTON_USE_PYTHON=1 \
   -DRDKAFKA_ROOT=$RDKAFKA_ROOT \
   -DOPENSSL_FOUND=1 \
-  -DOPENSSL_ROOT_DIR=$OPENSSL_PATH \
   -DOPENSSL_INCLUDE_DIR=$OPENSSL_PATH/include \
   -DOPENSSL_CRYPTO_LIBRARY=$OPENSSL_PATH/libcrypto.a \
   -DZLIB_FOUND=1 \
