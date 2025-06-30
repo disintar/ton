@@ -22,6 +22,11 @@ jobs:
     runs-on: arc-runner-set
 
     steps:
+      - name: LibAtomic
+        shell: bash
+        run: |
+          ls -lhta /usr/lib/x86_64-linux-gnu/libatomic.so.1
+
       - name: Check out repository
         uses: actions/checkout@v3
         with:
@@ -37,11 +42,6 @@ jobs:
         id: date-stamp
         run: |
           echo "timestamp=$(date -u "+%Y%m%d%H%M_%S")" >> "$GITHUB_OUTPUT"
-
-      - name: LibAtomic
-        shell: bash
-        run: |
-          find / -name libatomic.so.1
 
       - name: Install system libraries
         run: |
