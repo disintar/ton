@@ -11,7 +11,7 @@ mkdir -p "$THIRD_PARTY_CLEAR"
 NEED_CACHE=false
 
 # ==================== LZ4 ====================
-if [ ! -d "$THIRD_PARTY_DIR/lz4" ]; then
+if [ ! -d "$THIRD_PARTY_CLEAR/lz4" ]; then
   NEED_CACHE=true
   git clone https://github.com/lz4/lz4.git "$THIRD_PARTY_DIR/lz4"
   cd "$THIRD_PARTY_DIR/lz4"
@@ -26,7 +26,7 @@ fi
 export LZ4_PATH="$THIRD_PARTY_CLEAR/lz4"
 
 # ==================== Libsodium ====================
-if [ ! -d "$THIRD_PARTY_DIR/libsodium" ]; then
+if [ ! -d "$THIRD_PARTY_CLEAR/libsodium" ]; then
   NEED_CACHE=true
   mkdir -p "$THIRD_PARTY_DIR/libsodium"
   wget -O "$THIRD_PARTY_DIR/libsodium/libsodium-1.0.18.tar.gz" https://github.com/jedisct1/libsodium/releases/download/1.0.18-RELEASE/libsodium-1.0.18.tar.gz
@@ -44,7 +44,7 @@ fi
 export SODIUM_PATH="$THIRD_PARTY_CLEAR/libsodium"
 
 # ==================== OpenSSL ====================
-if [ ! -d "$THIRD_PARTY_DIR/openssl_3" ]; then
+if [ ! -d "$THIRD_PARTY_CLEAR/openssl_3" ]; then
   NEED_CACHE=true
   git clone https://github.com/openssl/openssl "$THIRD_PARTY_DIR/openssl_3"
   cd "$THIRD_PARTY_DIR/openssl_3"
@@ -60,7 +60,7 @@ fi
 export OPENSSL_PATH="$THIRD_PARTY_CLEAR/openssl"
 
 # ==================== Zlib ====================
-if [ ! -d "$THIRD_PARTY_DIR/zlib" ]; then
+if [ ! -d "$THIRD_PARTY_CLEAR/zlib" ]; then
   NEED_CACHE=true
   git clone https://github.com/madler/zlib.git "$THIRD_PARTY_DIR/zlib"
   cd "$THIRD_PARTY_DIR/zlib"
@@ -75,7 +75,7 @@ fi
 export ZLIB_PATH="$THIRD_PARTY_CLEAR/zlib"
 
 # ==================== Libmicrohttpd ====================
-if [ ! -d "$THIRD_PARTY_DIR/libmicrohttpd" ]; then
+if [ ! -d "$THIRD_PARTY_CLEAR/libmicrohttpd" ]; then
   NEED_CACHE=true
   mkdir -p "$THIRD_PARTY_DIR/libmicrohttpd"
   wget -O "$THIRD_PARTY_DIR/libmicrohttpd/libmicrohttpd-1.0.1.tar.gz" https://ftpmirror.gnu.org/libmicrohttpd/libmicrohttpd-1.0.1.tar.gz
@@ -93,7 +93,7 @@ fi
 export LIBMICROHTTPD_PATH="$THIRD_PARTY_CLEAR/libmicrohttpd"
 
 # ==================== librdkafka ====================
-if [ ! -d "$THIRD_PARTY_DIR/librdkafka" ]; then
+if [ ! -d "$THIRD_PARTY_CLEAR/librdkafka" ]; then
   NEED_CACHE=true
   git clone https://github.com/confluentinc/librdkafka.git "$THIRD_PARTY_DIR/librdkafka"
   cd "$THIRD_PARTY_DIR/librdkafka"
