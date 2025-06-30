@@ -18,7 +18,6 @@ echo "OPENSSL_PATH=$OPENSSL_PATH"
 echo "ZLIB_PATH=$ZLIB_PATH"
 echo "LIBMICROHTTPD_PATH=$LIBMICROHTTPD_PATH"
 echo "RDKAFKA_ROOT=$RDKAFKA_ROOT"
-find $OPENSSL_PATH/include
 echo "================================="
 
 set -e  # Exit on first error
@@ -75,8 +74,8 @@ cmake -GNinja .. \
   -DZLIB_INCLUDE_DIR=$ZLIB_PATH \
   -DZLIB_LIBRARIES=$ZLIB_PATH/libz.a \
   -DSODIUM_FOUND=1 \
-  -DSODIUM_INCLUDE_DIR=$SODIUM_PATH/src/libsodium/include \
-  -DSODIUM_LIBRARY_RELEASE=$SODIUM_PATH/libsodium/lib/libsodium.a \
+  -DSODIUM_INCLUDE_DIR=$SODIUM_PATH//include \
+  -DSODIUM_LIBRARY_RELEASE=$SODIUM_PATH/lib/libsodium.a \
   -DMHD_FOUND=1 \
   -DMHD_INCLUDE_DIR=$LIBMICROHTTPD_PATH/include \
   -DMHD_LIBRARY=$LIBMICROHTTPD_PATH/libs/libmicrohttpd.a \
