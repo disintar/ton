@@ -19,9 +19,6 @@ echo "ZLIB_PATH=$ZLIB_PATH"
 echo "LIBMICROHTTPD_PATH=$LIBMICROHTTPD_PATH"
 echo "RDKAFKA_ROOT=$RDKAFKA_ROOT"
 echo "THIRD_PARTY_DIR=$THIRD_PARTY_DIR"
-
-echo "Openssl: "
-find $OPENSSL_PATH
 echo "================================="
 
 set -e  # Exit on first error
@@ -93,7 +90,7 @@ echo "CMake configure step succeeded."
 # Build
 # ----------------------
 echo "Building targets with Ninja..."
-ninja libtonlibjson.so libemulator.so python_ton
+ninja python_ton
 
 # ----------------------
 # Collect artifacts

@@ -49,9 +49,8 @@ if [ ! -d "$THIRD_PARTY_DIR/openssl_3" ]; then
   git clone https://github.com/openssl/openssl "$THIRD_PARTY_DIR/openssl_3"
   cd "$THIRD_PARTY_DIR/openssl_3"
   git checkout openssl-3.1.4
-  ./config --prefix="$THIRD_PARTY_CLEAR/openssl" --openssldir="$THIRD_PARTY_CLEAR/openssl" no-shared
+  ./config --prefix="$THIRD_PARTY_CLEAR/openssl" --openssldir="$THIRD_PARTY_CLEAR/openssl"
   make build_libs -j$(nproc)
-  make install_sw
   echo "Compiled and installed OpenSSL"
 else
   echo "Using existing OpenSSL source"
