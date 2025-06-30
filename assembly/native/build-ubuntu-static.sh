@@ -1,8 +1,5 @@
 #!/bin/bash
 
-#sudo apt-get update
-#sudo apt-get install -y build-essential git cmake ninja-build automake libtool texinfo autoconf libc++-dev libc++abi-dev ccache libboost-all-dev pkg-config
-
 mkdir -p ~/.ccache
 export CCACHE_DIR=~/.ccache
 ccache -M 0
@@ -116,9 +113,9 @@ fi
 cmake -GNinja .. \
       -DPORTABLE=1 \
       -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_C_FLAGS="-w -static-libgcc -I${libmicrohttpdPath}/src/include" \
-      -DCMAKE_CXX_FLAGS="-w -I${libmicrohttpdPath}/src/include -static-libgcc -static-libstdc++" \
-      -DCMAKE_EXE_LINKER_FLAGS="-Wl,-Bstatic -latomic -Wl,-Bdynamic" \
+      -DCMAKE_C_FLAGS="-w -static-libgcc -latomic -I${libmicrohttpdPath}/src/include" \
+      -DCMAKE_CXX_FLAGS="-w -I${libmicrohttpdPath}/src/include -static-libgcc -static-libstdc++ -latomic" \
+      -DCMAKE_EXE_LINKER_FLAGS="-static -latomic" \
       -DOPENSSL_FOUND=1 \
       -DRDKAFKA_ROOT=$rdkafkaRoot \
       -DOPENSSL_INCLUDE_DIR=$opensslPath/include \
