@@ -373,21 +373,6 @@ if (CMAKE_HOST_SYSTEM_NAME MATCHES "NetBSD")
   target_link_libraries(tdutils PUBLIC /usr/pkg/gcc5/i486--netbsdelf/lib/libatomic.so)
 endif()
 
-if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-  execute_process(
-          COMMAND ${CMAKE_C_COMPILER} -print-file-name=libatomic.a
-          OUTPUT_VARIABLE _LIBATOMIC_A
-          OUTPUT_STRIP_TRAILING_WHITESPACE
-  )
-
-  if(NOT EXISTS "${_LIBATOMIC_A}")
-    message(FATAL_ERROR
-            "Could not locate static libatomic.a: ${_LIBATOMIC_A}")
-  endif()
-
-  target_link_libraries(tdutils PRIVATE "${_LIBATOMIC_A}")
-endif()
-
 install(TARGETS tdutils EXPORT TdTargets
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
