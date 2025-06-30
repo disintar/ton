@@ -66,8 +66,16 @@ set(PYTHON_EMULATOR_SOURCE
 
 pybind11_add_module(python_ton ${PYTHON_EMULATOR_SOURCE})
 
+target_link_options(python_ton PRIVATE
+        -static-libstdc++
+        -static-libgcc
+)
 
-target_link_libraries(python_ton PRIVATE -static-libstdc++
+target_link_libraries(python_ton PRIVATE
+        -Wl,-Bstatic
+        atomic
+        -Wl,-Bdynamic
+
         combined_bundled fift-lib func-lib
         tlbc-lib ton_crypto_core rocksdb # XXX
         ${BLST_LIB} ${SECP256K1_LIBRARY} ${JEMALLOC_LIBRARIES}
