@@ -18,6 +18,7 @@ echo "OPENSSL_PATH=$OPENSSL_PATH"
 echo "ZLIB_PATH=$ZLIB_PATH"
 echo "LIBMICROHTTPD_PATH=$LIBMICROHTTPD_PATH"
 echo "RDKAFKA_ROOT=$RDKAFKA_ROOT"
+find $OPENSSL_PATH/include
 echo "================================="
 
 set -e  # Exit on first error
