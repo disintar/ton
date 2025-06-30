@@ -71,7 +71,11 @@ target_link_libraries(python_ton PRIVATE -static-libstdc++
         combined_bundled fift-lib func-lib
         tlbc-lib ton_crypto_core rocksdb # XXX
         ${BLST_LIB} ${SECP256K1_LIBRARY} ${JEMALLOC_LIBRARIES}
-        OpenSSL::Crypto ${SODIUM_LIBRARY_RELEASE})
+        ${OPENSSL_CRYPTO_LIBRARY} ${SODIUM_LIBRARY_RELEASE})
+
+target_include_directories(python_ton PRIVATE
+        ${OPENSSL_INCLUDE_DIR}
+)
 
 target_include_directories(python_ton PRIVATE ${include_dirs})
 
