@@ -57,7 +57,6 @@ jobs:
             pkg-config \
             wget \
             gh \
-            libssl-dev \
             liblz4-dev \
             libsodium-dev \
             zlib1g-dev \
