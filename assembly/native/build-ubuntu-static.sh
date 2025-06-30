@@ -13,47 +13,6 @@ export CCACHE_DIR=~/.ccache
 ccache -M 5G
 ccache --show-stats || echo "ccache not installed properly"
 
-BASEDIR=`pwd`
-
-# ----------------------
-# Build OPENSSL
-# ----------------------
-echo "Build Openssl..."
-mkdir -p /tmp/3pp || echo "3pp exists"
-
-if [ ! -d "/tmp/3pp/openssl_3" ]; then
-  git clone https://github.com/openssl/openssl /tmp/3pp/openssl_3
-  cd /tmp/3pp/openssl_3
-
-  OPENSSL_PATH=`pwd`
-
-  git checkout openssl-3.1.4
-  ./config
-
-  make build_libs -j$(nproc)
-  test $? -eq 0 || { echo "Can't compile openssl_3"; exit 1; }
-else
-  OPENSSL_PATH=/tmp/3pp/openssl_3
-  echo "Using compiled openssl_3"
-fi
-
-
-if [ ! -d "/tmp/3pp/zlib" ]; then
-  git clone https://github.com/madler/zlib.git /tmp/3pp/zlib
-  cd /tmp/3pp/zlib
-
-  ZLIB_PATH=`pwd`
-  ./configure --static
-
-  make -j4
-  test $? -eq 0 || { echo "Can't compile zlib"; exit 1; }
-else
-  ZLIB_PATH=/tmp/3pp/zlib
-  echo "Using compiled zlib"
-fi
-
-cd $BASEDIR
-
 # ----------------------
 # Prepare build directory
 # ----------------------
@@ -83,16 +42,25 @@ cmake -GNinja .. \
   -DPORTABLE=1 \
   -DCMAKE_BUILD_TYPE=Release \
   -DBUILD_SHARED_LIBS=OFF \
-  -DOPENSSL_FOUND=1 \
-  -DOPENSSL_INCLUDE_DIR="$OPENSSL_PATH/include" \
-  -DOPENSSL_CRYPTO_LIBRARY="$OPENSSL_PATH/libcrypto.a" \
-  -DCMAKE_C_FLAGS="-w -static-libgcc -latomic" \
-  -DZLIB_FOUND=1 \
-  -DZLIB_INCLUDE_DIR=$ZLIB_PATH \
-  -DZLIB_LIBRARIES=$ZLIB_PATH/libz.a \
   -DCMAKE_CXX_FLAGS="-w -Bstatic /usr/lib/gcc/x86_64-linux-gnu/11/libatomic.a -static-libgcc -static-libstdc++ -latomic" \
   -DCMAKE_EXE_LINKER_FLAGS="-static -latomic" \
   -DTON_USE_PYTHON=1
+  -DRDKAFKA_ROOT=$RDKAFKA_ROOT \
+  -DOPENSSL_FOUND=1 \
+  -DOPENSSL_INCLUDE_DIR=$OPENSSL_PATH/include \
+  -DOPENSSL_CRYPTO_LIBRARY=$OPENSSL_PATH/libcrypto.a \
+  -DZLIB_FOUND=1 \
+  -DZLIB_INCLUDE_DIR=$ZLIB_PATH \
+  -DZLIB_LIBRARIES=$ZLIB_PATH/libz.a \
+  -DSODIUM_FOUND=1 \
+  -DSODIUM_INCLUDE_DIR=$SODIUM_PATH/src/libsodium/include \
+  -DSODIUM_LIBRARY_RELEASE=$SODIUM_PATH/src/libsodium/.libs/libsodium.a \
+  -DMHD_FOUND=1 \
+  -DMHD_INCLUDE_DIR=$LIBMICROHTTPD_PATH/src/include \
+  -DMHD_LIBRARY=$LIBMICROHTTPD_PATH/src/microhttpd/.libs/libmicrohttpd.a \
+  -DLZ4_FOUND=1 \
+  -DLZ4_INCLUDE_DIRS=$LZ4_PATH/lib \
+  -DLZ4_LIBRARIES=$LZ4_PATH/lib/liblz4.a
 
 echo "CMake configure step succeeded."
 

@@ -51,8 +51,25 @@ jobs:
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 16 clang
+          
 
-      - name: Restore cache TON
+      - name: Restore 3pp
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/3pp/
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-ubuntu-22.04-static-3pp
+
+      - name: Build 3pp
+        run: |
+          ./assembly/native/build-3pp.sh
+
+      - name: Save ccache
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/3pp/
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-ubuntu-22.04-static-3pp
+
+      - name: Restore 3pp
         uses: actions/cache/restore@v4
         with:
           path: ~/.ccache
@@ -71,7 +88,7 @@ jobs:
           echo "TARGET_SYSTEM=x86_64-$KERNEL" >> $GITHUB_ENV
           echo "RELEASE_NAME=ton-cpython-${{ matrix.py }}-x86_64-$KERNEL" >> $GITHUB_ENV
 
-      - name: Save cache TON
+      - name: Save ccache
         uses: actions/cache/save@v4
         with:
           path: ~/.ccache
