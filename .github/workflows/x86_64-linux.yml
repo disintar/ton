@@ -27,6 +27,10 @@ jobs:
         with:
           submodules: 'recursive'
 
+      - name: Build Openssl
+        run: |
+          ./assembly/native/build-ubuntu-openssl.sh
+
       - name: "Install Python"
         uses: actions/setup-python@v5
         with:
@@ -63,7 +67,7 @@ jobs:
             libmicrohttpd-dev \
             librdkafka-dev
           sudo apt remove libgsl-dev
-          mkdir ~/.ccache 3pp
+          mkdir ~/.ccache
 
       - name: Install clang-16
         run: |
@@ -81,7 +85,7 @@ jobs:
         run: |
           git submodule sync --recursive
           git submodule update
-          chmod +x  assembly/native/build-ubuntu-static.sh
+          
           ./assembly/native/build-ubuntu-static.sh
           ccache -sp
 
