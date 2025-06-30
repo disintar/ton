@@ -51,31 +51,26 @@ jobs:
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 16 clang
-          
+
+      - name: Compute 3pp cache key
+        id: third-party-key
+        run: echo "key=${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-ubuntu-22.04-static-3pp-$(sha256sum ./assembly/native/build-3pp.sh | cut -c1-16)" >> $GITHUB_OUTPUT
 
       - name: Restore 3pp
         uses: actions/cache/restore@v4
         with:
           path: /tmp/3pp/
-          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-ubuntu-22.04-static-3pp
+          key: ${{ steps.third-party-key.outputs.key }}
 
       - name: Build 3pp
         run: |
           ./assembly/native/build-3pp.sh
-          
-          echo "LZ4_PATH=$LZ4_PATH" >> $GITHUB_ENV
-          echo "SODIUM_PATH=$SODIUM_PATH" >> $GITHUB_ENV
-          echo "OPENSSL_PATH=$OPENSSL_PATH" >> $GITHUB_ENV
-          echo "ZLIB_PATH=$ZLIB_PATH" >> $GITHUB_ENV
-          echo "LIBMICROHTTPD_PATH=$LIBMICROHTTPD_PATH" >> $GITHUB_ENV
-          echo "RDKAFKA_ROOT=$RDKAFKA_ROOT" >> $GITHUB_ENV
-          echo "THIRD_PARTY_DIR=$THIRD_PARTY_DIR" >> $GITHUB_ENV
 
       - name: Save 3pp
         uses: actions/cache/save@v4
         with:
           path: /tmp/3pp/
-          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-ubuntu-22.04-static-3pp
+          key: ${{ steps.third-party-key.outputs.key }}
 
       - name: Restore ccache
         uses: actions/cache/restore@v4
@@ -85,6 +80,8 @@ jobs:
 
       - name: Build TON
         run: |
+          ./assembly/native/build-3pp.sh
+          
           git submodule sync --recursive
           git submodule update
           
