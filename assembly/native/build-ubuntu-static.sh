@@ -32,11 +32,27 @@ if [ ! -d "/tmp/3pp/openssl_3" ]; then
 
   make build_libs -j$(nproc)
   test $? -eq 0 || { echo "Can't compile openssl_3"; exit 1; }
-  cd $BASEDIR
 else
   OPENSSL_PATH=/tmp/3pp/openssl_3
   echo "Using compiled openssl_3"
 fi
+
+
+if [ ! -d "/tmp/3pp/zlib" ]; then
+  git clone https://github.com/madler/zlib.git /tmp/3pp/zlib
+  cd /tmp/3pp/zlib
+
+  ZLIB_PATH=`pwd`
+  ./configure --static
+
+  make -j4
+  test $? -eq 0 || { echo "Can't compile zlib"; exit 1; }
+else
+  ZLIB_PATH=/tmp/3pp/zlib
+  echo "Using compiled zlib"
+fi
+
+cd $BASEDIR
 
 # ----------------------
 # Prepare build directory
@@ -71,6 +87,9 @@ cmake -GNinja .. \
   -DOPENSSL_INCLUDE_DIR="$OPENSSL_PATH/include" \
   -DOPENSSL_CRYPTO_LIBRARY="$OPENSSL_PATH/libcrypto.a" \
   -DCMAKE_C_FLAGS="-w -static-libgcc -latomic" \
+  -DZLIB_FOUND=1 \
+  -DZLIB_INCLUDE_DIR=$ZLIB_PATH \
+  -DZLIB_LIBRARIES=$ZLIB_PATH/libz.a \
   -DCMAKE_CXX_FLAGS="-w -Bstatic /usr/lib/gcc/x86_64-linux-gnu/11/libatomic.a -static-libgcc -static-libstdc++ -latomic" \
   -DCMAKE_EXE_LINKER_FLAGS="-static -latomic" \
   -DTON_USE_PYTHON=1
