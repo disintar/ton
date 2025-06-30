@@ -13,6 +13,8 @@ export CCACHE_DIR=~/.ccache
 ccache -M 5G
 ccache --show-stats || echo "ccache not installed properly"
 
+BASEDIR=`pwd`
+
 # ----------------------
 # Build OPENSSL
 # ----------------------
@@ -30,6 +32,7 @@ if [ ! -d "/tmp/3pp/openssl_3" ]; then
 
   make build_libs -j$(nproc)
   test $? -eq 0 || { echo "Can't compile openssl_3"; exit 1; }
+  cd $BASEDIR
 else
   OPENSSL_PATH=/tmp/3pp/openssl_3
   echo "Using compiled openssl_3"
