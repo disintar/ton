@@ -115,7 +115,7 @@ cmake -GNinja .. \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_C_FLAGS="-w -static-libgcc -latomic -I${libmicrohttpdPath}/src/include" \
       -DCMAKE_CXX_FLAGS="-w -I${libmicrohttpdPath}/src/include -static-libgcc -static-libstdc++ -latomic" \
-      -DCMAKE_EXE_LINKER_FLAGS="-static -latomic" \
+      -DCMAKE_EXE_LINKER_FLAGS="-static -latomic -Wl,--no-as-needed /usr/lib/gcc/x86_64-linux-gnu/11/libatomic.so" \
       -DOPENSSL_FOUND=1 \
       -DRDKAFKA_ROOT=$rdkafkaRoot \
       -DOPENSSL_INCLUDE_DIR=$opensslPath/include \
