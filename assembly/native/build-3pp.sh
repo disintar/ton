@@ -44,7 +44,7 @@ fi
 export SODIUM_PATH="$THIRD_PARTY_CLEAR/libsodium"
 
 # ==================== OpenSSL ====================
-if [ ! -d "$THIRD_PARTY_DIR/openssl_3" ]; then
+if [ ! -d "$THIRD_PARTY_CLEAR/openssl_3" ]; then
   NEED_CACHE=true
   git clone https://github.com/openssl/openssl "$THIRD_PARTY_CLEAR/openssl_3"
   cd "$THIRD_PARTY_CLEAR/openssl_3"
