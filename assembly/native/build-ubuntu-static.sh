@@ -76,10 +76,10 @@ cmake -GNinja .. \
   -DZLIB_LIBRARIES=$ZLIB_PATH/libz.a \
   -DSODIUM_FOUND=1 \
   -DSODIUM_INCLUDE_DIR=$SODIUM_PATH/src/libsodium/include \
-  -DSODIUM_LIBRARY_RELEASE=$SODIUM_PATH/src/libsodium/.libs/libsodium.a \
+  -DSODIUM_LIBRARY_RELEASE=$SODIUM_PATH/libsodium/lib/libsodium.a \
   -DMHD_FOUND=1 \
-  -DMHD_INCLUDE_DIR=$LIBMICROHTTPD_PATH/src/include \
-  -DMHD_LIBRARY=$LIBMICROHTTPD_PATH/src/microhttpd/.libs/libmicrohttpd.a \
+  -DMHD_INCLUDE_DIR=$LIBMICROHTTPD_PATH/include \
+  -DMHD_LIBRARY=$LIBMICROHTTPD_PATH/libs/libmicrohttpd.a \
   -DLZ4_FOUND=1 \
   -DLZ4_INCLUDE_DIRS=$LZ4_PATH/lib \
   -DLZ4_LIBRARIES=$LZ4_PATH/lib/liblz4.a
