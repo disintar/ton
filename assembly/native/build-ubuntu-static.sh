@@ -3,6 +3,14 @@
 # ----------------------
 # Variables debug
 # ----------------------
+
+if [ -f /tmp/3pp/3pp_env.sh ]; then
+  source /tmp/3pp/3pp_env.sh
+  echo "✅ Sourced /tmp/3pp/3pp_env.sh"
+else
+  echo "⚠️  /tmp/3pp/3pp_env.sh not found, skipping source"
+fi
+
 echo "Variables: "
 echo "LZ4_PATH=$LZ4_PATH"
 echo "SODIUM_PATH=$SODIUM_PATH"

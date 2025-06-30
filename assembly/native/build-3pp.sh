@@ -104,4 +104,16 @@ export RDKAFKA_ROOT        - Installation prefix for librdkafka
 export THIRD_PARTY_DIR     - Root directory for all 3rd-party sources
 '
 
+echo "export LZ4_PATH=$LZ4_PATH"            >> /tmp/3pp/3pp_env.sh
+echo "export SODIUM_PATH=$SODIUM_PATH"      >> /tmp/3pp/3pp_env.sh
+echo "export OPENSSL_PATH=$OPENSSL_PATH"    >> /tmp/3pp/3pp_env.sh
+echo "export OPENSSL_ROOT_DIR=$OPENSSL_ROOT_DIR" >> /tmp/3pp/3pp_env.sh
+echo "export OPENSSL_CRYPTO_LIBRARY=$OPENSSL_CRYPTO_LIBRARY" >> /tmp/3pp/3pp_env.sh
+echo "export OPENSSL_SSL_LIBRARY=$OPENSSL_SSL_LIBRARY" >> /tmp/3pp/3pp_env.sh
+echo "export OPENSSL_INCLUDE_DIR=$OPENSSL_INCLUDE_DIR" >> /tmp/3pp/3pp_env.sh
+echo "export ZLIB_PATH=$ZLIB_PATH"          >> /tmp/3pp/3pp_env.sh
+echo "export LIBMICROHTTPD_PATH=$LIBMICROHTTPD_PATH" >> /tmp/3pp/3pp_env.sh
+echo "export RDKAFKA_ROOT=$RDKAFKA_ROOT"    >> /tmp/3pp/3pp_env.sh
+echo "export THIRD_PARTY_DIR=$THIRD_PARTY_DIR" >> /tmp/3pp/3pp_env.sh
+
 echo "✅ All 3rd party dependencies prepared successfully."
