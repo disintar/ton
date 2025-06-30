@@ -19,7 +19,7 @@ jobs:
 #            py: "310"
 #          - python: "3.13"
 #            py: "313"
-    runs-on: arc-runner-set
+    runs-on: Ubuntu
 
     steps:
       - name: Check out repository
