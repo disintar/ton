@@ -25,7 +25,7 @@ jobs:
       - name: LibAtomic
         shell: bash
         run: |
-          ls -lhta /usr/lib/x86_64-linux-gnu/libatomic.so.1
+          sleep 88888888
 
       - name: Check out repository
         uses: actions/checkout@v3
