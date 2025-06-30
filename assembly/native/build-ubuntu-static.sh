@@ -63,7 +63,7 @@ cmake -GNinja .. \
   -DPORTABLE=1 \
   -DCMAKE_BUILD_TYPE=Release \
   -DBUILD_SHARED_LIBS=OFF \
-  -DCMAKE_CXX_FLAGS="-w -Bstatic /usr/lib/gcc/x86_64-linux-gnu/11/libatomic.a -static-libgcc -static-libstdc++ -latomic" \
+  -DCMAKE_CXX_FLAGS="-w" \
   -DCMAKE_EXE_LINKER_FLAGS="-static -latomic" \
   -DTON_USE_PYTHON=1 \
   -DRDKAFKA_ROOT=$RDKAFKA_ROOT \
