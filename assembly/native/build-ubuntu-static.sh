@@ -18,7 +18,6 @@ echo "OPENSSL_PATH=$OPENSSL_PATH"
 echo "ZLIB_PATH=$ZLIB_PATH"
 echo "LIBMICROHTTPD_PATH=$LIBMICROHTTPD_PATH"
 echo "RDKAFKA_ROOT=$RDKAFKA_ROOT"
-echo "THIRD_PARTY_DIR=$THIRD_PARTY_DIR"
 echo "================================="
 
 set -e  # Exit on first error
