@@ -35,10 +35,6 @@ jobs:
             libc++-dev libc++abi-dev ccache libboost-all-dev pkg-config wget gh \
             liblz4-dev libsodium-dev zlib1g-dev libmicrohttpd-dev librdkafka-dev
 
-      - name: Build Openssl
-        run: |
-          ./assembly/native/build-ubuntu-openssl.sh
-
       - name: "Install Python"
         uses: actions/setup-python@v5
         with:
