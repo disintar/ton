@@ -75,14 +75,13 @@ pybind11_add_module(python_ton ${PYTHON_EMULATOR_SOURCE})
 target_link_options(python_ton PRIVATE
         -static-libstdc++
         -static-libgcc
-        -latomic
 )
 
 target_link_libraries(python_ton PRIVATE
-        -Wl,-Bstatic atomic combined_bundled fift-lib func-lib
+        -Wl,-Bstatic combined_bundled fift-lib func-lib
         tlbc-lib ton_crypto_core rocksdb # XXX
         ${BLST_LIB} ${SECP256K1_LIBRARY} ${JEMALLOC_LIBRARIES}
-        ${OPENSSL_CRYPTO_LIBRARY} ${SODIUM_LIBRARY_RELEASE})
+        ${OPENSSL_CRYPTO_LIBRARY} ${SODIUM_LIBRARY_RELEASE} ${ATOMIC_LIB})
 
 target_include_directories(python_ton PRIVATE
         ${OPENSSL_INCLUDE_DIR}
