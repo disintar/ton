@@ -63,13 +63,13 @@ jobs:
         run: |
           ./assembly/native/build-3pp.sh
 
-      - name: Save ccache
+      - name: Save 3pp
         uses: actions/cache/save@v4
         with:
           path: /tmp/3pp/
           key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-ubuntu-22.04-static-3pp
 
-      - name: Restore 3pp
+      - name: Restore ccache
         uses: actions/cache/restore@v4
         with:
           path: ~/.ccache
