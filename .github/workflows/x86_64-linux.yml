@@ -22,11 +22,6 @@ jobs:
     runs-on: arc-runner-set
 
     steps:
-      - name: LibAtomic
-        shell: bash
-        run: |
-          sleep 88888888
-
       - name: Check out repository
         uses: actions/checkout@v3
         with:
