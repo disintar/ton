@@ -46,12 +46,11 @@ export SODIUM_PATH="$THIRD_PARTY_CLEAR/libsodium"
 # ==================== OpenSSL ====================
 if [ ! -d "$THIRD_PARTY_DIR/openssl_3" ]; then
   NEED_CACHE=true
-  git clone https://github.com/openssl/openssl "$THIRD_PARTY_DIR/openssl_3"
-  cd "$THIRD_PARTY_DIR/openssl_3"
+  git clone https://github.com/openssl/openssl "$THIRD_PARTY_CLEAR/openssl_3"
+  cd "$THIRD_PARTY_CLEAR/openssl_3"
   git checkout openssl-3.1.4
-  ./config --prefix="$THIRD_PARTY_CLEAR/openssl" --openssldir="$THIRD_PARTY_CLEAR/openssl"
+  ./config
   make build_libs -j$(nproc)
-  make install_sw
   echo "Compiled and installed OpenSSL"
 else
   echo "Using existing OpenSSL source"
