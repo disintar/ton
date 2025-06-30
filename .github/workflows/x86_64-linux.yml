@@ -90,8 +90,6 @@ jobs:
 
       - name: Build TON
         run: |
-          ./assembly/native/build-3pp.sh
-          
           git submodule sync --recursive
           git submodule update
           
