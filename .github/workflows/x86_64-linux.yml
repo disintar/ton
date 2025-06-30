@@ -41,7 +41,28 @@ jobs:
       - name: Install system libraries
         run: |
           sudo apt update
-          sudo apt install -y build-essential git cmake ninja-build automake libtool texinfo autoconf libc++-dev libc++abi-dev ccache libboost-all-dev pkg-config wget gh libssl-dev
+          sudo apt install -y \
+            build-essential \
+            git \
+            cmake \
+            ninja-build \
+            automake \
+            libtool \
+            texinfo \
+            autoconf \
+            libc++-dev \
+            libc++abi-dev \
+            ccache \
+            libboost-all-dev \
+            pkg-config \
+            wget \
+            gh \
+            libssl-dev \
+            liblz4-dev \
+            libsodium-dev \
+            zlib1g-dev \
+            libmicrohttpd-dev \
+            librdkafka-dev
           sudo apt remove libgsl-dev
           mkdir ~/.ccache 3pp
 
