@@ -13,27 +13,27 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-22.04
+          - os: linux-x86_64
             runner: arc-runner-set
             python: "3.12"
             py: "312"
-          - os: ubuntu-22.04
+          - os: linux-x86_64
             runner: arc-runner-set
             python: "3.10"
             py: "310"
-          - os: ubuntu-22.04
+          - os: linux-x86_64
             runner: arc-runner-set
             python: "3.13"
             py: "313"
-          - os: macos-14
+          - os: macos-aarch64
             runner: macos-14
             python: "3.12"
             py: "312"
-          - os: macos-14
+          - os: macos-aarch64
             runner: macos-14
             python: "3.10"
             py: "310"
-          - os: macos-14
+          - os: macos-aarch64
             runner: macos-14
             python: "3.13"
             py: "313"
@@ -86,6 +86,9 @@ jobs:
         with:
           path: /tmp/3pp_clear/
           key: ${{ steps.third-party-key.outputs.key }}
+
+      - name: 3pp structure
+        run: find /tmp/3pp_clear/
 
       - name: Build 3pp
         run: ./assembly/native/build-3pp.sh
