@@ -49,11 +49,13 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
   export CC="$(brew --prefix llvm@16)/bin/clang"
   export CXX="$(brew --prefix llvm@16)/bin/clang++"
   export OPENSSL_LIBS="$OPENSSL_PATH/lib/libcrypto.a"
+  export EXTRA_CXX=""-isystem ${LIBMICROHTTPD_PATH}/include""
 else
   echo "Detected Linux"
   export CC=$(which clang-16)
   export CXX=$(which clang++-16)
   export OPENSSL_LIBS="$OPENSSL_PATH/lib64/libcrypto.a"
+  export EXTRA_CXX=""
 fi
 
 echo "Using CC: $CC"
@@ -75,7 +77,7 @@ cmake -GNinja .. \
   -DCMAKE_BUILD_TYPE=Release \
   -DBUILD_SHARED_LIBS=OFF \
   -DCMAKE_C_FLAGS="-w" \
-  -DCMAKE_CXX_FLAGS="-w" \
+  -DCMAKE_CXX_FLAGS="-w ${EXTRA_CXX}" \
   -DCMAKE_EXE_LINKER_FLAGS="${LINUX_LINKER_FLAGS}" \
   -DTON_USE_PYTHON=1 \
   -DRDKAFKA_ROOT=$RDKAFKA_ROOT \
