@@ -108,20 +108,20 @@ fi
 export RDKAFKA_ROOT="$THIRD_PARTY_CLEAR/librdkafka"
 
 # ==================== Exported variables summary ====================
-echo "export LZ4_PATH=$LZ4_PATH"                     >> /tmp/3pp/3pp_env.sh
-echo "export SODIUM_PATH=$SODIUM_PATH"               >> /tmp/3pp/3pp_env.sh
-echo "export OPENSSL_PATH=$OPENSSL_PATH"             >> /tmp/3pp/3pp_env.sh
-echo "export ZLIB_PATH=$ZLIB_PATH"                   >> /tmp/3pp/3pp_env.sh
-echo "export LIBMICROHTTPD_PATH=$LIBMICROHTTPD_PATH" >> /tmp/3pp/3pp_env.sh
-echo "export RDKAFKA_ROOT=$RDKAFKA_ROOT"             >> /tmp/3pp/3pp_env.sh
-echo "export THIRD_PARTY_DIR=$THIRD_PARTY_DIR"       >> /tmp/3pp/3pp_env.sh
-echo "export THIRD_PARTY_CLEAR=$THIRD_PARTY_CLEAR"   >> /tmp/3pp/3pp_env.sh
+echo "export LZ4_PATH=$LZ4_PATH"                     >> ${RUNNER_TEMP:-/tmp}/3pp/3pp_env.sh
+echo "export SODIUM_PATH=$SODIUM_PATH"               >> ${RUNNER_TEMP:-/tmp}/3pp/3pp_env.sh
+echo "export OPENSSL_PATH=$OPENSSL_PATH"             >> ${RUNNER_TEMP:-/tmp}/3pp/3pp_env.sh
+echo "export ZLIB_PATH=$ZLIB_PATH"                   >> ${RUNNER_TEMP:-/tmp}/3pp/3pp_env.sh
+echo "export LIBMICROHTTPD_PATH=$LIBMICROHTTPD_PATH" >> ${RUNNER_TEMP:-/tmp}/3pp/3pp_env.sh
+echo "export RDKAFKA_ROOT=$RDKAFKA_ROOT"             >> ${RUNNER_TEMP:-/tmp}/3pp/3pp_env.sh
+echo "export THIRD_PARTY_DIR=$THIRD_PARTY_DIR"       >> ${RUNNER_TEMP:-/tmp}/3pp/3pp_env.sh
+echo "export THIRD_PARTY_CLEAR=$THIRD_PARTY_CLEAR"   >> ${RUNNER_TEMP:-/tmp}/3pp/3pp_env.sh
 
 echo "✅ All 3rd party dependencies prepared and installed into $THIRD_PARTY_CLEAR."
 
 if [ "$NEED_CACHE" = true ]; then
   echo "Need to build 3pp"
-  echo "NEED_CACHE=true" >> /tmp/3pp/3pp_status.txt
+  echo "NEED_CACHE=true" >> ${RUNNER_TEMP:-/tmp}/3pp/3pp_status.txt
 else
-  echo "NEED_CACHE=false" >> /tmp/3pp/3pp_status.txt
+  echo "NEED_CACHE=false" >> ${RUNNER_TEMP:-/tmp}/3pp/3pp_status.txt
 fi

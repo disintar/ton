@@ -6,11 +6,11 @@ set -o pipefail
 # ----------------------
 # Variables debug
 # ----------------------
-if [ -f /tmp/3pp/3pp_env.sh ]; then
-  source /tmp/3pp/3pp_env.sh
-  echo "✅ Sourced /tmp/3pp/3pp_env.sh"
+if [ -f ${RUNNER_TEMP:-/tmp}/3pp/3pp_env.sh ]; then
+  source ${RUNNER_TEMP:-/tmp}/3pp/3pp_env.sh
+  echo "✅ Sourced 3pp_env.sh"
 else
-  echo "⚠️  /tmp/3pp/3pp_env.sh not found, skipping source"
+  echo "⚠️  3pp_env.sh not found, skipping source"
 fi
 
 echo "=========== Variables ==========="

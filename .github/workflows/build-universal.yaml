@@ -93,7 +93,7 @@ jobs:
       - name: Check 3pp build status
         id: check-third-party
         run: |
-          if grep -q "$NEED_CACHE=true" /tmp/3pp/3pp_status.txt; then
+          if grep -q "$NEED_CACHE=true" ${RUNNER_TEMP}/3pp/3pp_status.txt; then
             echo "cache=true" >> "$GITHUB_OUTPUT"
           else
             echo "cache=false" >> "$GITHUB_OUTPUT"
