@@ -49,7 +49,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
   export CC="$(brew --prefix llvm@16)/bin/clang"
   export CXX="$(brew --prefix llvm@16)/bin/clang++"
   export OPENSSL_LIBS="$OPENSSL_PATH/lib/libcrypto.a"
-  export EXTRA_CXX=""-isystem $LIBMICROHTTPD_PATH/include""
+  export EXTRA_CXX="-isystem $LIBMICROHTTPD_PATH/include"
 else
   echo "Detected Linux"
   export CC=$(which clang-16)
