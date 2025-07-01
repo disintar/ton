@@ -15,10 +15,10 @@ jobs:
         include:
           - python: "3.12"
             py: "312"
-#          - python: "3.10"
-#            py: "310"
-#          - python: "3.13"
-#            py: "313"
+          - python: "3.10"
+            py: "310"
+          - python: "3.13"
+            py: "313"
     runs-on: arc-runner-set
 
     steps:
