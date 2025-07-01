@@ -1,4 +1,4 @@
-name: x86-64-linux
+name: cross-platform-build
 
 on:
   push:
@@ -13,13 +13,32 @@ jobs:
     strategy:
       matrix:
         include:
-          - python: "3.12"
+          - os: ubuntu-22.04
+            runner: arc-runner-set
+            python: "3.12"
             py: "312"
-          - python: "3.10"
+          - os: ubuntu-22.04
+            runner: arc-runner-set
+            python: "3.10"
             py: "310"
-          - python: "3.13"
+          - os: ubuntu-22.04
+            runner: arc-runner-set
+            python: "3.13"
             py: "313"
-    runs-on: arc-runner-set
+          - os: macos-14
+            runner: macos-14
+            python: "3.12"
+            py: "312"
+          - os: macos-14
+            runner: macos-14
+            python: "3.10"
+            py: "310"
+          - os: macos-14
+            runner: macos-14
+            python: "3.13"
+            py: "313"
+
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Check out repository
@@ -27,7 +46,8 @@ jobs:
         with:
           submodules: 'recursive'
 
-      - name: Install Ubuntu packages
+      - name: Install Linux packages
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update -y
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq \
@@ -35,28 +55,31 @@ jobs:
             libc++-dev libc++abi-dev ccache libboost-all-dev pkg-config wget gh \
             liblz4-dev libsodium-dev libmicrohttpd-dev librdkafka-dev libatomic1
           sudo find / -type f -name "libatomic.so*" -print -delete 2>/dev/null || echo 'ok'
+          
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 16 clang
 
+      - name: Install macOS packages
+        if: runner.os == 'macOS'
+        run: |
+          brew install ninja pkg-config automake libtool autoconf texinfo wget ccache llvm@16 boost
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
 
-      - name: "Install Python"
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
 
       - name: Date Stamp
-        shell: bash
         id: date-stamp
         run: |
           echo "timestamp=$(date -u "+%Y%m%d%H%M_%S")" >> "$GITHUB_OUTPUT"
 
-      - name: Install clang-16
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 16 clang
-
       - name: Compute 3pp cache key
         id: third-party-key
-        run: echo "key=${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-ubuntu-22.04-static-3pp-$(sha256sum ./assembly/native/build-3pp.sh | cut -c1-16)" >> $GITHUB_OUTPUT
+        run: echo "key=${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-static-3pp-$(sha256sum ./assembly/native/build-3pp.sh | cut -c1-16)" >> $GITHUB_OUTPUT
 
       - name: Restore 3pp
         uses: actions/cache/restore@v4
@@ -65,8 +88,7 @@ jobs:
           key: ${{ steps.third-party-key.outputs.key }}
 
       - name: Build 3pp
-        run: |
-          ./assembly/native/build-3pp.sh
+        run: ./assembly/native/build-3pp.sh
 
       - name: Check 3pp build status
         id: check-third-party
@@ -88,26 +110,37 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.ccache
-          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-ubuntu-22.04-static-ccache
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-static-ccache
 
       - name: Build TON
         run: |
           git submodule sync --recursive
           git submodule update
-          
-          ./assembly/native/build-ubuntu-static.sh
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            ./assembly/native/build-ubuntu-static.sh
+          else
+            chmod +x assembly/native/build-macos-static.sh
+            ./assembly/native/build-macos-static.sh
+          fi
           ccache -sp
 
-      - run: |
-          export KERNEL=linux
-          echo "TARGET_SYSTEM=x86_64-$KERNEL" >> $GITHUB_ENV
-          echo "RELEASE_NAME=ton-cpython-${{ matrix.py }}-x86_64-$KERNEL" >> $GITHUB_ENV
+      - name: Set environment for release
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            KERNEL=linux
+            ARCH=x86_64
+          else
+            KERNEL=darwin
+            ARCH=aarch64
+          fi
+          echo "TARGET_SYSTEM=${ARCH}-${KERNEL}" >> $GITHUB_ENV
+          echo "RELEASE_NAME=ton-cpython-${{ matrix.py }}-${ARCH}-${KERNEL}" >> $GITHUB_ENV
 
       - name: Save ccache
         uses: actions/cache/save@v4
         with:
           path: ~/.ccache
-          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-ubuntu-22.04-static-ccache
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-static-ccache
 
       - name: Simple binary test
         run: cd artifacts; python3 -c 'import python_ton'

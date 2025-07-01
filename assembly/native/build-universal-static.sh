@@ -1,9 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -e
+set -o pipefail
 
 # ----------------------
 # Variables debug
 # ----------------------
-
 if [ -f /tmp/3pp/3pp_env.sh ]; then
   source /tmp/3pp/3pp_env.sh
   echo "✅ Sourced /tmp/3pp/3pp_env.sh"
@@ -20,17 +22,12 @@ echo "LIBMICROHTTPD_PATH=$LIBMICROHTTPD_PATH"
 echo "RDKAFKA_ROOT=$RDKAFKA_ROOT"
 echo "================================="
 
-set -e  # Exit on first error
-set -o pipefail
-
 # ----------------------
 # Setup ccache
 # ----------------------
 echo "Setting up ccache..."
 mkdir -p ~/.ccache
 export CCACHE_DIR=~/.ccache
-
-# Limit ccache size to avoid unexpected cache blowup (adjust if needed)
 ccache -M 5G
 ccache --show-stats || echo "ccache not installed properly"
 
@@ -42,15 +39,20 @@ if [ ! -d "build" ]; then
   mkdir build
 fi
 cd build
-
-# Clean up previous CMake/Ninja state
 rm -rf .ninja* CMakeCache.txt CMakeFiles
 
 # ----------------------
-# Set compilers
+# Detect OS and set compiler
 # ----------------------
-export CC=$(which clang-16)
-export CXX=$(which clang++-16)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  echo "Detected macOS"
+  export CC="$(brew --prefix llvm@16)/bin/clang"
+  export CXX="$(brew --prefix llvm@16)/bin/clang++"
+else
+  echo "Detected Linux"
+  export CC=$(which clang-16)
+  export CXX=$(which clang++-16)
+fi
 
 echo "Using CC: $CC"
 echo "Using CXX: $CXX"
@@ -59,22 +61,30 @@ echo "Using CXX: $CXX"
 # Configure with CMake
 # ----------------------
 echo "Configuring project with CMake..."
+
+# Extra linker flags for Linux
+LINUX_LINKER_FLAGS=""
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+  LINUX_LINKER_FLAGS="-static -latomic"
+fi
+
 cmake -GNinja .. \
   -DPORTABLE=1 \
   -DCMAKE_BUILD_TYPE=Release \
   -DBUILD_SHARED_LIBS=OFF \
+  -DCMAKE_C_FLAGS="-w" \
   -DCMAKE_CXX_FLAGS="-w" \
-  -DCMAKE_EXE_LINKER_FLAGS="-static -latomic" \
+  -DCMAKE_EXE_LINKER_FLAGS="${LINUX_LINKER_FLAGS}" \
   -DTON_USE_PYTHON=1 \
   -DRDKAFKA_ROOT=$RDKAFKA_ROOT \
   -DOPENSSL_FOUND=1 \
   -DOPENSSL_INCLUDE_DIR=$OPENSSL_PATH/include \
-  -DOPENSSL_CRYPTO_LIBRARY=$OPENSSL_PATH/lib64/libcrypto.a \
+  -DOPENSSL_CRYPTO_LIBRARY=$OPENSSL_PATH/libcrypto.a \
   -DZLIB_FOUND=1 \
   -DZLIB_INCLUDE_DIR=$ZLIB_PATH \
   -DZLIB_LIBRARIES=$ZLIB_PATH/lib/libz.a \
   -DSODIUM_FOUND=1 \
-  -DSODIUM_INCLUDE_DIR=$SODIUM_PATH//include \
+  -DSODIUM_INCLUDE_DIR=$SODIUM_PATH/include \
   -DSODIUM_LIBRARY_RELEASE=$SODIUM_PATH/lib/libsodium.a \
   -DMHD_FOUND=1 \
   -DMHD_INCLUDE_DIR=$LIBMICROHTTPD_PATH/include \
@@ -83,7 +93,7 @@ cmake -GNinja .. \
   -DLZ4_INCLUDE_DIRS=$LZ4_PATH/lib \
   -DLZ4_LIBRARIES=$LZ4_PATH/lib/liblz4.a
 
-echo "CMake configure step succeeded."
+echo "✅ CMake configure step succeeded."
 
 # ----------------------
 # Build
@@ -99,7 +109,4 @@ cd ..
 mkdir -p artifacts
 mv ./build/tvm-python/*.so ./artifacts/
 
-# ----------------------
-# Done
-# ----------------------
 echo "✅ Build and artifact collection completed successfully."
