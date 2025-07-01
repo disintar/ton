@@ -53,7 +53,7 @@ else
   echo "Detected Linux"
   export CC=$(which clang-16)
   export CXX=$(which clang++-16)
-  export OPENSSL_LIBS="$OPENSSL_PATH/libs/libcrypto.a"
+  export OPENSSL_LIBS="$OPENSSL_PATH/lib64/libcrypto.a"
 fi
 
 echo "Using CC: $CC"
