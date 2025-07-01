@@ -34,7 +34,7 @@ jobs:
             build-essential git cmake ninja-build automake libtool texinfo autoconf \
             libc++-dev libc++abi-dev ccache libboost-all-dev pkg-config wget gh \
             liblz4-dev libsodium-dev libmicrohttpd-dev librdkafka-dev libatomic1
-          sudo find / -type f -name "libatomic.so*" -print -delete 2>/dev/null
+          sudo find / -type f -name "libatomic.so*" -print -delete 2>/dev/null || echo 'ok'
 
 
       - name: "Install Python"
