@@ -87,10 +87,6 @@ jobs:
           path: ${{ runner.temp }}/3pp_clear/
           key: ${{ steps.third-party-key.outputs.key }}
 
-      - name: 3pp structure
-        run: |
-          find "${RUNNER_TEMP}/3pp_clear/"
-
       - name: Build 3pp
         run: ./assembly/native/build-3pp.sh
 
@@ -109,6 +105,10 @@ jobs:
         with:
           path: ${{ runner.temp }}/3pp_clear/
           key: ${{ steps.third-party-key.outputs.key }}
+
+      - name: 3pp structure
+        run: |
+          find "${RUNNER_TEMP}/3pp_clear/"
 
       - name: Restore ccache
         uses: actions/cache/restore@v4
