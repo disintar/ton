@@ -66,11 +66,13 @@ set(PYTHON_EMULATOR_SOURCE
 
 pybind11_add_module(python_ton ${PYTHON_EMULATOR_SOURCE})
 
-target_link_options(python_ton PRIVATE
-        -static-libstdc++
-        -static-libgcc
-        -latomic
-)
+if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+    target_link_options(python_ton PRIVATE
+            -static-libstdc++
+            -static-libgcc
+            -latomic
+    )
+endif ()
 
 target_link_libraries(python_ton PRIVATE
         -Wl,-Bstatic combined_bundled fift-lib func-lib
