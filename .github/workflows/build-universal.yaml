@@ -116,23 +116,21 @@ jobs:
         run: |
           git submodule sync --recursive
           git submodule update
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            ./assembly/native/build-ubuntu-static.sh
-          else
-            chmod +x assembly/native/build-macos-static.sh
-            ./assembly/native/build-macos-static.sh
-          fi
+          ./assembly/native/build-universal-static.sh
           ccache -sp
 
       - name: Set environment for release
         run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            KERNEL=linux
-            ARCH=x86_64
-          else
-            KERNEL=darwin
-            ARCH=aarch64
+          KERNEL=$(uname -s | tr '[:upper:]' '[:lower:]')
+          ARCH=$(uname -m)
+          
+          # Map architecture if needed
+          if [ "$ARCH" = "x86_64" ]; then
+            ARCH="x86_64"
+          elif [ "$ARCH" = "arm64" ]; then
+            ARCH="aarch64"
           fi
+          
           echo "TARGET_SYSTEM=${ARCH}-${KERNEL}" >> $GITHUB_ENV
           echo "RELEASE_NAME=ton-cpython-${{ matrix.py }}-${ARCH}-${KERNEL}" >> $GITHUB_ENV
 
