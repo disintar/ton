@@ -63,7 +63,7 @@ jobs:
       - name: Install macOS packages
         if: runner.os == 'macOS'
         run: |
-          brew install ninja pkg-config automake libtool autoconf texinfo wget ccache llvm@16 boost
+          brew install ninja pkg-config automake coreutils libtool autoconf texinfo wget ccache llvm@16 boost
         env:
           HOMEBREW_NO_AUTO_UPDATE: 1
 
