@@ -2,10 +2,10 @@
 
 set -e
 
-export THIRD_PARTY_DIR="/tmp/3pp"
+export THIRD_PARTY_DIR="${RUNNER_TEMP:-/tmp}/3pp"
 mkdir -p "$THIRD_PARTY_DIR"
 
-export THIRD_PARTY_CLEAR="/tmp/3pp_clear"
+export THIRD_PARTY_CLEAR="${RUNNER_TEMP:-/tmp}/3pp_clear"
 mkdir -p "$THIRD_PARTY_CLEAR"
 
 NEED_CACHE=false

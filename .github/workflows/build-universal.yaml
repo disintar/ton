@@ -84,7 +84,7 @@ jobs:
       - name: Restore 3pp
         uses: actions/cache/restore@v4
         with:
-          path: /tmp/3pp_clear/
+          path: ${{ runner.temp }}/3pp_clear/
           key: ${{ steps.third-party-key.outputs.key }}
 
       - name: 3pp structure
@@ -106,7 +106,7 @@ jobs:
         if: steps.check-third-party.outputs.cache == 'true'
         uses: actions/cache/save@v4
         with:
-          path: /tmp/3pp_clear/
+          path: ${{ runner.temp }}/3pp_clear/
           key: ${{ steps.third-party-key.outputs.key }}
 
       - name: Restore ccache
