@@ -75,7 +75,7 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 endif ()
 
 target_link_libraries(python_ton PRIVATE
-        -Wl,-Bstatic combined_bundled fift-lib func-lib
+        combined_bundled fift-lib func-lib
         tlbc-lib ton_crypto_core rocksdb # XXX
         ${BLST_LIB} ${SECP256K1_LIBRARY} ${JEMALLOC_LIBRARIES}
         ${OPENSSL_CRYPTO_LIBRARY} ${SODIUM_LIBRARY_RELEASE} ${ATOMIC_LIB})
