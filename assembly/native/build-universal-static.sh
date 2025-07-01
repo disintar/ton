@@ -48,10 +48,12 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
   echo "Detected macOS"
   export CC="$(brew --prefix llvm@16)/bin/clang"
   export CXX="$(brew --prefix llvm@16)/bin/clang++"
+  export OPENSSL_LIBS="$OPENSSL_PATH/lib/libcrypto.a"
 else
   echo "Detected Linux"
   export CC=$(which clang-16)
   export CXX=$(which clang++-16)
+  export OPENSSL_LIBS="$OPENSSL_PATH/libs/libcrypto.a"
 fi
 
 echo "Using CC: $CC"
@@ -79,7 +81,7 @@ cmake -GNinja .. \
   -DRDKAFKA_ROOT=$RDKAFKA_ROOT \
   -DOPENSSL_FOUND=1 \
   -DOPENSSL_INCLUDE_DIR=$OPENSSL_PATH/include \
-  -DOPENSSL_CRYPTO_LIBRARY=$OPENSSL_PATH/lib/libcrypto.a \
+  -DOPENSSL_CRYPTO_LIBRARY=$OPENSSL_LIBS \
   -DZLIB_FOUND=1 \
   -DZLIB_INCLUDE_DIR=$ZLIB_PATH \
   -DZLIB_LIBRARIES=$ZLIB_PATH/lib/libz.a \
