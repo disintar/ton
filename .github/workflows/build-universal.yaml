@@ -148,7 +148,12 @@ jobs:
         run: cd artifacts; python3 -c 'import python_ton'
 
       - name: Linked libraries
+        if: runner.os == 'Linux'
         run: ldd ./artifacts/*.so
+
+      - name: Linked libraries
+        if: runner.os == 'macOS'
+        run: otool -L ./artifacts/*.so
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
