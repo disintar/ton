@@ -88,7 +88,8 @@ jobs:
           key: ${{ steps.third-party-key.outputs.key }}
 
       - name: 3pp structure
-        run: find /tmp/3pp_clear/
+        run: |
+          find "${RUNNER_TEMP}/3pp_clear/"
 
       - name: Build 3pp
         run: ./assembly/native/build-3pp.sh
