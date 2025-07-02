@@ -10,28 +10,29 @@ const someN_coins = 10 as coins;
 const cost1 = ton("1.234");
 const cost2 = ton("0.05") + ton("0.001");
 
+fun rand(): uint256 { return random.uint256(); }
 
 fun autoInferInt8(x: int8) {
-    if (random()) { return x; }
-    else if (random()) { return 0 as int8; }
-    else if (random()) { return x!; }
+    if (rand()) { return x; }
+    else if (rand()) { return 0 as int8; }
+    else if (rand()) { return x!; }
     else { return x += x; }
 }
 
 fun autoInferUInt16Opt(x: uint16) {
-    if (random()) { return autoInferInt8(x as int8) as uint16; }
+    if (rand()) { return autoInferInt8(x as int8) as uint16; }
     return null;
 }
 
 fun inferInt_v1(): int {
-    if (random()) { return 0; }
-    else if (random()) { return 0 as uint16; }
+    if (rand()) { return 0; }
+    else if (rand()) { return 0 as uint16; }
     else { return 0 as int8; }
 }
 
 fun inferInt_v2(): int {
-    if (random()) { return 0 as uint1; }
-    else if (random()) { return 0 as int123; }
+    if (rand()) { return 0 as uint1; }
+    else if (rand()) { return 0 as int123; }
     else { return 0 as int8; }
 }
 
@@ -218,9 +219,9 @@ fun assign0<T>(mutate v: T) { v = 0; }
 
 fun main() {
     var t = createEmptyTuple();
-    t.tuplePush(1);
-    t.tuplePush(2);
-    t.tuplePush(3);
+    t.push(1);
+    t.push(2);
+    t.push(3);
     assign0(mutate t.0 as int8);
     assign0(mutate t.1 as uint16);
     assign0(mutate t.2 as int);
@@ -245,7 +246,7 @@ fun main() {
 @testcase | 110 |      | 50000000 50000100 1234000000 51000000
 @testcase | 111 |      | [ 1000000000 1000000000 1000000000 -321123456789 321123456789 1100000000 ]
 @testcase | 114 | 5    | (null) (null) 0
-@testcase | 114 | 15   | 15 2 130
+@testcase | 114 | 15   | 15 2 typeid-2
 
 @fif_codegen DECLPROC assign0<int8>
 @fif_codegen DECLPROC assign0<uint16>
@@ -254,7 +255,6 @@ fun main() {
 @fif_codegen
 """
   test12 PROC:<{
-    //
     100000000 PUSHINT	//  '4=100000000
   }>
 """

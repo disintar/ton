@@ -344,7 +344,6 @@ struct ChunkIdentifierOrKeyword final : ChunkLexerBase {
         if (str == "var") return tok_var;
         if (str == "fun") return tok_fun;
         if (str == "asm") return tok_asm;
-        if (str == "get") return tok_get;
         if (str == "try") return tok_try;
         if (str == "val") return tok_val;
         break;
@@ -524,6 +523,8 @@ struct TolkLanguageGrammar {
     register_token("^=", 2, tok_set_bitwise_xor);
     register_token("->", 2, tok_arrow);
     register_token("=>", 2, tok_double_arrow);
+    register_token("++", 2, tok_double_plus);
+    register_token("--", 2, tok_double_minus);
     register_token("<=>", 3, tok_spaceship);
     register_token("~>>", 3, tok_rshiftR);
     register_token("^>>", 3, tok_rshiftC);
@@ -554,15 +555,6 @@ Lexer::Lexer(const SrcFile* file)
   , p_end(p_start + file->text.size())
   , p_next(p_start)
   , location(file) {
-  next();
-}
-
-Lexer::Lexer(std::string_view text)
-  : file(nullptr)
-  , p_start(text.data())
-  , p_end(p_start + text.size())
-  , p_next(p_start)
-  , location() {
   next();
 }
 
@@ -598,6 +590,12 @@ void Lexer::restore_position(SavedPositionForLookahead saved) {
   cur_token_idx = last_token_idx = saved.cur_token_idx;
   cur_token = saved.cur_token;
   location = saved.loc;
+}
+
+void Lexer::hack_replace_rshift_with_one_triangle() {
+  // overcome the `>>` problem when parsing generics, leave only `>` here, see comments at usage
+  assert(cur_token.type == tok_rshift);
+  cur_token = Token(tok_gt, ">");
 }
 
 void Lexer::error(const std::string& err_msg) const {

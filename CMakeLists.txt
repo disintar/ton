@@ -35,6 +35,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(CMAKE_CXX_EXTENSIONS FALSE)
 
+set(CMAKE_COLOR_DIAGNOSTICS TRUE)
+
 #BEGIN internal
 option(BUILD_SHARED_LIBS "Use \"ON\" to build shared libraries instead of static where it's not specified (not recommended)" OFF)
 option(USE_EMSCRIPTEN "Use \"ON\" for config building wasm." OFF)
@@ -58,6 +60,16 @@ option(TON_USE_ASAN "Use \"ON\" to enable AddressSanitizer." OFF)
 option(TON_USE_TSAN "Use \"ON\" to enable ThreadSanitizer." OFF)
 option(TON_USE_UBSAN "Use \"ON\" to enable UndefinedBehaviorSanitizer." OFF)
 set(TON_ARCH "native" CACHE STRING "Architecture, will be passed to -march=")
+
+option(TON_PRINT_BACKTRACE_ON_CRASH "Attempt to print a backtrace when a fatal signal is caught" ON)
+
+option(TON_USE_LLD "Use LLD for linking" OFF)
+
+if (TON_USE_LLD)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fuse-ld=lld")
+    set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -fuse-ld=lld")
+endif()
 
 #BEGIN M1 support
 EXECUTE_PROCESS( COMMAND uname -m COMMAND tr -d '\n' OUTPUT_VARIABLE ARCHITECTURE )
@@ -558,7 +570,6 @@ endif()
 enable_testing()
 set(TEST_OPTIONS "--regression ${CMAKE_CURRENT_SOURCE_DIR}/test/regression-tests.ans --filter -Bench")
 separate_arguments(TEST_OPTIONS)
-add_test(test-ed25519-crypto crypto/test-ed25519-crypto)
 add_test(test-ed25519 test-ed25519)
 add_test(test-bigint test-bigint)
 add_test(test-vm test-vm ${TEST_OPTIONS})

@@ -127,9 +127,12 @@ class TolkTestCaseInputOutput:
         self.input = " ".join(processed_inputs)
         self.expected_output = output_str
 
-    def check(self, stdout_lines: List[str], line_idx: int):
-        if stdout_lines[line_idx] != self.expected_output:
-            raise CompareOutputError("error on case #%d (%d | %s):\n    expect: %s\n    actual: %s" % (line_idx + 1, self.method_id, self.input, self.expected_output, stdout_lines[line_idx]), "\n".join(stdout_lines))
+    def check(self, stdout_lines: List[str], line_idx: int, pivot_typeid: int):
+        expected_str = self.expected_output
+        if expected_str.find("typeid") != -1:
+           expected_str = re.sub(r'typeid-(\d+)', lambda m: str(pivot_typeid + int(m.group(1))), expected_str)
+        if stdout_lines[line_idx] != expected_str:
+            raise CompareOutputError("error on case #%d (%d | %s):\n    expect: %s\n    actual: %s" % (line_idx + 1, self.method_id, self.input, expected_str, stdout_lines[line_idx]), "\n".join(stdout_lines))
 
 
 class TolkTestCaseStderr:
@@ -260,6 +263,8 @@ class TolkTestFile:
         self.fif_codegen: List[TolkTestCaseFifCodegen] = []
         self.expected_hash: TolkTestCaseExpectedHash | None = None
         self.experimental_options: str | None = None
+        self.enable_tolk_lines_comments = False
+        self.pivot_typeid = 138  # may be changed when stdlib introduces new union types
 
     def parse_input_from_tolk_file(self):
         with open(self.tolk_filename, "r") as fd:
@@ -279,6 +284,8 @@ class TolkTestFile:
                 self.stderr_includes.append(TolkTestCaseStderr(self.parse_string_value(lines), False))
             elif line.startswith("@fif_codegen_avoid"):
                 self.fif_codegen.append(TolkTestCaseFifCodegen(self.parse_string_value(lines), True))
+            elif line.startswith("@fif_codegen_enable_comments"):
+                self.enable_tolk_lines_comments = True
             elif line.startswith("@fif_codegen"):
                 self.fif_codegen.append(TolkTestCaseFifCodegen(self.parse_string_value(lines), False))
             elif line.startswith("@code_hash"):
@@ -326,6 +333,8 @@ class TolkTestFile:
         cmd_args = [TOLK_EXECUTABLE, "-o", self.get_compiled_fif_filename()]
         if self.experimental_options:
             cmd_args = cmd_args + ["-x", self.experimental_options]
+        if not self.enable_tolk_lines_comments:
+            cmd_args = cmd_args + ["-L"]
         res = subprocess.run(cmd_args + [self.tolk_filename], capture_output=True, timeout=10)
         exit_code = res.returncode
         stderr = str(res.stderr, "utf-8")
@@ -369,7 +378,7 @@ class TolkTestFile:
             raise CompareOutputError("unexpected number of fift output: %d lines, but %d testcases" % (len(stdout_lines), len(self.input_output)), stdout)
 
         for i in range(len(stdout_lines)):
-            self.input_output[i].check(stdout_lines, i)
+            self.input_output[i].check(stdout_lines, i, self.pivot_typeid)
 
         if len(self.fif_codegen):
             with open(self.get_compiled_fif_filename()) as fd:

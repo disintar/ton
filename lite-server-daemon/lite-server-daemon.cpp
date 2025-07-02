@@ -137,7 +137,7 @@ class LiteServerDaemon : public td::actor::Actor {
       void send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) override {
       }
       void send_block_candidate(BlockIdExt block_id, CatchainSeqno cc_seqno, td::uint32 validator_set_hash,
-                                          td::BufferSlice data) override {
+                                          td::BufferSlice data, int mode) override {
       };
       void send_broadcast(BlockBroadcast broadcast, int mode) override {
       }
@@ -147,7 +147,8 @@ class LiteServerDaemon : public td::actor::Actor {
       void download_zero_state(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                td::Promise<td::BufferSlice> promise) override {
       }
-      void download_persistent_state(BlockIdExt id, BlockIdExt masterchain_block_id, td::uint32 priority,
+      void download_persistent_state(BlockIdExt id, BlockIdExt masterchain_block_id,
+                                     validator::PersistentStateType type, td::uint32 priority,
                                      td::Timestamp timeout, td::Promise<td::BufferSlice> promise) override {
       }
       void download_block_proof(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout, td::Promise<td::BufferSlice> promise) override {
@@ -390,7 +391,6 @@ class LiteServerDaemon : public td::actor::Actor {
       init_block = ton::create_block_id(conf.validator_->init_block_);
     }
 
-    auto check_shard = [](ShardIdFull) { return true; };
     bool allow_blockchain_init = false;
     double sync_blocks_before = 86400;
     double block_ttl = 86400 * 7;
@@ -400,7 +400,7 @@ class LiteServerDaemon : public td::actor::Actor {
     double max_mempool_num = 999999;
     bool initial_sync_disabled = true;
 
-    opts_ = ton::validator::ValidatorManagerOptions::create(zero_state, init_block, check_shard, allow_blockchain_init,
+    opts_ = ton::validator::ValidatorManagerOptions::create(zero_state, init_block, allow_blockchain_init,
                                                             sync_blocks_before, block_ttl, state_ttl, archive_ttl,
                                                             key_proof_ttl, max_mempool_num, initial_sync_disabled);
 
