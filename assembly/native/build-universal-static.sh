@@ -72,6 +72,8 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   LINUX_LINKER_FLAGS="-static -latomic"
 fi
 
+export PKG_CONFIG_PATH="$LIBMICROHTTPD_PATH/lib/pkgconfig:$PKG_CONFIG_PATH"
+
 cmake -GNinja .. \
   -DPORTABLE=1 \
   -DCMAKE_BUILD_TYPE=Release \
