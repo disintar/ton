@@ -2,12 +2,12 @@ if (NOT OPENSSL_FOUND)
     find_package(OpenSSL REQUIRED)
 endif ()
 
-if (NIX)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(MHD REQUIRED libmicrohttpd)
-else()
-    find_package(MHD REQUIRED)
-endif()
+#if (NIX)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(MHD REQUIRED libmicrohttpd)
+#else()
+#    find_package(MHD REQUIRED)
+#endif()
 
 set(VALIDATOR_ENGINE_SOURCE
         prometheus/PrometheusExporterActor.h
