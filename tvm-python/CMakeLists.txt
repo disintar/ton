@@ -82,6 +82,7 @@ target_link_libraries(python_ton PRIVATE
 
 target_include_directories(python_ton PRIVATE
         ${OPENSSL_INCLUDE_DIR}
+        ${MHD_INCLUDE_DIR}
 )
 
 target_include_directories(python_ton PRIVATE ${include_dirs})

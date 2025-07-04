@@ -23,6 +23,10 @@ if (MHD_LIBRARY)
   message(STATUS "Found MHD: ${MHD_LIBRARY}")
 endif()
 
+if (MHD_INCLUDE_DIR)
+    message(STATUS "Found MHD Include dir: ${MHD_INCLUDE_DIR}")
+endif()
+
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(MHD DEFAULT_MSG MHD_INCLUDE_DIR MHD_LIBRARY)
 mark_as_advanced(MHD_INCLUDE_DIR MHD_LIBRARY)

@@ -49,7 +49,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
   export CC="$(brew --prefix llvm@16)/bin/clang"
   export CXX="$(brew --prefix llvm@16)/bin/clang++"
   export OPENSSL_LIBS="$OPENSSL_PATH/lib/libcrypto.a"
-  export EXTRA_CXX="-I$LIBMICROHTTPD_PATH/include"
+  export EXTRA_CXX="-isystem $LIBMICROHTTPD_PATH/include"
 else
   echo "Detected Linux"
   export CC=$(which clang-16)
@@ -71,8 +71,6 @@ LINUX_LINKER_FLAGS=""
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   LINUX_LINKER_FLAGS="-static -latomic"
 fi
-
-export PKG_CONFIG_PATH="$LIBMICROHTTPD_PATH/lib/pkgconfig:$PKG_CONFIG_PATH"
 
 cmake -GNinja .. \
   -DPORTABLE=1 \
