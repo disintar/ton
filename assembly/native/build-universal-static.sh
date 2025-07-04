@@ -67,15 +67,17 @@ echo "Configuring project with CMake..."
 # Extra linker flags for Linux
 LINUX_LINKER_FLAGS=""
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-  LINUX_LINKER_FLAGS="-static -latomic"
+  LINUX_LINKER_FLAGS="-static-libstdc++ -static-libgcc -latomic"
 fi
 
 cmake -GNinja .. \
   -DPORTABLE=1 \
   -DCMAKE_BUILD_TYPE=Release \
   -DBUILD_SHARED_LIBS=OFF \
-  -DCMAKE_C_FLAGS="-static -w" \
-  -DCMAKE_CXX_FLAGS="-static -w" \
+  -DCMAKE_LINK_SEARCH_START_STATIC=ON \
+  -DCMAKE_LINK_SEARCH_END_STATIC=ON \
+  -DCMAKE_C_FLAGS="-w" \
+  -DCMAKE_CXX_FLAGS="-w -static-libstdc++ -static-libgcc" \
   -DCMAKE_EXE_LINKER_FLAGS="${LINUX_LINKER_FLAGS}" \
   -DTON_USE_PYTHON=1 \
   -DRDKAFKA_ROOT=$RDKAFKA_ROOT \
