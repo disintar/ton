@@ -76,8 +76,8 @@ cmake -GNinja .. \
   -DPORTABLE=1 \
   -DCMAKE_BUILD_TYPE=Release \
   -DBUILD_SHARED_LIBS=OFF \
-  -DCMAKE_C_FLAGS="-w" \
-  -DCMAKE_CXX_FLAGS="-w ${EXTRA_CXX}" \
+  -DCMAKE_C_FLAGS="-static -w" \
+  -DCMAKE_CXX_FLAGS="-static -w ${EXTRA_CXX}" \
   -DCMAKE_EXE_LINKER_FLAGS="${LINUX_LINKER_FLAGS}" \
   -DTON_USE_PYTHON=1 \
   -DRDKAFKA_ROOT=$RDKAFKA_ROOT \
@@ -95,7 +95,8 @@ cmake -GNinja .. \
   -DMHD_LIBRARY=$LIBMICROHTTPD_PATH/lib/libmicrohttpd.a \
   -DLZ4_FOUND=1 \
   -DLZ4_INCLUDE_DIRS=$LZ4_PATH/include \
-  -DLZ4_LIBRARIES=$LZ4_PATH/lib/liblz4.a
+  -DLZ4_LIBRARIES=$LZ4_PATH/lib/liblz4.a \
+  -DTON_USE_JEMALLOC=ON
 
 echo "✅ CMake configure step succeeded."
 

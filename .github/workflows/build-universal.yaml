@@ -17,26 +17,26 @@ jobs:
             runner: arc-runner-set
             python: "3.12"
             py: "312"
-          - os: linux-x86_64
-            runner: arc-runner-set
-            python: "3.10"
-            py: "310"
-          - os: linux-x86_64
-            runner: arc-runner-set
-            python: "3.13"
-            py: "313"
-          - os: macos-aarch64
-            runner: macos-14
-            python: "3.12"
-            py: "312"
-          - os: macos-aarch64
-            runner: macos-14
-            python: "3.10"
-            py: "310"
-          - os: macos-aarch64
-            runner: macos-14
-            python: "3.13"
-            py: "313"
+#          - os: linux-x86_64
+#            runner: arc-runner-set
+#            python: "3.10"
+#            py: "310"
+#          - os: linux-x86_64
+#            runner: arc-runner-set
+#            python: "3.13"
+#            py: "313"
+#          - os: macos-aarch64
+#            runner: macos-14
+#            python: "3.12"
+#            py: "312"
+#          - os: macos-aarch64
+#            runner: macos-14
+#            python: "3.10"
+#            py: "310"
+#          - os: macos-aarch64
+#            runner: macos-14
+#            python: "3.13"
+#            py: "313"
 
     runs-on: ${{ matrix.runner }}
 
@@ -53,7 +53,7 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq \
             build-essential git cmake ninja-build automake libtool texinfo autoconf \
             libc++-dev libc++abi-dev ccache libboost-all-dev pkg-config wget gh \
-            liblz4-dev libsodium-dev libmicrohttpd-dev librdkafka-dev libatomic1
+            libatomic1 libjemalloc-dev
           sudo find / -type f -name "libatomic.so*" -print -delete 2>/dev/null || echo 'ok'
           
           wget https://apt.llvm.org/llvm.sh
@@ -63,7 +63,8 @@ jobs:
       - name: Install macOS packages
         if: runner.os == 'macOS'
         run: |
-          brew install ninja pkg-config automake coreutils libtool autoconf texinfo wget ccache llvm@16 boost
+          brew install ninja pkg-config automake coreutils libtool autoconf \
+            texinfo wget ccache llvm@16 boost jemalloc
         env:
           HOMEBREW_NO_AUTO_UPDATE: 1
 
@@ -100,7 +101,7 @@ jobs:
           fi
 
       - name: Save 3pp
-        if: steps.check-third-party.outputs.cache == 'true'
+        if: steps.check-third-party.outputs.cache == 'true' && github.event_name != 'pull_request'
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/3pp_clear/
@@ -139,6 +140,7 @@ jobs:
           echo "RELEASE_NAME=ton-cpython-${{ matrix.py }}-${ARCH}-${KERNEL}" >> $GITHUB_ENV
 
       - name: Save ccache
+        if: github.event_name != 'pull_request'
         uses: actions/cache/save@v4
         with:
           path: ~/.ccache
@@ -156,12 +158,14 @@ jobs:
         run: otool -L ./artifacts/*.so
 
       - name: Upload artifacts
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.RELEASE_NAME }}
           path: artifacts
 
       - name: Create release
+        if: github.event_name != 'pull_request'
         run: |
           gh release delete -y "$RELEASE_NAME" || true
           gh release create --notes "Your binary sir" "$RELEASE_NAME" artifacts/*
