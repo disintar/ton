@@ -353,7 +353,7 @@ add_library(ton_db STATIC ${TON_DB_SOURCE})
 target_include_directories(ton_db PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)
 target_link_libraries(ton_db PUBLIC tdutils tddb ton_crypto)
-target_include_directories(fift-lib PUBLIC ${MHD_INCLUDE_DIR})
+target_include_directories(ton_db PUBLIC ${MHD_INCLUDE_DIR})
 
 add_library(fift-lib STATIC ${FIFT_SOURCE})
 target_include_directories(fift-lib PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
