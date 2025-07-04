@@ -76,8 +76,8 @@ cmake -GNinja .. \
   -DBUILD_SHARED_LIBS=OFF \
   -DCMAKE_LINK_SEARCH_START_STATIC=ON \
   -DCMAKE_LINK_SEARCH_END_STATIC=ON \
-  -DCMAKE_C_FLAGS="-w" \
-  -DCMAKE_CXX_FLAGS="-w -static-libstdc++ -static-libgcc" \
+  -DCMAKE_C_FLAGS="-w -static-libstdc++ -static-libgcc -fPIC -pthread" \
+  -DCMAKE_CXX_FLAGS="-w -static-libstdc++ -static-libgcc -fPIC -pthread -latomic" \
   -DCMAKE_EXE_LINKER_FLAGS="${LINUX_LINKER_FLAGS}" \
   -DTON_USE_PYTHON=1 \
   -DRDKAFKA_ROOT=$RDKAFKA_ROOT \

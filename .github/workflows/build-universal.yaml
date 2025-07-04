@@ -54,7 +54,8 @@ jobs:
             build-essential git cmake ninja-build automake libtool texinfo autoconf \
             libc++-dev libc++abi-dev ccache libboost-all-dev pkg-config wget gh \
             libatomic1 libjemalloc-dev
-
+          sudo find / -type f -name "libatomic.so*" -print -delete 2>/dev/null || echo 'ok'
+          
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 16 clang
@@ -116,26 +117,12 @@ jobs:
           path: ~/.ccache
           key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-static-ccache
 
-      - name: Mask SO
-        run: |
-          sudo find / -type f -name "libatomic.so*" -exec mv {} {}.backup \; 2>/dev/null || echo 'ok'
-          sudo find / -type f -name "libc.so*" -exec mv {} {}.backup \; 2>/dev/null || echo 'ok'
-          sudo find / -type f -name "libz.so*" -exec mv {} {}.backup \; 2>/dev/null || echo 'ok'
-          sudo find / -type f -name "libm.so*" -exec mv {} {}.backup \; 2>/dev/null || echo 'ok'
-
       - name: Build TON
         run: |
           git submodule sync --recursive
           git submodule update
           ./assembly/native/build-universal-static.sh
           ccache -sp
-
-      - name: Unmask SO
-        run: |
-          sudo find / -type f -name "libatomic.so*.backup" -exec sh -c 'mv "$0" "${0%.backup}"' {} \; 2>/dev/null || echo 'ok'
-          sudo find / -type f -name "libc.so*.backup" -exec sh -c 'mv "$0" "${0%.backup}"' {} \; 2>/dev/null || echo 'ok'
-          sudo find / -type f -name "libz.so*.backup" -exec sh -c 'mv "$0" "${0%.backup}"' {} \; 2>/dev/null || echo 'ok'
-          sudo find / -type f -name "libm.so*.backup" -exec sh -c 'mv "$0" "${0%.backup}"' {} \; 2>/dev/null || echo 'ok'
 
       - name: Set environment for release
         run: |
