@@ -200,6 +200,7 @@ class RootDb : public Db {
   void add_persistent_state_description(td::Ref<PersistentStateDescription> desc, td::Promise<td::Unit> promise) override;
   void get_persistent_state_descriptions(td::Promise<std::vector<td::Ref<PersistentStateDescription>>> promise) override;
 
+  void iterate_temp_block_handles(std::function<void(const BlockHandleInterface &)> f) override;
   void reinit(td::Promise<td::Unit>) override;
 
  private:

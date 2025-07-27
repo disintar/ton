@@ -147,6 +147,7 @@ class Db : public td::actor::Actor {
   virtual void get_persistent_state_descriptions(
       td::Promise<std::vector<td::Ref<PersistentStateDescription>>> promise) = 0;
   virtual void reinit(td::Promise<td::Unit>) = 0;
+  virtual void iterate_temp_block_handles(std::function<void(const BlockHandleInterface &)> f) = 0;
 };
 
 }  // namespace validator

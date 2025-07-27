@@ -19,6 +19,7 @@ Copyright 2017-2020 Telegram Systems LLP
 #pragma once
 
 #include "common/refcnt.hpp"
+#include "td/utils/HashMap.h"
 #include "vm/cellslice.h"
 #include "vm/stack.hpp"
 #include "vm/vmstate.h"
@@ -466,6 +467,10 @@ class VmState final : public VmStateInterface {
   bool register_get_extra_balance_call() {
     ++get_extra_balance_counter;
     return get_extra_balance_counter <= get_extra_balance_cheap_count;
+  }
+
+  td::HashSet<CellHash> extract_loaded_cells() {
+    return std::move(loaded_cells);
   }
 
  private:
