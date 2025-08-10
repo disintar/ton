@@ -48,14 +48,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: third_libs
-          key: ${{ runner.os }}-${{ runner.arch }}-windows-2022-3pp-${{ hashFiles('**/assembly/native/dirty/build-windows-2022.bat') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-windows-2022-3pp-${{ hashFiles('**/assembly/native/build-windows-2022.bat') }}
 
       - name: Build TON (Windows)
         run: |
           git submodule sync --recursive
           git submodule update
-          copy assembly\native\dirty\build-windows-github-2022.bat .
-          copy assembly\native\dirty\build-windows-2022.bat .
+          copy assembly\native\build-windows-github-2022.bat .
+          copy assembly\native\build-windows-2022.bat .
           echo Using RDKAFKA_ROOT=%RDKAFKA_ROOT%
           build-windows-github-2022.bat Enterprise
 
