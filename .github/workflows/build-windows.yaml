@@ -1,0 +1,85 @@
+name: windows-build-ton-cpython
+
+on:
+  push:
+    branches: [ feature/windows ]
+  pull_request:
+    branches: [ feature/windows ]
+  workflow_dispatch:
+  workflow_call:
+
+defaults:
+  run:
+    shell: cmd
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Print OS info
+        run: |
+          systeminfo | findstr /B /C:"OS Name" /C:"OS Version"
+
+      - name: Ensure vcpkg and install librdkafka
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path "C:\\vcpkg\\vcpkg.exe")) {
+            Write-Host "Bootstrapping vcpkg..."
+            git clone https://github.com/microsoft/vcpkg C:\\vcpkg
+            & C:\\vcpkg\\bootstrap-vcpkg.bat
+          }
+          $env:VCPKG_ROOT = "C:\\vcpkg"
+          & C:\\vcpkg\\vcpkg.exe install librdkafka:x64-windows
+          echo "RDKAFKA_ROOT=$env:VCPKG_ROOT\\installed\\x64-windows" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Cache 3pp
+        uses: actions/cache@v4
+        with:
+          path: third_libs
+          key: ${{ runner.os }}-${{ runner.arch }}-windows-2022-3pp-${{ hashFiles('**/assembly/native/dirty/build-windows-2022.bat') }}
+
+      - name: Build TON (Windows)
+        run: |
+          git submodule sync --recursive
+          git submodule update
+          copy assembly\native\dirty\build-windows-github-2022.bat .
+          copy assembly\native\dirty\build-windows-2022.bat .
+          echo Using RDKAFKA_ROOT=%RDKAFKA_ROOT%
+          build-windows-github-2022.bat Enterprise
+
+      - name: Set release env
+        shell: bash
+        run: |
+          echo "RELEASE_NAME=ton-cpython-313-x86_64-windows" >> $GITHUB_ENV
+
+      - name: Simple python import test
+        run: |
+          cd artifacts && python -c "import python_ton"
+
+      - name: Upload artifacts
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.RELEASE_NAME }}
+          path: artifacts
+
+      - name: Create release
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          gh release delete -y "$RELEASE_NAME" || true
+          gh release create --notes "Windows 2022 Python 3.13 build" "$RELEASE_NAME" artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
