@@ -31,7 +31,7 @@ jobs:
         run: |
           systeminfo | findstr /B /C:"OS Name" /C:"OS Version"
 
-      - name: Ensure vcpkg and install librdkafka
+      - name: Ensure vcpkg and install dependencies (librdkafka, boost)
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -42,7 +42,13 @@ jobs:
           }
           $env:VCPKG_ROOT = "C:\\vcpkg"
           & C:\\vcpkg\\vcpkg.exe install librdkafka:x64-windows
-          echo "RDKAFKA_ROOT=$env:VCPKG_ROOT\\installed\\x64-windows" | Out-File -FilePath $env:GITHUB_ENV -Append
+          & C:\\vcpkg\\vcpkg.exe install boost:x64-windows
+          # Expose roots for CMake Find scripts
+          $prefix = "$env:VCPKG_ROOT\\installed\\x64-windows"
+          echo "RDKAFKA_ROOT=$prefix" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "BOOST_ROOT=$prefix" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "BOOST_INCLUDEDIR=$prefix\\include" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "BOOST_LIBRARYDIR=$prefix\\lib" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Cache 3pp
         uses: actions/cache@v4
