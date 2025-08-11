@@ -31,30 +31,44 @@ jobs:
         run: |
           systeminfo | findstr /B /C:"OS Name" /C:"OS Version"
 
-      - name: Ensure vcpkg and install dependencies (librdkafka, boost)
+      - name: Compute 3pp cache key
+        id: third-party-key
+        shell: bash
+        run: |
+          echo "key=${{ runner.os }}-${{ runner.arch }}-windows-2022-3pp-$(sha256sum ./assembly/native/build-3pp.bat | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore 3pp
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}\3pp_clear\
+          key: ${{ steps.third-party-key.outputs.key }}
+
+      - name: Build 3pp
+        run: |
+          assembly\native\build-3pp.bat
+
+      - name: Check 3pp build status
+        id: check-third-party
         shell: powershell
         run: |
-          $ErrorActionPreference = 'Stop'
-          if (-not (Test-Path "C:\\vcpkg\\vcpkg.exe")) {
-            Write-Host "Bootstrapping vcpkg..."
-            git clone https://github.com/microsoft/vcpkg C:\\vcpkg
-            & C:\\vcpkg\\bootstrap-vcpkg.bat
+          $statusPath = Join-Path $env:RUNNER_TEMP '3pp/3pp_status.txt'
+          if (Test-Path $statusPath) {
+            $content = Get-Content $statusPath -Raw
+            if ($content -match 'NEED_CACHE=true') {
+              echo "cache=true" >> $env:GITHUB_OUTPUT
+            } else {
+              echo "cache=false" >> $env:GITHUB_OUTPUT
+            }
+          } else {
+            echo "cache=false" >> $env:GITHUB_OUTPUT
           }
-          $env:VCPKG_ROOT = "C:\\vcpkg"
-          & C:\\vcpkg\\vcpkg.exe install librdkafka:x64-windows
-          & C:\\vcpkg\\vcpkg.exe install boost:x64-windows
-          # Expose roots for CMake Find scripts
-          $prefix = "$env:VCPKG_ROOT\\installed\\x64-windows"
-          echo "RDKAFKA_ROOT=$prefix" | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo "BOOST_ROOT=$prefix" | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo "BOOST_INCLUDEDIR=$prefix\\include" | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo "BOOST_LIBRARYDIR=$prefix\\lib" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Cache 3pp
-        uses: actions/cache@v4
+      - name: Save 3pp
+        if: steps.check-third-party.outputs.cache == 'true' && github.event_name != 'pull_request'
+        uses: actions/cache/save@v4
         with:
-          path: third_libs
-          key: ${{ runner.os }}-${{ runner.arch }}-windows-2022-3pp-${{ hashFiles('**/assembly/native/build-windows-2022.bat') }}
+          path: ${{ runner.temp }}\3pp_clear\
+          key: ${{ steps.third-party-key.outputs.key }}
 
       - name: Build TON (Windows)
         run: |
@@ -72,7 +86,7 @@ jobs:
 
       - name: Simple python import test
         run: |
-          cd artifacts && python -c "import python_ton"
+          cd artifacts && ls && python -c "import python_ton"
 
       - name: Upload artifacts
         if: github.event_name != 'pull_request'
