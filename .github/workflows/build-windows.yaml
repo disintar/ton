@@ -45,7 +45,8 @@ jobs:
 
       - name: Build 3pp
         run: |
-          assembly\native\build-3pp.bat
+          call "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Auxiliary\\Build\\vcvars64.bat"
+          call assembly\native\build-3pp.bat
 
       - name: Check 3pp build status
         id: check-third-party
