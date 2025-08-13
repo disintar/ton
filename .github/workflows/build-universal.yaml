@@ -26,10 +26,10 @@ jobs:
             runner: arc-runner-set
             python: "3.10"
             py: "310"
-          - os: linux-x86_64
-            runner: arc-runner-set
-            python: "3.11"
-            py: "311"
+#          - os: linux-x86_64
+#            runner: arc-runner-set
+#            python: "3.11"
+#            py: "311"
           - os: linux-x86_64
             runner: arc-runner-set
             python: "3.12"
@@ -52,10 +52,10 @@ jobs:
             runner: macos-14
             python: "3.10"
             py: "310"
-          - os: macos-aarch64
-            runner: macos-14
-            python: "3.11"
-            py: "311"
+#          - os: macos-aarch64
+#            runner: macos-14
+#            python: "3.11"
+#            py: "311"
           - os: macos-aarch64
             runner: macos-14
             python: "3.12"
@@ -78,10 +78,10 @@ jobs:
             runner: macos-13
             python: "3.10"
             py: "310"
-          - os: macos-x86_64
-            runner: macos-13
-            python: "3.11"
-            py: "311"
+#          - os: macos-x86_64
+#            runner: macos-13
+#            python: "3.11"
+#            py: "311"
           - os: macos-x86_64
             runner: macos-13
             python: "3.12"
