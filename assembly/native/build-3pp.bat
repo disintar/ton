@@ -24,6 +24,25 @@ if not exist "%STATUS_DIR%" mkdir "%STATUS_DIR%"
 set NEED_CACHE=false
 
 REM ------------------------------------------------------------
+REM Ensure NASM is installed for OpenSSL build
+REM ------------------------------------------------------------
+where nasm >nul 2>&1
+if errorlevel 1 (
+  echo Installing NASM via Chocolatey...
+  choco install -y nasm
+  if errorlevel 1 (
+    echo Failed to install NASM
+    exit /b 1
+  )
+  set PATH=%PATH%;C:\Program Files\NASM
+)
+where nasm
+if errorlevel 1 (
+  echo NASM is still not available on PATH
+  exit /b 1
+)
+
+REM ------------------------------------------------------------
 REM Restore from cache if present
 REM ------------------------------------------------------------
 if exist "%CACHE_ROOT%\third_libs" (
