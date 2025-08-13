@@ -68,6 +68,7 @@ echo "Configuring project with CMake..."
 LINUX_LINKER_FLAGS=""
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   LINUX_LINKER_FLAGS="-static-libstdc++ -static-libgcc -latomic"
+  LINUX_LINKER_FLAGS_NOATOMIC="-static-libstdc++ -static-libgcc"
 fi
 
 cmake -GNinja .. \
@@ -76,8 +77,8 @@ cmake -GNinja .. \
   -DBUILD_SHARED_LIBS=OFF \
   -DCMAKE_LINK_SEARCH_START_STATIC=ON \
   -DCMAKE_LINK_SEARCH_END_STATIC=ON \
-  -DCMAKE_C_FLAGS="-w -static-libstdc++ -static-libgcc -fPIC -pthread" \
-  -DCMAKE_CXX_FLAGS="-w -static-libstdc++ -static-libgcc -fPIC -pthread -latomic" \
+  -DCMAKE_C_FLAGS="-w ${LINUX_LINKER_FLAGS_NOATOMIC} -fPIC -pthread" \
+  -DCMAKE_CXX_FLAGS="-w -fPIC -pthread ${LINUX_LINKER_FLAGS}" \
   -DCMAKE_EXE_LINKER_FLAGS="${LINUX_LINKER_FLAGS}" \
   -DTON_USE_PYTHON=1 \
   -DRDKAFKA_ROOT=$RDKAFKA_ROOT \
