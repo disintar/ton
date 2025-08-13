@@ -11,7 +11,7 @@ set REPO_ROOT=%cd%
 REM Resolve runner temp directories provided by GitHub Actions
 if "%RUNNER_TEMP%"=="" (
   echo RUNNER_TEMP is not set. Falling back to %TEMP%.
-  set RUNNER_TEMP=%TEMP%
+  set "RUNNER_TEMP=%TEMP%"
 )
 
 set CACHE_ROOT=%RUNNER_TEMP%\3pp_clear
@@ -34,7 +34,7 @@ if errorlevel 1 (
     echo Failed to install NASM
     exit /b 1
   )
-  set PATH=%PATH%;C:\Program Files\NASM
+  set "PATH=%PATH%;C:\Program Files\NASM"
 )
 where nasm
 if errorlevel 1 (
