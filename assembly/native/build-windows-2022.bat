@@ -153,6 +153,6 @@ mkdir artifacts
 
 REM Copy Python extension
 for %%P in (build\tvm-python\*.pyd) do (
-  echo copy %%P artifacts\
-  copy %%P artifacts\
+  echo copy "%%P" "artifacts\"
+  copy "%%P" "artifacts\"
 )

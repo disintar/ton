@@ -1,2 +1,5 @@
-call "C:\Program Files\Microsoft Visual Studio\2022\%1\Common7\Tools\VsDevCmd.bat" -arch=amd64 -host_arch=amd64
+@echo off
+setlocal
+call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+if errorlevel 1 exit /b %errorlevel%
 call build-windows-2022.bat -t
