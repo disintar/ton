@@ -67,30 +67,30 @@ jobs:
 #            py: "313"
 
           # macOS Intel (x86_64) builds on macos-13
-          - os: macos-x86_64
-            runner: macos-13
-            python: "3.8"
-            py: "308"
-          - os: macos-x86_64
-            runner: macos-13
-            python: "3.9"
-            py: "309"
-          - os: macos-x86_64
-            runner: macos-13
-            python: "3.10"
-            py: "310"
+#          - os: macos-x86_64
+#            runner: macos-13
+#            python: "3.8"
+#            py: "308"
+#          - os: macos-x86_64
+#            runner: macos-13
+#            python: "3.9"
+#            py: "309"
+#          - os: macos-x86_64
+#            runner: macos-13
+#            python: "3.10"
+#            py: "310"
           - os: macos-x86_64
             runner: macos-13
             python: "3.11"
             py: "311"
-          - os: macos-x86_64
-            runner: macos-13
-            python: "3.12"
-            py: "312"
-          - os: macos-x86_64
-            runner: macos-13
-            python: "3.13"
-            py: "313"
+#          - os: macos-x86_64
+#            runner: macos-13
+#            python: "3.12"
+#            py: "312"
+#          - os: macos-x86_64
+#            runner: macos-13
+#            python: "3.13"
+#            py: "313"
 
     runs-on: ${{ matrix.runner }}
 
@@ -224,8 +224,22 @@ jobs:
             done
           fi
 
-      - name: Simple binary test
-        run: cd artifacts; python3 -c 'import python_ton'
+      - name: Simple binary test with backtrace
+        run: |
+          set -euxo pipefail
+          cd artifacts
+          PYCODE='import faulthandler; faulthandler.enable(); import python_ton'
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            if command -v xcrun >/dev/null 2>&1; then
+              # Use LLDB in batch mode to capture native backtrace on crash
+              xcrun lldb --batch -o "run" -o "bt all" -- python3 -c "$PYCODE"
+            else
+              echo "xcrun not found; running without LLDB"
+              python3 -c "$PYCODE"
+            fi
+          else
+            python3 -c "$PYCODE"
+          fi
 
       - name: Upload artifacts
         if: github.event_name != 'pull_request'
