@@ -15,6 +15,7 @@ defaults:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         platform: [x64, arm64]
         python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
@@ -159,9 +160,19 @@ jobs:
         run: |
           echo "RELEASE_NAME=ton-cpython-${PY_SHORT}-${{ matrix.arch }}-windows" >> $GITHUB_ENV
 
-      - name: Simple python import test
+      - name: Simple python import test (with backtrace)
+        shell: powershell
         run: |
-          cd artifacts && ls && python -c "import python_ton"
+          $env:PYTHONFAULTHANDLER = '1'
+          Push-Location artifacts
+          try {
+            python -X faulthandler -c "import python_ton"
+            $code = $LASTEXITCODE
+          } finally {
+            Pop-Location
+          }
+          exit $code
+
 
       - name: Upload artifacts
         if: github.event_name != 'pull_request'

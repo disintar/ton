@@ -90,9 +90,9 @@ struct py::detail::type_caster<td::optional<T>> {
 
   static handle cast(const td::optional<T>& src, return_value_policy, handle) {
     if (src) {
-      return py::cast(src.value());
+      return py::cast(src.value()).release();
     } else {
-      return py::none();
+      return py::none().release();
     }
   }
 };
