@@ -235,7 +235,6 @@ jobs:
               # We must continue after initial exec stop to actually run the script.
               set +e
               LLDB_OUT=$(xcrun lldb --batch \
-                -o "settings set stop-on-sharedlibrary-events false" \
                 -o "run" \
                 -o "continue" \
                 -o "bt all" \
