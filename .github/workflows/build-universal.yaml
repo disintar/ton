@@ -71,26 +71,26 @@ jobs:
             runner: macos-13
             python: "3.8"
             py: "308"
-#          - os: macos-x86_64
-#            runner: macos-13
-#            python: "3.9"
-#            py: "309"
-#          - os: macos-x86_64
-#            runner: macos-13
-#            python: "3.10"
-#            py: "310"
-#          - os: macos-x86_64
-#            runner: macos-13
-#            python: "3.11"
-#            py: "311"
-#          - os: macos-x86_64
-#            runner: macos-13
-#            python: "3.12"
-#            py: "312"
-#          - os: macos-x86_64
-#            runner: macos-13
-#            python: "3.13"
-#            py: "313"
+          - os: macos-x86_64
+            runner: macos-13
+            python: "3.9"
+            py: "309"
+          - os: macos-x86_64
+            runner: macos-13
+            python: "3.10"
+            py: "310"
+          - os: macos-x86_64
+            runner: macos-13
+            python: "3.11"
+            py: "311"
+          - os: macos-x86_64
+            runner: macos-13
+            python: "3.12"
+            py: "312"
+          - os: macos-x86_64
+            runner: macos-13
+            python: "3.13"
+            py: "313"
 
     runs-on: ${{ matrix.runner }}
 
