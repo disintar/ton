@@ -51,8 +51,28 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
   export OPENSSL_LIBS="$OPENSSL_PATH/lib/libcrypto.a"
 else
   echo "Detected Linux"
-  export CC=$(which clang-16)
-  export CXX=$(which clang++-16)
+  # Detect available clang version (prefer 16, then 18, 20, 17, 19; fallback to default clang)
+  find_clang() {
+    for v in 16 18 20 17 19; do
+      if command -v "clang-${v}" >/dev/null 2>&1 && command -v "clang++-${v}" >/dev/null 2>&1; then
+        echo "${v}"
+        return 0
+      fi
+    done
+    if command -v clang >/dev/null 2>&1 && command -v clang++ >/dev/null 2>&1; then
+      echo "default"
+      return 0
+    fi
+    return 1
+  }
+  v=$(find_clang) || { echo "No suitable clang found in PATH" >&2; exit 1; }
+  if [ "$v" = "default" ]; then
+    export CC=$(command -v clang)
+    export CXX=$(command -v clang++)
+  else
+    export CC=$(command -v clang-"$v")
+    export CXX=$(command -v clang++-"$v")
+  fi
   # Prefer lib, fallback to lib64 for OpenSSL static lib location
   if [ -f "$OPENSSL_PATH/lib/libcrypto.a" ]; then
     export OPENSSL_LIBS="$OPENSSL_PATH/lib/libcrypto.a"
