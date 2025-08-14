@@ -14,6 +14,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Linux ARM64 (aarch64) build on GitHub-hosted runner
+          - os: linux-aarch64
+            runner: ubuntu-24.04-arm
+            python: "3.11"
+            py: "311"
 #          # Linux x86_64 builds
 #          - os: linux-x86_64
 #            runner: arc-runner-set
@@ -79,10 +84,10 @@ jobs:
 #            runner: macos-13
 #            python: "3.10"
 #            py: "310"
-          - os: macos-x86_64
-            runner: macos-13
-            python: "3.11"
-            py: "311"
+#          - os: macos-x86_64
+#            runner: macos-13
+#            python: "3.11"
+#            py: "311"
 #          - os: macos-x86_64
 #            runner: macos-13
 #            python: "3.12"

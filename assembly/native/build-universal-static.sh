@@ -53,7 +53,12 @@ else
   echo "Detected Linux"
   export CC=$(which clang-16)
   export CXX=$(which clang++-16)
-  export OPENSSL_LIBS="$OPENSSL_PATH/lib64/libcrypto.a"
+  # Prefer lib, fallback to lib64 for OpenSSL static lib location
+  if [ -f "$OPENSSL_PATH/lib/libcrypto.a" ]; then
+    export OPENSSL_LIBS="$OPENSSL_PATH/lib/libcrypto.a"
+  else
+    export OPENSSL_LIBS="$OPENSSL_PATH/lib64/libcrypto.a"
+  fi
 fi
 
 echo "Using CC: $CC"
