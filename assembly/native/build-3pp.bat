@@ -28,18 +28,47 @@ REM Ensure NASM is installed for OpenSSL build
 REM ------------------------------------------------------------
 where nasm >nul 2>&1
 if errorlevel 1 (
-  echo Installing NASM via Chocolatey...
-  choco install -y nasm
-  if errorlevel 1 (
-    echo Failed to install NASM
-    exit /b 1
+  echo NASM not found on PATH. Attempting installation...
+  rem First try Chocolatey if available
+  where choco >nul 2>&1
+  if not errorlevel 1 (
+    echo Installing NASM via Chocolatey...
+    choco install nasm -y --no-progress
+    rem Add common install locations to PATH for current session
+    if exist "C:\Program Files\NASM\nasm.exe" set "PATH=%PATH%;C:\Program Files\NASM"
+    if exist "C:\ProgramData\chocolatey\bin\nasm.exe" set "PATH=%PATH%;C:\ProgramData\chocolatey\bin"
+  ) else (
+    echo Chocolatey is not available.
   )
-  set "PATH=%PATH%;C:\Program Files\NASM"
 )
+
+rem Fallback: direct download if still not found
+where nasm >nul 2>&1
+if errorlevel 1 (
+  echo Falling back to direct NASM download...
+  set "NASM_DIR=%RUNNER_TEMP%\nasm"
+  if not exist "%NASM_DIR%" mkdir "%NASM_DIR%"
+  powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ^
+     $u = 'https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/win64/nasm-2.16.03-win64.zip'; ^
+     $zip = Join-Path $env:RUNNER_TEMP 'nasm.zip'; ^
+     Invoke-WebRequest -Uri $u -OutFile $zip; ^
+     Expand-Archive -LiteralPath $zip -DestinationPath $env:RUNNER_TEMP -Force; ^
+     $d = Get-ChildItem -Directory $env:RUNNER_TEMP | Where-Object { $_.Name -like 'nasm-*' } | Select-Object -First 1; ^
+     if ($d) { '$($d.FullName)\' }" > "%RUNNER_TEMP%\nasm_dir.txt"
+  for /f "usebackq tokens=* delims=" %%A in ("%RUNNER_TEMP%\nasm_dir.txt") do set "EXTRACTED_NASM=%%~A"
+  if exist "%EXTRACTED_NASM%nasm.exe" (
+    set "PATH=%PATH%;%EXTRACTED_NASM%"
+  )
+)
+
 where nasm
 if errorlevel 1 (
   echo NASM is still not available on PATH
   exit /b 1
+) else (
+  echo Detected NASM:
+  nasm -v
 )
 
 REM ------------------------------------------------------------

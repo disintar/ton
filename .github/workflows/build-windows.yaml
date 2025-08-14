@@ -44,8 +44,13 @@ jobs:
         shell: powershell
         run: |
           $ver = "${{ matrix.python }}"
-          $majorMinor = ($ver -split '\\.')[0..1] -join '.'
-          $versionRange = "$majorMinor.*"
+          $parts = $ver -split '\.'
+          $major = [int]$parts[0]
+          $minor = [int]$parts[1]
+          $nextMinor = $minor + 1
+          $lower = "$major.$minor.0"
+          $upper = "$major.$nextMinor.0"
+          $versionRange = "[$lower,$upper)"
           Write-Host "Installing Python ARM64 $versionRange via NuGet"
           $outDir = Join-Path $env:RUNNER_TEMP 'pyarm'
           New-Item -ItemType Directory -Force -Path $outDir | Out-Null
