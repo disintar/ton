@@ -200,16 +200,32 @@ jobs:
           path: ~/.ccache
           key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.py }}-static-ccache
 
+      - name: Linked libraries (pre-test)
+        run: |
+          set -euxo pipefail
+          shopt -s nullglob
+          cd artifacts
+          files=( python_ton*.so python_ton*.dylib ton_python*.so ton_python*.dylib *.so *.dylib )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No shared libraries found in artifacts directory to inspect. Contents:";
+            ls -la
+            exit 0
+          fi
+          echo "Found the following candidate shared libraries:" "${files[@]}"
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            for f in "${files[@]}"; do
+              echo "==== otool -L $f ===="
+              otool -L "$f" || true
+            done
+          else
+            for f in "${files[@]}"; do
+              echo "==== ldd $f ===="
+              ldd "$f" || true
+            done
+          fi
+
       - name: Simple binary test
         run: cd artifacts; python3 -c 'import python_ton'
-
-      - name: Linked libraries
-        if: runner.os == 'Linux'
-        run: ldd ./artifacts/*.so
-
-      - name: Linked libraries
-        if: runner.os == 'macOS'
-        run: otool -L ./artifacts/*.so
 
       - name: Upload artifacts
         if: github.event_name != 'pull_request'
