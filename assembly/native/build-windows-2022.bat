@@ -146,6 +146,10 @@ IF %errorlevel% NEQ 0 (
 )
 
 ninja python_ton
+IF %errorlevel% NEQ 0 (
+  echo Build TON failed
+  exit /b %errorlevel%
+)
 
 echo Strip and copy artifacts
 cd ..

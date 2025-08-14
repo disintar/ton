@@ -10,3 +10,4 @@ if not exist "%VCVARS%" set "VCVARS=C:\Program Files\Microsoft Visual Studio\202
 call "%VCVARS%"
 if errorlevel 1 exit /b %errorlevel%
 call build-windows-2022.bat -t
+if errorlevel 1 exit /b %errorlevel%

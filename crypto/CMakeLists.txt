@@ -391,6 +391,10 @@ endif()
 add_library(func-lib STATIC ${FUNC_LIB_SOURCE})
 target_include_directories(func-lib PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 target_link_libraries(func-lib PUBLIC ton_crypto src_func_parser ton_block)
+if (WINGETOPT_FOUND AND WIN32)
+  # func-lib compiles func/func.cpp which includes <getopt.h>, ensure headers from wingetopt are visible
+  target_include_directories(func-lib SYSTEM PUBLIC $<TARGET_PROPERTY:wingetopt,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
 if (USE_EMSCRIPTEN)
   target_link_options(func-lib PRIVATE -fexceptions)
   target_compile_options(func-lib PRIVATE -fexceptions)
@@ -434,6 +438,10 @@ endif()
 
 add_library(tlbc-lib tl/tlbc.cpp)
 target_link_libraries(tlbc-lib PUBLIC ton_crypto_core src_parser)
+if (WINGETOPT_FOUND AND WIN32)
+  # tlbc-lib compiles tl/tlbc.cpp which includes <getopt.h>
+  target_include_directories(tlbc-lib SYSTEM PUBLIC $<TARGET_PROPERTY:wingetopt,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
 
 if (WINGETOPT_FOUND)
   target_link_libraries_system(fift wingetopt)
