@@ -44,23 +44,27 @@ if errorlevel 1 (
 
 rem Fallback: direct download if still not found
 where nasm >nul 2>&1
-if errorlevel 1 (
-  echo Falling back to direct NASM download...
-  set "NASM_DIR=%RUNNER_TEMP%\nasm"
-  if not exist "%NASM_DIR%" mkdir "%NASM_DIR%"
-  powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ^
-     $u = 'https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/win64/nasm-2.16.03-win64.zip'; ^
-     $zip = Join-Path $env:RUNNER_TEMP 'nasm.zip'; ^
-     Invoke-WebRequest -Uri $u -OutFile $zip; ^
-     Expand-Archive -LiteralPath $zip -DestinationPath $env:RUNNER_TEMP -Force; ^
-     $d = Get-ChildItem -Directory $env:RUNNER_TEMP | Where-Object { $_.Name -like 'nasm-*' } | Select-Object -First 1; ^
-     if ($d) { '$($d.FullName)\' }" > "%RUNNER_TEMP%\nasm_dir.txt"
-  for /f "usebackq tokens=* delims=" %%A in ("%RUNNER_TEMP%\nasm_dir.txt") do set "EXTRACTED_NASM=%%~A"
-  if exist "%EXTRACTED_NASM%nasm.exe" (
-    set "PATH=%PATH%;%EXTRACTED_NASM%"
-  )
+if errorlevel 1 goto :DOWNLOAD_NASM
+goto :AFTER_NASM_FALLBACK
+
+:DOWNLOAD_NASM
+echo Falling back to direct NASM download...
+set "NASM_DIR=%RUNNER_TEMP%\nasm"
+if not exist "%NASM_DIR%" mkdir "%NASM_DIR%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ^
+   $u = 'https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/win64/nasm-2.16.03-win64.zip'; ^
+   $zip = Join-Path $env:RUNNER_TEMP 'nasm.zip'; ^
+   Invoke-WebRequest -Uri $u -OutFile $zip; ^
+   Expand-Archive -LiteralPath $zip -DestinationPath $env:RUNNER_TEMP -Force; ^
+   $d = Get-ChildItem -Directory $env:RUNNER_TEMP | Where-Object { $_.Name -like 'nasm-*' } | Select-Object -First 1; ^
+   if ($d) { '$($d.FullName)\' }" > "%RUNNER_TEMP%\nasm_dir.txt"
+for /f "usebackq tokens=* delims=" %%A in ("%RUNNER_TEMP%\nasm_dir.txt") do set "EXTRACTED_NASM=%%~A"
+if exist "%EXTRACTED_NASM%nasm.exe" (
+  set "PATH=%PATH%;%EXTRACTED_NASM%"
 )
+
+:AFTER_NASM_FALLBACK
 
 where nasm
 if errorlevel 1 (
