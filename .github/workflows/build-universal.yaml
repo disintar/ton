@@ -17,8 +17,28 @@ jobs:
           # Linux ARM64 (aarch64) build on GitHub-hosted runner
           - os: linux-aarch64
             runner: ubuntu-24.04-arm
+            python: "3.8"
+            py: "308"
+          - os: linux-aarch64
+            runner: ubuntu-24.04-arm
+            python: "3.9"
+            py: "309"
+          - os: linux-aarch64
+            runner: ubuntu-24.04-arm
+            python: "3.10"
+            py: "310"
+          - os: linux-aarch64
+            runner: ubuntu-24.04-arm
             python: "3.11"
             py: "311"
+          - os: linux-aarch64
+            runner: ubuntu-24.04-arm
+            python: "3.12"
+            py: "312"
+          - os: linux-aarch64
+            runner: ubuntu-24.04-arm
+            python: "3.13"
+            py: "313"
 #          # Linux x86_64 builds
 #          - os: linux-x86_64
 #            runner: arc-runner-set
