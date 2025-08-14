@@ -231,13 +231,42 @@ jobs:
           PYCODE='import faulthandler; faulthandler.enable(); import python_ton'
           if [ "${{ runner.os }}" = "macOS" ]; then
             if command -v xcrun >/dev/null 2>&1; then
-              # Use LLDB in batch mode to capture native backtrace on crash
-              xcrun lldb --batch -o "run" -o "bt all" -- python3 -c "$PYCODE"
+              # Use LLDB in batch mode to capture native backtrace on crash.
+              # We must continue after initial exec stop to actually run the script.
+              set +e
+              LLDB_OUT=$(xcrun lldb --batch \
+                -o "settings set stop-on-sharedlibrary-events false" \
+                -o "run" \
+                -o "continue" \
+                -o "bt all" \
+                -o "process status" -- python3 -c "$PYCODE" 2>&1)
+              LLDB_STATUS=$?
+              set -e
+              echo "$LLDB_OUT"
+              # If Python import succeeded, we are fine regardless of backtrace.
+              if echo "$LLDB_OUT" | grep -qE "Process [0-9]+ exited with status 0"; then
+                exit 0
+              fi
+              # If process exited with non-zero or was killed, ensure backtrace was captured.
+              if echo "$LLDB_OUT" | grep -qE "(exited with status [1-9][0-9]*|exited due to signal|stop reason = signal|Abort trap|SIGABRT|SIGSEGV|EXC_)"; then
+                # Count frame lines; a single dyld frame suggests we didn't get a useful backtrace.
+                FRAME_COUNT=$(printf "%s" "$LLDB_OUT" | grep -E "^[[:space:]]*frame #" | wc -l | tr -d ' ')
+                if [ "${FRAME_COUNT}" -lt 2 ]; then
+                  echo "Backtrace collection appears to have failed (only ${FRAME_COUNT} frame(s)). Failing step." >&2
+                  exit 1
+                fi
+                # We have at least 2 frames; treat as successful backtrace capture but still fail overall if process crashed.
+                exit 1
+              fi
+              # If none of the above matched, treat as backtrace failure.
+              echo "Unable to determine process result or collect backtrace. Failing step." >&2
+              exit 1
             else
-              echo "xcrun not found; running without LLDB"
-              python3 -c "$PYCODE"
+              echo "xcrun (LLDB) not found; required for backtrace on macOS. Failing step." >&2
+              exit 1
             fi
           else
+            # Non-macOS: just run the import normally.
             python3 -c "$PYCODE"
           fi
 
