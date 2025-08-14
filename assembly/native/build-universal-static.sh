@@ -71,6 +71,16 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   LINUX_LINKER_FLAGS_NOATOMIC="-static-libstdc++ -static-libgcc"
 fi
 
+# Help CMake find Homebrew GNU readline on macOS (avoid linking to libedit)
+EXTRA_CMAKE_ARGS=""
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  if brew ls --versions readline >/dev/null 2>&1; then
+    READLINE_PREFIX="$(brew --prefix readline)"
+    EXTRA_CMAKE_ARGS="-DCMAKE_PREFIX_PATH=${READLINE_PREFIX}"
+    echo "Using Homebrew readline at ${READLINE_PREFIX}"
+  fi
+fi
+
 cmake -GNinja .. \
   -DPORTABLE=1 \
   -DCMAKE_BUILD_TYPE=Release \
@@ -97,6 +107,7 @@ cmake -GNinja .. \
   -DLZ4_FOUND=1 \
   -DLZ4_INCLUDE_DIRS=$LZ4_PATH/include \
   -DLZ4_LIBRARIES=$LZ4_PATH/lib/liblz4.a \
+  ${EXTRA_CMAKE_ARGS} \
 #  -DTON_USE_JEMALLOC=ON
 
 echo "✅ CMake configure step succeeded."

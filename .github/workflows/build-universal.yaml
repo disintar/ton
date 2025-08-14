@@ -14,83 +14,83 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux x86_64 builds
-          - os: linux-x86_64
-            runner: arc-runner-set
-            python: "3.8"
-            py: "308"
-          - os: linux-x86_64
-            runner: arc-runner-set
-            python: "3.9"
-            py: "309"
-          - os: linux-x86_64
-            runner: arc-runner-set
-            python: "3.10"
-            py: "310"
+#          # Linux x86_64 builds
+#          - os: linux-x86_64
+#            runner: arc-runner-set
+#            python: "3.8"
+#            py: "308"
+#          - os: linux-x86_64
+#            runner: arc-runner-set
+#            python: "3.9"
+#            py: "309"
+#          - os: linux-x86_64
+#            runner: arc-runner-set
+#            python: "3.10"
+#            py: "310"
 #          - os: linux-x86_64
 #            runner: arc-runner-set
 #            python: "3.11"
 #            py: "311"
-          - os: linux-x86_64
-            runner: arc-runner-set
-            python: "3.12"
-            py: "312"
-          - os: linux-x86_64
-            runner: arc-runner-set
-            python: "3.13"
-            py: "313"
-
-          # macOS Apple Silicon (arm64) builds on macos-14
-          - os: macos-aarch64
-            runner: macos-14
-            python: "3.8"
-            py: "308"
-          - os: macos-aarch64
-            runner: macos-14
-            python: "3.9"
-            py: "309"
-          - os: macos-aarch64
-            runner: macos-14
-            python: "3.10"
-            py: "310"
+#          - os: linux-x86_64
+#            runner: arc-runner-set
+#            python: "3.12"
+#            py: "312"
+#          - os: linux-x86_64
+#            runner: arc-runner-set
+#            python: "3.13"
+#            py: "313"
+#
+#          # macOS Apple Silicon (arm64) builds on macos-14
+#          - os: macos-aarch64
+#            runner: macos-14
+#            python: "3.8"
+#            py: "308"
+#          - os: macos-aarch64
+#            runner: macos-14
+#            python: "3.9"
+#            py: "309"
+#          - os: macos-aarch64
+#            runner: macos-14
+#            python: "3.10"
+#            py: "310"
 #          - os: macos-aarch64
 #            runner: macos-14
 #            python: "3.11"
 #            py: "311"
-          - os: macos-aarch64
-            runner: macos-14
-            python: "3.12"
-            py: "312"
-          - os: macos-aarch64
-            runner: macos-14
-            python: "3.13"
-            py: "313"
+#          - os: macos-aarch64
+#            runner: macos-14
+#            python: "3.12"
+#            py: "312"
+#          - os: macos-aarch64
+#            runner: macos-14
+#            python: "3.13"
+#            py: "313"
 
           # macOS Intel (x86_64) builds on macos-13
           - os: macos-x86_64
             runner: macos-13
             python: "3.8"
             py: "308"
-          - os: macos-x86_64
-            runner: macos-13
-            python: "3.9"
-            py: "309"
-          - os: macos-x86_64
-            runner: macos-13
-            python: "3.10"
-            py: "310"
+#          - os: macos-x86_64
+#            runner: macos-13
+#            python: "3.9"
+#            py: "309"
+#          - os: macos-x86_64
+#            runner: macos-13
+#            python: "3.10"
+#            py: "310"
 #          - os: macos-x86_64
 #            runner: macos-13
 #            python: "3.11"
 #            py: "311"
-          - os: macos-x86_64
-            runner: macos-13
-            python: "3.12"
-            py: "312"
-          - os: macos-x86_64
-            runner: macos-13
-            python: "3.13"
-            py: "313"
+#          - os: macos-x86_64
+#            runner: macos-13
+#            python: "3.12"
+#            py: "312"
+#          - os: macos-x86_64
+#            runner: macos-13
+#            python: "3.13"
+#            py: "313"
 
     runs-on: ${{ matrix.runner }}
 
@@ -118,7 +118,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install ninja pkg-config automake coreutils libtool autoconf \
-            texinfo wget ccache llvm@16 boost jemalloc
+            texinfo wget ccache llvm@16 boost jemalloc readline
         env:
           HOMEBREW_NO_AUTO_UPDATE: 1
 
