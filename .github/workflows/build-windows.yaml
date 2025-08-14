@@ -56,30 +56,65 @@ jobs:
           Write-Host "Resolving pythonarm64 version in range [$lower,$upper)..."
           $nugetSource = 'https://api.nuget.org/v3/index.json'
           $list = & nuget list pythonarm64 -AllVersions -Source $nugetSource 2>$null
-          if (-not $list) { Write-Error 'nuget list returned no results for pythonarm64'; exit 1 }
           $versions = @()
-          foreach ($line in $list) {
-            if ($line -match 'pythonarm64\s+([0-9]+\.[0-9]+\.[0-9]+)') {
-              $versions += [version]$Matches[1]
+          if ($list) {
+            foreach ($line in $list) {
+              if ($line -match 'pythonarm64\s+([0-9]+\.[0-9]+\.[0-9]+)') {
+                $versions += [version]$Matches[1]
+              }
             }
           }
           $cand = $versions | Where-Object { $_ -ge $lower -and $_ -lt $upper } | Sort-Object -Descending | Select-Object -First 1
-          if (-not $cand) { Write-Error "No pythonarm64 version found within [$lower,$upper)"; exit 1 }
-          $exact = $cand.ToString()
-          Write-Host "Installing Python ARM64 $exact via NuGet"
-          $outDir = Join-Path $env:RUNNER_TEMP 'pyarm'
-          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-          nuget install pythonarm64 -Version $exact -OutputDirectory $outDir -Source $nugetSource
-          $pkg = Get-ChildItem $outDir -Directory | Where-Object { $_.Name -like "pythonarm64.$exact*" } | Sort-Object Name -Descending | Select-Object -First 1
-          if (-not $pkg) { $pkg = Get-ChildItem $outDir -Directory | Where-Object { $_.Name -like 'pythonarm64*' } | Sort-Object Name -Descending | Select-Object -First 1 }
-          if (-not $pkg) { Write-Error 'Failed to install pythonarm64 via NuGet'; exit 1 }
-          $tools = Join-Path $pkg.FullName 'tools'
-          if (-not (Test-Path (Join-Path $tools 'python.exe'))) { Write-Error 'python.exe not found in NuGet tools folder'; exit 1 }
-          # Add python to PATH for subsequent steps
-          echo $tools >> $env:GITHUB_PATH
-          & (Join-Path $tools 'python.exe') --version
-          # Ensure pip is available
-          & (Join-Path $tools 'python.exe') -m ensurepip --upgrade
+          if ($cand) {
+            $exact = $cand.ToString()
+            Write-Host "Installing Python ARM64 $exact via NuGet"
+            $outDir = Join-Path $env:RUNNER_TEMP 'pyarm'
+            New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+            nuget install pythonarm64 -Version $exact -OutputDirectory $outDir -Source $nugetSource
+            $pkg = Get-ChildItem $outDir -Directory | Where-Object { $_.Name -like "pythonarm64.$exact*" } | Sort-Object Name -Descending | Select-Object -First 1
+            if (-not $pkg) { $pkg = Get-ChildItem $outDir -Directory | Where-Object { $_.Name -like 'pythonarm64*' } | Sort-Object Name -Descending | Select-Object -First 1 }
+            if (-not $pkg) { Write-Error 'Failed to install pythonarm64 via NuGet'; exit 1 }
+            $tools = Join-Path $pkg.FullName 'tools'
+            if (-not (Test-Path (Join-Path $tools 'python.exe'))) { Write-Error 'python.exe not found in NuGet tools folder'; exit 1 }
+            # Add python to PATH for subsequent steps
+            echo $tools >> $env:GITHUB_PATH
+            & (Join-Path $tools 'python.exe') --version
+            # Ensure pip is available
+            & (Join-Path $tools 'python.exe') -m ensurepip --upgrade
+          } else {
+            Write-Warning "No pythonarm64 NuGet package found within [$lower,$upper). Falling back to official python.org ARM64 installer."
+            $maxPatch = 30
+            $foundUrl = $null
+            for ($p = $maxPatch; $p -ge 0; $p--) {
+              $verExact = "$major.$minor.$p"
+              $url = "https://www.python.org/ftp/python/$verExact/python-$verExact-arm64.exe"
+              try {
+                $resp = Invoke-WebRequest -Uri $url -Method Head -UseBasicParsing -ErrorAction Stop
+                if ($resp.StatusCode -lt 400) { $foundUrl = $url; Write-Host "Found installer at $url"; break }
+              } catch { }
+            }
+            if (-not $foundUrl) { Write-Error "Could not locate official ARM64 installer for $major.$minor.x on python.org"; exit 1 }
+            $dlDir = Join-Path $env:RUNNER_TEMP 'pyarm_official'
+            New-Item -ItemType Directory -Force -Path $dlDir | Out-Null
+            $installer = Join-Path $dlDir 'python-arm64.exe'
+            Write-Host "Downloading $foundUrl"
+            Invoke-WebRequest -Uri $foundUrl -OutFile $installer -UseBasicParsing
+            $target = Join-Path $env:RUNNER_TEMP "pyarm_install_${major}${minor}"
+            New-Item -ItemType Directory -Force -Path $target | Out-Null
+            $args = @('/quiet', 'InstallAllUsers=0', 'Include_pip=1', 'PrependPath=0', "TargetDir=$target")
+            $proc = Start-Process -FilePath $installer -ArgumentList $args -Wait -PassThru
+            if ($proc.ExitCode -ne 0) { Write-Error "Python installer failed with exit code $($proc.ExitCode)"; exit $proc.ExitCode }
+            $py = Join-Path $target 'python.exe'
+            if (-not (Test-Path $py)) { $py = Join-Path $target 'python3.exe' }
+            if (-not (Test-Path $py)) { Write-Error 'python.exe not found after installer completed'; exit 1 }
+            $scripts = Join-Path $target 'Scripts'
+            # Add to PATH for subsequent steps
+            echo $target >> $env:GITHUB_PATH
+            if (Test-Path $scripts) { echo $scripts >> $env:GITHUB_PATH }
+            & $py --version
+            # Ensure pip is available (embeddable typically lacks pip, but installer with Include_pip should provide it)
+            try { & $py -m pip --version } catch { & $py -m ensurepip --upgrade }
+          }
 
       - name: Compute Python short version
         id: py-short
