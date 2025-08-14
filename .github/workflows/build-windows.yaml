@@ -18,9 +18,6 @@ jobs:
       matrix:
         platform: [x64, arm64]
         python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-        exclude:
-          - platform: arm64
-            python: "3.9"
         include:
           - platform: x64
             runner: windows-2022
@@ -36,10 +33,32 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup Python
+      - name: Setup Python (x64)
+        if: matrix.platform == 'x64'
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+
+      - name: Install Python (Windows ARM64)
+        if: matrix.platform == 'arm64'
+        shell: powershell
+        run: |
+          $ver = "${{ matrix.python }}"
+          $majorMinor = ($ver -split '\\.')[0..1] -join '.'
+          $versionRange = "$majorMinor.*"
+          Write-Host "Installing Python ARM64 $versionRange via NuGet"
+          $outDir = Join-Path $env:RUNNER_TEMP 'pyarm'
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          nuget install pythonarm64 -Version $versionRange -OutputDirectory $outDir -Source https://api.nuget.org/v3/index.json
+          $pkg = Get-ChildItem $outDir -Directory | Where-Object { $_.Name -like 'pythonarm64*' } | Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $pkg) { Write-Error 'Failed to install pythonarm64 via NuGet'; exit 1 }
+          $tools = Join-Path $pkg.FullName 'tools'
+          if (-not (Test-Path (Join-Path $tools 'python.exe'))) { Write-Error 'python.exe not found in NuGet tools folder'; exit 1 }
+          # Add python to PATH for subsequent steps
+          echo $tools >> $env:GITHUB_PATH
+          & (Join-Path $tools 'python.exe') --version
+          # Ensure pip is available
+          & (Join-Path $tools 'python.exe') -m ensurepip --upgrade
 
       - name: Compute Python short version
         id: py-short
