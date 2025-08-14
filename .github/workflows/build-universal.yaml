@@ -112,7 +112,7 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq \
             build-essential git cmake ninja-build automake libtool texinfo autoconf \
             libc++-dev libc++abi-dev ccache libboost-all-dev pkg-config wget gh \
-            libatomic1 libjemalloc-dev
+            libatomic1 libjemalloc-dev gdb
           sudo find / -type f -name "libatomic.so*" -print -delete 2>/dev/null || echo 'ok'
           
           wget https://apt.llvm.org/llvm.sh
@@ -286,8 +286,36 @@ jobs:
               exit 1
             fi
           else
-            # Non-macOS: just run the import normally.
-            python3 -c "$PYCODE"
+            # Non-macOS (Linux): run under gdb to capture native backtrace on crash.
+            if ! command -v gdb >/dev/null 2>&1; then
+              echo "gdb not found; cannot collect backtrace on Linux. Failing step." >&2
+              exit 1
+            fi
+            set +e
+            GDB_OUT=$(gdb -q -batch \
+              -ex "set pagination off" \
+              -ex "set confirm off" \
+              -ex "run" \
+              -ex "bt full" \
+              -ex "info threads" \
+              -ex "thread apply all bt full" --args python3 -c "$PYCODE" 2>&1)
+            GDB_STATUS=$?
+            set -e
+            echo "$GDB_OUT"
+            # If Python import succeeded, gdb typically reports "exited normally" or exit code 0.
+            if echo "$GDB_OUT" | grep -qiE "exited normally|exit code 0"; then
+              exit 0
+            fi
+            # Detect common crash indicators
+            if [ $GDB_STATUS -ne 0 ] || echo "$GDB_OUT" | grep -qiE "Program received signal|SIGSEGV|SIGABRT|SIGBUS|SIGILL|core dumped"; then
+              FRAME_COUNT=$(printf "%s" "$GDB_OUT" | grep -E "^#?[0-9]+\s+" | wc -l | tr -d ' ')
+              if [ "${FRAME_COUNT}" -lt 2 ]; then
+                echo "Backtrace collection appears to have failed (only ${FRAME_COUNT} frame(s)). Failing step." >&2
+              fi
+              exit 1
+            fi
+            echo "Unable to determine process result or collect backtrace. Failing step." >&2
+            exit 1
           fi
 
       - name: Upload artifacts
