@@ -46,60 +46,24 @@ jobs:
         if: matrix.platform == 'arm64'
         shell: powershell
         run: |
-          $ver = "${{ matrix.python }}"
-          $parts = $ver -split '\.'
-          $major = [int]$parts[0]
-          $minor = [int]$parts[1]
-          $nextMinor = $minor + 1
-          $lower = [version]"$major.$minor.0"
-          $upper = [version]"$major.$nextMinor.0"
-          Write-Host "Resolving pythonarm64 version in range [$lower,$upper)..."
-          $nugetSource = 'https://api.nuget.org/v3/index.json'
-          $list = & nuget list pythonarm64 -AllVersions -Source $nugetSource 2>$null
-          $versions = @()
-          if ($list) {
-            foreach ($line in $list) {
-              if ($line -match 'pythonarm64\s+([0-9]+\.[0-9]+\.[0-9]+)') {
-                $versions += [version]$Matches[1]
-              }
-            }
+          $minor = "${{ matrix.python }}"
+          $urls = @{
+            '3.13' = 'https://www.python.org/ftp/python/3.13.6/python-3.13.6-arm64.exe'
+            '3.12' = 'https://www.python.org/ftp/python/3.12.7/python-3.12.7-arm64.exe'
+            '3.11' = 'https://www.python.org/ftp/python/3.11.6/python-3.11.6-arm64.exe'
+            '3.10' = 'https://www.python.org/ftp/python/3.10.1/python-3.10.1-embed-arm64.zip'
           }
-          $cand = $versions | Where-Object { $_ -ge $lower -and $_ -lt $upper } | Sort-Object -Descending | Select-Object -First 1
-          if ($cand) {
-            $exact = $cand.ToString()
-            Write-Host "Installing Python ARM64 $exact via NuGet"
-            $outDir = Join-Path $env:RUNNER_TEMP 'pyarm'
-            New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-            nuget install pythonarm64 -Version $exact -OutputDirectory $outDir -Source $nugetSource
-            $pkg = Get-ChildItem $outDir -Directory | Where-Object { $_.Name -like "pythonarm64.$exact*" } | Sort-Object Name -Descending | Select-Object -First 1
-            if (-not $pkg) { $pkg = Get-ChildItem $outDir -Directory | Where-Object { $_.Name -like 'pythonarm64*' } | Sort-Object Name -Descending | Select-Object -First 1 }
-            if (-not $pkg) { Write-Error 'Failed to install pythonarm64 via NuGet'; exit 1 }
-            $tools = Join-Path $pkg.FullName 'tools'
-            if (-not (Test-Path (Join-Path $tools 'python.exe'))) { Write-Error 'python.exe not found in NuGet tools folder'; exit 1 }
-            # Add python to PATH for subsequent steps
-            echo $tools >> $env:GITHUB_PATH
-            & (Join-Path $tools 'python.exe') --version
-            # Ensure pip is available
-            & (Join-Path $tools 'python.exe') -m ensurepip --upgrade
-          } else {
-            Write-Warning "No pythonarm64 NuGet package found within [$lower,$upper). Falling back to official python.org ARM64 installer."
-            $maxPatch = 30
-            $foundUrl = $null
-            for ($p = $maxPatch; $p -ge 0; $p--) {
-              $verExact = "$major.$minor.$p"
-              $url = "https://www.python.org/ftp/python/$verExact/python-$verExact-arm64.exe"
-              try {
-                $resp = Invoke-WebRequest -Uri $url -Method Head -UseBasicParsing -ErrorAction Stop
-                if ($resp.StatusCode -lt 400) { $foundUrl = $url; Write-Host "Found installer at $url"; break }
-              } catch { }
-            }
-            if (-not $foundUrl) { Write-Error "Could not locate official ARM64 installer for $major.$minor.x on python.org"; exit 1 }
-            $dlDir = Join-Path $env:RUNNER_TEMP 'pyarm_official'
-            New-Item -ItemType Directory -Force -Path $dlDir | Out-Null
+          if (-not $urls.ContainsKey($minor)) {
+            Write-Error "ARM64 Python install: unsupported minor version '$minor'. Allowed: 3.10, 3.11, 3.12, 3.13"; exit 1
+          }
+          $url = $urls[$minor]
+          $dlDir = Join-Path $env:RUNNER_TEMP 'pyarm_dl'
+          New-Item -ItemType Directory -Force -Path $dlDir | Out-Null
+          if ($url.EndsWith('.exe')) {
             $installer = Join-Path $dlDir 'python-arm64.exe'
-            Write-Host "Downloading $foundUrl"
-            Invoke-WebRequest -Uri $foundUrl -OutFile $installer -UseBasicParsing
-            $target = Join-Path $env:RUNNER_TEMP "pyarm_install_${major}${minor}"
+            Write-Host "Downloading $url"
+            Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
+            $target = Join-Path $env:RUNNER_TEMP ("pyarm_install_" + ($minor -replace '\\.', ''))
             New-Item -ItemType Directory -Force -Path $target | Out-Null
             $args = @('/quiet', 'InstallAllUsers=0', 'Include_pip=1', 'PrependPath=0', "TargetDir=$target")
             $proc = Start-Process -FilePath $installer -ArgumentList $args -Wait -PassThru
@@ -108,12 +72,27 @@ jobs:
             if (-not (Test-Path $py)) { $py = Join-Path $target 'python3.exe' }
             if (-not (Test-Path $py)) { Write-Error 'python.exe not found after installer completed'; exit 1 }
             $scripts = Join-Path $target 'Scripts'
-            # Add to PATH for subsequent steps
             echo $target >> $env:GITHUB_PATH
             if (Test-Path $scripts) { echo $scripts >> $env:GITHUB_PATH }
             & $py --version
-            # Ensure pip is available (embeddable typically lacks pip, but installer with Include_pip should provide it)
             try { & $py -m pip --version } catch { & $py -m ensurepip --upgrade }
+          } else {
+            $zip = Join-Path $dlDir 'python-arm64-embed.zip'
+            Write-Host "Downloading $url"
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+            $target = Join-Path $env:RUNNER_TEMP ("pyarm_embed_" + ($minor -replace '\\.', ''))
+            New-Item -ItemType Directory -Force -Path $target | Out-Null
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $target)
+            # Enable imports from current directory and standard site packages in embeddable dist
+            $pth = Get-ChildItem $target -Filter 'python*._pth' -Name | ForEach-Object { Join-Path $target $_ }
+            foreach ($f in $pth) {
+              Add-Content -Path $f -Value '.'
+              Add-Content -Path $f -Value 'import site'
+            }
+            echo $target >> $env:GITHUB_PATH
+            $py = Join-Path $target 'python.exe'
+            & $py --version
           }
 
       - name: Compute Python short version
