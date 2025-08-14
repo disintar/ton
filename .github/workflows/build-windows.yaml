@@ -14,7 +14,18 @@ defaults:
 
 jobs:
   build:
-    runs-on: windows-2022
+    strategy:
+      matrix:
+        platform: [x64, arm64]
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        include:
+          - platform: x64
+            runner: windows-2022
+            arch: x86_64
+          - platform: arm64
+            runner: windows-11-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Check out repository
@@ -22,10 +33,16 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup Python 3.13
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: ${{ matrix.python }}
+
+      - name: Compute Python short version
+        id: py-short
+        shell: bash
+        run: |
+          echo "PY_SHORT=${{ matrix.python }}" | tr -d '.' >> "$GITHUB_ENV"
 
       - name: Print OS info
         run: |
@@ -35,7 +52,7 @@ jobs:
         id: third-party-key
         shell: bash
         run: |
-          echo "key=${{ runner.os }}-${{ runner.arch }}-windows-2022-3pp-$(sha256sum ./assembly/native/build-3pp.bat | cut -c1-16)" >> "$GITHUB_OUTPUT"
+          echo "key=${{ runner.os }}-${{ runner.arch }}-${PY_SHORT}-3pp-$(sha256sum ./assembly/native/build-3pp.bat | cut -c1-16)" >> "$GITHUB_OUTPUT"
 
       - name: Restore 3pp
         uses: actions/cache/restore@v4
@@ -83,7 +100,7 @@ jobs:
       - name: Set release env
         shell: bash
         run: |
-          echo "RELEASE_NAME=ton-cpython-313-x86_64-windows" >> $GITHUB_ENV
+          echo "RELEASE_NAME=ton-cpython-${PY_SHORT}-${{ matrix.arch }}-windows" >> $GITHUB_ENV
 
       - name: Simple python import test
         run: |
@@ -101,6 +118,6 @@ jobs:
         shell: bash
         run: |
           gh release delete -y "$RELEASE_NAME" || true
-          gh release create --notes "Windows 2022 Python 3.13 build" "$RELEASE_NAME" artifacts/*
+          gh release create --notes "Windows Python ${{ matrix.python }} build" "$RELEASE_NAME" artifacts/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
