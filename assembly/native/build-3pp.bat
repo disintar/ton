@@ -168,7 +168,7 @@ if not exist "openssl" (
     echo Perl not found for OpenSSL build
     exit /b 1
   )
-  perl Configure VC-WIN64A
+  perl Configure VC-WIN64A no-tests
   if errorlevel 1 exit /b 1
   nmake
   if errorlevel 1 exit /b 1
