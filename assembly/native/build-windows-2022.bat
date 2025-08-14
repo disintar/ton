@@ -138,6 +138,8 @@ cmake -GNinja  -DCMAKE_BUILD_TYPE=Release ^
 -DOPENSSL_FOUND=1 ^
 -DOPENSSL_INCLUDE_DIR=%third_libs%\openssl\include ^
 -DOPENSSL_CRYPTO_LIBRARY=%third_libs%\openssl\libcrypto_static.lib ^
+-DOPENSSL_ROOT_DIR=%third_libs%\openssl ^
+-DOPENSSL_USE_STATIC_LIBS=TRUE ^
 -DCMAKE_CXX_FLAGS="/DTD_WINDOWS=1 /EHsc /bigobj" ..
 
 IF %errorlevel% NEQ 0 (
