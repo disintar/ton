@@ -48,14 +48,27 @@ jobs:
           $major = [int]$parts[0]
           $minor = [int]$parts[1]
           $nextMinor = $minor + 1
-          $lower = "$major.$minor.0"
-          $upper = "$major.$nextMinor.0"
-          $versionRange = "[$lower,$upper)"
-          Write-Host "Installing Python ARM64 $versionRange via NuGet"
+          $lower = [version]"$major.$minor.0"
+          $upper = [version]"$major.$nextMinor.0"
+          Write-Host "Resolving pythonarm64 version in range [$lower,$upper)..."
+          $nugetSource = 'https://api.nuget.org/v3/index.json'
+          $list = & nuget list pythonarm64 -AllVersions -Source $nugetSource 2>$null
+          if (-not $list) { Write-Error 'nuget list returned no results for pythonarm64'; exit 1 }
+          $versions = @()
+          foreach ($line in $list) {
+            if ($line -match 'pythonarm64\s+([0-9]+\.[0-9]+\.[0-9]+)') {
+              $versions += [version]$Matches[1]
+            }
+          }
+          $cand = $versions | Where-Object { $_ -ge $lower -and $_ -lt $upper } | Sort-Object -Descending | Select-Object -First 1
+          if (-not $cand) { Write-Error "No pythonarm64 version found within [$lower,$upper)"; exit 1 }
+          $exact = $cand.ToString()
+          Write-Host "Installing Python ARM64 $exact via NuGet"
           $outDir = Join-Path $env:RUNNER_TEMP 'pyarm'
           New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-          nuget install pythonarm64 -Version $versionRange -OutputDirectory $outDir -Source https://api.nuget.org/v3/index.json
-          $pkg = Get-ChildItem $outDir -Directory | Where-Object { $_.Name -like 'pythonarm64*' } | Sort-Object Name -Descending | Select-Object -First 1
+          nuget install pythonarm64 -Version $exact -OutputDirectory $outDir -Source $nugetSource
+          $pkg = Get-ChildItem $outDir -Directory | Where-Object { $_.Name -like "pythonarm64.$exact*" } | Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $pkg) { $pkg = Get-ChildItem $outDir -Directory | Where-Object { $_.Name -like 'pythonarm64*' } | Sort-Object Name -Descending | Select-Object -First 1 }
           if (-not $pkg) { Write-Error 'Failed to install pythonarm64 via NuGet'; exit 1 }
           $tools = Join-Path $pkg.FullName 'tools'
           if (-not (Test-Path (Join-Path $tools 'python.exe'))) { Write-Error 'python.exe not found in NuGet tools folder'; exit 1 }
