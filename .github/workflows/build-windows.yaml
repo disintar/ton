@@ -18,6 +18,9 @@ jobs:
       matrix:
         platform: [x64, arm64]
         python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        exclude:
+          - platform: arm64
+            python: "3.9"
         include:
           - platform: x64
             runner: windows-2022
