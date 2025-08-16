@@ -51,9 +51,34 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
   export OPENSSL_LIBS="$OPENSSL_PATH/lib/libcrypto.a"
 else
   echo "Detected Linux"
-  export CC=$(which clang-16)
-  export CXX=$(which clang++-16)
-  export OPENSSL_LIBS="$OPENSSL_PATH/lib64/libcrypto.a"
+  # Detect available clang version (prefer 16, then 18, 20, 17, 19; fallback to default clang)
+  find_clang() {
+    for v in 16 18 20 17 19; do
+      if command -v "clang-${v}" >/dev/null 2>&1 && command -v "clang++-${v}" >/dev/null 2>&1; then
+        echo "${v}"
+        return 0
+      fi
+    done
+    if command -v clang >/dev/null 2>&1 && command -v clang++ >/dev/null 2>&1; then
+      echo "default"
+      return 0
+    fi
+    return 1
+  }
+  v=$(find_clang) || { echo "No suitable clang found in PATH" >&2; exit 1; }
+  if [ "$v" = "default" ]; then
+    export CC=$(command -v clang)
+    export CXX=$(command -v clang++)
+  else
+    export CC=$(command -v clang-"$v")
+    export CXX=$(command -v clang++-"$v")
+  fi
+  # Prefer lib, fallback to lib64 for OpenSSL static lib location
+  if [ -f "$OPENSSL_PATH/lib/libcrypto.a" ]; then
+    export OPENSSL_LIBS="$OPENSSL_PATH/lib/libcrypto.a"
+  else
+    export OPENSSL_LIBS="$OPENSSL_PATH/lib64/libcrypto.a"
+  fi
 fi
 
 echo "Using CC: $CC"
@@ -68,6 +93,17 @@ echo "Configuring project with CMake..."
 LINUX_LINKER_FLAGS=""
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   LINUX_LINKER_FLAGS="-static-libstdc++ -static-libgcc -latomic"
+  LINUX_LINKER_FLAGS_NOATOMIC="-static-libstdc++ -static-libgcc"
+fi
+
+# Help CMake find Homebrew GNU readline on macOS (avoid linking to libedit)
+EXTRA_CMAKE_ARGS=""
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  if brew ls --versions readline >/dev/null 2>&1; then
+    READLINE_PREFIX="$(brew --prefix readline)"
+    EXTRA_CMAKE_ARGS="-DCMAKE_PREFIX_PATH=${READLINE_PREFIX}"
+    echo "Using Homebrew readline at ${READLINE_PREFIX}"
+  fi
 fi
 
 cmake -GNinja .. \
@@ -76,8 +112,8 @@ cmake -GNinja .. \
   -DBUILD_SHARED_LIBS=OFF \
   -DCMAKE_LINK_SEARCH_START_STATIC=ON \
   -DCMAKE_LINK_SEARCH_END_STATIC=ON \
-  -DCMAKE_C_FLAGS="-w -static-libstdc++ -static-libgcc -fPIC -pthread" \
-  -DCMAKE_CXX_FLAGS="-w -static-libstdc++ -static-libgcc -fPIC -pthread -latomic" \
+  -DCMAKE_C_FLAGS="-w ${LINUX_LINKER_FLAGS_NOATOMIC} -fPIC -pthread" \
+  -DCMAKE_CXX_FLAGS="-w -fPIC -pthread ${LINUX_LINKER_FLAGS}" \
   -DCMAKE_EXE_LINKER_FLAGS="${LINUX_LINKER_FLAGS}" \
   -DTON_USE_PYTHON=1 \
   -DRDKAFKA_ROOT=$RDKAFKA_ROOT \
@@ -96,6 +132,7 @@ cmake -GNinja .. \
   -DLZ4_FOUND=1 \
   -DLZ4_INCLUDE_DIRS=$LZ4_PATH/include \
   -DLZ4_LIBRARIES=$LZ4_PATH/lib/liblz4.a \
+  ${EXTRA_CMAKE_ARGS} \
 #  -DTON_USE_JEMALLOC=ON
 
 echo "✅ CMake configure step succeeded."
