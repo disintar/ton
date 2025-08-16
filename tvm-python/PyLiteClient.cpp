@@ -5,7 +5,6 @@
 #include "lite-client/lite-client.h"
 #include "common/delay.h"
 #include "tdutils/td/utils/Time.h"
-#include "terminal/terminal.h"
 #include "crypto/vm/cells/MerkleProof.h"
 #include "third-party/pybind11/include/pybind11/embed.h"
 
@@ -697,7 +696,6 @@ namespace pylite {
                 } catch (vm::VmVirtError err) {
                     throw std::logic_error("virtualization error while traversing block transaction proof");
                 }
-                auto out = td::TerminalIO::out();
                 if (root.is_null()) {
                     throw std::logic_error("transaction not found");
                 }
