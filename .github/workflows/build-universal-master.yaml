@@ -17,10 +17,6 @@ jobs:
           # Linux ARM64 (aarch64) build on GitHub-hosted runner
           - os: linux-aarch64
             runner: ubuntu-24.04-arm
-            python: "3.9"
-            py: "309"
-          - os: linux-aarch64
-            runner: ubuntu-24.04-arm
             python: "3.10"
             py: "310"
           - os: linux-aarch64
@@ -37,10 +33,6 @@ jobs:
             py: "313"
 
           # Linux x86_64 builds
-          - os: linux-x86_64
-            runner: arc-runner-set
-            python: "3.9"
-            py: "309"
           - os: linux-x86_64
             runner: arc-runner-set
             python: "3.10"
@@ -61,10 +53,6 @@ jobs:
           # macOS Apple Silicon (arm64) builds on macos-14
           - os: macos-aarch64
             runner: macos-14
-            python: "3.9"
-            py: "309"
-          - os: macos-aarch64
-            runner: macos-14
             python: "3.10"
             py: "310"
           - os: macos-aarch64
@@ -81,10 +69,6 @@ jobs:
             py: "313"
 
           # macOS Intel (x86_64) builds on macos-13
-          - os: macos-x86_64
-            runner: macos-13
-            python: "3.9"
-            py: "309"
           - os: macos-x86_64
             runner: macos-13
             python: "3.10"
