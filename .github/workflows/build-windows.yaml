@@ -17,18 +17,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [x64, arm64]
-        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-        exclude:
-          - platform: arm64
-            python: "3.9"
+        platform: [x64] # arm64
+        python: ["3.13"] # "3.9", "3.10", "3.11", "3.12",
+#        exclude:
+#          - platform: arm64
+#            python: "3.9"
         include:
           - platform: x64
             runner: windows-2022
             arch: x86_64
-          - platform: arm64
-            runner: windows-11-arm
-            arch: aarch64
+#          - platform: arm64
+#            runner: windows-11-arm
+#            arch: aarch64
     runs-on: ${{ matrix.runner }}
 
     steps:
@@ -115,7 +115,9 @@ jobs:
       - name: Restore 3pp
         uses: actions/cache/restore@v4
         with:
-          path: ${{ runner.temp }}\3pp_clear\
+          path: |
+            ${{ runner.temp }}\3pp_clear\third_libs\
+            ${{ runner.temp }}\3pp_clear\vcpkg_installed\
           key: ${{ steps.third-party-key.outputs.key }}
 
       - name: Build 3pp
@@ -143,7 +145,9 @@ jobs:
         if: steps.check-third-party.outputs.cache == 'true' && github.event_name != 'pull_request'
         uses: actions/cache/save@v4
         with:
-          path: ${{ runner.temp }}\3pp_clear\
+          path: |
+            ${{ runner.temp }}\3pp_clear\third_libs\
+            ${{ runner.temp }}\3pp_clear\vcpkg_installed\
           key: ${{ steps.third-party-key.outputs.key }}
 
       - name: Build TON (Windows)
