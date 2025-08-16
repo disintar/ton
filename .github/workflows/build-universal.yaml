@@ -137,7 +137,7 @@ jobs:
           fi
           
           echo "TARGET_SYSTEM=${ARCH}-${KERNEL}" >> $GITHUB_ENV
-          echo "RELEASE_NAME=ton-cpython-${{ matrix.py }}-${ARCH}-${KERNEL}" >> $GITHUB_ENV
+          echo "RELEASE_NAME=ton-cpython-${{ matrix.py }}-${ARCH}-${KERNEL}-dev" >> $GITHUB_ENV
 
       - name: Save ccache
         if: github.event_name != 'pull_request'
@@ -177,7 +177,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.RELEASE_NAME }}-dev
+          name: ${{ env.RELEASE_NAME }}
           path: artifacts
 
       - name: Create release
