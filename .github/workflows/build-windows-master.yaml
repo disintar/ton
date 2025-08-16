@@ -2,9 +2,9 @@ name: windows-build-ton-cpython
 
 on:
   push:
-    branches: [ feature/windows ]
+    branches: [ master ]
   pull_request:
-    branches: [ feature/windows ]
+    branches: [ master ]
   workflow_dispatch:
   workflow_call:
 
@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         platform: [x64] # arm64
-        python: ["3.13"] # "3.9", "3.10", "3.11", "3.12",
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
 #        exclude:
 #          - platform: arm64
 #            python: "3.9"
@@ -179,14 +179,14 @@ jobs:
 
 
       - name: Upload artifacts
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.RELEASE_NAME }}
           path: artifacts
 
       - name: Create release
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         shell: bash
         run: |
           gh release delete -y "$RELEASE_NAME" || true
