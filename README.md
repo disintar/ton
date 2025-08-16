@@ -17,13 +17,13 @@
 ### Supported systems / architectures / Python
 
 | System | Architecture | Python versions | CI status              |
-|:--|:--|:--|:-----------------------|
-| 🐧 Linux | `x86_64` | 3.8 – 3.13 | ✅ |
-| 🐧 Linux | `aarch64` | 3.8 – 3.13 | ✅  |
-| 🍎 macOS | `x86_64` (Intel) | 3.8 – 3.13 | ✅  |
-| 🍎 macOS | `aarch64` (Apple Silicon) | 3.8 – 3.13 | ✅ |
-| 🪟 Windows | `x86_64` | 3.9 – 3.13 | ✅  |
-| 🪟 Windows | `aarch64` | — | ⛔                      |
+|:--|:--|:----------------|:-----------------------|
+| 🐧 Linux | `x86_64` | 3.10 – 3.13     | ✅ |
+| 🐧 Linux | `aarch64` | 3.10 – 3.13      | ✅  |
+| 🍎 macOS | `x86_64` (Intel) | 3.10 – 3.13      | ✅  |
+| 🍎 macOS | `aarch64` (Apple Silicon) | 3.10 – 3.13      | ✅ |
+| 🪟 Windows | `x86_64` | 3.9 – 3.13      | ✅  |
+| 🪟 Windows | `aarch64` | —               | ⛔                      |
 
 
 [chat-badge]: https://img.shields.io/badge/chat-@dtontech-2CA5E0?logo=telegram&logoColor=white&style=flat
