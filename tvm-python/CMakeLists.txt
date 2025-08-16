@@ -80,6 +80,11 @@ target_link_libraries(python_ton PRIVATE
         ${BLST_LIB} ${SECP256K1_LIBRARY} ${JEMALLOC_LIBRARIES}
         ${OPENSSL_CRYPTO_LIBRARY} ${SODIUM_LIBRARY_RELEASE} ${ATOMIC_LIB})
 
+if (WIN32)
+    # Needed by OpenSSL CAPI engine symbols (Cert*), when linking statically
+    target_link_libraries(python_ton PRIVATE Crypt32)
+endif()
+
 target_include_directories(python_ton PRIVATE
         ${OPENSSL_INCLUDE_DIR}
         ${MHD_INCLUDE_DIR}

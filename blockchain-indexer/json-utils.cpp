@@ -276,9 +276,11 @@ std::string fetch_string(vm::CellSlice &cs, bool convert_to_utf8) {
   } else {
     const unsigned int text_size = cs.size() / 8;
 
-    unsigned char b[text_size];
-    cs.fetch_bytes(b, text_size);
-    std::string tmp(b, b + sizeof b / sizeof b[0]);
+    std::string tmp;
+    tmp.resize(text_size);
+    if (text_size > 0) {
+      cs.fetch_bytes(reinterpret_cast<unsigned char*>(&tmp[0]), text_size);
+    }
     return tmp;
   }
 }

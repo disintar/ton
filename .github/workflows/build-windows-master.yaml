@@ -1,0 +1,195 @@
+name: windows-build-ton-cpython
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+  workflow_call:
+
+defaults:
+  run:
+    shell: cmd
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [x64] # arm64
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+#        exclude:
+#          - platform: arm64
+#            python: "3.9"
+        include:
+          - platform: x64
+            runner: windows-2022
+            arch: x86_64
+#          - platform: arm64
+#            runner: windows-11-arm
+#            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python (x64)
+        if: matrix.platform == 'x64'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install Python (Windows ARM64)
+        if: matrix.platform == 'arm64'
+        shell: powershell
+        run: |
+          $minor = "${{ matrix.python }}"
+          $urls = @{
+            '3.13' = 'https://www.python.org/ftp/python/3.13.6/python-3.13.6-arm64.exe'
+            '3.12' = 'https://www.python.org/ftp/python/3.12.7/python-3.12.7-arm64.exe'
+            '3.11' = 'https://www.python.org/ftp/python/3.11.6/python-3.11.6-arm64.exe'
+            '3.10' = 'https://www.python.org/ftp/python/3.10.1/python-3.10.1-embed-arm64.zip'
+          }
+          if (-not $urls.ContainsKey($minor)) {
+            Write-Error "ARM64 Python install: unsupported minor version '$minor'. Allowed: 3.10, 3.11, 3.12, 3.13"; exit 1
+          }
+          $url = $urls[$minor]
+          $dlDir = Join-Path $env:RUNNER_TEMP 'pyarm_dl'
+          New-Item -ItemType Directory -Force -Path $dlDir | Out-Null
+          if ($url.EndsWith('.exe')) {
+            $installer = Join-Path $dlDir 'python-arm64.exe'
+            Write-Host "Downloading $url"
+            Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
+            $target = Join-Path $env:RUNNER_TEMP ("pyarm_install_" + ($minor -replace '\\.', ''))
+            New-Item -ItemType Directory -Force -Path $target | Out-Null
+            $args = @('/quiet', 'InstallAllUsers=0', 'Include_pip=1', 'PrependPath=0', "TargetDir=$target")
+            $proc = Start-Process -FilePath $installer -ArgumentList $args -Wait -PassThru
+            if ($proc.ExitCode -ne 0) { Write-Error "Python installer failed with exit code $($proc.ExitCode)"; exit $proc.ExitCode }
+            $py = Join-Path $target 'python.exe'
+            if (-not (Test-Path $py)) { $py = Join-Path $target 'python3.exe' }
+            if (-not (Test-Path $py)) { Write-Error 'python.exe not found after installer completed'; exit 1 }
+            $scripts = Join-Path $target 'Scripts'
+            echo $target >> $env:GITHUB_PATH
+            if (Test-Path $scripts) { echo $scripts >> $env:GITHUB_PATH }
+            & $py --version
+            try { & $py -m pip --version } catch { & $py -m ensurepip --upgrade }
+          } else {
+            $zip = Join-Path $dlDir 'python-arm64-embed.zip'
+            Write-Host "Downloading $url"
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+            $target = Join-Path $env:RUNNER_TEMP ("pyarm_embed_" + ($minor -replace '\\.', ''))
+            New-Item -ItemType Directory -Force -Path $target | Out-Null
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $target)
+            # Enable imports from current directory and standard site packages in embeddable dist
+            $pth = Get-ChildItem $target -Filter 'python*._pth' -Name | ForEach-Object { Join-Path $target $_ }
+            foreach ($f in $pth) {
+              Add-Content -Path $f -Value '.'
+              Add-Content -Path $f -Value 'import site'
+            }
+            echo $target >> $env:GITHUB_PATH
+            $py = Join-Path $target 'python.exe'
+            & $py --version
+          }
+
+      - name: Compute Python short version
+        id: py-short
+        shell: bash
+        run: |
+          echo "PY_SHORT=${{ matrix.python }}" | tr -d '.' >> "$GITHUB_ENV"
+
+      - name: Print OS info
+        run: |
+          systeminfo | findstr /B /C:"OS Name" /C:"OS Version"
+
+      - name: Compute 3pp cache key
+        id: third-party-key
+        shell: bash
+        run: |
+          echo "key=${{ runner.os }}-${{ runner.arch }}-${PY_SHORT}-3pp-$(sha256sum ./assembly/native/build-3pp.bat | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore 3pp
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ runner.temp }}\3pp_clear\third_libs\
+            ${{ runner.temp }}\3pp_clear\vcpkg_installed\
+          key: ${{ steps.third-party-key.outputs.key }}
+
+      - name: Build 3pp
+        run: |
+          call "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Auxiliary\\Build\\vcvars64.bat"
+          call assembly\native\build-3pp.bat
+
+      - name: Check 3pp build status
+        id: check-third-party
+        shell: powershell
+        run: |
+          $statusPath = Join-Path $env:RUNNER_TEMP '3pp/3pp_status.txt'
+          if (Test-Path $statusPath) {
+            $content = Get-Content $statusPath -Raw
+            if ($content -match 'NEED_CACHE=true') {
+              echo "cache=true" >> $env:GITHUB_OUTPUT
+            } else {
+              echo "cache=false" >> $env:GITHUB_OUTPUT
+            }
+          } else {
+            echo "cache=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Save 3pp
+        if: steps.check-third-party.outputs.cache == 'true' && github.event_name != 'pull_request'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ runner.temp }}\3pp_clear\third_libs\
+            ${{ runner.temp }}\3pp_clear\vcpkg_installed\
+          key: ${{ steps.third-party-key.outputs.key }}
+
+      - name: Build TON (Windows)
+        run: |
+          git submodule sync --recursive
+          git submodule update
+          copy assembly\native\build-windows-github-2022.bat .
+          copy assembly\native\build-windows-2022.bat .
+          echo Using RDKAFKA_ROOT=%RDKAFKA_ROOT%
+          build-windows-github-2022.bat Enterprise
+
+      - name: Set release env
+        shell: bash
+        run: |
+          echo "RELEASE_NAME=ton-cpython-${PY_SHORT}-${{ matrix.arch }}-windows" >> $GITHUB_ENV
+
+      - name: Simple python import test (with backtrace)
+        shell: powershell
+        run: |
+          $env:PYTHONFAULTHANDLER = '1'
+          Push-Location artifacts
+          try {
+            python -X faulthandler -c "import python_ton"
+            $code = $LASTEXITCODE
+          } finally {
+            Pop-Location
+          }
+          exit $code
+
+
+      - name: Upload artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.RELEASE_NAME }}
+          path: artifacts
+
+      - name: Create release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        shell: bash
+        run: |
+          gh release delete -y "$RELEASE_NAME" || true
+          gh release create --notes "Windows Python ${{ matrix.python }} build" "$RELEASE_NAME" artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

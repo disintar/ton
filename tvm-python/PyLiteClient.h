@@ -17,6 +17,8 @@
 #include "tl/generate/auto/tl/tonlib_api.h"
 #include "tonlib/tonlib/TonlibClient.h"
 #include "third-party/pybind11/include/pybind11/embed.h"
+#include <thread>
+#include <chrono>
 
 
 #ifndef TON_PYLITECLIENT_H
@@ -276,7 +278,7 @@ namespace pylite {
 
         bool dummy_wait(int wait) {
           py::gil_scoped_release release;
-          sleep(wait);
+          std::this_thread::sleep_for(std::chrono::seconds(wait));
           return false;
         };
 
