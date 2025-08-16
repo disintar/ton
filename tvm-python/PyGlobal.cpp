@@ -35,7 +35,6 @@ namespace pyglobal {
         scheduler_thread = std::make_unique<td::thread>([&] {
             thread_local_scheduler->run();
         });
-        scheduler_thread->detach();
       }
     }
 
@@ -49,10 +48,17 @@ namespace pyglobal {
     void stop_scheduler_thread() {
       if (scheduler_running) {
         std::lock_guard<std::mutex> lock(scheduler_init_mutex);
-        thread_local_scheduler->run_in_context_external([] {
-            td::actor::SchedulerContext::get()->stop();
-        });
-        scheduler_thread->join();
+        if (thread_local_scheduler) {
+          thread_local_scheduler->run_in_context_external([] {
+              td::actor::SchedulerContext::get()->stop();
+          });
+        }
+        if (scheduler_thread) {
+          scheduler_thread->join();
+          scheduler_thread.reset();
+        }
+        thread_local_scheduler.reset();
+        scheduler_running = false;
       }
     }
 
