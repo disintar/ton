@@ -47,6 +47,11 @@ std::string Symbol::unknown_symbol_name(sym_idx_t i) {
   }
 }
 
+void SymTableBase::reset_defs() {
+  def_kw = 0x100;
+  def_sym = 0;
+}
+
 sym_idx_t SymTableBase::gen_lookup(std::string str, int mode, sym_idx_t idx) {
   unsigned long long h1 = 1, h2 = 1;
   for (char c : str) {

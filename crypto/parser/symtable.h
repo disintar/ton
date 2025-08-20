@@ -106,6 +106,9 @@ class SymTableBase {
     std::memset(keywords, 0, sizeof(keywords));
   }
 
+  // Reset internal counters to initial state (useful before re-populating the table)
+  void reset_defs();
+
  protected:
   sym_idx_t gen_lookup(std::string str, int mode = 0, sym_idx_t idx = 0);
 };
@@ -133,8 +136,14 @@ class SymTable : public SymTableBase {
   }
 
   void clear() {
+    // Reset internal counters (number of defined symbols and keyword index base)
+    SymTableBase::reset_defs();
+    // Clear keyword lookup table
     SymTableBase::clear_keywords();
-    std::memset(sym, 0, (pp + 1) * sizeof(std::unique_ptr<Symbol>));
+    // Properly release all allocated Symbols to avoid leaks across runs
+    for (int i = 0; i <= pp; ++i) {
+      sym[i].reset();
+    }
   }
 };
 
