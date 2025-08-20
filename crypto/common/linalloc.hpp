@@ -33,6 +33,11 @@ class LinearAllocator {
   ~LinearAllocator() {
     free(ptr);
   }
+  // Resets allocation pointer to the beginning without freeing memory.
+  // This allows reusing the preallocated buffer for repeated runs.
+  void reset() {
+    cur = ptr;
+  }
   void* allocate(std::size_t count) {
     char* t = cur;
     cur += (count + 7) & -8;

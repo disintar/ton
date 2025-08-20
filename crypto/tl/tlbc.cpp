@@ -3062,6 +3062,9 @@ void register_source(std::string source) {
 
 void clear_for_redefine() {
   // if we generate several times tlb code in runtime need to clear stuff
+  // reset linear allocator to avoid memory exhaustion across repeated runs
+  AR.reset();
+
   sym::clear_sym_def();
   sym::symbols.clear();
   types.clear();
