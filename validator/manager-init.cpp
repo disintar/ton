@@ -356,9 +356,9 @@ void ValidatorManagerMasterchainStarter::got_init_block_handle(BlockHandle handl
 
   handle_ = std::move(handle);
   if (!handle_->received_state()) {
-    LOG(ERROR) << "db inconsistent: last state ( " << handle_->id() << " ) not received";
     if (!read_only_) {
-      td::actor::send_closure(manager_, &ValidatorManager::wait_block_state, handle_, 1, td::Timestamp::in(600.0),
+      LOG(ERROR) << "db inconsistent: last state ( " << handle_->id() << " ) not received";
+      td::actor::send_closure(manager_, &ValidatorManager::wait_block_state, handle_, 1, td::Timestamp::in(600.0), true,
                               [SelfId = actor_id(this), handle = handle_](td::Result<td::Ref<ShardState>> R) {
                                 td::actor::send_closure(
                                     SelfId, &ValidatorManagerMasterchainStarter::got_init_block_handle, handle);
@@ -370,6 +370,7 @@ void ValidatorManagerMasterchainStarter::got_init_block_handle(BlockHandle handl
           },
           td::Timestamp::in(0.1));
     }
+
     return;
   }
   if (!handle_->is_applied()) {

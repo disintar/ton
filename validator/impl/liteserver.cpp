@@ -1220,12 +1220,13 @@ void LiteQuery::perform_runSmcMethod(BlockIdExt blkid, WorkchainId workchain, St
           mc_state_ = Ref<MasterchainStateQ>(std::move(mc_state));
           CHECK(mc_state_.not_null());
 
-          auto rconfig = block::ConfigInfo::extract_config(mc_state_->root_cell(), block::ConfigInfo::needLibraries);
-          if (rconfig.is_error()) {
-            fatal_error("cannot extract library list block configuration from masterchain state");
-            return;
-          }
-          auto config = rconfig.move_as_ok();
+  auto rconfig = block::ConfigInfo::extract_config(mc_state_->root_cell(), mc_state_->get_block_id(),
+                                                   block::ConfigInfo::needLibraries);
+  if (rconfig.is_error()) {
+    fatal_error("cannot extract library list block configuration from masterchain state");
+    return;
+  }
+  auto config = rconfig.move_as_ok();
 
           if (false) {
             std::ostringstream os;
@@ -1564,25 +1565,24 @@ void LiteQuery::perform_runSmcMethod(BlockIdExt blkid, WorkchainId workchain, St
           return true;
         }
 
-        bool LiteQuery::make_ancestor_block_proof(Ref<vm::Cell> &proof, Ref<vm::Cell> state_root,
-                                                  const BlockIdExt &old_blkid) {
-          vm::MerkleProofBuilder mpb{std::move(state_root)};
-          auto rconfig = block::ConfigInfo::extract_config(mpb.root(), block::ConfigInfo::needPrevBlocks);
-          if (rconfig.is_error()) {
-            return fatal_error(
-                    "cannot extract previous block configuration from masterchain state while constructing Merkle proof for "s +
-                    old_blkid.to_str());
-          }
-          if (!rconfig.move_as_ok()->check_old_mc_block_id(old_blkid, true)) {
-            return fatal_error("cannot check that "s + old_blkid.to_str() +
-                               " is indeed a previous masterchain block while constructing Merkle proof");
-          }
-          if (!mpb.extract_proof_to(proof)) {
-            return fatal_error(
-                    "error while constructing Merkle proof for old masterchain block "s + old_blkid.to_str());
-          }
-          return true;
-        }
+bool LiteQuery::make_ancestor_block_proof(Ref<vm::Cell>& proof, Ref<MasterchainState> mc_state, const BlockIdExt& old_blkid) {
+  vm::MerkleProofBuilder mpb{mc_state->root_cell()};
+  auto rconfig =
+      block::ConfigInfo::extract_config(mpb.root(), mc_state->get_block_id(), block::ConfigInfo::needPrevBlocks);
+  if (rconfig.is_error()) {
+    return fatal_error(
+        "cannot extract previous block configuration from masterchain state while constructing Merkle proof for "s +
+        old_blkid.to_str());
+  }
+  if (!rconfig.move_as_ok()->check_old_mc_block_id(old_blkid, true)) {
+    return fatal_error("cannot check that "s + old_blkid.to_str() +
+                       " is indeed a previous masterchain block while constructing Merkle proof");
+  }
+  if (!mpb.extract_proof_to(proof)) {
+    return fatal_error("error while constructing Merkle proof for old masterchain block "s + old_blkid.to_str());
+  }
+  return true;
+}
 
         void LiteQuery::continue_getAccountState() {
           LOG(DEBUG) << "continue getAccountState() query";
@@ -1619,33 +1619,32 @@ void LiteQuery::perform_runSmcMethod(BlockIdExt blkid, WorkchainId workchain, St
           }
         }
 
-        void LiteQuery::finish_getAccountState(td::BufferSlice shard_proof) {
-          LOG(DEBUG) << "completing getAccountState() query";
-          Ref<vm::Cell> proof1, proof2;
-          if (!make_state_root_proof(proof1)) {
-            return;
-          }
-          vm::MerkleProofBuilder pb{state_->root_cell()};
-          block::gen::ShardStateUnsplit::Record sstate;
-          if (!tlb::unpack_cell(pb.root(), sstate)) {
-            fatal_error("cannot unpack state header");
-            return;
-          }
-          vm::AugmentedDictionary accounts_dict{vm::load_cell_slice_ref(sstate.accounts), 256,
-                                                block::tlb::aug_ShardAccounts};
-          auto acc_csr = accounts_dict.lookup(acc_addr_);
-          if (mode_ & 0x80000000) {
-            auto config = block::ConfigInfo::extract_config(mc_state_->root_cell(), 0xFFFF);
-            if (config.is_error()) {
-              fatal_error(config.move_as_error());
-              return;
-            }
-            auto rconfig = config.move_as_ok();
-            rconfig->set_block_id_ext(mc_state_->get_block_id());
-            acc_state_promise_.set_value(
-                    std::make_tuple(std::move(acc_csr), sstate.gen_utime, sstate.gen_lt, std::move(rconfig)));
-            return;
-          }
+void LiteQuery::finish_getAccountState(td::BufferSlice shard_proof) {
+  LOG(INFO) << "completing getAccountState() query";
+  Ref<vm::Cell> proof1, proof2;
+  if (!make_state_root_proof(proof1)) {
+    return;
+  }
+  vm::MerkleProofBuilder pb{state_->root_cell()};
+  block::gen::ShardStateUnsplit::Record sstate;
+  if (!tlb::unpack_cell(pb.root(), sstate)) {
+    fatal_error("cannot unpack state header");
+    return;
+  }
+  vm::AugmentedDictionary accounts_dict{vm::load_cell_slice_ref(sstate.accounts), 256, block::tlb::aug_ShardAccounts};
+  auto acc_csr = accounts_dict.lookup(acc_addr_);
+  if (mode_ & 0x80000000) {
+    auto config = block::ConfigInfo::extract_config(mc_state_->root_cell(), mc_state_->get_block_id(), 0xFFFF);
+    if (config.is_error()) {
+      fatal_error(config.move_as_error());
+      return;
+    }
+    auto rconfig = config.move_as_ok();
+    acc_state_promise_.set_value(std::make_tuple(
+                                  std::move(acc_csr), sstate.gen_utime, sstate.gen_lt, std::move(rconfig)
+                                 ));
+    return;
+  }
 
   Ref<vm::Cell> acc_root;
   if (acc_csr.not_null()) {
@@ -1819,7 +1818,7 @@ void LiteQuery::finish_runSmcMethod(td::BufferSlice shard_proof, td::BufferSlice
   LOG(DEBUG) << "creating VM with gas limit " << gas_limit;
   // **** INIT VM ****
   auto r_config = block::ConfigInfo::extract_config(
-      mc_state_->root_cell(),
+      mc_state_->root_cell(), mc_state_->get_block_id(),
       block::ConfigInfo::needLibraries | block::ConfigInfo::needCapabilities | block::ConfigInfo::needPrevBlocks);
   if (r_config.is_error()) {
     fatal_error(r_config.move_as_error());
@@ -2242,7 +2241,7 @@ void LiteQuery::perform_getConfigParams(BlockIdExt blkid, int mode, std::vector<
     if (mode & block::ConfigInfo::needPrevBlocks) {
       mode |= block::ConfigInfo::needCapabilities;
     }
-    auto res = block::ConfigInfo::extract_config(mpb.root(), mode);
+    auto res = block::ConfigInfo::extract_config(mpb.root(), keyblk ? base_blk_id_ : mc_state_->get_block_id(), mode);
     if (res.is_error()) {
       fatal_error(res.move_as_error());
       return;
@@ -2759,48 +2758,45 @@ void LiteQuery::perform_getConfigParams(BlockIdExt blkid, int mode, std::vector<
           request_block_data(blkid);
         }
 
-        static td::Result<tl_object_ptr<lite_api::liteServer_transactionMetadata>> get_in_msg_metadata(
-                const Ref<vm::Cell> &in_msg_descr_root, const Ref<vm::Cell> &trans_root) {
-          vm::AugmentedDictionary in_msg_descr{vm::load_cell_slice_ref(in_msg_descr_root), 256,
-                                               block::tlb::aug_InMsgDescr};
-          block::gen::Transaction::Record transaction;
-          if (!block::tlb::unpack_cell(trans_root, transaction)) {
-            return td::Status::Error("invalid Transaction in block");
-          }
-          Ref<vm::Cell> msg = transaction.r1.in_msg->prefetch_ref();
-          if (msg.is_null()) {
-            return nullptr;
-          }
-          td::Bits256 in_msg_hash = msg->get_hash().bits();
-          Ref<vm::CellSlice> in_msg = in_msg_descr.lookup(in_msg_hash);
-          if (in_msg.is_null()) {
-            return td::Status::Error(
-                    PSTRING() << "no InMsg in InMsgDescr for message with hash " << in_msg_hash.to_hex());
-          }
-          int tag = block::gen::t_InMsg.get_tag(*in_msg);
-          if (tag != block::gen::InMsg::msg_import_imm && tag != block::gen::InMsg::msg_import_fin &&
-              tag != block::gen::InMsg::msg_import_deferred_fin) {
-            return nullptr;
-          }
-          Ref<vm::Cell> msg_env = in_msg->prefetch_ref();
-          if (msg_env.is_null()) {
-            return td::Status::Error(
-                    PSTRING() << "no MsgEnvelope in InMsg for message with hash " << in_msg_hash.to_hex());
-          }
-          block::tlb::MsgEnvelope::Record_std env;
-          if (!block::tlb::unpack_cell(std::move(msg_env), env)) {
-            return td::Status::Error(
-                    PSTRING() << "failed to unpack MsgEnvelope for message with hash " << in_msg_hash.to_hex());
-          }
-          if (!env.metadata) {
-            return nullptr;
-          }
-          block::MsgMetadata &metadata = env.metadata.value();
-          return create_tl_object<lite_api::liteServer_transactionMetadata>(
-                  0, metadata.depth,
-                  create_tl_object<lite_api::liteServer_accountId>(metadata.initiator_wc, metadata.initiator_addr),
-                  metadata.initiator_lt);
-        }
+static td::Result<tl_object_ptr<lite_api::liteServer_transactionMetadata>> get_in_msg_metadata(
+    const Ref<vm::Cell>& in_msg_descr_root, const Ref<vm::Cell>& trans_root) {
+  vm::AugmentedDictionary in_msg_descr{vm::load_cell_slice_ref(in_msg_descr_root), 256,
+                                       block::tlb::aug_InMsgDescrDefault};
+  block::gen::Transaction::Record transaction;
+  if (!block::tlb::unpack_cell(trans_root, transaction)) {
+    return td::Status::Error("invalid Transaction in block");
+  }
+  Ref<vm::Cell> msg = transaction.r1.in_msg->prefetch_ref();
+  if (msg.is_null()) {
+    return nullptr;
+  }
+  td::Bits256 in_msg_hash = msg->get_hash().bits();
+  Ref<vm::CellSlice> in_msg = in_msg_descr.lookup(in_msg_hash);
+  if (in_msg.is_null()) {
+    return td::Status::Error(PSTRING() << "no InMsg in InMsgDescr for message with hash " << in_msg_hash.to_hex());
+  }
+  int tag = block::gen::t_InMsg.get_tag(*in_msg);
+  if (tag != block::gen::InMsg::msg_import_imm && tag != block::gen::InMsg::msg_import_fin &&
+      tag != block::gen::InMsg::msg_import_deferred_fin) {
+    return nullptr;
+  }
+  Ref<vm::Cell> msg_env = in_msg->prefetch_ref();
+  if (msg_env.is_null()) {
+    return td::Status::Error(PSTRING() << "no MsgEnvelope in InMsg for message with hash " << in_msg_hash.to_hex());
+  }
+  block::tlb::MsgEnvelope::Record_std env;
+  if (!block::tlb::unpack_cell(std::move(msg_env), env)) {
+    return td::Status::Error(PSTRING() << "failed to unpack MsgEnvelope for message with hash " << in_msg_hash.to_hex());
+  }
+  if (!env.metadata) {
+    return nullptr;
+  }
+  block::MsgMetadata& metadata = env.metadata.value();
+  return create_tl_object<lite_api::liteServer_transactionMetadata>(
+      0, metadata.depth,
+      create_tl_object<lite_api::liteServer_accountId>(metadata.initiator_wc, metadata.initiator_addr),
+      metadata.initiator_lt);
+}
 
         void LiteQuery::finish_listBlockTransactions(int mode, int req_count) {
           LOG(INFO)
@@ -2925,38 +2921,36 @@ void LiteQuery::perform_getConfigParams(BlockIdExt blkid, int mode, std::vector<
           request_block_data(blkid);
         }
 
-        static td::Status process_all_in_msg_metadata(const Ref<vm::Cell> &in_msg_descr_root,
-                                                      const std::vector<Ref<vm::Cell>> &trans_roots) {
-          vm::AugmentedDictionary in_msg_descr{vm::load_cell_slice_ref(in_msg_descr_root), 256,
-                                               block::tlb::aug_InMsgDescr};
-          for (const Ref<vm::Cell> &trans_root: trans_roots) {
-            block::gen::Transaction::Record transaction;
-            if (!block::tlb::unpack_cell(trans_root, transaction)) {
-              return td::Status::Error("invalid Transaction in block");
-            }
-            Ref<vm::Cell> msg = transaction.r1.in_msg->prefetch_ref();
-            if (msg.is_null()) {
-              continue;
-            }
-            td::Bits256 in_msg_hash = msg->get_hash().bits();
-            Ref<vm::CellSlice> in_msg = in_msg_descr.lookup(in_msg_hash);
-            if (in_msg.is_null()) {
-              return td::Status::Error(
-                      PSTRING() << "no InMsg in InMsgDescr for message with hash " << in_msg_hash.to_hex());
-            }
-            int tag = block::gen::t_InMsg.get_tag(*in_msg);
-            if (tag == block::gen::InMsg::msg_import_imm || tag == block::gen::InMsg::msg_import_fin ||
-                tag == block::gen::InMsg::msg_import_deferred_fin) {
-              Ref<vm::Cell> msg_env = in_msg->prefetch_ref();
-              if (msg_env.is_null()) {
-                return td::Status::Error(
-                        PSTRING() << "no MsgEnvelope in InMsg for message with hash " << in_msg_hash.to_hex());
-              }
-              vm::load_cell_slice(msg_env);
-            }
-          }
-          return td::Status::OK();
-        }
+static td::Status process_all_in_msg_metadata(const Ref<vm::Cell>& in_msg_descr_root,
+                                              const std::vector<Ref<vm::Cell>>& trans_roots) {
+  vm::AugmentedDictionary in_msg_descr{vm::load_cell_slice_ref(in_msg_descr_root), 256,
+                                       block::tlb::aug_InMsgDescrDefault};
+  for (const Ref<vm::Cell>& trans_root : trans_roots) {
+    block::gen::Transaction::Record transaction;
+    if (!block::tlb::unpack_cell(trans_root, transaction)) {
+      return td::Status::Error("invalid Transaction in block");
+    }
+    Ref<vm::Cell> msg = transaction.r1.in_msg->prefetch_ref();
+    if (msg.is_null()) {
+      continue;
+    }
+    td::Bits256 in_msg_hash = msg->get_hash().bits();
+    Ref<vm::CellSlice> in_msg = in_msg_descr.lookup(in_msg_hash);
+    if (in_msg.is_null()) {
+      return td::Status::Error(PSTRING() << "no InMsg in InMsgDescr for message with hash " << in_msg_hash.to_hex());
+    }
+    int tag = block::gen::t_InMsg.get_tag(*in_msg);
+    if (tag == block::gen::InMsg::msg_import_imm || tag == block::gen::InMsg::msg_import_fin ||
+        tag == block::gen::InMsg::msg_import_deferred_fin) {
+      Ref<vm::Cell> msg_env = in_msg->prefetch_ref();
+      if (msg_env.is_null()) {
+        return td::Status::Error(PSTRING() << "no MsgEnvelope in InMsg for message with hash " << in_msg_hash.to_hex());
+      }
+      vm::load_cell_slice(msg_env);
+    }
+  }
+  return td::Status::OK();
+}
 
         void LiteQuery::finish_listBlockTransactionsExt(int mode, int req_count) {
           LOG(INFO)
@@ -3427,42 +3421,42 @@ void LiteQuery::perform_getConfigParams(BlockIdExt blkid, int mode, std::vector<
           return request_proof_link(cur) && request_mc_block_state(cur);
         }
 
-        bool LiteQuery::construct_proof_link_back_cont(ton::BlockIdExt cur, ton::BlockIdExt next) {
-          LOG(INFO) << "continue constructing a backward proof link from " << cur.to_str() << " to " << next.to_str();
-          CHECK(mc_state_.not_null() && proof_link_.not_null() && mc_state_->get_block_id() == cur &&
-                proof_link_->block_id() == cur);
-          try {
-            // virtualize proof link
-            auto vres1 = proof_link_->get_virtual_root();
-            if (vres1.is_error()) {
-              return fatal_error(vres1.move_as_error());
-            }
-            auto vroot = vres1.ok().root;
-            // adjust dest_proof and is_key of the last link of existing proof
-            if (!adjust_last_proof_link(cur, vroot)) {
-              return false;
-            }
-            // construct proof that `mc_state_` is the state of `cur`
-            Ref<vm::Cell> state_proof, proof;
-            if (!make_state_root_proof(proof, mc_state_->root_cell(), vroot, cur)) {
-              return fatal_error("cannot construct proof for state of masterchain block "s + cur.to_str());
-            }
-            // construct proof that `next` is listed in OldMcBlocksInfo of `mc_state_`
-            if (!make_ancestor_block_proof(state_proof, mc_state_->root_cell(), next)) {
-              return fatal_error("cannot prove that "s + next.to_str() +
-                                 " is in the previous block set of the masterchain state of " + cur.to_str());
-            }
-            // create a BlockProofLink for cur -> next (without dest_proof)
-            auto &link = chain_->new_link(cur, next, !next.seqno());
-            link.proof = std::move(proof);
-            link.state_proof = std::move(state_proof);
-            // continue constructing proof chain from `next`
-            return construct_proof_chain(next);
-          } catch (vm::VmVirtError &) {
-            return fatal_error("virtualization error during construction of backward proof link from "s + cur.to_str() +
-                               " to " + next.to_str());
-          }
-        }
+bool LiteQuery::construct_proof_link_back_cont(ton::BlockIdExt cur, ton::BlockIdExt next) {
+  LOG(INFO) << "continue constructing a backward proof link from " << cur.to_str() << " to " << next.to_str();
+  CHECK(mc_state_.not_null() && proof_link_.not_null() && mc_state_->get_block_id() == cur &&
+        proof_link_->block_id() == cur);
+  try {
+    // virtualize proof link
+    auto vres1 = proof_link_->get_virtual_root();
+    if (vres1.is_error()) {
+      return fatal_error(vres1.move_as_error());
+    }
+    auto vroot = vres1.ok().root;
+    // adjust dest_proof and is_key of the last link of existing proof
+    if (!adjust_last_proof_link(cur, vroot)) {
+      return false;
+    }
+    // construct proof that `mc_state_` is the state of `cur`
+    Ref<vm::Cell> state_proof, proof;
+    if (!make_state_root_proof(proof, mc_state_->root_cell(), vroot, cur)) {
+      return fatal_error("cannot construct proof for state of masterchain block "s + cur.to_str());
+    }
+    // construct proof that `next` is listed in OldMcBlocksInfo of `mc_state_`
+    if (!make_ancestor_block_proof(state_proof, mc_state_, next)) {
+      return fatal_error("cannot prove that "s + next.to_str() +
+                         " is in the previous block set of the masterchain state of " + cur.to_str());
+    }
+    // create a BlockProofLink for cur -> next (without dest_proof)
+    auto& link = chain_->new_link(cur, next, !next.seqno());
+    link.proof = std::move(proof);
+    link.state_proof = std::move(state_proof);
+    // continue constructing proof chain from `next`
+    return construct_proof_chain(next);
+  } catch (vm::VmVirtError&) {
+    return fatal_error("virtualization error during construction of backward proof link from "s + cur.to_str() +
+                       " to " + next.to_str());
+  }
+}
 
         bool LiteQuery::finish_proof_chain(ton::BlockIdExt id) {
           CHECK(chain_);

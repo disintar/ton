@@ -1224,7 +1224,7 @@ class IndexerWorker : public td::actor::Actor {
       */
 
         auto in_msg_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.in_msg_descr), 256,
-                                                                     block::tlb::aug_InMsgDescr);
+                                                                     block::tlb::aug_InMsgDescrDefault);
 
         //          std::vector<json> in_msgs_json;
         //          while (!in_msg_dict->is_empty()) {
@@ -1985,10 +1985,6 @@ class Indexer : public td::actor::Actor {
         //        td::actor::send_closure(id_, &FullNodeImpl::new_key_block, std::move(handle));
       }
 
-      void send_validator_telemetry(ton::PublicKeyHash key,
-                                    ton::tl_object_ptr<ton::ton_api::validator_telemetry> telemetry) override {
-      }
-
       Callback(td::actor::ActorId<Indexer> id) : id_(id) {
       }
 
@@ -2266,10 +2262,6 @@ class IndexerSimple : public td::actor::Actor {
       void new_key_block(BlockHandle handle) override {
         LOG(DEBUG) << "new_key_block";
         //        td::actor::send_closure(id_, &FullNodeImpl::new_key_block, std::move(handle));
-      }
-
-      void send_validator_telemetry(ton::PublicKeyHash key,
-                                    ton::tl_object_ptr<ton::ton_api::validator_telemetry> telemetry) override {
       }
 
       Callback(td::actor::ActorId<IndexerSimple> id) : id_(id) {

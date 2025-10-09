@@ -45,9 +45,10 @@ rm -rf .ninja* CMakeCache.txt CMakeFiles
 # Detect OS and set compiler
 # ----------------------
 if [[ "$OSTYPE" == "darwin"* ]]; then
-  echo "Detected macOS"
-  export CC="$(brew --prefix llvm@16)/bin/clang"
-  export CXX="$(brew --prefix llvm@16)/bin/clang++"
+  echo "CC=$(xcrun -find clang)"  >> $GITHUB_ENV
+  echo "CXX=$(xcrun -find clang++)" >> $GITHUB_ENV
+#  export CC="$(brew --prefix llvm@16)/bin/clang"
+#  export CXX="$(brew --prefix llvm@16)/bin/clang++"
   export OPENSSL_LIBS="$OPENSSL_PATH/lib/libcrypto.a"
 else
   echo "Detected Linux"

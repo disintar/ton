@@ -92,6 +92,10 @@ class PyStackEntry {
 
   std::vector<PyStackEntry> as_tuple() {
     auto x = entry.as_tuple();
+    if (x.is_null()) {
+      throw std::invalid_argument("Stack is not correct type");
+    }
+
     std::vector<PyStackEntry> tmp;
     for (const auto& e : *x) {
       tmp.push_back(PyStackEntry(e));
@@ -102,11 +106,19 @@ class PyStackEntry {
 
   PyContinuation as_cont() {
     auto x = entry.as_cont();
+    if (x.is_null()) {
+      throw std::invalid_argument("Stack is not correct type");
+    }
+
     return PyContinuation(x);
   }
 
   PyCellSlice as_cell_slice() {
     auto x = entry.as_slice();
+    if (x.is_null()) {
+      throw std::invalid_argument("Stack is not correct type");
+    }
+
     vm::CellBuilder cb;
     cb.append_cellslice(x);
     td::Ref<vm::Cell> cell = cb.finalize(x->is_special());
@@ -116,6 +128,10 @@ class PyStackEntry {
 
   PyCellBuilder as_cell_builder() {
     auto x = entry.as_builder();
+    if (x.is_null()) {
+      throw std::invalid_argument("Stack is not correct type");
+    }
+
     bool special;
     auto cs = vm::load_cell_slice_special(x->finalize_copy(), special);
     return PyCellBuilder(cs);
@@ -123,11 +139,15 @@ class PyStackEntry {
 
   std::string as_int() {
     auto x = entry.as_int();
+    if (x.is_null()) {
+      throw std::invalid_argument("Stack is not correct type");
+    }
+
     return x->to_dec_string();
   }
 
   std::string as_string() {
-    return entry.as_string();
+    return std::move(entry.as_string());
   }
 
   PyCell serialize(int mode = 0) {

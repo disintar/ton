@@ -34,6 +34,7 @@
 #include "vm/excno.hpp"
 
 #include "td/utils/Span.h"
+#include "td/utils/StringBuilder.h"
 
 #include <functional>
 
@@ -570,4 +571,9 @@ class Stack : public td::CntObject {
 namespace td {
 extern template class td::Cnt<std::vector<vm::StackEntry>>;
 extern template class td::Ref<td::Cnt<std::vector<vm::StackEntry>>>;
+
+inline td::StringBuilder &operator<<(td::StringBuilder &sb, const vm::StackEntry &entry) {
+  // Use existing textual representation of StackEntry; avoid ambiguity with std::string overloads
+  return sb << td::Slice(entry.to_string());
+}
 }  // namespace td

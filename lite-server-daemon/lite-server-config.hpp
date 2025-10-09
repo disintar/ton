@@ -192,7 +192,7 @@ class Config {
     std::vector<ton::tl_object_ptr<ton::ton_api::liteserver_desc>> lite_slaves_vec;
     for (auto &x : liteslaves) {
       lite_slaves_vec.push_back(
-          ton::create_tl_object<ton::ton_api::liteserver_desc>(x.key.tl(), x.addr.get_ipv4(), x.addr.get_port()));
+          ton::create_tl_object<ton::ton_api::liteserver_desc>(x.key.tl(), x.addr.get_ipv4(), x.addr.get_port(), ""));
     }
 
     return ton::create_tl_object<ton::ton_api::engine_liteserver_config>(

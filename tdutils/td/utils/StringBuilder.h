@@ -164,4 +164,9 @@ inline LambdaPrintHelper<td::StringBuilder> operator<<(td::StringBuilder& sb, co
   return LambdaPrintHelper<td::StringBuilder>{sb};
 }
 
+// Added to avoid ambiguity when streaming std::string into StringBuilder
+inline StringBuilder &operator<<(StringBuilder &sb, const std::string &str) {
+  return sb << Slice(str);
+}
+
 }  // namespace td
