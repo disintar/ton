@@ -64,7 +64,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install ninja pkg-config automake coreutils libtool autoconf \
-            texinfo wget ccache llvm@16 boost jemalloc cmake
+            texinfo wget ccache boost jemalloc cmake
 
       - name: Setup Python
         uses: actions/setup-python@v5
