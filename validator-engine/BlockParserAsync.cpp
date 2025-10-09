@@ -611,7 +611,7 @@ namespace ton::validator {
       LOG(DEBUG) << "Parse: " << blkid.to_str() << " ValueFlow success";
 
       auto in_msg_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.in_msg_descr), 256,
-                                                                   block::tlb::aug_InMsgDescr);
+                                                                   block::tlb::aug_InMsgDescrDefault);
 
       std::vector<json> in_msgs_json;
       while (!in_msg_dict->is_empty()) {
@@ -628,7 +628,7 @@ namespace ton::validator {
       LOG(DEBUG) << "Parse: " << blkid.to_str() << " in_msg_dict success";
 
       auto out_msg_dict = std::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(extra.out_msg_descr), 256,
-                                                                    block::tlb::aug_OutMsgDescr);
+                                                                    block::tlb::aug_OutMsgDescrDefault);
 
       std::vector<json> out_msgs_json;
       while (!out_msg_dict->is_empty()) {

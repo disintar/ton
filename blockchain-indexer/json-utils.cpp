@@ -344,7 +344,7 @@ json parse_message(Ref<vm::Cell> message_any) {
         {"grams", block::tlb::t_Grams.as_integer(value_cc.grams)->to_dec_string()},
         {"extra", value_cc.other->have_refs() ? parse_extra_currency(value_cc.other->prefetch_ref()) : dummy}};
 
-    answer["ihr_fee"] = block::tlb::t_Grams.as_integer(msg.ihr_fee.write())->to_dec_string();
+    answer["extra_flags"] = block::tlb::t_Grams.as_integer(msg.extra_flags.write())->to_dec_string();
     answer["fwd_fee"] = block::tlb::t_Grams.as_integer(msg.fwd_fee.write())->to_dec_string();
     answer["created_lt"] = msg.created_lt;
     answer["created_at"] = msg.created_at;
