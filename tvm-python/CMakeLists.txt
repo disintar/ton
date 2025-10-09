@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0.2 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 
 if (NOT Python_FOUND)
