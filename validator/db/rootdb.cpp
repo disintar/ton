@@ -314,7 +314,7 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
           });
 
       if (R.is_error()) {
-        LOG(ERROR) << "Can't find handle for prev block state " << prev_id.to_str();
+        LOG(ERROR) << "Can't find handle for prev block state " << prev_id.to_str() << " error: " << R.error().message();
         ConstBlockHandle h(next_handle);
         publisher->storeBlockState(h, next_state->root_cell(), std::move(final_publish));
       } else {
