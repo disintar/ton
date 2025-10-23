@@ -335,7 +335,7 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
         });
 
         const auto new_handle = R.move_as_ok();
-        td::actor::send_closure(SelfId, &RootDb::get_block_state_root_cell, new_handle, std::move(P2));
+        td::actor::send_closure(SelfId, &RootDb::get_block_state_root_cell, new_handle, std::move(P2), true);
       }
     });
 
@@ -429,8 +429,8 @@ void RootDb::get_block_state(ConstBlockHandle handle, td::Promise<td::Ref<ShardS
     promise.set_error(td::Status::Error(ErrorCode::notready, "state not in db"));
   }
 }
-void RootDb::get_block_state_root_cell(ConstBlockHandle handle, td::Promise<td::Ref<vm::DataCell>> promise) {
-  if (handle->inited_state_boc()) {
+void RootDb::get_block_state_root_cell(ConstBlockHandle handle, td::Promise<td::Ref<vm::DataCell>> promise, bool force_load) {
+  if (handle->inited_state_boc() or force_load) {
     if (handle->deleted_state_boc()) {
       promise.set_error(td::Status::Error(ErrorCode::error, "state already gc'd"));
       return;
