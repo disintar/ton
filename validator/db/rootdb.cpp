@@ -322,7 +322,7 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state,
                                               next_state = next_state, publisher = publisher,
                                               prev_id](td::Result<td::Ref<vm::DataCell>> R) mutable {
           if (R.is_error()) {
-            LOG(ERROR) << "Can't find prev block state for" << prev_id.to_str();
+            LOG(ERROR) << "Can't find prev block state for: " << prev_id.to_str() << " error: " << R.error().message();
             ConstBlockHandle h(next_handle);
             publisher->storeBlockState(h, next_state->root_cell(), std::move(final_publish));
           } else {
