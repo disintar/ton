@@ -35,8 +35,10 @@ void PyTVM::set_c7(PyStackEntry x) {
 
 void PyTVM::log(const std::string &log_string, int level) {
   if (log_level >= level && level == LOG_INFO) {
+    py::gil_scoped_acquire gil;
     py::print("INFO: " + log_string);
   } else if (log_level >= level && level == LOG_DEBUG) {
+    py::gil_scoped_acquire gil;
     py::print("DEBUG: " + log_string);
   }
 }
@@ -129,6 +131,7 @@ public:
       }
 
       if (!muted) {
+        py::gil_scoped_acquire gil;
         py::print(slice.str());
       }
     }
