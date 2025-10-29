@@ -59,6 +59,7 @@ class PyEmulator {
   ~PyEmulator() = default;
 
   bool set_rand_seed(const std::string& rand_seed_hex);
+  bool set_vm_verbosity_level(int verbosity);
   bool set_ignore_chksig(bool ignore_chksig);
   bool set_libs(const PyCell& shardchain_libs_cell);
   bool set_debug_enabled(bool debug_enabled);

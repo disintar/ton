@@ -11,38 +11,38 @@ namespace emulator {
 td::Result<std::unique_ptr<TransactionEmulator::EmulationResult>> TransactionEmulator::emulate_transaction(
     block::Account&& account, td::Ref<vm::Cell> msg_root, ton::UnixTime utime, ton::LogicalTime lt, int trans_type,
     int vm_ver) {
+  td::Ref<vm::Cell> old_mparams;
+  std::vector<block::StoragePrices> storage_prices;
+  block::StoragePhaseConfig storage_phase_cfg{&storage_prices};
+  block::ComputePhaseConfig compute_phase_cfg;
+  block::ActionPhaseConfig action_phase_cfg;
+  block::SerializeConfig serialize_config;
+  td::RefInt256 masterchain_create_fee, basechain_create_fee;
 
-    td::Ref<vm::Cell> old_mparams;
-    std::vector<block::StoragePrices> storage_prices;
-    block::StoragePhaseConfig storage_phase_cfg{&storage_prices};
-    block::ComputePhaseConfig compute_phase_cfg;
-    block::ActionPhaseConfig action_phase_cfg;
-    block::SerializeConfig serialize_config;
-    td::RefInt256 masterchain_create_fee, basechain_create_fee;
-    
-    if (!utime) {
-      utime = unixtime_;
-    }
-    if (!utime) {
-      utime = (unsigned)std::time(nullptr);
-    }
+  if (!utime) {
+    utime = unixtime_;
+  }
+  if (!utime) {
+    utime = (unsigned)std::time(nullptr);
+  }
 
-    auto fetch_res = block::FetchConfigParams::fetch_config_params(
-        *config_, prev_blocks_info_, &old_mparams, &storage_prices, &storage_phase_cfg, &rand_seed_, &compute_phase_cfg,
-        &action_phase_cfg, &serialize_config, &masterchain_create_fee, &basechain_create_fee, account.workchain, utime);
-    if(fetch_res.is_error()) {
-        return fetch_res.move_as_error_prefix("cannot fetch config params ");
-    }
+  auto fetch_res = block::FetchConfigParams::fetch_config_params(
+      *config_, prev_blocks_info_, &old_mparams, &storage_prices, &storage_phase_cfg, &rand_seed_, &compute_phase_cfg,
+      &action_phase_cfg, &serialize_config, &masterchain_create_fee, &basechain_create_fee, account.workchain, utime);
+  if (fetch_res.is_error()) {
+    return fetch_res.move_as_error_prefix("cannot fetch config params ");
+  }
 
   TRY_STATUS(vm::init_vm(debug_enabled_));
 
-    if (!lt) {
-      lt = lt_;
-    }
-    if (!lt) {
-      lt = (account.last_trans_lt_ / block::ConfigInfo::get_lt_align() + 1) * block::ConfigInfo::get_lt_align(); // next block after account_.last_trans_lt_
-    }
-    account.block_lt = lt - lt % block::ConfigInfo::get_lt_align();
+  if (!lt) {
+    lt = lt_;
+  }
+  if (!lt) {
+    lt = (account.last_trans_lt_ / block::ConfigInfo::get_lt_align() + 1) * block::ConfigInfo::get_lt_align();
+    // next block after account_.last_trans_lt_
+  }
+  account.block_lt = lt - lt % block::ConfigInfo::get_lt_align();
 
   compute_phase_cfg.libraries = std::make_unique<vm::Dictionary>(libraries_);
   compute_phase_cfg.ignore_chksig = ignore_chksig_;
@@ -68,9 +68,10 @@ td::Result<std::unique_ptr<TransactionEmulator::EmulationResult>> TransactionEmu
                                                                                elapsed);
   }
 
-    if (!trans->serialize(serialize_config)) {
-      return td::Status::Error(-669,"cannot serialize new transaction for smart contract "s + trans->account.addr.to_hex());
-    }
+  if (!trans->serialize(serialize_config)) {
+    return td::Status::Error(
+        -669, "cannot serialize new transaction for smart contract "s + trans->account.addr.to_hex());
+  }
 
   auto trans_root = trans->commit(account);
   if (trans_root.is_null()) {
@@ -133,29 +134,29 @@ td::Result<TransactionEmulator::EmulationSuccess> TransactionEmulator::emulate_t
     }
   }
 
-    TRY_RESULT(emulation, emulate_transaction(std::move(account), msg_root, utime, lt, trans_type));
+  TRY_RESULT(emulation, emulate_transaction(std::move(account), msg_root, utime, lt, trans_type));
 
-    if (auto emulation_result_ptr = dynamic_cast<EmulationSuccess*>(emulation.get())) {
-      auto& emulation_result = *emulation_result_ptr;
+  if (auto emulation_result_ptr = dynamic_cast<EmulationSuccess*>(emulation.get())) {
+    auto& emulation_result = *emulation_result_ptr;
 
-      if (td::Bits256(emulation_result.transaction->get_hash().bits()) != td::Bits256(original_trans->get_hash().bits())) {
-        return td::Status::Error("transaction hash mismatch");
-      }
-
-      if (!check_state_update(emulation_result.account, record_trans)) {
-        return td::Status::Error("account hash mismatch");
-      }
-
-      return std::move(emulation_result);
-
-    } else if (auto emulation_not_accepted_ptr = dynamic_cast<EmulationExternalNotAccepted*>(emulation.get())) {
-      return td::Status::Error( PSTRING()
-        << "VM Log: " << emulation_not_accepted_ptr->vm_log
-        << ", VM Exit Code: " << emulation_not_accepted_ptr->vm_exit_code
-        << ", Elapsed Time: " << emulation_not_accepted_ptr->elapsed_time);
-    } else {
-       return td::Status::Error("emulation failed");
+    if (td::Bits256(emulation_result.transaction->get_hash().bits()) !=
+        td::Bits256(original_trans->get_hash().bits())) {
+      return td::Status::Error("transaction hash mismatch");
     }
+
+    if (!check_state_update(emulation_result.account, record_trans)) {
+      return td::Status::Error("account hash mismatch");
+    }
+
+    return std::move(emulation_result);
+  } else if (auto emulation_not_accepted_ptr = dynamic_cast<EmulationExternalNotAccepted*>(emulation.get())) {
+    return td::Status::Error(PSTRING()
+                             << "VM Log: " << emulation_not_accepted_ptr->vm_log
+                             << ", VM Exit Code: " << emulation_not_accepted_ptr->vm_exit_code
+                             << ", Elapsed Time: " << emulation_not_accepted_ptr->elapsed_time);
+  } else {
+    return td::Status::Error("emulation failed");
+  }
 }
 
 td::Result<TransactionEmulator::EmulationChain> TransactionEmulator::emulate_transactions_chain(
@@ -205,7 +206,7 @@ td::Result<std::unique_ptr<block::transaction::Transaction>> TransactionEmulator
     if (external) {
       // inbound external message was not accepted
       return td::Status::Error(-701, "inbound external message rejected by account "s + acc->addr.to_hex() +
-                                         " before smart-contract execution");
+                                     " before smart-contract execution");
     }
     return td::Status::Error(-669, "cannot unpack input message for a new transaction");
   }
@@ -238,7 +239,7 @@ td::Result<std::unique_ptr<block::transaction::Transaction>> TransactionEmulator
   if (!trans->compute_phase->accepted) {
     if (!external && trans->compute_phase->skip_reason == block::ComputePhase::sk_none) {
       return td::Status::Error(-669, "new ordinary transaction for smart contract "s + acc->addr.to_hex() +
-                                         " has not been accepted by the smart contract (?)");
+                                     " has not been accepted by the smart contract (?)");
     }
   }
 
@@ -248,9 +249,10 @@ td::Result<std::unique_ptr<block::transaction::Transaction>> TransactionEmulator
   }
 
   if (trans->bounce_enabled
-  && (!trans->compute_phase->success || trans->action_phase->state_exceeds_limits || trans->action_phase->bounce)
-  && !trans->prepare_bounce_phase(*action_phase_cfg)) {
-    return td::Status::Error(-669,"cannot create bounce phase of a new transaction for smart contract "s + acc->addr.to_hex());
+      && (!trans->compute_phase->success || trans->action_phase->state_exceeds_limits || trans->action_phase->bounce)
+      && !trans->prepare_bounce_phase(*action_phase_cfg)) {
+    return td::Status::Error(
+        -669, "cannot create bounce phase of a new transaction for smart contract "s + acc->addr.to_hex());
   }
 
   return trans;
@@ -272,6 +274,10 @@ void TransactionEmulator::set_ignore_chksig(bool ignore_chksig) {
   ignore_chksig_ = ignore_chksig;
 }
 
+void TransactionEmulator::set_vm_verbosity_level(int verbosity) {
+  vm_log_verbosity_ = verbosity;
+}
+
 void TransactionEmulator::set_config(std::shared_ptr<block::Config> config) {
   config_ = std::move(config);
 }
@@ -287,5 +293,4 @@ void TransactionEmulator::set_debug_enabled(bool debug_enabled) {
 void TransactionEmulator::set_prev_blocks_info(td::Ref<vm::Tuple> prev_blocks_info) {
   prev_blocks_info_ = std::move(prev_blocks_info);
 }
-
-}  // namespace emulator
+} // namespace emulator

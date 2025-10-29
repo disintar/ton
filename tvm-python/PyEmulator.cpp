@@ -45,6 +45,11 @@ bool PyEmulator::set_ignore_chksig(bool ignore_chksig) {
     return true;
 }
 
+bool PyEmulator::set_vm_verbosity_level(int verbosity) {
+    emulator->set_vm_verbosity_level(verbosity);
+    return true;
+}
+
 bool PyEmulator::set_libs(const PyCell &shardchain_libs_cell) {
     emulator->set_libs(vm::Dictionary(shardchain_libs_cell.my_cell, 256));
     return true;

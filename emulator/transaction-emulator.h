@@ -78,6 +78,7 @@ public:
   void set_lt(ton::LogicalTime lt);
   void set_rand_seed(td::BitArray<256>& rand_seed);
   void set_ignore_chksig(bool ignore_chksig);
+  void set_vm_verbosity_level(int vm_verbosity);
   void set_config(std::shared_ptr<block::Config> config);
   void set_libs(vm::Dictionary &&libs);
   void set_debug_enabled(bool debug_enabled);

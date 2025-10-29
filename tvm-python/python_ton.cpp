@@ -375,6 +375,7 @@ PYBIND11_MODULE(python_ton, m) {
       .def("set_libs", &PyEmulator::set_libs, py::arg("shardchain_libs_boc"))
       .def("set_prev_blocks_info", &PyEmulator::set_prev_blocks_info, py::arg("prev_blocks"))
       .def("set_debug_enabled", &PyEmulator::set_debug_enabled, py::arg("debug_enabled"))
+      .def("set_vm_verbosity_level", &PyEmulator::set_vm_verbosity_level, py::arg("vm_verbosity"))
       .def("emulate_transaction", &PyEmulator::emulate_transaction, py::arg("shard_account_cell"),
            py::arg("message_cell"), py::arg("unixtime") = "0", py::arg("lt") = "0", py::arg("vm_ver") = 1,
            py::arg("force_uninit") = false)
