@@ -45,6 +45,11 @@ bool PyEmulator::set_ignore_chksig(bool ignore_chksig) {
     return true;
 }
 
+bool PyEmulator::set_vm_verbosity_level(int verbosity) {
+    emulator->set_vm_verbosity_level(verbosity);
+    return true;
+}
+
 bool PyEmulator::set_libs(const PyCell &shardchain_libs_cell) {
     emulator->set_libs(vm::Dictionary(shardchain_libs_cell.my_cell, 256));
     return true;
@@ -151,6 +156,7 @@ bool PyEmulator::emulate_transaction(const PyCell &shard_account_cell, const PyC
     }
 
     const auto &emulation_success = dynamic_cast<emulator::TransactionEmulator::EmulationSuccess &>(*emulation_result);
+    vm_log = emulation_success.vm_log;
     transaction_cell = std::move(emulation_success.transaction);
 
     auto new_shard_account_cell = vm::CellBuilder()
@@ -225,7 +231,8 @@ bool PyEmulator::emulate_tick_tock_transaction(const PyCell &shard_account_boc, 
     }
 
     const auto &emulation_success = dynamic_cast<emulator::TransactionEmulator::EmulationSuccess &>(*emulation_result);
-    transaction_cell = std::move(emulation_success.transaction);
+    vm_log = emulation_success.vm_log;
+    transaction_cell = emulation_success.transaction;
 
     auto new_shard_account_cell = vm::CellBuilder()
             .store_ref(emulation_success.account.total_state)

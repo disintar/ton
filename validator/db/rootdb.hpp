@@ -70,16 +70,19 @@
 #include "validator.h"
 
 namespace ton {
-
 namespace validator {
-
 class RootDb : public Db {
- public:
+public:
   enum class Flags : td::uint32 { f_started = 1, f_ready = 2, f_switched = 4, f_archived = 8 };
+
   RootDb(td::actor::ActorId<ValidatorManager> validator_manager, std::string root_path,
          td::Ref<ValidatorManagerOptions> opts, bool read_only = false)
-      : validator_manager_(validator_manager), root_path_(std::move(root_path)), read_only_(read_only), opts_(opts) {
+    : validator_manager_(validator_manager)
+    , root_path_(std::move(root_path))
+    , read_only_(read_only)
+    , opts_(opts) {
   }
+
   void set_block_publisher(BlockParser* publisher) override {
     if (publisher == nullptr) {
       LOG(ERROR) << "Received nullptr IBlockPublisher";
@@ -94,6 +97,7 @@ class RootDb : public Db {
   void clear_boc_cache() override {
     td::actor::send_closure(cell_db_, &CellDb::clear_boc_cache);
   }
+
   void start_up() override;
 
   void store_block_data(BlockHandle handle, td::Ref<BlockData> block, td::Promise<td::Unit> promise) override;
@@ -119,7 +123,7 @@ class RootDb : public Db {
   void store_block_state_from_data(BlockHandle handle, td::Ref<BlockData> block,
                                    td::Promise<td::Ref<ShardState>> promise) override;
   void store_block_state_from_data_preliminary(std::vector<td::Ref<BlockData>> blocks,
-                                         td::Promise<td::Unit> promise) override;
+                                               td::Promise<td::Unit> promise) override;
   void get_block_state(ConstBlockHandle handle, td::Promise<td::Ref<ShardState>> promise) override;
   void store_block_state_part(BlockId effective_block, td::Ref<vm::Cell> cell,
                               td::Promise<td::Ref<vm::DataCell>> promise) override;
@@ -127,6 +131,7 @@ class RootDb : public Db {
 
   void store_block_handle(BlockHandle handle, td::Promise<td::Unit> promise) override;
   void get_block_handle(BlockIdExt id, td::Promise<BlockHandle> promise) override;
+
   void get_block_handle_external(BlockIdExt id, bool force, td::Promise<BlockHandle> promise) {
     td::actor::send_closure(validator_manager_, &ValidatorManager::get_block_handle, id, force, std::move(promise));
   }
@@ -151,7 +156,6 @@ class RootDb : public Db {
 
   void try_get_static_file(FileHash file_hash, td::Promise<td::BufferSlice> promise) override;
 
-  void apply_block(BlockHandle handle, td::Promise<td::Unit> promise) override;
   void get_block_by_lt(AccountIdPrefixFull account, LogicalTime lt, td::Promise<ConstBlockHandle> promise) override;
   void get_block_by_unix_time(AccountIdPrefixFull account, UnixTime ts, td::Promise<ConstBlockHandle> promise) override;
   void get_block_by_seqno(AccountIdPrefixFull account, BlockSeqno seqno,
@@ -197,13 +201,15 @@ class RootDb : public Db {
   void set_async_mode(bool mode, td::Promise<td::Unit> promise) override;
 
   void run_gc(UnixTime mc_ts, UnixTime gc_ts, double archive_ttl) override;
-  void add_persistent_state_description(td::Ref<PersistentStateDescription> desc, td::Promise<td::Unit> promise) override;
-  void get_persistent_state_descriptions(td::Promise<std::vector<td::Ref<PersistentStateDescription>>> promise) override;
+  void add_persistent_state_description(td::Ref<PersistentStateDescription> desc,
+                                        td::Promise<td::Unit> promise) override;
+  void get_persistent_state_descriptions(
+      td::Promise<std::vector<td::Ref<PersistentStateDescription>>> promise) override;
 
-  void iterate_temp_block_handles(std::function<void(const BlockHandleInterface &)> f) override;
+  void iterate_temp_block_handles(std::function<void(const BlockHandleInterface&)> f) override;
   void reinit(td::Promise<td::Unit>) override;
 
- private:
+private:
   td::actor::ActorId<ValidatorManager> validator_manager_;
   std::string root_path_;
   bool read_only_ = false;
@@ -214,11 +220,10 @@ class RootDb : public Db {
   td::actor::ActorOwn<StaticFilesDb> static_files_db_;
   td::actor::ActorOwn<ArchiveManager> archive_db_;
   td::actor::ActorOwn<ClusterPublishSync> cluster_sync_;
-
+  std::map<BlockIdExt, std::vector<td::Promise<td::Unit>>> archive_block_waiters_;
   BlockParser* publisher_ = nullptr;
-  void get_block_state_root_cell(ConstBlockHandle handle, td::Promise<td::Ref<vm::DataCell>> promise) override;
+  void get_block_state_root_cell(ConstBlockHandle handle, td::Promise<td::Ref<vm::DataCell>> promise,
+                                 bool force_load = false) override;
 };
-
-}  // namespace validator
-
+}; // namespace validator
 }  // namespace ton
