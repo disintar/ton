@@ -1,7 +1,3 @@
-if (NOT OPENSSL_FOUND)
-    find_package(OpenSSL REQUIRED)
-endif ()
-
 if (NIX)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(MHD REQUIRED libmicrohttpd)

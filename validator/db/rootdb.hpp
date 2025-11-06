@@ -156,7 +156,6 @@ public:
 
   void try_get_static_file(FileHash file_hash, td::Promise<td::BufferSlice> promise) override;
 
-  void apply_block(BlockHandle handle, td::Promise<td::Unit> promise) override;
   void get_block_by_lt(AccountIdPrefixFull account, LogicalTime lt, td::Promise<ConstBlockHandle> promise) override;
   void get_block_by_unix_time(AccountIdPrefixFull account, UnixTime ts, td::Promise<ConstBlockHandle> promise) override;
   void get_block_by_seqno(AccountIdPrefixFull account, BlockSeqno seqno,
@@ -221,10 +220,10 @@ private:
   td::actor::ActorOwn<StaticFilesDb> static_files_db_;
   td::actor::ActorOwn<ArchiveManager> archive_db_;
   td::actor::ActorOwn<ClusterPublishSync> cluster_sync_;
-
+  std::map<BlockIdExt, std::vector<td::Promise<td::Unit>>> archive_block_waiters_;
   BlockParser* publisher_ = nullptr;
   void get_block_state_root_cell(ConstBlockHandle handle, td::Promise<td::Ref<vm::DataCell>> promise,
                                  bool force_load = false) override;
 };
-} // namespace validator
-} // namespace ton
+}; // namespace validator
+}  // namespace ton

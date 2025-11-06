@@ -1,7 +1,3 @@
-if (NOT OPENSSL_FOUND)
-  find_package(OpenSSL REQUIRED)
-endif()
-
 if (NIX)
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(MHD REQUIRED libmicrohttpd)
@@ -124,8 +120,6 @@ set(VALIDATOR_SOURCE
   manager-init.cpp
   manager.cpp
 
-  ${VALIDATOR_DB_SOURCE}
-
   ${VALIDATOR_HEADERS}
 )
 
@@ -146,8 +140,6 @@ set(DISK_VALIDATOR_SOURCE
   lite-server-rate-limiter.cpp
   manager-init.cpp
   manager-disk.cpp
-
-  ${VALIDATOR_DB_SOURCE}
 )
 
 set(HARDFORK_VALIDATOR_SOURCE
@@ -166,8 +158,6 @@ set(HARDFORK_VALIDATOR_SOURCE
 
   manager-init.cpp
   manager-hardfork.cpp
-
-  ${VALIDATOR_DB_SOURCE}
 )
 
 set(FULL_NODE_SOURCE
@@ -202,6 +192,10 @@ set(FULL_NODE_SOURCE
   net/get-next-key-blocks.hpp
   net/get-next-key-blocks.cpp
 )
+
+add_library(validator-db OBJECT ${VALIDATOR_DB_SOURCE})
+target_include_directories(validator-db PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+target_link_libraries(validator-db PUBLIC tdactor adnl rldp tl_api dht tdfec overlay catchain validatorsession ton_db)
 
 add_library(validator STATIC ${VALIDATOR_SOURCE})
 add_library(validator-disk STATIC ${DISK_VALIDATOR_SOURCE})
@@ -240,10 +234,11 @@ target_include_directories(full-node PUBLIC ${MHD_INCLUDE_DIR} ${MHD_STATIC_INCL
 target_include_directories(validator-hardfork PUBLIC ${MHD_INCLUDE_DIR} ${MHD_STATIC_INCLUDE_DIRS})
 target_include_directories(validator-disk PUBLIC ${MHD_INCLUDE_DIR} ${MHD_STATIC_INCLUDE_DIRS})
 target_include_directories(validator PUBLIC ${MHD_INCLUDE_DIR} ${MHD_STATIC_INCLUDE_DIRS})
+target_link_libraries(validator PRIVATE validator-db)
 
-target_link_libraries(validator PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} tdactor adnl rldp tl_api dht tdfec overlay catchain validatorsession ton_db)
+target_link_libraries(validator-disk PRIVATE validator-db)
 
-target_link_libraries(validator-disk PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} ton_validator tdutils tdactor adnl rldp tl_api dht tdfec overlay catchain validatorsession ton_db)
+target_link_libraries(validator-hardfork PRIVATE validator-db)
 
 target_link_libraries(validator-hardfork PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} tdactor adnl rldp tl_api dht tdfec overlay catchain validatorsession ton_db)
 
