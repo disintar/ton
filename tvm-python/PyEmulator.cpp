@@ -156,6 +156,7 @@ bool PyEmulator::emulate_transaction(const PyCell &shard_account_cell, const PyC
     }
 
     const auto &emulation_success = dynamic_cast<emulator::TransactionEmulator::EmulationSuccess &>(*emulation_result);
+    vm_log = emulation_success.vm_log;
     transaction_cell = std::move(emulation_success.transaction);
 
     auto new_shard_account_cell = vm::CellBuilder()
@@ -230,7 +231,8 @@ bool PyEmulator::emulate_tick_tock_transaction(const PyCell &shard_account_boc, 
     }
 
     const auto &emulation_success = dynamic_cast<emulator::TransactionEmulator::EmulationSuccess &>(*emulation_result);
-    transaction_cell = std::move(emulation_success.transaction);
+    vm_log = emulation_success.vm_log;
+    transaction_cell = emulation_success.transaction;
 
     auto new_shard_account_cell = vm::CellBuilder()
             .store_ref(emulation_success.account.total_state)

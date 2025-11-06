@@ -148,7 +148,7 @@ bool Account::check_addr_rewrite_length(int length) const {
 
 /**
  * Parses anycast data of the account address.
- * 
+ *
  * Initializes addr_rewrite.
  *
  * @param cs The cell slice containing partially-parsed account address.
@@ -450,7 +450,7 @@ bool Account::unpack(Ref<vm::CellSlice> shard_account, ton::UnixTime now, bool s
     return false;
   }
   if (verbosity > 2) {
-    FLOG(INFO) {
+    FLOG(DEBUG) {
       shard_account->print_rec(sb, 2);
       block::gen::t_ShardAccount.print(sb, shard_account);
     };
@@ -906,7 +906,7 @@ bool Transaction::unpack_input_msg(bool ihr_delivered, const ActionPhaseConfig* 
     return false;
   }
   if (verbosity > 2) {
-    FLOG(INFO) {
+    FLOG(DEBUG) {
       sb << "unpacking inbound message for a new transaction: ";
       block::gen::t_Message_Any.print_ref(sb, in_msg);
       load_cell_slice(in_msg).print_rec(sb);
@@ -1412,7 +1412,7 @@ td::uint64 Transaction::gas_bought_for(const ComputePhaseConfig& cfg, td::RefInt
     gas_limit_overridden = true;
     // Same as ComputePhaseConfig::gas_bought for, but with other gas_limit and max_gas_threshold
     auto gas_limit = new_limit.value();
-    LOG(INFO) << "overridding gas limit for account " << account.workchain << ":" << account.addr.to_hex() << " to "
+    LOG(DEBUG) << "overridding gas limit for account " << account.workchain << ":" << account.addr.to_hex() << " to "
               << gas_limit;
     auto max_gas_threshold =
         compute_max_gas_threshold(cfg.gas_price256, gas_limit, cfg.flat_gas_limit, cfg.flat_gas_price);
@@ -1785,7 +1785,7 @@ bool Transaction::run_precompiled_contract(const ComputePhaseConfig& cfg, precom
   cp.gas_used = gas_usage;
   cp.accepted = result.accepted;
   cp.success = (cp.accepted && result.committed);
-  LOG(INFO) << "Running precompiled smart contract " << impl.get_name() << ": exit_code=" << result.exit_code
+  LOG(DEBUG) << "Running precompiled smart contract " << impl.get_name() << ": exit_code=" << result.exit_code
             << " accepted=" << result.accepted << " success=" << cp.success << " gas_used=" << gas_usage
             << " time=" << time_tvm.real << "s cpu_time=" << time_tvm.cpu;
   if (cp.accepted & use_msg_state) {
@@ -1802,7 +1802,7 @@ bool Transaction::run_precompiled_contract(const ComputePhaseConfig& cfg, precom
     cp.actions = impl.get_c5();
     int out_act_num = output_actions_count(cp.actions);
     if (verbosity > 2) {
-      FLOG(INFO) {
+      FLOG(DEBUG) {
         sb << "new smart contract data: ";
         bool can_be_special = true;
         load_cell_slice_special(cp.new_data, can_be_special).print_rec(sb);
@@ -1953,7 +1953,7 @@ bool Transaction::prepare_compute_phase(const ComputePhaseConfig& cfg) {
 
     // Contract is marked as precompiled in global config, but implementation is not available
     // In this case we run TVM and override gas_used
-    LOG(INFO) << "Unknown precompiled contract (code_hash=" << new_code->get_hash().to_hex()
+    LOG(DEBUG) << "Unknown precompiled contract (code_hash=" << new_code->get_hash().to_hex()
               << ", gas_usage=" << gas_usage << "), running VM";
     long long limit = account.is_special ? cfg.special_gas_limit : cfg.gas_limit;
     gas = vm::GasLimits{limit, limit, gas.gas_credit ? limit : 0};
@@ -2029,9 +2029,9 @@ bool Transaction::prepare_compute_phase(const ComputePhaseConfig& cfg) {
       return false;
     }
   }
-  LOG(INFO) << "steps: " << vm.get_steps_count() << " gas: used=" << gas.gas_consumed() << ", max=" << gas.gas_max
+  LOG(DEBUG) << "steps: " << vm.get_steps_count() << " gas: used=" << gas.gas_consumed() << ", max=" << gas.gas_max
             << ", limit=" << gas.gas_limit << ", credit=" << gas.gas_credit;
-  LOG(INFO) << "out_of_gas=" << cp.out_of_gas << ", accepted=" << cp.accepted << ", success=" << cp.success
+  LOG(DEBUG) << "out_of_gas=" << cp.out_of_gas << ", accepted=" << cp.accepted << ", success=" << cp.success
             << ", time=" << time_tvm.real << "s, cpu_time=" << time_tvm.cpu;
   if (logger != nullptr) {
     cp.vm_log = logger->get_log();
@@ -2041,7 +2041,7 @@ bool Transaction::prepare_compute_phase(const ComputePhaseConfig& cfg) {
     cp.actions = vm.get_committed_state().c5;   // c5 -> action list
     int out_act_num = output_actions_count(cp.actions);
     if (verbosity > 2) {
-      FLOG(INFO) {
+      FLOG(DEBUG) {
         sb << "new smart contract data: ";
         bool can_be_special = true;
         load_cell_slice_special(cp.new_data, can_be_special).print_rec(sb);
@@ -2114,7 +2114,7 @@ bool Transaction::prepare_action_phase(const ActionPhaseConfig& cfg) {
         return -1;
       }
       // Rollback changes to state, fail action phase
-      LOG(INFO) << "Account state size exceeded limits: " << S.move_as_error();
+      LOG(DEBUG) << "Account state size exceeded limits: " << S.move_as_error();
       new_account_storage_stat = {};
       new_code = old_code;
       new_data = old_data;
@@ -2154,7 +2154,7 @@ bool Transaction::prepare_action_phase(const ActionPhaseConfig& cfg) {
       ap.result_code = 33;  // too many actions
       ap.result_arg = n;
       ap.action_list_invalid = true;
-      LOG(DEBUG) << "action list too long: more than " << cfg.max_actions << " actions";
+      LOG(DEBUG) << " action list too long: more than " << cfg.max_actions << " actions";
       return true;
     }
   }
@@ -2186,11 +2186,12 @@ bool Transaction::prepare_action_phase(const ActionPhaseConfig& cfg) {
       }
       ap.result_code = 34;  // action #i invalid or unsupported
       ap.action_list_invalid = true;
-      LOG(DEBUG) << "invalid action " << ap.result_arg << " found while preprocessing action list: error code "
+      LOG(DEBUG) << " invalid action " << ap.result_arg << " found while preprocessing action list: error code "
                  << ap.result_code;
       return true;
     }
   }
+
   ap.valid = true;
   for (int i = n - 1; i >= 0; --i) {
     if(ap.action_list[i].is_null()) {
@@ -2208,11 +2209,11 @@ bool Transaction::prepare_action_phase(const ActionPhaseConfig& cfg) {
         err_code = try_action_set_code(cs, ap, cfg);
         break;
       case block::gen::OutAction::action_send_msg:
-        err_code = try_action_send_msg(cs, ap, cfg);
+        err_code = try_action_send_msg(cs, ap, cfg, 0, ap.result_arg);
         if (err_code == -2) {
-          err_code = try_action_send_msg(cs, ap, cfg, 1);
+          err_code = try_action_send_msg(cs, ap, cfg, 1, ap.result_arg);
           if (err_code == -2) {
-            err_code = try_action_send_msg(cs, ap, cfg, 2);
+            err_code = try_action_send_msg(cs, ap, cfg, 2, ap.result_arg);
           }
         }
         break;
@@ -2639,7 +2640,7 @@ bool Transaction::check_rewrite_dest_addr(Ref<vm::CellSlice>& dest_addr, const A
  *          Returns -2 if the action should be attempted again.
  */
 int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, const ActionPhaseConfig& cfg,
-                                     int redoing) {
+                                     int redoing, int action_position) {
   block::gen::OutAction::Record_action_send_msg act_rec;
   // mode:
   // +128 = attach all remaining balance
@@ -2668,6 +2669,24 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
       return 0;
     }
     return error_code;
+  };
+  auto log_fail = [&](int code, const std::string& desc, bool ignored) {
+    LOG(INFO) << "{ \"type\":\"try_action_send_msg_fail\", \"in_msg_hash\":\"" << in_msg->get_hash().to_hex()
+              << "\", \"action_id\":" << action_position
+              << ", \"description\":\"" << desc
+              << "\", \"exit_code\":" << code
+              << ", \"action_fail_ignored\":" << (ignored ? "true" : "false")
+              << " }";
+  };
+  auto log_fail_req = [&](int code, const std::string& desc, const td::RefInt256& requested, const td::RefInt256& remaining, bool ignored) {
+    LOG(INFO) << "{ \"type\":\"try_action_send_msg_fail\", \"in_msg_hash\":\"" << in_msg->get_hash().to_hex()
+              << "\", \"action_id\":" << action_position
+              << ", \"description\":\"" << desc
+              << "\", \"exit_code\":" << code
+              << ", \"action_fail_ignored\":" << (ignored ? "true" : "false")
+              << ", \"requested\":\"" << requested << "\""
+              << ", \"remaining\":\"" << remaining << "\""
+              << " }";
   };
   // try to parse suggested message in act_rec.out_msg
   td::RefInt256 fwd_fee, ihr_fee;
@@ -2753,23 +2772,22 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
   // have to check source address
   // it must be either our source address, or empty
   if (!check_replace_src_addr(info.src)) {
-    LOG(DEBUG) << "invalid source address in a proposed outbound message";
+    log_fail(35, "invalid source address in a proposed outbound message", false);
     return 35;  // invalid source address
   }
   bool to_mc = false;
   if (!check_rewrite_dest_addr(info.dest, cfg, &to_mc, !cfg.disable_anycast)) {
-    LOG(DEBUG) << "invalid destination address in a proposed outbound message";
+    log_fail(36, "invalid destination address in a proposed outbound message", skip_invalid);
     return check_skip_invalid(36);  // invalid destination address
   }
   if (!ext_msg && cfg.extra_currency_v2) {
     CurrencyCollection value;
     if (!value.unpack(info.value)) {
-      LOG(DEBUG) << "invalid value:ExtraCurrencies in a proposed outbound message";
+      log_fail(37, "invalid value:ExtraCurrencies in a proposed outbound message", skip_invalid);
       return check_skip_invalid(37);  // invalid value:CurrencyCollection
     }
     if (!CurrencyCollection::remove_zero_extra_currencies(value.extra, cfg.size_limits.max_msg_extra_currencies)) {
-      LOG(DEBUG) << "invalid value:ExtraCurrencies in a proposed outbound message: too many currencies (max "
-                 << cfg.size_limits.max_msg_extra_currencies << ")";
+      log_fail(44, "invalid value:ExtraCurrencies in a proposed outbound message: too many currencies", skip_invalid);
       // Dict should be valid, since it was checked in t_OutListNode.validate_ref, so error here means limit exceeded
       return check_skip_invalid(44);  // invalid value:CurrencyCollection : too many extra currencies
     }
@@ -2787,7 +2805,7 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
     td::RefInt256 funds = ap.remaining_balance.grams;
     if (!ext_msg && !(act_rec.mode & 0x80) && !(act_rec.mode & 1)) {
       if (!block::tlb::t_CurrencyCollection.validate_csr(info.value)) {
-        LOG(DEBUG) << "invalid value:CurrencyCollection in proposed outbound message";
+        log_fail(37, "invalid value:CurrencyCollection in proposed outbound message", skip_invalid);
         return check_skip_invalid(37);
       }
       block::CurrencyCollection value;
@@ -2803,8 +2821,7 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
         }
         new_funds -= ap.action_fine;
         if (new_funds->sgn() < 0) {
-          LOG(DEBUG)
-              << "not enough value to transfer with the message: all of the inbound message value has been consumed";
+          log_fail(37, "not enough value to transfer with the message: all of the inbound message value has been consumed", skip_invalid);
           return check_skip_invalid(37);
         }
       }
@@ -2841,17 +2858,19 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
     }
   };
   if (sstat.cells > max_cells && max_cells < cfg.size_limits.max_msg_cells) {
-    LOG(DEBUG) << "not enough funds to process a message (max_cells=" << max_cells << ")";
+    // insufficient funds to process message cells
+    td::RefInt256 requested_cells_fine = td::make_refint((td::uint64)sstat.cells * fine_per_cell);
+    log_fail_req(40, "not enough funds to process a message", requested_cells_fine, ap.remaining_balance.grams, skip_invalid);
     collect_fine();
     return check_skip_invalid(40);
   }
   if (sstat.bits > cfg.size_limits.max_msg_bits || sstat.cells > max_cells) {
-    LOG(DEBUG) << "message too large, invalid";
+    log_fail(40, "message too large, invalid", skip_invalid);
     collect_fine();
     return check_skip_invalid(40);
   }
   if (max_merkle_depth > max_allowed_merkle_depth) {
-    LOG(DEBUG) << "message has too big merkle depth, invalid";
+    log_fail(40, "message has too big merkle depth, invalid", skip_invalid);
     collect_fine();
     return check_skip_invalid(40);
   }
@@ -2883,7 +2902,7 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
     // check value, check/compute ihr_fees, fwd_fees
     // ...
     if (!block::tlb::t_CurrencyCollection.validate_csr(info.value)) {
-      LOG(DEBUG) << "invalid value:CurrencyCollection in proposed outbound message";
+      log_fail(37, "invalid value:CurrencyCollection in proposed outbound message", skip_invalid);
       collect_fine();
       return check_skip_invalid(37);
     }
@@ -2917,8 +2936,7 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
           req -= compute_phase->gas_fees;
         }
         if (!req.is_valid()) {
-          LOG(DEBUG)
-              << "not enough value to transfer with the message: all of the inbound message value has been consumed";
+          log_fail(37, "not enough value to transfer with the message: all of the inbound message value has been consumed", skip_invalid);
           collect_fine();
           return check_skip_invalid(37);
         }
@@ -2933,8 +2951,7 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
       req_grams_brutto += fees_total;
     } else if (req.grams < fees_total) {
       // receiver pays the fees (but cannot)
-      LOG(DEBUG) << "not enough value attached to the message to pay forwarding fees : have " << req.grams << ", need "
-                 << fees_total;
+      log_fail(37, std::string("not enough value attached to the message to pay forwarding fees"), skip_invalid);
       collect_fine();
       return check_skip_invalid(37);  // not enough grams
     } else {
@@ -2944,23 +2961,21 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
 
     // check that we have at least the required value
     if (ap.remaining_balance.grams < req_grams_brutto) {
-      LOG(DEBUG) << "not enough grams to transfer with the message : remaining balance is "
-                 << ap.remaining_balance.to_str() << ", need " << req_grams_brutto << " (including forwarding fees)";
+      // insufficient contract grams
+      log_fail_req(37, "not enough grams to transfer with the message (including forwarding fees)", req_grams_brutto, ap.remaining_balance.grams, skip_invalid);
       collect_fine();
       return check_skip_invalid(37);  // not enough grams
     }
 
     if (cfg.extra_currency_v2 && !req.check_extra_currency_limit(cfg.size_limits.max_msg_extra_currencies)) {
-      LOG(DEBUG) << "too many extra currencies in the message : max " << cfg.size_limits.max_msg_extra_currencies;
+      log_fail(44, "too many extra currencies in the message", skip_invalid);
       return check_skip_invalid(44);  // to many extra currencies
     }
 
     Ref<vm::Cell> new_extra;
 
     if (!block::sub_extra_currency(ap.remaining_balance.extra, req.extra, new_extra)) {
-      LOG(DEBUG) << "not enough extra currency to send with the message: "
-                 << block::CurrencyCollection{0, req.extra}.to_str() << " required, only "
-                 << block::CurrencyCollection{0, ap.remaining_balance.extra}.to_str() << " available";
+      log_fail(38, "not enough extra currency to send with the message", skip_invalid);
       collect_fine();
       return check_skip_invalid(38);  // not enough (extra) funds
     }
@@ -2985,11 +3000,12 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
     CHECK(tlb::csr_pack(msg.info, info));
     vm::CellBuilder cb;
     if (!tlb::type_pack(cb, block::gen::t_MessageRelaxed_Any, msg)) {
-      LOG(DEBUG) << "outbound message does not fit into a cell after rewriting";
       if (redoing == 2) {
+        log_fail(39, "outbound message does not fit into a cell after rewriting", skip_invalid);
         collect_fine();
         return check_skip_invalid(39);
       }
+      log_fail(-2, "outbound message does not fit into a cell after rewriting (will retry)", false);
       return -2;
     }
 
@@ -3015,7 +3031,8 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
   } else {
     // external messages also have forwarding fees
     if (ap.remaining_balance.grams < fwd_fee) {
-      LOG(DEBUG) << "not enough funds to pay for an outbound external message";
+      // insufficient contract grams for external message fwd fee
+      log_fail_req(37, "not enough funds to pay for an outbound external message", fwd_fee, ap.remaining_balance.grams, skip_invalid);
       collect_fine();
       return check_skip_invalid(37);  // not enough grams
     }
@@ -3029,11 +3046,12 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
     CHECK(tlb::csr_pack(msg.info, erec));
     vm::CellBuilder cb;
     if (!tlb::type_pack(cb, block::gen::t_MessageRelaxed_Any, msg)) {
-      LOG(DEBUG) << "outbound message does not fit into a cell after rewriting";
       if (redoing == 2) {
+        log_fail(39, "outbound message does not fit into a cell after rewriting", skip_invalid);
         collect_fine();
         return check_skip_invalid(39);
       }
+      log_fail(-2, "outbound message does not fit into a cell after rewriting (will retry)", false);
       return -2;
     }
 
@@ -3054,7 +3072,7 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
   }
   if (!block::gen::t_Message_Any.validate_ref(new_msg)) {
     LOG(ERROR) << "generated outbound message is not a valid (Message Any) according to automated check";
-    FLOG(INFO) {
+    FLOG(DEBUG) {
       block::gen::t_Message_Any.print_ref(sb, new_msg);
       vm::load_cell_slice(new_msg).print_rec(sb);
     };
@@ -3062,7 +3080,7 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
     return -1;
   }
   if (verbosity > 2) {
-    FLOG(INFO) {
+    FLOG(DEBUG) {
       sb << "converted outbound message: ";
       block::gen::t_Message_Any.print_ref(sb, new_msg);
     };
@@ -3431,7 +3449,7 @@ bool Transaction::prepare_bounce_phase(const ActionPhaseConfig& cfg) {
   }
   CHECK(cb.finalize_to(bp.out_msg));
   if (verbosity > 2) {
-    FLOG(INFO) {
+    FLOG(DEBUG) {
       sb << "generated bounced message: ";
       block::gen::t_Message_Any.print_ref(sb, bp.out_msg);
     };
@@ -3524,7 +3542,7 @@ bool Transaction::compute_state(const SerializeConfig& cfg) {
       auto frozen_state = cb2.finalize();
       frozen_hash = frozen_state->get_hash().bits();
       if (verbosity >= 3 * 1) {  // !!!DEBUG!!!
-        FLOG(INFO) {
+        FLOG(DEBUG) {
           sb << "freezing state of smart contract: ";
           block::gen::t_StateInit.print_ref(sb, frozen_state);
           CHECK(block::gen::t_StateInit.validate_ref(frozen_state));
@@ -3631,7 +3649,7 @@ bool Transaction::compute_state(const SerializeConfig& cfg) {
       new_storage_dict_hash = r_hash.move_as_ok();
     }
     if (timer.elapsed() > 0.1) {
-      LOG(INFO) << "Compute used storage (2) took " << timer.elapsed() << "s";
+      LOG(DEBUG) << "Compute used storage (2) took " << timer.elapsed() << "s";
     }
   } else {
     new_storage_used = account.storage_used;
@@ -3659,7 +3677,7 @@ bool Transaction::compute_state(const SerializeConfig& cfg) {
   CHECK(cb.append_cellslice_bool(new_storage));
   new_total_state = cb.finalize();
   if (verbosity > 2) {
-    FLOG(INFO) {
+    FLOG(DEBUG) {
       sb << "new account state: ";
       block::gen::t_Account.print_ref(sb, new_total_state);
     };
@@ -3756,7 +3774,7 @@ bool Transaction::serialize(const SerializeConfig& cfg) {
       return false;
   }
   if (verbosity >= 3 * 1) {
-    FLOG(INFO) {
+    FLOG(DEBUG) {
       sb << "new transaction: ";
       block::gen::t_Transaction.print_ref(sb, root);
       vm::load_cell_slice(root).print_rec(sb);
@@ -3765,7 +3783,7 @@ bool Transaction::serialize(const SerializeConfig& cfg) {
 
   if (!block::gen::t_Transaction.validate_ref(4096, root)) {
     LOG(ERROR) << "newly-generated transaction failed to pass automated validation:";
-    FLOG(INFO) {
+    FLOG(DEBUG) {
       vm::load_cell_slice(root).print_rec(sb);
       block::gen::t_Transaction.print_ref(sb, root);
     };
@@ -3774,7 +3792,7 @@ bool Transaction::serialize(const SerializeConfig& cfg) {
   }
   if (!block::tlb::t_Transaction.validate_ref(4096, root)) {
     LOG(ERROR) << "newly-generated transaction failed to pass hand-written validation:";
-    FLOG(INFO) {
+    FLOG(DEBUG) {
       vm::load_cell_slice(root).print_rec(sb);
       block::gen::t_Transaction.print_ref(sb, root);
     };

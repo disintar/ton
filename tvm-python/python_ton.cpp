@@ -23,7 +23,7 @@
 #include "PyGlobal.h"
 
 namespace py = pybind11;
-using namespace pybind11::literals;  // to bring in the `_a` literal
+using namespace pybind11::literals; // to bring in the `_a` literal
 
 void globalSetVerbosity(int vb) {
   int v = VERBOSITY_NAME(FATAL) + vb;
@@ -55,27 +55,63 @@ py::object async_wrapper(Func&& func, Args&&... args) {
 
   future.inc_ref();
   pyglobal::execute_async([loop, future, func = std::forward<Func>(func), args...]() mutable {
-      try {
-        auto result = func(std::forward<Args>(args)...);
+    try {
+      auto result = func(std::forward<Args>(args)...);
 
-        {
-          py::gil_scoped_acquire acquire;
-          auto call_soon_threadsafe = loop.attr("call_soon_threadsafe");
-          call_soon_threadsafe(future.attr("set_result"), py::cast(std::move(result)));
-        }
-      } catch (const std::exception& e) {
+      {
         py::gil_scoped_acquire acquire;
-        future.attr("set_exception")(py::cast(std::runtime_error(e.what())));
+        auto call_soon_threadsafe = loop.attr("call_soon_threadsafe");
+        call_soon_threadsafe(future.attr("set_result"), py::cast(std::move(result)));
       }
+    } catch (const std::exception& e) {
+      py::gil_scoped_acquire acquire;
+      future.attr("set_exception")(py::cast(std::runtime_error(e.what())));
+    }
   });
 
   return future;
 }
 
+class LogCollector : public td::LogInterface {
+public:
+  void append(td::CSlice slice) override {
+    if (slice.empty())
+      return;
+
+    std::lock_guard<std::mutex> lock(mu_);
+    out_.emplace_back(slice.str());
+
+    // keep only latest 1000
+    if (out_.size() > max_size_) {
+      out_.erase(out_.begin(), out_.end() - max_size_);
+    }
+  }
+
+  std::vector<std::string> get_logs() {
+    std::lock_guard<std::mutex> lock(mu_);
+    return out_;
+  }
+
+private:
+  std::vector<std::string> out_;
+  std::mutex mu_;
+  const size_t max_size_ = 1000;
+};
+
+LogCollector global_log_collector;
+
+bool create_log_collector() {
+  td::log_interface = &global_log_collector;
+  return true;
+}
+
+std::vector<std::string> get_logs() {
+  return global_log_collector.get_logs();
+}
 
 template <typename T>
 struct py::detail::type_caster<td::optional<T>> {
- public:
+public:
   PYBIND11_TYPE_CASTER(td::optional<T>, _("td::optional"));
 
   bool load(handle src, bool) {
@@ -316,8 +352,10 @@ PYBIND11_MODULE(python_ton, m) {
       .def("clear_stack", &PyTVM::clear_stack)
       .def("set_gasLimit", &PyTVM::set_gasLimit, py::arg("gas_limit") = "0", py::arg("gas_max") = "-1")
       .def("run_vm", &PyTVM::run_vm)
-      .def("arun_vm", [](PyTVM &self) {
-          return async_wrapper([&self]() { return self.run_vm(); });
+      .def("arun_vm", [](PyTVM& self) {
+        return async_wrapper([&self]() {
+          return self.run_vm();
+        });
       })
       .def("get_stacks", &PyTVM::get_stacks)
       .def("set_c7", &PyTVM::set_c7, py::arg("stack"))
@@ -380,17 +418,17 @@ PYBIND11_MODULE(python_ton, m) {
            py::arg("message_cell"), py::arg("unixtime") = "0", py::arg("lt") = "0", py::arg("vm_ver") = 1,
            py::arg("force_uninit") = false)
       .def("aemulate_transaction",
-           [](PyEmulator &self,
+           [](PyEmulator& self,
               const PyCell& shard_account_cell,
               const PyCell& message_cell,
               const std::string& unixtime,
               const std::string& lt,
               int vm_ver,
               bool force_uninit) {
-               return async_wrapper([=, &self]() {
-                   return self.emulate_transaction(
-                           shard_account_cell, message_cell, unixtime, lt, vm_ver, force_uninit);
-               });
+             return async_wrapper([=, &self]() {
+               return self.emulate_transaction(
+                   shard_account_cell, message_cell, unixtime, lt, vm_ver, force_uninit);
+             });
            },
            py::arg("shard_account_cell"),
            py::arg("message_cell"),
@@ -401,16 +439,16 @@ PYBIND11_MODULE(python_ton, m) {
       .def("emulate_tick_tock_transaction", &PyEmulator::emulate_tick_tock_transaction, py::arg("shard_account_boc"),
            py::arg("is_tock"), py::arg("unixtime") = "0", py::arg("lt") = "0", py::arg("vm_ver") = 1)
       .def("aemulate_tick_tock_transaction",
-           [](PyEmulator &self,
+           [](PyEmulator& self,
               const PyCell& shard_account_boc,
               bool is_tock,
               const std::string& unixtime,
               const std::string& lt,
               int vm_ver) {
-               return async_wrapper([=, &self]() {
-                   return self.emulate_tick_tock_transaction(
-                           shard_account_boc, is_tock, unixtime, lt, vm_ver);
-               });
+             return async_wrapper([=, &self]() {
+               return self.emulate_tick_tock_transaction(
+                   shard_account_boc, is_tock, unixtime, lt, vm_ver);
+             });
            },
            py::arg("shard_account_boc"),
            py::arg("is_tock"),
@@ -466,15 +504,23 @@ PYBIND11_MODULE(python_ton, m) {
       .def_readonly("workchain", &ton::BlockId::workchain)
       .def_readonly("shard", &ton::BlockId::shard)
       .def_readonly("seqno", &ton::BlockId::seqno)
-      .def("__str__", [](ton::BlockId obj) -> std::string { return obj.to_str(); })
-      .def("to_string", [](ton::BlockId obj) -> std::string { return obj.to_str(); });
+      .def("__str__", [](ton::BlockId obj) -> std::string {
+        return obj.to_str();
+      })
+      .def("to_string", [](ton::BlockId obj) -> std::string {
+        return obj.to_str();
+      });
 
   py::class_<TestNode::BlockHdrInfo>(m, "BlockHdrInfo", py::module_local())
       .def_readonly("blk_id", &TestNode::BlockHdrInfo::blk_id)
       .def_readonly("mode", &TestNode::BlockHdrInfo::mode)
-      .def_property_readonly("proof", [](TestNode::BlockHdrInfo obj) -> PyCell { return PyCell(obj.proof); })
+      .def_property_readonly("proof", [](TestNode::BlockHdrInfo obj) -> PyCell {
+        return PyCell(obj.proof);
+      })
       .def_property_readonly("virt_blk_root",
-                             [](TestNode::BlockHdrInfo obj) -> PyCell { return PyCell(obj.virt_blk_root); });
+                             [](TestNode::BlockHdrInfo obj) -> PyCell {
+                               return PyCell(obj.virt_blk_root);
+                             });
 
   py::class_<ton::BlockIdExt>(m, "BlockIdExt", py::module_local())
       .def(py::init([](ton::BlockId id_, std::string root_hash_, std::string file_hash_) -> ton::BlockIdExt {
@@ -491,10 +537,18 @@ PYBIND11_MODULE(python_ton, m) {
         return ton::BlockIdExt(std::move(id_), std::move(root_hash_bits), std::move(file_hash_bits));
       }))
       .def_readonly("id", &ton::BlockIdExt::id)
-      .def_property_readonly("root_hash", [](ton::BlockIdExt obj) -> std::string { return obj.root_hash.to_hex(); })
-      .def_property_readonly("file_hash", [](ton::BlockIdExt obj) -> std::string { return obj.file_hash.to_hex(); })
-      .def("__str__", [](ton::BlockIdExt obj) -> std::string { return obj.to_str(); })
-      .def("to_string", [](ton::BlockIdExt obj) -> std::string { return obj.to_str(); });
+      .def_property_readonly("root_hash", [](ton::BlockIdExt obj) -> std::string {
+        return obj.root_hash.to_hex();
+      })
+      .def_property_readonly("file_hash", [](ton::BlockIdExt obj) -> std::string {
+        return obj.file_hash.to_hex();
+      })
+      .def("__str__", [](ton::BlockIdExt obj) -> std::string {
+        return obj.to_str();
+      })
+      .def("to_string", [](ton::BlockIdExt obj) -> std::string {
+        return obj.to_str();
+      });
 
   py::class_<ton::lite_api::liteServer_masterchainInfoExt>(m, "liteServer_masterchainInfoExt", py::module_local())
       .def(py::init<>())
@@ -515,34 +569,60 @@ PYBIND11_MODULE(python_ton, m) {
   py::class_<block::AccountState::Info>(m, "block_AccountState_Info", py::module_local())
       .def(py::init<>())
       .def_property_readonly("last_trans_lt",
-                             [](const block::AccountState::Info& obj) -> long long { return obj.last_trans_lt; })
+                             [](const block::AccountState::Info& obj) -> long long {
+                               return obj.last_trans_lt;
+                             })
       .def_property_readonly(
           "last_trans_hash",
-          [](const block::AccountState::Info& obj) -> std::string { return obj.last_trans_hash.to_hex(); })
-      .def_property_readonly("gen_lt", [](const block::AccountState::Info& obj) -> long long { return obj.gen_lt; })
+          [](const block::AccountState::Info& obj) -> std::string {
+            return obj.last_trans_hash.to_hex();
+          })
+      .def_property_readonly("gen_lt", [](const block::AccountState::Info& obj) -> long long {
+        return obj.gen_lt;
+      })
       .def_property_readonly("gen_utime",
-                             [](const block::AccountState::Info& obj) -> long long { return obj.gen_utime; })
-      .def_property_readonly("root", [](const block::AccountState::Info& obj) -> PyCell { return PyCell(obj.root); })
+                             [](const block::AccountState::Info& obj) -> long long {
+                               return obj.gen_utime;
+                             })
+      .def_property_readonly("root", [](const block::AccountState::Info& obj) -> PyCell {
+        return PyCell(obj.root);
+      })
       .def_property_readonly("true_root",
-                             [](const block::AccountState::Info& obj) -> PyCell { return PyCell(obj.true_root); });
+                             [](const block::AccountState::Info& obj) -> PyCell {
+                               return PyCell(obj.true_root);
+                             });
 
   py::class_<block::Transaction::Info>(m, "block_Transaction_Info", py::module_local())
       .def(py::init<>())
-      .def_property_readonly("blkid", [](const block::Transaction::Info& obj) -> ton::BlockIdExt { return obj.blkid; })
+      .def_property_readonly("blkid", [](const block::Transaction::Info& obj) -> ton::BlockIdExt {
+        return obj.blkid;
+      })
       .def_property_readonly(
-          "prev_trans_lt", [](const block::Transaction::Info& obj) -> unsigned long long { return obj.prev_trans_lt; })
-      .def_property_readonly("now", [](const block::Transaction::Info& obj) -> unsigned long long { return obj.now; })
+          "prev_trans_lt", [](const block::Transaction::Info& obj) -> unsigned long long {
+            return obj.prev_trans_lt;
+          })
+      .def_property_readonly("now", [](const block::Transaction::Info& obj) -> unsigned long long {
+        return obj.now;
+      })
       .def_property_readonly(
           "prev_trans_hash",
-          [](const block::Transaction::Info& obj) -> std::string { return obj.prev_trans_hash.to_hex(); })
+          [](const block::Transaction::Info& obj) -> std::string {
+            return obj.prev_trans_hash.to_hex();
+          })
       .def_property_readonly("transaction",
-                             [](const block::Transaction::Info& obj) -> PyCell { return PyCell(obj.transaction); });
+                             [](const block::Transaction::Info& obj) -> PyCell {
+                               return PyCell(obj.transaction);
+                             });
 
   py::class_<block::TransactionList::Info>(m, "block_TransactionList_Info", py::module_local())
       .def(py::init<>())
-      .def_property_readonly("lt", [](const block::TransactionList::Info& obj) -> unsigned long long { return obj.lt; })
+      .def_property_readonly("lt", [](const block::TransactionList::Info& obj) -> unsigned long long {
+        return obj.lt;
+      })
       .def_property_readonly("hash",
-                             [](const block::TransactionList::Info& obj) -> std::string { return obj.hash.to_hex(); })
+                             [](const block::TransactionList::Info& obj) -> std::string {
+                               return obj.hash.to_hex();
+                             })
       .def_property_readonly("transactions",
                              [](const block::TransactionList::Info& obj) -> std::vector<block::Transaction::Info> {
                                return obj.transactions;
@@ -603,6 +683,9 @@ PYBIND11_MODULE(python_ton, m) {
 
   m.def("init_thread_scheduler", pyglobal::init_thread_scheduler);
   m.def("stop_scheduler_thread", pyglobal::stop_scheduler_thread);
+
+  m.def("create_log_collector", create_log_collector);
+  m.def("get_logs", get_logs);
 
   m.def("cleanup", &cleanup);
   py::module::import("atexit").attr("register")(py::cpp_function(cleanup));

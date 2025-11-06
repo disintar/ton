@@ -3,7 +3,6 @@
 #include <memory>
 #include <mutex>
 #include "third-party/pybind11/include/pybind11/pybind11.h"
-
 #include "PyGlobal.h"
 
 std::mutex scheduler_init_mutex;
