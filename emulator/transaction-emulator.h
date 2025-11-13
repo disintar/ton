@@ -37,13 +37,15 @@ public:
     td::Ref<vm::Cell> transaction;
     block::Account account;
     td::Ref<vm::Cell> actions;
+    std::vector<std::string> c5_status;
 
     EmulationSuccess(td::Ref<vm::Cell> transaction_, block::Account account_, std::string vm_log_,
-                     td::Ref<vm::Cell> actions_, double elapsed_time_)
+                     td::Ref<vm::Cell> actions_, std::vector<std::string> c5_status_, double elapsed_time_)
         : EmulationResult(vm_log_, elapsed_time_)
         , transaction(transaction_)
         , account(std::move(account_))
-        , actions(actions_) {
+        , actions(actions_)
+        , c5_status(std::move(c5_status_)) {
     }
   };
 

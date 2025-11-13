@@ -152,6 +152,7 @@ bool PyEmulator::emulate_transaction(const PyCell &shard_account_cell, const PyC
         vm_log = std::move(external_not_accepted->vm_log);
         vm_exit_code = external_not_accepted->vm_exit_code;
         elapsed_time = external_not_accepted->elapsed_time;
+        c5_status.clear();
         return false;
     }
 
@@ -167,6 +168,7 @@ bool PyEmulator::emulate_transaction(const PyCell &shard_account_cell, const PyC
 
     account_cell = std::move(new_shard_account_cell);
     actions_cell = std::move(emulation_success.actions);
+    c5_status = emulation_success.c5_status;
 
     return true;
 }
@@ -242,6 +244,7 @@ bool PyEmulator::emulate_tick_tock_transaction(const PyCell &shard_account_boc, 
 
     account_cell = std::move(new_shard_account_cell);
     actions_cell = std::move(emulation_success.actions);
+    c5_status = emulation_success.c5_status;
 
     return true;
 }

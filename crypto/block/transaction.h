@@ -247,6 +247,8 @@ struct ActionPhase {
   td::RefInt256 action_fine;
   bool need_bounce_on_fail = false;
   bool bounce = false;
+  // Collected C5 action failure statuses (JSON strings, same content as previously printed by log_fail/log_fail_req)
+  std::vector<std::string> c5_status;
 };
 
 struct BouncePhase {

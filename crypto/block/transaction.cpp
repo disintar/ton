@@ -26,6 +26,7 @@
 #include "ton/ton-shard.h"
 #include "vm/vm.h"
 #include "td/utils/Timer.h"
+#include <sstream>
 
 namespace {
 /**
@@ -2671,22 +2672,27 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
     return error_code;
   };
   auto log_fail = [&](int code, const std::string& desc, bool ignored) {
-    LOG(INFO) << "{ \"type\":\"try_action_send_msg_fail\", \"in_msg_hash\":\"" << in_msg->get_hash().to_hex()
-              << "\", \"action_id\":" << action_position
-              << ", \"description\":\"" << desc
-              << "\", \"exit_code\":" << code
-              << ", \"action_fail_ignored\":" << (ignored ? "true" : "false")
-              << " }";
+    std::ostringstream os;
+    os << "{ \"type\":\"try_action_send_msg_fail\", \"in_msg_hash\":\"" << in_msg->get_hash().to_hex()
+       << "\", \"action_id\":" << action_position
+       << ", \"description\":\"" << desc
+       << "\", \"exit_code\":" << code
+       << ", \"action_fail_ignored\":" << (ignored ? "true" : "false")
+       << " }";
+    ap.c5_status.emplace_back(os.str());
   };
-  auto log_fail_req = [&](int code, const std::string& desc, const td::RefInt256& requested, const td::RefInt256& remaining, bool ignored) {
-    LOG(INFO) << "{ \"type\":\"try_action_send_msg_fail\", \"in_msg_hash\":\"" << in_msg->get_hash().to_hex()
-              << "\", \"action_id\":" << action_position
-              << ", \"description\":\"" << desc
-              << "\", \"exit_code\":" << code
-              << ", \"action_fail_ignored\":" << (ignored ? "true" : "false")
-              << ", \"requested\":\"" << requested << "\""
-              << ", \"remaining\":\"" << remaining << "\""
-              << " }";
+  auto log_fail_req = [&](int code, const std::string& desc, const td::RefInt256& requested, const td::RefInt256& remaining, bool ignored, const td::RefInt256& total_fees) {
+    std::ostringstream os;
+    os << "{ \"type\":\"try_action_send_msg_fail\", \"in_msg_hash\":\"" << in_msg->get_hash().to_hex()
+       << "\", \"action_id\":" << action_position
+       << ", \"description\":\"" << desc
+       << "\", \"exit_code\":" << code
+       << ", \"action_fail_ignored\":" << (ignored ? "true" : "false")
+       << ", \"requested\":\"" << requested << "\""
+       << ", \"remaining\":\"" << remaining << "\""
+       << ", \"total_fees\":\"" << total_fees << "\""
+       << " }";
+    ap.c5_status.emplace_back(os.str());
   };
   // try to parse suggested message in act_rec.out_msg
   td::RefInt256 fwd_fee, ihr_fee;
@@ -2867,7 +2873,7 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
   if (sstat.cells > max_cells && max_cells < cfg.size_limits.max_msg_cells) {
     // insufficient funds to process message cells
     td::RefInt256 requested_cells_fine = td::make_refint((td::uint64)sstat.cells * fine_per_cell);
-    log_fail_req(40, "not enough funds to process a message", requested_cells_fine, ap.remaining_balance.grams, skip_invalid);
+    log_fail_req(40, "not enough funds to process a message", requested_cells_fine, ap.remaining_balance.grams, skip_invalid, td::zero_refint());
     collect_fine();
     return check_skip_invalid(40);
   }
@@ -2969,7 +2975,11 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
     // check that we have at least the required value
     if (ap.remaining_balance.grams < req_grams_brutto) {
       // insufficient contract grams
-      log_fail_req(37, "not enough grams to transfer with the message (including forwarding fees)", req_grams_brutto, ap.remaining_balance.grams, skip_invalid);
+      log_fail_req(37, "not enough grams to transfer with the message (including forwarding fees)",
+        req.grams,
+        ap.remaining_balance.grams,
+        skip_invalid,
+        (act_rec.mode & 1) ? fees_total : td::zero_refint());
       collect_fine();
       return check_skip_invalid(37);  // not enough grams
     }
@@ -3039,7 +3049,7 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
     // external messages also have forwarding fees
     if (ap.remaining_balance.grams < fwd_fee) {
       // insufficient contract grams for external message fwd fee
-      log_fail_req(37, "not enough funds to pay for an outbound external message", fwd_fee, ap.remaining_balance.grams, skip_invalid);
+      log_fail_req(37, "not enough funds to pay for an outbound external message", fwd_fee, ap.remaining_balance.grams, skip_invalid, td::zero_refint());
       collect_fine();
       return check_skip_invalid(37);  // not enough grams
     }

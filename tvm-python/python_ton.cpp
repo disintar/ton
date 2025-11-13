@@ -72,43 +72,6 @@ py::object async_wrapper(Func&& func, Args&&... args) {
   return future;
 }
 
-class LogCollector : public td::LogInterface {
-public:
-  void append(td::CSlice slice) override {
-    if (slice.empty())
-      return;
-
-    std::lock_guard<std::mutex> lock(mu_);
-    out_.emplace_back(slice.str());
-
-    // keep only latest 1000
-    if (out_.size() > max_size_) {
-      out_.erase(out_.begin(), out_.end() - max_size_);
-    }
-  }
-
-  std::vector<std::string> get_logs() {
-    std::lock_guard<std::mutex> lock(mu_);
-    return out_;
-  }
-
-private:
-  std::vector<std::string> out_;
-  std::mutex mu_;
-  const size_t max_size_ = 1000;
-};
-
-LogCollector global_log_collector;
-
-bool create_log_collector() {
-  td::log_interface = &global_log_collector;
-  return true;
-}
-
-std::vector<std::string> get_logs() {
-  return global_log_collector.get_logs();
-}
-
 template <typename T>
 struct py::detail::type_caster<td::optional<T>> {
 public:
@@ -459,7 +422,8 @@ PYBIND11_MODULE(python_ton, m) {
       .def_property("elapsed_time", &PyEmulator::get_elapsed_time, &PyEmulator::dummy_set)
       .def_property("transaction_cell", &PyEmulator::get_transaction_cell, &PyEmulator::dummy_set)
       .def_property("account_cell", &PyEmulator::get_account_cell, &PyEmulator::dummy_set)
-      .def_property("actions_cell", &PyEmulator::get_actions_cell, &PyEmulator::dummy_set);
+      .def_property("actions_cell", &PyEmulator::get_actions_cell, &PyEmulator::dummy_set)
+            .def_property("c5_status", &PyEmulator::get_c5_status, &PyEmulator::dummy_set);
 
   py::class_<PyAugmentationCheckData>(m, "PyAugmentationCheckData", py::module_local())
       .def(py::init<py::function&, py::function&, py::function&, py::function&>(), py::arg("py_eval_leaf"),
@@ -683,9 +647,6 @@ PYBIND11_MODULE(python_ton, m) {
 
   m.def("init_thread_scheduler", pyglobal::init_thread_scheduler);
   m.def("stop_scheduler_thread", pyglobal::stop_scheduler_thread);
-
-  m.def("create_log_collector", create_log_collector);
-  m.def("get_logs", get_logs);
 
   m.def("cleanup", &cleanup);
   py::module::import("atexit").attr("register")(py::cpp_function(cleanup));

@@ -2,6 +2,7 @@
 
 #include "third-party/pybind11/include/pybind11/pybind11.h"
 #include <string>
+#include <vector>
 #include "td/utils/base64.h"
 #include <utility>
 #include "vm/boc.h"
@@ -39,6 +40,7 @@ class PyEmulator {
   std::string vm_log;
   double elapsed_time;
   int vm_exit_code;
+  std::vector<std::string> c5_status;
 
   PyEmulator(const PyCell& config_params_cell) {
     // todo: pass ConfigParams as root cell
@@ -72,6 +74,7 @@ class PyEmulator {
   PyCell get_transaction_cell();
   PyCell get_account_cell();
   PyCell get_actions_cell();
+  std::vector<std::string> get_c5_status() { return c5_status; }
   void set_prev_blocks_info(PyStackEntry pystack);
 
   static void dummy_set() {
