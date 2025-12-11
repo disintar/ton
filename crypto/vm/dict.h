@@ -17,11 +17,12 @@
     Copyright 2017-2020 Telegram Systems LLP
 */
 #pragma once
+#include <functional>
+
 #include "common/bitstring.h"
 #include "vm/cells.h"
 #include "vm/cellslice.h"
 #include "vm/stack.hpp"
-#include <functional>
 
 namespace vm {
 using td::BitSlice;

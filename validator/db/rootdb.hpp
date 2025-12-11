@@ -22,48 +22,22 @@
 #include "td/db/KeyValueAsync.h"
 #include "ton/ton-types.h"
 
+#include "archive-manager.hpp"
 #include "celldb.hpp"
 #include "statedb.hpp"
 #include "staticfilesdb.hpp"
-#include "archive-manager.hpp"
-#include "validator/fabric.h"
-#include "archiver.hpp"
 
 #include "td/db/RocksDb.h"
-#include "ton/ton-tl.hpp"
-#include "td/utils/overloaded.h"
 #include "common/checksum.h"
-#include "validator/stats-merger.h"
-#include "td/actor/MultiPromise.h"
 
 #include "td/utils/logging.h"
-#include "td/actor/actor.h"
-#include "td/utils/Time.h"
-#include "td/utils/filesystem.h"
-#include "td/utils/JsonBuilder.h"
-#include "auto/tl/ton_api_json.h"
-#include "crypto/vm/cp0.h"
-#include "ton/ton-types.h"
-#include "ton/ton-tl.hpp"
-#include "tl/tlblib.hpp"
-#include "block/block.h"
 #include "block/block-parse.h"
-#include "block/block-auto.h"
-#include "vm/dict.h"
-#include "vm/cells/MerkleProof.h"
-#include "vm/vm.h"
 #include "td/utils/Slice.h"
 #include "td/utils/common.h"
 #include "crypto/block/transaction.h"
-#include "td/utils/base64.h"
-#include "td/utils/OptionParser.h"
-#include "td/utils/port/user.h"
 #include <utility>
-#include "auto/tl/lite_api.h"
-#include "adnl/utils.hpp"
 #include "tuple"
 #include "vm/boc.h"
-#include "crypto/block/mc-config.h"
 
 #include "validator-engine/IBlockParser.hpp"
 #include "validator-engine/ClusterSyncer.hpp"
@@ -139,7 +113,7 @@ public:
   void store_persistent_state_file(BlockIdExt block_id, BlockIdExt masterchain_block_id, PersistentStateType type,
                                    td::BufferSlice state, td::Promise<td::Unit> promise) override;
   void store_persistent_state_file_gen(BlockIdExt block_id, BlockIdExt masterchain_block_id, PersistentStateType type,
-                                       std::function<td::Status(td::FileFd&)> write_data,
+                                       std::function<td::Status(td::FileFd &)> write_data,
                                        td::Promise<td::Unit> promise) override;
   void get_persistent_state_file(BlockIdExt block_id, BlockIdExt masterchain_block_id, PersistentStateType type,
                                  td::Promise<td::BufferSlice> promise) override;

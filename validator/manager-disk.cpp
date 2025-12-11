@@ -16,16 +16,18 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "manager-disk.hpp"
-#include "validator-group.hpp"
 #include "adnl/utils.hpp"
+#include "downloaders/wait-block-data-disk.hpp"
+#include "downloaders/wait-block-state-merge.hpp"
 #include "adnl/adnl-ext-client.h"
 #include "downloaders/wait-block-state.hpp"
-#include "downloaders/wait-block-state-merge.hpp"
-#include "downloaders/wait-block-data-disk.hpp"
-#include "validator-group.hpp"
+#include "td/utils/overloaded.h"
+#include "ton/ton-io.hpp"
+
 #include "fabric.h"
+#include "manager-disk.hpp"
 #include "manager.h"
+#include "validator-group.hpp"
 #include "ton/ton-io.hpp"
 #include "td/utils/overloaded.h"
 #include "auto/tl/lite_api.h"
@@ -697,7 +699,7 @@ void ValidatorManagerImpl::wait_block_message_queue_short(BlockIdExt block_id, t
 void ValidatorManagerImpl::get_external_messages(
     ShardIdFull shard, td::Promise<std::vector<std::pair<td::Ref<ExtMessage>, int>>> promise) {
   std::vector<std::pair<td::Ref<ExtMessage>, int>> res;
-  for (const auto& x : ext_messages_) {
+  for (const auto &x : ext_messages_) {
     res.emplace_back(x, 0);
   }
   promise.set_result(std::move(res));

@@ -18,8 +18,13 @@
 */
 #pragma once
 
-#include "TonlibCallback.h"
+#include <map>
 
+#include "lite-client/ext-client.h"
+#include "smc-envelope/ManualDns.h"
+#include "td/actor/actor.h"
+#include "td/utils/CancellationToken.h"
+#include "td/utils/optional.h"
 #include "tonlib/Config.h"
 #include "tonlib/ExtClient.h"
 #include "tonlib/ExtClientOutbound.h"
@@ -27,15 +32,7 @@
 #include "tonlib/KeyValue.h"
 #include "tonlib/LastBlockStorage.h"
 
-#include "td/actor/actor.h"
-
-#include "td/utils/CancellationToken.h"
-#include "td/utils/optional.h"
-
-#include "smc-envelope/ManualDns.h"
-#include "lite-client/ext-client.h"
-
-#include <map>
+#include "TonlibCallback.h"
 
 namespace tonlib {
 namespace int_api {
@@ -339,7 +336,8 @@ class TonlibClient : public td::actor::Actor {
 
   td::Status do_request(const tonlib_api::smc_getLibraries& request,
                         td::Promise<object_ptr<tonlib_api::smc_libraryResult>>&& promise);
-  void get_libraries(ton::BlockIdExt blkid, std::vector<td::Bits256> library_list_, td::Promise<object_ptr<tonlib_api::smc_libraryResult>>&& promise);
+  void get_libraries(ton::BlockIdExt blkid, std::vector<td::Bits256> library_list_,
+                     td::Promise<object_ptr<tonlib_api::smc_libraryResult>>&& promise);
 
   td::Status do_request(const tonlib_api::smc_getLibrariesExt& request,
                         td::Promise<object_ptr<tonlib_api::smc_libraryResultExt>>&& promise);

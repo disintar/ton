@@ -16,14 +16,13 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "vm/dict.h"
-#include "vm/cells.h"
-#include "vm/cellslice.h"
-#include "vm/stack.hpp"
 #include "common/bitstring.h"
 #include "td/utils/Random.h"
-
 #include "td/utils/bits.h"
+#include "vm/cells.h"
+#include "vm/cellslice.h"
+#include "vm/dict.h"
+#include "vm/stack.hpp"
 
 namespace vm {
 
@@ -2274,8 +2273,8 @@ bool DictionaryFixed::combine_with(DictionaryFixed& dict2) {
 }
 
 bool DictionaryFixed::dict_check_for_each(Ref<Cell> dict, td::BitPtr key_buffer, int n, int total_key_len,
-                                          const DictionaryFixed::foreach_func_t& foreach_func,
-                                          bool invert_first, bool shuffle) const {
+                                          const DictionaryFixed::foreach_func_t& foreach_func, bool invert_first,
+                                          bool shuffle) const {
   if (dict.is_null()) {
     return true;
   }
@@ -2295,7 +2294,7 @@ bool DictionaryFixed::dict_check_for_each(Ref<Cell> dict, td::BitPtr key_buffer,
   if (l) {
     invert_first = false;
   }
-  bool invert = shuffle ? td::Random::fast(0, 1) == 1: invert_first;
+  bool invert = shuffle ? td::Random::fast(0, 1) == 1 : invert_first;
   if (invert) {
     std::swap(c1, c2);
   }

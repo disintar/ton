@@ -18,11 +18,13 @@
 */
 #pragma once
 
-#include "validator/interfaces/db.h"
-#include "package.hpp"
-#include "fileref.hpp"
-#include "td/db/RocksDb.h"
 #include <map>
+
+#include "td/db/RocksDb.h"
+#include "validator/interfaces/db.h"
+
+#include "fileref.hpp"
+#include "package.hpp"
 
 namespace rocksdb {
 class Statistics;
@@ -70,7 +72,8 @@ struct DbStatistics {
 
 class PackageWriter : public td::actor::Actor {
  public:
-  PackageWriter(std::weak_ptr<Package> package, bool async_mode = false, std::shared_ptr<PackageStatistics> statistics = nullptr)
+  PackageWriter(std::weak_ptr<Package> package, bool async_mode = false,
+                std::shared_ptr<PackageStatistics> statistics = nullptr)
       : package_(std::move(package)), async_mode_(async_mode), statistics_(std::move(statistics)) {
   }
 
@@ -137,7 +140,7 @@ class ArchiveSlice : public td::actor::Actor {
  private:
   void before_query();
   void do_close();
-  template<typename T>
+  template <typename T>
   td::Promise<T> begin_async_query(td::Promise<T> promise);
   void end_async_query();
   void add_file_cont(size_t idx, FileReference ref_id, td::uint64 offset, td::uint64 size,
@@ -166,9 +169,7 @@ class ArchiveSlice : public td::actor::Actor {
   bool shard_separated_{false};
   td::uint32 shard_split_depth_ = 0;
 
-  enum Status {
-    st_closed, st_open, st_want_close
-  } status_ = st_closed;
+  enum Status { st_closed, st_open, st_want_close } status_ = st_closed;
   size_t active_queries_ = 0;
 
   std::string db_root_;
@@ -177,8 +178,8 @@ class ArchiveSlice : public td::actor::Actor {
   std::unique_ptr<td::KeyValue> kv_;
 
   struct PackageInfo {
-    PackageInfo(std::shared_ptr<Package> package, td::actor::ActorOwn<PackageWriter> writer, BlockSeqno seqno, ShardIdFull shard_prefix,
-                std::string path, td::uint32 idx, td::uint32 version)
+    PackageInfo(std::shared_ptr<Package> package, td::actor::ActorOwn<PackageWriter> writer, BlockSeqno seqno,
+                ShardIdFull shard_prefix, std::string path, td::uint32 idx, td::uint32 version)
         : package(std::move(package))
         , writer(std ::move(writer))
         , seqno(seqno)
@@ -224,6 +225,7 @@ class ArchiveLru : public td::actor::Actor {
   }
   void on_query(td::actor::ActorId<ArchiveSlice> slice, PackageId id, size_t files_count);
   void set_permanent_slices(std::vector<PackageId> ids);
+
  private:
   size_t current_idx_ = 1;
   struct SliceInfo {

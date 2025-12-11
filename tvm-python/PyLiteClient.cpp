@@ -434,7 +434,7 @@ namespace pylite {
             throw std::logic_error(z.move_as_error().to_string());
         }
         auto root = z.move_as_ok();
-        auto virt_root = vm::MerkleProof::virtualize(root, 1);
+        auto virt_root = vm::MerkleProof::virtualize(root);
         if (virt_root.is_null()) {
             throw std::logic_error("block header proof for block " + blk_id.to_str() + " is not a valid Merkle proof");
         }
@@ -508,7 +508,7 @@ namespace pylite {
                             "cannot virtualize configuration proof constructed from key block " + blkid.to_str());
                 }
 
-                block = vm::MerkleProof::virtualize(config_proof, 1);
+                block = vm::MerkleProof::virtualize(config_proof);
                 if (block.is_null()) {
                     throw std::logic_error(
                             "cannot virtualize configuration proof constructed from key block " + blkid.to_str());
@@ -660,7 +660,7 @@ namespace pylite {
                 }
                 auto proof_root = P.move_as_ok();
                 try {
-                    auto block_root = vm::MerkleProof::virtualize(std::move(proof_root), 1);
+                    auto block_root = vm::MerkleProof::virtualize(std::move(proof_root));
                     if (block_root.is_null()) {
                         throw std::logic_error("transaction block proof is invalid");
                     }

@@ -28,3 +28,14 @@ openssl-3.1.4.zip
 readline-5.0-1-lib.zip
 
 tmp_acc_test/*
+
+# Python files
+.venv
+.ruff_cache
+*.egg-info
+
+# Work directory for integration tests
+test/integration/.network
+
+test/tontester/tests/tl/generated
+test/tontester/src/tontester/tl

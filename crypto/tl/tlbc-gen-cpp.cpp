@@ -16,9 +16,10 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "tlbc-gen-cpp.h"
 #include "td/utils/bits.h"
 #include "td/utils/filesystem.h"
+
+#include "tlbc-gen-cpp.h"
 
 namespace tlbc {
 

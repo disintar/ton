@@ -18,8 +18,9 @@
 */
 #pragma once
 
-#include "interfaces/validator-manager.h"
 #include "interfaces/db.h"
+#include "interfaces/validator-manager.h"
+
 #include "validator.h"
 
 namespace ton {
@@ -47,11 +48,14 @@ struct ValidateParams {
   BlockIdExt min_masterchain_block_id;
   std::vector<BlockIdExt> prev;
   td::Ref<ValidatorSet> validator_set = {};
-  PublicKeyHash local_validator_id = PublicKeyHash::zero();;
+  PublicKeyHash local_validator_id = PublicKeyHash::zero();
+  ;
   bool is_fake = false;
 
   // Optional - used for validation of optimistic candidates
   Ref<BlockData> optimistic_prev_block = {};
+
+  bool parallel_validation = false;
 };
 
 td::actor::ActorOwn<Db> create_db_actor(td::actor::ActorId<ValidatorManager> manager, std::string db_root_,
@@ -81,8 +85,8 @@ void run_check_external_message(td::Ref<ExtMessage> message, td::actor::ActorId<
 
 void run_accept_block_query(BlockIdExt id, td::Ref<BlockData> data, std::vector<BlockIdExt> prev,
                             td::Ref<ValidatorSet> validator_set, td::Ref<BlockSignatureSet> signatures,
-                            td::Ref<BlockSignatureSet> approve_signatures, int send_broadcast_mode, bool apply,
-                            td::actor::ActorId<ValidatorManager> manager, td::Promise<td::Unit> promise);
+                            int send_broadcast_mode, bool apply, td::actor::ActorId<ValidatorManager> manager,
+                            td::Promise<td::Unit> promise);
 void run_fake_accept_block_query(BlockIdExt id, td::Ref<BlockData> data, std::vector<BlockIdExt> prev,
                                  td::Ref<ValidatorSet> validator_set, td::actor::ActorId<ValidatorManager> manager,
                                  td::Promise<td::Unit> promise);

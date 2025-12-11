@@ -16,34 +16,36 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "liteserver.hpp"
+#include <ctime>
+
+#include "adnl/utils.hpp"
+#include "auto/tl/lite_api.h"
+#include "auto/tl/lite_api.hpp"
+#include "block/block-auto.h"
+#include "block/block-parse.h"
+#include "block/block.h"
+#include "block/check-proof.h"
+#include "td/actor/MultiPromise.h"
+#include "td/utils/Random.h"
 #include "td/utils/Slice.h"
 #include "td/utils/common.h"
 #include "td/utils/crypto.h"
 #include "td/utils/overloaded.h"
-#include "auto/tl/lite_api.h"
-#include "auto/tl/lite_api.hpp"
-#include "adnl/utils.hpp"
-#include "ton/lite-tl.hpp"
 #include "tl-utils/lite-utils.hpp"
-#include "td/utils/Random.h"
-#include "vm/boc.h"
 #include "tl/tlblib.hpp"
-#include "block/block.h"
-#include "block/block-parse.h"
-#include "block/block-auto.h"
-#include "block/check-proof.h"
-#include "vm/dict.h"
+#include "ton/lite-tl.hpp"
+#include "vm/boc.h"
 #include "vm/cells/MerkleProof.h"
-#include "vm/vm.h"
+#include "vm/dict.h"
 #include "vm/memo.h"
-#include "shard.hpp"
-#include "validator-set.hpp"
-#include "signature-set.hpp"
-#include "fabric.h"
-#include <ctime>
-#include "td/actor/MultiPromise.h"
+#include "vm/vm.h"
+
 #include "collator-impl.h"
+#include "fabric.h"
+#include "liteserver.hpp"
+#include "shard.hpp"
+#include "signature-set.hpp"
+#include "validator-set.hpp"
 
 static std::string string_block_id(ton::tl_object_ptr<ton::lite_api::tonNode_blockIdExt> &B) {
   return "(" + std::to_string(B->workchain_) + ":" + std::to_string(B->shard_) + ":" + std::to_string(B->seqno_) +
@@ -1565,7 +1567,8 @@ void LiteQuery::perform_runSmcMethod(BlockIdExt blkid, WorkchainId workchain, St
           return true;
         }
 
-bool LiteQuery::make_ancestor_block_proof(Ref<vm::Cell>& proof, Ref<MasterchainState> mc_state, const BlockIdExt& old_blkid) {
+bool LiteQuery::make_ancestor_block_proof(Ref<vm::Cell>& proof, Ref<MasterchainState> mc_state,
+                                          const BlockIdExt& old_blkid) {
   vm::MerkleProofBuilder mpb{mc_state->root_cell()};
   auto rconfig =
       block::ConfigInfo::extract_config(mpb.root(), mc_state->get_block_id(), block::ConfigInfo::needPrevBlocks);
@@ -1640,9 +1643,8 @@ void LiteQuery::finish_getAccountState(td::BufferSlice shard_proof) {
       return;
     }
     auto rconfig = config.move_as_ok();
-    acc_state_promise_.set_value(std::make_tuple(
-                                  std::move(acc_csr), sstate.gen_utime, sstate.gen_lt, std::move(rconfig)
-                                 ));
+    acc_state_promise_.set_value(
+        std::make_tuple(std::move(acc_csr), sstate.gen_utime, sstate.gen_lt, std::move(rconfig)));
     return;
   }
 
@@ -2396,30 +2398,33 @@ void LiteQuery::perform_getConfigParams(BlockIdExt blkid, int mode, std::vector<
           << lt << ", " << utime << ") liteserver query";
 
   ton::AccountIdPrefixFull pfx{blkid.workchain, blkid.shard};
-  auto P = td::PromiseCreator::lambda(
-    [Self = actor_id(this), mc_blkid, manager = manager_, pfx](td::Result<ConstBlockHandle> res) {
-      if (res.is_error()) {
-        td::actor::send_closure(Self, &LiteQuery::abort_query, res.move_as_error());
-        return;
-      }
-      auto handle = res.move_as_ok();
-      if (!handle->inited_masterchain_ref_block()) {
-        td::actor::send_closure(Self, &LiteQuery::abort_query, td::Status::Error("block doesn't have masterchain ref"));
-        return;
-      }
-      if (handle->masterchain_ref_block() > mc_blkid.seqno()) {
-        td::actor::send_closure(Self, &LiteQuery::abort_query, td::Status::Error("specified mc block is older than block's masterchain ref"));
-        return;
-      }
-      LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
-      td::actor::send_closure_later(manager, &ValidatorManager::get_block_data_from_db, handle,
-                                    [Self, mc_ref_blkid = handle->masterchain_ref_block(), pfx](td::Result<Ref<BlockData>> res) {
-        if (res.is_error()) {
-          td::actor::send_closure(Self, &LiteQuery::abort_query, res.move_as_error());
-        } else {
-          td::actor::send_closure_later(Self, &LiteQuery::continue_lookupBlockWithProof_getHeaderProof, res.move_as_ok(), pfx, mc_ref_blkid);
-        }
-      });
+  auto P = td::PromiseCreator::lambda([Self = actor_id(this), mc_blkid, manager = manager_,
+                                       pfx](td::Result<ConstBlockHandle> res) {
+    if (res.is_error()) {
+      td::actor::send_closure(Self, &LiteQuery::abort_query, res.move_as_error());
+      return;
+    }
+    auto handle = res.move_as_ok();
+    if (!handle->inited_masterchain_ref_block()) {
+      td::actor::send_closure(Self, &LiteQuery::abort_query, td::Status::Error("block doesn't have masterchain ref"));
+      return;
+    }
+    if (handle->masterchain_ref_block() > mc_blkid.seqno()) {
+      td::actor::send_closure(Self, &LiteQuery::abort_query,
+                              td::Status::Error("specified mc block is older than block's masterchain ref"));
+      return;
+    }
+    LOG(DEBUG) << "requesting data for block " << handle->id().to_str();
+    td::actor::send_closure_later(
+        manager, &ValidatorManager::get_block_data_from_db, handle,
+        [Self, mc_ref_blkid = handle->masterchain_ref_block(), pfx](td::Result<Ref<BlockData>> res) {
+          if (res.is_error()) {
+            td::actor::send_closure(Self, &LiteQuery::abort_query, res.move_as_error());
+          } else {
+            td::actor::send_closure_later(Self, &LiteQuery::continue_lookupBlockWithProof_getHeaderProof,
+                                          res.move_as_ok(), pfx, mc_ref_blkid);
+          }
+        });
   });
 
           if (mode & 2) {
@@ -2786,7 +2791,8 @@ static td::Result<tl_object_ptr<lite_api::liteServer_transactionMetadata>> get_i
   }
   block::tlb::MsgEnvelope::Record_std env;
   if (!block::tlb::unpack_cell(std::move(msg_env), env)) {
-    return td::Status::Error(PSTRING() << "failed to unpack MsgEnvelope for message with hash " << in_msg_hash.to_hex());
+    return td::Status::Error(PSTRING() << "failed to unpack MsgEnvelope for message with hash "
+                                       << in_msg_hash.to_hex());
   }
   if (!env.metadata) {
     return nullptr;
@@ -4096,28 +4102,25 @@ void LiteQuery::finish_getDispatchQueueMessages(StdSmcAddress addr, LogicalTime 
   finish_query(std::move(b));
 }
 
-        void
-        LiteQuery::perform_nonfinal_getCandidate(td::Bits256 source, BlockIdExt blkid, td::Bits256 collated_data_hash) {
-          LOG(INFO) << "started a nonfinal.getCandidate liteserver query";
+void LiteQuery::perform_nonfinal_getCandidate(td::Bits256 source, BlockIdExt blkid, td::Bits256 collated_data_hash) {
+  LOG(INFO) << "started a nonfinal.getCandidate liteserver query";
+  td::actor::send_closure_later(
+      manager_, &ValidatorManager::get_block_candidate_for_litequery, PublicKey{pubkeys::Ed25519{source}}, blkid,
+      collated_data_hash, [Self = actor_id(this)](td::Result<BlockCandidate> R) {
+        if (R.is_error()) {
+          td::actor::send_closure(Self, &LiteQuery::abort_query, R.move_as_error());
+        } else {
+          BlockCandidate cand = R.move_as_ok();
           td::actor::send_closure_later(
-                  manager_, &ValidatorManager::get_block_candidate_for_litequery, PublicKey{pubkeys::Ed25519{source}},
-                  blkid, collated_data_hash,
-                  [Self = actor_id(this)](td::Result<BlockCandidate> R) {
-                      if (R.is_error()) {
-                        td::actor::send_closure(Self, &LiteQuery::abort_query, R.move_as_error());
-                      } else {
-                        BlockCandidate cand = R.move_as_ok();
-                        td::actor::send_closure_later(
-                                Self, &LiteQuery::finish_query,
-                                create_serialize_tl_object<lite_api::liteServer_nonfinal_candidate>(
-                                        create_tl_object<lite_api::liteServer_nonfinal_candidateId>(
-                                                create_tl_lite_block_id(cand.id), cand.pubkey.as_bits256(),
-                                                cand.collated_file_hash),
-                                        std::move(cand.data), std::move(cand.collated_data)),
-                                false);
-                      }
-                  });
+              Self, &LiteQuery::finish_query,
+              create_serialize_tl_object<lite_api::liteServer_nonfinal_candidate>(
+                  create_tl_object<lite_api::liteServer_nonfinal_candidateId>(
+                      create_tl_lite_block_id(cand.id), cand.pubkey.as_bits256(), cand.collated_file_hash),
+                  std::move(cand.data), std::move(cand.collated_data)),
+              false);
         }
+      });
+}
 
         void LiteQuery::perform_nonfinal_getValidatorGroups(int mode, ShardIdFull shard) {
           bool with_shard = mode & 1;

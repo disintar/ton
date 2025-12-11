@@ -18,11 +18,11 @@
 */
 #pragma once
 
+#include "adnl/utils.hpp"
+#include "auto/tl/ton_api.h"
+#include "block/transaction.h"
 #include "interfaces/validator-manager.h"
 #include "validator/interfaces/external-message.h"
-#include "auto/tl/ton_api.h"
-#include "adnl/utils.hpp"
-#include "block/transaction.h"
 
 namespace ton {
 

@@ -18,17 +18,20 @@
 */
 #pragma once
 
-#include <cassert>
 #include <algorithm>
+#include <cassert>
+#include <functional>
+#include <iostream>
+#include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
-#include <iostream>
-#include <sstream>
-#include <memory>
-#include "common/refcnt.hpp"
+
 #include "common/bigint.hpp"
-#include "common/refint.h"
 #include "common/bitstring.h"
+#include "common/refcnt.hpp"
+#include "common/refint.h"
+#include "td/utils/Span.h"
 #include "vm/cells.h"
 #include "vm/cellslice.h"
 #include "vm/excno.hpp"

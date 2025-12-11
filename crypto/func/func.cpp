@@ -31,7 +31,14 @@
 #include <getopt.h>
 #include "git.h"
 #include <fstream>
+#include <getopt.h>
+
+#include "parser/lexer.h"
+#include "parser/srcread.h"
 #include "td/utils/port/path.h"
+
+#include "func.h"
+#include "git.h"
 
 namespace funC {
 
@@ -71,7 +78,7 @@ td::Result<std::string> fs_read_callback(ReadCallback::Kind kind, const char* qu
  *
  */
 
-void generate_output_func(SymDef* func_sym, std::ostream &outs, std::ostream &errs) {
+void generate_output_func(SymDef* func_sym, std::ostream& outs, std::ostream& errs) {
   SymValCodeFunc* func_val = dynamic_cast<SymValCodeFunc*>(func_sym->value);
   func_assert(func_val);
   std::string name = sym_func::symbols.get_name(func_sym->sym_idx);
@@ -157,7 +164,7 @@ void generate_output_func(SymDef* func_sym, std::ostream &outs, std::ostream &er
   }
 }
 
-int generate_output(std::ostream &outs, std::ostream &errs) {
+int generate_output(std::ostream& outs, std::ostream& errs) {
   if (asm_preamble) {
     outs << "\"Asm.fif\" include\n";
   }
@@ -200,7 +207,7 @@ int generate_output(std::ostream &outs, std::ostream &errs) {
   return errors;
 }
 
-void output_inclusion_stack(std::ostream &errs) {
+void output_inclusion_stack(std::ostream& errs) {
   while (!funC::inclusion_locations.empty()) {
     src_func::SrcLocation loc = funC::inclusion_locations.top();
     funC::inclusion_locations.pop();
@@ -212,8 +219,7 @@ void output_inclusion_stack(std::ostream &errs) {
   }
 }
 
-
-int func_proceed(const std::vector<std::string> &sources, std::ostream &outs, std::ostream &errs) {
+int func_proceed(const std::vector<std::string>& sources, std::ostream& outs, std::ostream& errs) {
   if (funC::program_envelope && !funC::indent) {
     funC::indent = 1;
   }
