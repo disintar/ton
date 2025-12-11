@@ -268,7 +268,7 @@ struct promise_type : promise_value<td::Result<T>> {
     return wrap_and_resume_on_current(std::move(wrapped.value));
   }
 
-  template <class Aw>
+  template <IsAwaitable Aw>
   auto await_transform(Aw&& aw) noexcept {
     return wrap_and_resume_on_current(std::forward<Aw>(aw));
   }

@@ -186,6 +186,10 @@ struct ResultUnwrapAwaiter {
 
   Res result;
 
+  // Allow constructing from a result value explicitly
+  constexpr explicit ResultUnwrapAwaiter(Res r) noexcept : result(std::move(r)) {
+  }
+
   bool await_ready() noexcept {
     return result.is_ok();
   }
@@ -223,7 +227,7 @@ template <IsAwaitable Aw>
 
 template <class T>
 [[nodiscard]] auto result_awaiter_unwrap(Result<T>&& r) noexcept {
-  return detail::ResultUnwrapAwaiter<Result<T>>(std::move(r));
+  return detail::ResultUnwrapAwaiter<Result<T>>{std::move(r)};
 }
 
 template <class T>
