@@ -24,6 +24,12 @@
 [submodule "third-party/tl-parser"]
 	path = third-party/tl-parser
 	url = https://github.com/ton-blockchain/tl-parser.git
+[submodule "third-party/libbacktrace"]
+	path = third-party/libbacktrace
+	url = https://github.com/ianlancetaylor/libbacktrace.git
+[submodule "third-party/ngtcp2"]
+	path = third-party/ngtcp2
+	url = https://github.com/ngtcp2/ngtcp2.git
 [submodule "third-party/pybind11"]
 	path = third-party/pybind11
 	url = https://github.com/pybind/pybind11.git

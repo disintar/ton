@@ -160,13 +160,10 @@ class ValidatorManagerImpl : public ValidatorManager {
   void get_key_block_proof_link(BlockIdExt block_id, td::Promise<td::BufferSlice> promise) override;
   //void get_block_description(BlockIdExt block_id, td::Promise<BlockDescription> promise) override;
 
-  void new_external_message(td::BufferSlice data, int priority) override;
-  void check_external_message(td::BufferSlice data, td::Promise<td::Ref<ExtMessage>> promise, bool from_ls = false) override;
+  td::actor::Task<> new_external_message_broadcast(td::BufferSlice data, int priority) override;
   void new_ihr_message(td::BufferSlice data) override;
   void new_shard_block_description_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno,
                                              td::BufferSlice data) override;
-  void new_block_candidate_broadcast(BlockIdExt block_id, td::BufferSlice data) override {
-  }
 
   void add_ext_server_id(adnl::AdnlNodeIdShort id) override;
   void add_ext_server_port(td::uint16 port) override;
@@ -214,12 +211,12 @@ class ValidatorManagerImpl : public ValidatorManager {
   void wait_block_proof_link_short(BlockIdExt id, td::Timestamp timeout,
                                    td::Promise<td::Ref<ProofLink>> promise) override;
 
-  void set_block_signatures(BlockHandle handle, td::Ref<BlockSignatureSet> signatures,
-                            td::Promise<td::Unit> promise) override;
+  void set_block_signatures(BlockHandle handle, td::Ref<block::BlockSignatureSet> signatures,
+                            Ref<block::ValidatorSet> vset, td::Promise<td::Unit> promise) override;
   void wait_block_signatures(BlockHandle handle, td::Timestamp timeout,
-                             td::Promise<td::Ref<BlockSignatureSet>> promise) override;
+                             td::Promise<td::Ref<block::BlockSignatureSet>> promise) override;
   void wait_block_signatures_short(BlockIdExt id, td::Timestamp timeout,
-                                   td::Promise<td::Ref<BlockSignatureSet>> promise) override;
+                                   td::Promise<td::Ref<block::BlockSignatureSet>> promise) override;
 
   void set_block_candidate(BlockIdExt id, BlockCandidate candidate, CatchainSeqno cc_seqno,
                            td::uint32 validator_set_hash, td::Promise<td::Unit> promise) override;
@@ -293,13 +290,6 @@ class ValidatorManagerImpl : public ValidatorManager {
                                         td::Promise<std::vector<BlockIdExt>> promise) override {
     UNREACHABLE();
   }
-  void send_external_message(td::Ref<ExtMessage> message) override {
-    if (offline_) {
-      new_external_message(message->serialize(), 0);
-    } else {
-      callback_->send_ext_message(message->shard(), message->serialize());
-    }
-  }
   void send_ihr_message(td::Ref<IhrMessage> message) override {
     new_ihr_message(message->serialize());
   }
@@ -354,9 +344,9 @@ class ValidatorManagerImpl : public ValidatorManager {
   void started_final(ValidatorManagerInitResult result);
 
   void write_fake(BlockCandidate candidate, std::vector<BlockIdExt> prev, BlockIdExt last,
-                  td::Ref<ValidatorSet> val_set);
+                  td::Ref<block::ValidatorSet> val_set);
   void validate_fake(BlockCandidate candidate, std::vector<BlockIdExt> prev, BlockIdExt last,
-                     td::Ref<ValidatorSet> val_set);
+                     td::Ref<block::ValidatorSet> val_set);
   void complete_fake(BlockIdExt candidate_id);
 
   void check_is_hardfork(BlockIdExt block_id, td::Promise<bool> promise) override {
@@ -615,7 +605,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   void update_shard_blocks();
   void reinit();
   void dec_pending_new_blocks();
-  ValidatorSessionId get_validator_set_id(ShardIdFull shard, td::Ref<ValidatorSet> val_set);
+  ValidatorSessionId get_validator_set_id(ShardIdFull shard, td::Ref<block::ValidatorSet> val_set);
 };
 
 }  // namespace validator

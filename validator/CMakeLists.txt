@@ -30,6 +30,8 @@ set(VALIDATOR_DB_SOURCE
   db/staticfilesdb.hpp
   db/db-utils.cpp
   db/db-utils.h
+  db/db-event-publisher.cpp
+  db/db-event-publisher.hpp
   ../blockchain-indexer/json-utils.cpp
   ../validator-engine/IBlockParser.cpp
   ../validator-engine/IBlockParser.hpp
@@ -43,6 +45,7 @@ set(VALIDATOR_DB_SOURCE
 )
 
 set(VALIDATOR_HEADERS
+  types.h
   block-handle.hpp
   get-next-key-blocks.h
 
@@ -59,10 +62,8 @@ set(VALIDATOR_HEADERS
   interfaces/out-msg-queue-proof.h
   interfaces/proof.h
   interfaces/shard.h
-  interfaces/signature-set.h
   interfaces/validator-full-id.h
   interfaces/validator-manager.h
-  interfaces/validator-set.h
   invariants.hpp
 
   import-db-slice.hpp
@@ -119,6 +120,23 @@ set(VALIDATOR_SOURCE
 
   manager-init.cpp
   manager.cpp
+
+  consensus/null/consensus.cpp
+  consensus/simplex/bus.cpp
+  consensus/simplex/candidate-resolver.cpp
+  consensus/simplex/certificate.cpp
+  consensus/simplex/consensus.cpp
+  consensus/simplex/pool.cpp
+  consensus/simplex/votes.cpp
+  consensus/block-accepter.cpp
+  consensus/block-producer.cpp
+  consensus/block-validator.cpp
+  consensus/bridge.cpp
+  consensus/bus.cpp
+  consensus/private-overlay.cpp
+  consensus/stats-collector.cpp
+  consensus/types.cpp
+  consensus/utils.cpp
 
   ${VALIDATOR_HEADERS}
 )

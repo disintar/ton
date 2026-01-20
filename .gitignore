@@ -38,4 +38,4 @@ tmp_acc_test/*
 test/integration/.network
 
 test/tontester/tests/tl/generated
-test/tontester/src/tontester/tl
+test/tontester/src/tonapi

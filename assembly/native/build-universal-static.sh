@@ -100,6 +100,7 @@ fi
 # Help CMake find Homebrew GNU readline on macOS (avoid linking to libedit)
 EXTRA_CMAKE_ARGS=""
 if [[ "$OSTYPE" == "darwin"* ]]; then
+  # SDKROOT=$(xcrun --show-sdk-path)
   if brew ls --versions readline >/dev/null 2>&1; then
     READLINE_PREFIX="$(brew --prefix readline)"
     EXTRA_CMAKE_ARGS="-DCMAKE_PREFIX_PATH=${READLINE_PREFIX}"

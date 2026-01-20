@@ -27,7 +27,6 @@
 
 #include "message-queue.hpp"
 #include "shard.hpp"
-#include "validator-set.hpp"
 
 #define LAZY_STATE_DESERIALIZE 1
 
@@ -423,8 +422,9 @@ td::Status MasterchainStateQ::prepare() {
   return mc_reinit();
 }
 
-Ref<ValidatorSet> MasterchainStateQ::compute_validator_set(ShardIdFull shard, const block::ValidatorSet& vset,
-                                                           UnixTime time, CatchainSeqno ccseqno) const {
+Ref<block::ValidatorSet> MasterchainStateQ::compute_validator_set(ShardIdFull shard,
+                                                                  const block::TotalValidatorSet& vset, UnixTime time,
+                                                                  CatchainSeqno ccseqno) const {
   if (!config_) {
     return {};
   }
@@ -433,10 +433,10 @@ Ref<ValidatorSet> MasterchainStateQ::compute_validator_set(ShardIdFull shard, co
   if (nodes.empty()) {
     return {};
   }
-  return Ref<ValidatorSetQ>{true, ccseqno, shard, std::move(nodes)};
+  return Ref<block::ValidatorSet>{true, ccseqno, shard, std::move(nodes)};
 }
 
-Ref<ValidatorSet> MasterchainStateQ::get_validator_set(ShardIdFull shard) const {
+Ref<block::ValidatorSet> MasterchainStateQ::get_validator_set(ShardIdFull shard) const {
   if (!config_ || !cur_validators_) {
     LOG(ERROR) << "MasterchainStateQ::get_validator_set() : no config or no cur_validators";
     return {};
@@ -444,7 +444,8 @@ Ref<ValidatorSet> MasterchainStateQ::get_validator_set(ShardIdFull shard) const 
   return compute_validator_set(shard, *cur_validators_, config_->utime, 0);
 }
 
-Ref<ValidatorSet> MasterchainStateQ::get_validator_set(ShardIdFull shard, UnixTime ts, CatchainSeqno cc_seqno) const {
+Ref<block::ValidatorSet> MasterchainStateQ::get_validator_set(ShardIdFull shard, UnixTime ts,
+                                                              CatchainSeqno cc_seqno) const {
   if (!config_ || !cur_validators_) {
     LOG(ERROR) << "MasterchainStateQ::get_validator_set() : no config or no cur_validators";
     return {};
@@ -453,11 +454,11 @@ Ref<ValidatorSet> MasterchainStateQ::get_validator_set(ShardIdFull shard, UnixTi
   if (nodes.empty()) {
     return {};
   }
-  return Ref<ValidatorSetQ>{true, cc_seqno, shard, std::move(nodes)};
+  return Ref<block::ValidatorSet>{true, cc_seqno, shard, std::move(nodes)};
 }
 
 // next = -1 -> prev, next = 0 -> cur
-Ref<ValidatorSet> MasterchainStateQ::get_total_validator_set(int next) const {
+Ref<block::ValidatorSet> MasterchainStateQ::get_total_validator_set(int next) const {
   if (!config_) {
     LOG(ERROR) << "MasterchainStateQ::get_total_validator_set() : no config";
     return {};
@@ -466,10 +467,10 @@ Ref<ValidatorSet> MasterchainStateQ::get_total_validator_set(int next) const {
   if (nodes.empty()) {
     return {};
   }
-  return Ref<ValidatorSetQ>{true, 0, ton::ShardIdFull{}, std::move(nodes)};
+  return Ref<block::ValidatorSet>{true, 0, ton::ShardIdFull{}, std::move(nodes)};
 }
 
-Ref<ValidatorSet> MasterchainStateQ::get_next_validator_set(ShardIdFull shard) const {
+Ref<block::ValidatorSet> MasterchainStateQ::get_next_validator_set(ShardIdFull shard) const {
   if (!config_ || !cur_validators_) {
     LOG(ERROR) << "MasterchainStateQ::get_next_validator_set() : no config or no cur_validators";
     return {};
@@ -505,6 +506,13 @@ td::Ref<McShardHash> MasterchainStateQ::get_shard_from_config(ShardIdFull shard,
     return {};
   }
   return config_->get_shard_hash(shard, exact);
+}
+
+CatchainSeqno MasterchainStateQ::get_shard_cc_seqno(ShardIdFull shard) const {
+  if (!config_) {
+    return std::numeric_limits<CatchainSeqno>::max();
+  }
+  return config_->get_shard_cc_seqno(shard);
 }
 
 bool MasterchainStateQ::rotated_all_shards() const {

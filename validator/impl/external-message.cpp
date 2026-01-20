@@ -27,7 +27,6 @@
 
 #include "collator-impl.h"
 #include "external-message.hpp"
-#include "fabric.h"
 
 namespace ton {
 
@@ -149,7 +148,7 @@ td::Status ExtMessageQ::run_message_on_account(ton::WorkchainId wc, block::Accou
   if (fetch_res.is_error()) {
     auto error = fetch_res.move_as_error();
     LOG(DEBUG) << "Cannot fetch config params: " << error.message();
-    return error.move_as_error_prefix("Cannot fetch config params: ");
+    return error.move_as_error_prefix("External message was not accepted: cannot fetch config params: ");
   }
   compute_phase_cfg_.libraries = std::make_unique<vm::Dictionary>(config->get_libraries_root(), 256);
   compute_phase_cfg_.with_vm_log = true;
@@ -161,16 +160,226 @@ td::Status ExtMessageQ::run_message_on_account(ton::WorkchainId wc, block::Accou
   if (res.is_error()) {
     auto error = res.move_as_error();
     LOG(DEBUG) << "Cannot run message on account: " << error.message();
-    return error.move_as_error_prefix("Cannot run message on account: ");
+    return error.move_as_error_prefix("External message was not accepted: cannot run message on account: ");
   }
   std::unique_ptr<block::transaction::Transaction> trans = res.move_as_ok();
 
   auto trans_root = trans->commit(*acc);
   if (trans_root.is_null()) {
     LOG(DEBUG) << "Cannot commit new transaction for smart contract";
-    return td::Status::Error("Cannot commit new transaction for smart contract");
+    return td::Status::Error("External message was not accepted: cannot commit new transaction for smart contract");
   }
   return td::Status::OK();
+}
+
+namespace {
+class WalletMessageProcessorImpl : public WalletMessageProcessor {
+  td::Result<std::pair<td::uint32, UnixTime>> parse_message(td::Ref<vm::Cell> msg_root) const override {
+    if (msg_root.is_null()) {
+      return td::Status::Error("msg is null");
+    }
+    vm::CellSlice cs{vm::NoVmOrd{}, msg_root};
+    block::gen::CommonMsgInfo::Record_ext_in_msg_info info;
+    block::gen::EitherStateInit::Record init;
+    if (!tlb::unpack(cs, info) || !tlb::unpack(cs, init) || cs.size() < 1) {
+      return td::Status::Error("cannot unpack external message");
+    }
+    vm::CellSlice body;
+    if (cs.fetch_ulong(1) == 0) {
+      body = cs;
+    } else {
+      td::Ref<vm::Cell> ref = cs.prefetch_ref();
+      if (ref.is_null()) {
+        return td::Status::Error("cannot unpack external message");
+      }
+      body = vm::CellSlice{vm::NoVmOrd{}, std::move(ref)};
+    }
+    return parse_message_body(std::move(body));
+  }
+
+  virtual td::Result<std::pair<td::uint32, UnixTime>> parse_message_body(vm::CellSlice body) const = 0;
+
+  td::Result<td::uint32> get_wallet_seqno(td::Ref<vm::Cell> data_root) const override {
+    if (data_root.is_null()) {
+      return td::Status::Error("data is null");
+    }
+    vm::CellSlice cs{vm::NoVmOrd{}, data_root};
+    if (cs.size() < 32) {
+      return td::Status::Error("invalid data");
+    }
+    return (td::uint32)cs.prefetch_ulong(32);
+  }
+
+  td::Result<td::Ref<vm::Cell>> set_wallet_seqno(td::Ref<vm::Cell> data_root, td::uint32 new_seqno) const override {
+    if (data_root.is_null()) {
+      return td::Status::Error("data is null");
+    }
+    vm::CellSlice cs{vm::NoVmOrd{}, data_root};
+    if (cs.size() < 32) {
+      return td::Status::Error("invalid data");
+    }
+    cs.skip_first(32);
+    vm::CellBuilder cb;
+    cb.store_long(new_seqno, 32);
+    cb.append_cellslice(cs);
+    return cb.finalize_novm();
+  }
+};
+
+class WalletV1 : public WalletMessageProcessorImpl {
+ public:
+  std::string name() const override {
+    return "wallet-v1";
+  }
+
+  td::Result<std::pair<td::uint32, UnixTime>> parse_message_body(vm::CellSlice body) const override {
+    // signature, msg_seqno
+    if (body.size() < 512 + 32) {
+      return td::Status::Error("invalid message body");
+    }
+    body.skip_first(512);
+    auto msg_seqno = (td::uint32)body.fetch_ulong(32);
+    return std::make_pair(msg_seqno, std::numeric_limits<UnixTime>::max());
+  }
+};
+
+class WalletV2 : public WalletMessageProcessorImpl {
+ public:
+  std::string name() const override {
+    return "wallet-v2";
+  }
+
+  td::Result<std::pair<td::uint32, UnixTime>> parse_message_body(vm::CellSlice body) const override {
+    // signature, msg_seqno, valid_until
+    if (body.size() < 512 + 32 + 32) {
+      return td::Status::Error("invalid message body");
+    }
+    body.skip_first(512);
+    auto msg_seqno = (td::uint32)body.fetch_ulong(32);
+    auto valid_until = (UnixTime)body.fetch_ulong(32);
+    return std::make_pair(msg_seqno, valid_until);
+  }
+};
+
+class WalletV3 : public WalletMessageProcessorImpl {
+ public:
+  std::string name() const override {
+    return "wallet-v3";
+  }
+
+  td::Result<std::pair<td::uint32, UnixTime>> parse_message_body(vm::CellSlice body) const override {
+    // signature, subwallet_id, valid_until, msg_seqno
+    if (body.size() < 512 + 32 + 32 + 32) {
+      return td::Status::Error("invalid message body");
+    }
+    body.skip_first(512 + 32);
+    auto valid_until = (UnixTime)body.fetch_ulong(32);
+    auto msg_seqno = (td::uint32)body.fetch_ulong(32);
+    return std::make_pair(msg_seqno, valid_until);
+  }
+};
+
+class WalletV4 : public WalletMessageProcessorImpl {
+ public:
+  std::string name() const override {
+    return "wallet-v4";
+  }
+
+  td::Result<std::pair<td::uint32, UnixTime>> parse_message_body(vm::CellSlice body) const override {
+    // signature, subwallet_id, valid_until, msg_seqno
+    if (body.size() < 512 + 32 + 32 + 32) {
+      return td::Status::Error("invalid message body");
+    }
+    body.skip_first(512 + 32);
+    auto valid_until = (UnixTime)body.fetch_ulong(32);
+    auto msg_seqno = (td::uint32)body.fetch_ulong(32);
+    return std::make_pair(msg_seqno, valid_until);
+  }
+};
+
+class WalletV5 : public WalletMessageProcessorImpl {
+ public:
+  std::string name() const override {
+    return "wallet-v5";
+  }
+
+  td::Result<std::pair<td::uint32, UnixTime>> parse_message_body(vm::CellSlice body) const override {
+    // tag, subwallet_id, valid_until, msg_seqno
+    if (body.size() < 32 + 32 + 32 + 32) {
+      return td::Status::Error("invalid message body");
+    }
+    body.skip_first(32 + 32);
+    auto valid_until = (UnixTime)body.fetch_ulong(32);
+    auto msg_seqno = (td::uint32)body.fetch_ulong(32);
+    return std::make_pair(msg_seqno, valid_until);
+  }
+
+  td::Result<td::uint32> get_wallet_seqno(td::Ref<vm::Cell> data_root) const override {
+    if (data_root.is_null()) {
+      return td::Status::Error("data is null");
+    }
+    vm::CellSlice cs{vm::NoVmOrd{}, data_root};
+    if (cs.size() < 33) {
+      return td::Status::Error("invalid data");
+    }
+    cs.skip_first(1);
+    return (td::uint32)cs.prefetch_ulong(32);
+  }
+
+  td::Result<td::Ref<vm::Cell>> set_wallet_seqno(td::Ref<vm::Cell> data_root, td::uint32 new_seqno) const override {
+    if (data_root.is_null()) {
+      return td::Status::Error("data is null");
+    }
+    vm::CellSlice cs{vm::NoVmOrd{}, data_root};
+    if (cs.size() < 33) {
+      return td::Status::Error("invalid data");
+    }
+    bool flag = cs.fetch_long(1);
+    cs.skip_first(32);
+    vm::CellBuilder cb;
+    cb.store_long(flag, 1);
+    cb.store_long(new_seqno, 32);
+    cb.append_cellslice(cs);
+    return cb.finalize_novm();
+  }
+};
+
+}  // namespace
+
+const WalletMessageProcessor* WalletMessageProcessor::get(td::Bits256 code_hash) {
+  static auto wallets = []() -> std::map<td::Bits256, std::shared_ptr<WalletMessageProcessor>> {
+    std::map<td::Bits256, std::shared_ptr<WalletMessageProcessor>> wallets;
+    auto add_wallet = [&](td::Slice s, std::shared_ptr<WalletMessageProcessor> wallet) {
+      td::Bits256 code_hash;
+      CHECK(code_hash.from_hex(s) == 256);
+      wallets[code_hash] = wallet;
+      // Make library cell
+      vm::CellBuilder cb;
+      cb.store_long((int)vm::Cell::SpecialType::Library, 8);
+      cb.store_bytes(code_hash.as_slice());
+      td::Bits256 library_code_hash = cb.finalize_novm(true)->get_hash().bits();
+      wallets[library_code_hash] = wallet;
+    };
+
+    add_wallet("A0CFC2C48AEE16A271F2CFC0B7382D81756CECB1017D077FAAAB3BB602F6868C", std::make_shared<WalletV1>());
+    add_wallet("D4902FCC9FAD74698FA8E353220A68DA0DCF72E32BCB2EB9EE04217C17D3062C", std::make_shared<WalletV1>());
+    add_wallet("587CC789EFF1C84F46EC3797E45FC809A14FF5AE24F1E0C7A6A99CC9DC9061FF", std::make_shared<WalletV1>());
+
+    add_wallet("5C9A5E68C108E18721A07C42F9956BFB39AD77EC6D624B60C576EC88EEE65329", std::make_shared<WalletV2>());
+    add_wallet("FE9530D3243853083EF2EF0B4C2908C0ABF6FA1C31EA243AACAA5BF8C7D753F1", std::make_shared<WalletV2>());
+
+    add_wallet("B61041A58A7980B946E8FB9E198E3C904D24799FFA36574EA4251C41A566F581", std::make_shared<WalletV3>());
+    add_wallet("84DAFA449F98A6987789BA232358072BC0F76DC4524002A5D0918B9A75D2D599", std::make_shared<WalletV3>());
+
+    add_wallet("64DD54805522C5BE8A9DB59CEA0105CCF0D08786CA79BEB8CB79E880A8D7322D", std::make_shared<WalletV4>());
+    add_wallet("FEB5FF6820E2FF0D9483E7E0D62C817D846789FB4AE580C878866D959DABD5C0", std::make_shared<WalletV4>());
+
+    add_wallet("20834B7B72B112147E1B2FB457B84E74D1A30F04F737D4F62A668E9552D2B72F", std::make_shared<WalletV5>());
+
+    return wallets;
+  }();
+  auto it = wallets.find(code_hash);
+  return it == wallets.end() ? nullptr : it->second.get();
 }
 
 }  // namespace validator

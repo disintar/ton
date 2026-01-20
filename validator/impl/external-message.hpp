@@ -70,6 +70,17 @@ class ExtMessageQ : public ExtMessage {
                                            std::unique_ptr<block::ConfigInfo> config);
 };
 
+class WalletMessageProcessor {
+ public:
+  virtual ~WalletMessageProcessor() = default;
+  virtual std::string name() const = 0;
+  virtual td::Result<std::pair<td::uint32, UnixTime>> parse_message(td::Ref<vm::Cell> msg_root) const = 0;
+  virtual td::Result<td::uint32> get_wallet_seqno(td::Ref<vm::Cell> data_root) const = 0;
+  virtual td::Result<td::Ref<vm::Cell>> set_wallet_seqno(td::Ref<vm::Cell> data_root, td::uint32 new_seqno) const = 0;
+
+  static const WalletMessageProcessor* get(td::Bits256 code_hash);
+};
+
 }  // namespace validator
 
 }  // namespace ton

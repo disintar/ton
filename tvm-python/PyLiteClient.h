@@ -202,7 +202,7 @@ namespace pylite {
 
         ~PyLiteClient() {
           scheduler_.run_in_context_external([&] { engine.reset(); });
-          scheduler_.run_in_context_external([] { td::actor::SchedulerContext::get()->stop(); });
+          scheduler_.run_in_context_external([] { td::actor::SchedulerContext::get().stop(); });
           scheduler_thread_.join();
         }
 
@@ -294,7 +294,7 @@ namespace pylite {
 
         void stop() {
           scheduler_.run_in_context_external([&] { engine.reset(); });
-          scheduler_.run_in_context_external([] { td::actor::SchedulerContext::get()->stop(); });
+          scheduler_.run_in_context_external([] { td::actor::SchedulerContext::get().stop(); });
           scheduler_thread_.join();
           scheduler_.stop();
         }

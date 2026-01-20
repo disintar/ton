@@ -1,4 +1,4 @@
-/* 
+/*
     This file is part of TON Blockchain source code.
 
     TON Blockchain is free software; you can redistribute it and/or
@@ -14,13 +14,13 @@
     You should have received a copy of the GNU General Public License
     along with TON Blockchain.  If not, see <http://www.gnu.org/licenses/>.
 
-    In addition, as a special exception, the copyright holders give permission 
-    to link the code of portions of this program with the OpenSSL library. 
-    You must obey the GNU General Public License in all respects for all 
-    of the code used other than OpenSSL. If you modify file(s) with this 
-    exception, you may extend this exception to your version of the file(s), 
-    but you are not obligated to do so. If you do not wish to do so, delete this 
-    exception statement from your version. If you delete this exception statement 
+    In addition, as a special exception, the copyright holders give permission
+    to link the code of portions of this program with the OpenSSL library.
+    You must obey the GNU General Public License in all respects for all
+    of the code used other than OpenSSL. If you modify file(s) with this
+    exception, you may extend this exception to your version of the file(s),
+    but you are not obligated to do so. If you do not wish to do so, delete this
+    exception statement from your version. If you delete this exception statement
     from all source files in the program, then also delete it here.
 
     Copyright 2017-2020 Telegram Systems LLP
@@ -61,9 +61,9 @@ int verbosity;
 namespace src {
 
 /*
- * 
+ *
  *   KEYWORD DEFINITION
- * 
+ *
  */
 
 enum { _Eof = -1, _Ident = 0, _Number, _Special, _Eq = 0x80, _Leq, _Geq, _Neq, _Type, _EMPTY };
@@ -224,9 +224,9 @@ namespace tlbc {
 td::LinearAllocator AR(1 << 22);
 
 /*
- * 
+ *
  *  AUXILIARY DATA TYPES
- * 
+ *
  */
 
 // headers are in tlbc-aux.h
@@ -848,9 +848,9 @@ using src::Lexer;
 using sym::sym_idx_t;
 
 /*
- * 
+ *
  *  DATA TYPES: Type Expressions, Types, Constructors
- * 
+ *
  */
 
 // headers in tlbc-data.h
@@ -1568,12 +1568,11 @@ bool TypeExpr::bind_value(bool value_negated, Constructor& cs, bool checking_typ
   //   negated = true, value_negated = false: assign the value to the expression to compute some of the variables present in the expression
   // if checking_type == true:
   //   value_negated must be false
-  //(debug output)
-  //  std::cerr << "binding " << (value_negated ? "negative" : "positive") << " value to expression "
-  //            << (checking_type ? "of type " : "");
-  //  show(std::cerr, &cs);
-  //  std::cerr << std::endl;
-  //
+  /* (debug output)
+  std::cerr << "binding " << (value_negated ? "negative" : "positive") << " value to expression " << (checking_type ? "of type " : "");
+  show(std::cerr, &cs);
+  std::cerr << std::endl;
+  */
   if (!checking_type) {
     no_tchk();
   } else {
@@ -1977,9 +1976,9 @@ bool Field::isomorphic_to(const Field& f, bool allow_other_names) const {
 }
 
 /*
- * 
+ *
  *  TL-B SOURCE PARSER
- * 
+ *
  */
 
 void parse_field_list(Lexer& lex, Constructor& cs);
@@ -2412,9 +2411,9 @@ void parse_constructor_def(Lexer& lex) {
 }
 
 /*
- * 
+ *
  *  SOURCE PARSER (TOP LEVEL)
- * 
+ *
  */
 
 std::vector<const src::FileDescr*> source_fdescr;
@@ -2456,9 +2455,9 @@ bool parse_source_string(const std::string& tlb_code) {
 }
 
 /*
- * 
+ *
  *   BUILT-IN TYPE DEFINITIONS
- * 
+ *
  */
 
 Type* define_builtin_type(std::string name_str, std::string args, bool produces_nat, int size = -1, int min_size = -1,
@@ -2540,9 +2539,9 @@ void define_builtins() {
 }
 
 /*
- * 
+ *
  *  SCHEME PROCESSING AND CHECKING
- * 
+ *
  */
 
 bool Type::cons_all_exact() const {
@@ -3050,9 +3049,9 @@ void dump_all_constexpr() {
 }
 
 /*
- * 
+ *
  *   CODE GENERATION
- * 
+ *
  */
 
 std::vector<std::string> source_list;
@@ -3107,9 +3106,9 @@ std::string codegen_python_tlb(const std::string& tlb_text) {
 #include "tlbc-gen-py.cpp"
 
 /*
- * 
+ *
  *   TLBC MAIN
- * 
+ *
  */
 
 void usage(const char* progname) {

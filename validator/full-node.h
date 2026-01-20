@@ -31,6 +31,8 @@
 #include "ton/ton-types.h"
 #include "validator/validator.h"
 
+#include "types.h"
+
 namespace ton {
 
 namespace validator {
@@ -38,6 +40,7 @@ namespace validator {
 namespace fullnode {
 
 constexpr int VERBOSITY_NAME(FULL_NODE_WARNING) = verbosity_WARNING;
+constexpr int VERBOSITY_NAME(FULL_NODE_BENCHMARK) = verbosity_WARNING;
 constexpr int VERBOSITY_NAME(FULL_NODE_NOTICE) = verbosity_INFO;
 constexpr int VERBOSITY_NAME(FULL_NODE_INFO) = verbosity_DEBUG;
 constexpr int VERBOSITY_NAME(FULL_NODE_DEBUG) = verbosity_DEBUG;
@@ -56,6 +59,7 @@ struct FullNodeOptions {
   FullNodeConfig config_;
   double public_broadcast_speed_multiplier_ = 1.0;
   double private_broadcast_speed_multiplier_ = 1.0;
+  double fast_sync_broadcast_speed_multiplier_ = 1.0;
   double initial_sync_delay_ = 60.0;
   double ratelimit_window_size_ = 0;
   size_t ratelimit_global_ = 0, ratelimit_heavy_ = 0, ratelimit_medium_ = 0;
@@ -99,6 +103,8 @@ class FullNode : public td::actor::Actor {
   virtual void process_block_broadcast(BlockBroadcast broadcast) = 0;
   virtual void process_block_candidate_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno,
                                                  td::uint32 validator_set_hash, td::BufferSlice data) = 0;
+  virtual void process_shard_block_info_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno,
+                                                  td::BufferSlice data) = 0;
   virtual void get_out_msg_queue_query_token(td::Promise<std::unique_ptr<ActionToken>> promise) = 0;
 
   virtual void set_validator_telemetry_filename(std::string value) = 0;

@@ -139,10 +139,10 @@ class LiteServerDaemon : public td::actor::Actor {
       void send_block_candidate(BlockIdExt block_id, CatchainSeqno cc_seqno, td::uint32 validator_set_hash,
                                           td::BufferSlice data, int mode) override {
       };
-      void send_broadcast(BlockBroadcast broadcast, int mode) override {
+      void send_broadcast(validator::BlockBroadcast broadcast, int mode) override {
       }
       void download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
-                          td::Promise<ReceivedBlock> promise) override {
+                          td::Promise<validator::ReceivedBlock> promise) override {
       }
       void download_zero_state(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                td::Promise<td::BufferSlice> promise) override {

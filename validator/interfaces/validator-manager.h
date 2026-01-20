@@ -21,6 +21,7 @@
 #include <ton/ton-tl.hpp>
 
 #include "auto/tl/lite_api.h"
+#include "block/signature-set.h"
 #include "crypto/vm/db/DynamicBagOfCellsDb.h"
 #include "impl/out-msg-queue-proof.hpp"
 #include "validator-session/validator-session-types.h"
@@ -45,6 +46,10 @@ constexpr int VERBOSITY_NAME(VALIDATOR_NOTICE) = verbosity_INFO;
 constexpr int VERBOSITY_NAME(VALIDATOR_INFO) = verbosity_DEBUG;
 constexpr int VERBOSITY_NAME(VALIDATOR_DEBUG) = verbosity_DEBUG;
 constexpr int VERBOSITY_NAME(VALIDATOR_EXTRA_DEBUG) = verbosity_DEBUG + 1;
+
+struct CandidateAccept {
+  double ok_from_utime = 0.0;
+};
 
 struct CandidateReject {
   std::string reason;
@@ -237,7 +242,7 @@ struct CollatorNodeResponseStats {
   }
 };
 
-using ValidateCandidateResult = td::Variant<UnixTime, CandidateReject>;
+using ValidateCandidateResult = td::Variant<CandidateAccept, CandidateReject>;
 
 class ValidatorManager : public ValidatorManagerInterface {
  public:
@@ -277,12 +282,12 @@ class ValidatorManager : public ValidatorManagerInterface {
   virtual void wait_block_proof_link_short(BlockIdExt id, td::Timestamp timeout,
                                            td::Promise<td::Ref<ProofLink>> promise) = 0;
 
-  virtual void set_block_signatures(BlockHandle handle, td::Ref<BlockSignatureSet> signatures,
-                                    td::Promise<td::Unit> promise) = 0;
+  virtual void set_block_signatures(BlockHandle handle, td::Ref<block::BlockSignatureSet> signatures,
+                                    Ref<block::ValidatorSet> vset, td::Promise<td::Unit> promise) = 0;
   virtual void wait_block_signatures(BlockHandle handle, td::Timestamp timeout,
-                                     td::Promise<td::Ref<BlockSignatureSet>> promise) = 0;
+                                     td::Promise<td::Ref<block::BlockSignatureSet>> promise) = 0;
   virtual void wait_block_signatures_short(BlockIdExt id, td::Timestamp timeout,
-                                           td::Promise<td::Ref<BlockSignatureSet>> promise) = 0;
+                                           td::Promise<td::Ref<block::BlockSignatureSet>> promise) = 0;
 
   virtual void set_block_candidate(BlockIdExt id, BlockCandidate candidate, CatchainSeqno cc_seqno,
                                    td::uint32 validator_set_hash, td::Promise<td::Unit> promise) = 0;
@@ -325,7 +330,6 @@ class ValidatorManager : public ValidatorManagerInterface {
                                                  td::Promise<td::BufferSlice> promise) = 0;
   virtual void send_get_next_key_blocks_request(BlockIdExt block_id, td::uint32 priority,
                                                 td::Promise<std::vector<BlockIdExt>> promise) = 0;
-  virtual void send_external_message(td::Ref<ExtMessage> message) = 0;
   virtual void send_ihr_message(td::Ref<IhrMessage> message) = 0;
   virtual void send_top_shard_block_description(td::Ref<ShardTopBlockDescription> desc) = 0;
   virtual void send_block_broadcast(BlockBroadcast broadcast, int mode) = 0;
@@ -386,6 +390,11 @@ class ValidatorManager : public ValidatorManagerInterface {
   virtual void get_validator_groups_info_for_litequery(
       td::optional<ShardIdFull> shard,
       td::Promise<tl_object_ptr<lite_api::liteServer_nonfinal_validatorGroups>> promise) = 0;
+  virtual void get_pending_shard_blocks_for_litequery(
+      td::optional<ShardIdFull> shard,
+      td::Promise<tl_object_ptr<lite_api::liteServer_nonfinal_pendingShardBlocks>> promise) {
+    promise.set_error(td::Status::Error("not implemented"));
+  }
   virtual void update_lite_server_state(BlockIdExt shard_client, td::Ref<MasterchainState> state) = 0;
 
   virtual void add_lite_query_stats(int lite_query_id, bool success) {

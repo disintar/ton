@@ -1698,6 +1698,7 @@ td::Status ValidatorEngine::load_global_config() {
   validator_options_.write().set_hardforks(std::move(h));
   validator_options_.write().set_catchain_broadcast_speed_multiplier(broadcast_speed_multiplier_catchain_);
   validator_options_.write().set_parallel_validation(parallel_validation_);
+  validator_options_.write().set_db_event_fifo_path(db_event_fifo_path_);
 
   for (auto &id : config_.collator_node_whitelist) {
     validator_options_.write().set_collator_node_whitelisted_validator(id, true);
@@ -2207,6 +2208,10 @@ void ValidatorEngine::started_dht() {
 void ValidatorEngine::start_rldp() {
   rldp_ = ton::rldp::Rldp::create(adnl_.get());
   rldp2_ = ton::rldp2::Rldp::create(adnl_.get());
+  auto peer_table = td::actor::actor_dynamic_cast<ton::adnl::AdnlPeerTable>(adnl_.get());
+  CHECK(!peer_table.empty());
+  CHECK(!keyring_.empty());
+  quic_ = td::actor::create_actor<ton::quic::QuicSender>("QuicSender", peer_table, keyring_.get());
   td::actor::send_closure(rldp_, &ton::rldp::Rldp::set_default_mtu, 2048);
   td::actor::send_closure(rldp2_, &ton::rldp2::Rldp::set_default_mtu, 2048);
   started_rldp();
@@ -2235,7 +2240,7 @@ void ValidatorEngine::start_validator() {
   load_collator_options();
 
   validator_manager_ = ton::validator::ValidatorManagerFactory::create(
-      validator_options_, db_root_, keyring_.get(), adnl_.get(), rldp_.get(), rldp2_.get(), overlay_manager_.get());
+      validator_options_, db_root_, keyring_.get(), adnl_.get(), rldp_.get(), rldp2_.get(), quic_.get(), overlay_manager_.get());
 
   for (auto &v: config_.validators) {
     td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::add_permanent_key, v.first,
@@ -5390,13 +5395,10 @@ int main(int argc, char *argv[]) {
                                    [&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_state_ttl, v); });
                            return td::Status::OK();
                        });
-  p.add_checked_option('m', "mempool-num", "Maximal number of mempool external message", [&](td::Slice fname) {
-      auto v = td::to_double(fname);
-      if (v < 0) {
-        return td::Status::Error("mempool-num should be non-negative");
-      }
-      acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_max_mempool_num, v); });
-      return td::Status::OK();
+  p.add_checked_option('m', "mempool-num", "Maximal number of mempool external message", [&](td::Slice s) {
+    TRY_RESULT(v, td::to_integer_safe<size_t>(s));
+    acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_max_mempool_num, v); });
+    return td::Status::OK();
   });
   p.add_checked_option('b', "block-ttl", "deprecated",
                        [&](td::Slice fname) {
@@ -5674,6 +5676,18 @@ int main(int argc, char *argv[]) {
             [&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_broadcast_speed_multiplier_private, v); });
         return td::Status::OK();
       });
+  p.add_checked_option(
+      '\0', "broadcast-speed-fast-sync",
+      "multiplier for broadcast speed in fast-sync overlays (experimental, default is 3.33, which is ~1 MB/s)",
+      [&](td::Slice s) -> td::Status {
+        auto v = td::to_double(s);
+        if (v <= 0.0) {
+          return td::Status::Error("broadcast-speed-fast-sync should be positive");
+        }
+        acts.push_back(
+            [&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_broadcast_speed_multiplier_fast_sync, v); });
+        return td::Status::OK();
+      });
   p.add_option(
       '\0', "permanent-celldb",
       "disable garbage collection in CellDb. This improves performance on archival nodes (once enabled, this option "
@@ -5751,6 +5765,9 @@ int main(int argc, char *argv[]) {
                        });
   p.add_option('\0', "parallel-validation", "parallel validation over different accounts", [&]() {
     acts.push_back([&x]() { td::actor::send_closure(x, &ValidatorEngine::set_parallel_validation, true); });
+  });
+  p.add_option('\0', "db-event-fifo", "path to FIFO pipe for publishing DB events", [&](td::Slice s) {
+    acts.push_back([&x, s = s.str()]() { td::actor::send_closure(x, &ValidatorEngine::set_db_event_fifo_path, s); });
   });
   auto S = p.run(argc, argv);
   if (S.is_error()) {

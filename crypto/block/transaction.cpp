@@ -2815,8 +2815,12 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
   // have to check source address
   // it must be either our source address, or empty
   if (!check_replace_src_addr(info.src)) {
+    LOG(DEBUG) << "invalid source address in a proposed outbound message";
     log_fail(35, "invalid source address in a proposed outbound message", false, info.dest);
-    return 35; // invalid source address
+    if (cfg.global_version >= 13) {
+      return check_skip_invalid(35);
+    }
+    return 35;  // invalid source address
   }
   bool to_mc = false;
   if (!check_rewrite_dest_addr(info.dest, cfg, &to_mc, !cfg.disable_anycast)) {

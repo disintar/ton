@@ -58,7 +58,7 @@ void stop_scheduler_thread() {
     std::lock_guard<std::mutex> lock(scheduler_init_mutex);
     if (thread_local_scheduler) {
       thread_local_scheduler->run_in_context_external([] {
-        td::actor::SchedulerContext::get()->stop();
+        td::actor::SchedulerContext::get().stop();
       });
     }
     if (scheduler_thread) {

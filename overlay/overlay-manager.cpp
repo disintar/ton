@@ -278,8 +278,6 @@ void OverlayManager::send_query_via(adnl::AdnlNodeIdShort dst, adnl::AdnlNodeIdS
 
 void OverlayManager::send_message_via(adnl::AdnlNodeIdShort dst, adnl::AdnlNodeIdShort src, OverlayIdShort overlay_id,
                                       td::BufferSlice object, td::actor::ActorId<adnl::AdnlSenderInterface> via) {
-  CHECK(object.size() <= adnl::Adnl::huge_packet_max_size());
-
   auto extra = create_tl_object<ton_api::overlay_messageExtra>();
   extra->flags_ = 0;
 
@@ -440,7 +438,7 @@ void OverlayManager::save_to_db(adnl::AdnlNodeIdShort local_id, OverlayIdShort o
   auto obj = create_tl_object<ton_api::overlay_nodes>(std::move(nodes_vec));
 
   auto key = create_hash_tl_object<ton_api::overlay_db_key_nodes>(local_id.bits256_value(), overlay_id.bits256_value());
-  db_.set(key, create_serialize_tl_object<ton_api::overlay_db_nodes>(std::move(obj)));
+  db_.set(key, create_serialize_tl_object<ton_api::overlay_db_nodes>(std::move(obj)), [](td::Result<td::Unit>) {});
 }
 
 void OverlayManager::get_stats(td::Promise<tl_object_ptr<ton_api::engine_validator_overlaysStats>> promise) {
@@ -553,7 +551,7 @@ const PublicKey &Certificate::issuer() const {
   return issued_by_.get<PublicKey>();
 }
 
-td::Result<std::shared_ptr<Certificate>> Certificate::create(tl_object_ptr<ton_api::overlay_Certificate> cert) {
+td::Result<std::shared_ptr<Certificate>> Certificate::create(const tl_object_ptr<ton_api::overlay_Certificate> &cert) {
   std::shared_ptr<Certificate> res;
   ton_api::downcast_call(*cert.get(),
                          td::overloaded([&](ton_api::overlay_emptyCertificate &obj) { res = nullptr; },

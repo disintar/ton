@@ -28,9 +28,9 @@
 namespace funC {
 
 /*
- * 
+ *
  *   ASM-OP LIST FUNCTIONS
- * 
+ *
  */
 
 int is_pos_pow2(td::RefInt256 x) {
