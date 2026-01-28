@@ -61,6 +61,7 @@ bool QuicServer::try_close(ConnectionState &state) {
   }
   auto R = state.impl().handle_expiry();
   if (R.is_error()) {
+    LOG(INFO) << "expiry error: " << R.error();
     return true;
   }
 
@@ -73,10 +74,10 @@ bool QuicServer::try_close(ConnectionState &state) {
       flush_egress_for(state);
       return false;
     case QuicConnectionPImpl::ExpiryAction::IdleClose:
-      LOG(DEBUG) << "expiry IdleClose for " << state.remote_address;
+      LOG(INFO) << "expiry IdleClose for " << state.remote_address;
       return true;
     case QuicConnectionPImpl::ExpiryAction::Close:
-      LOG(DEBUG) << "expiry Close for " << state.remote_address;
+      LOG(INFO) << "expiry Close for " << state.remote_address;
       flush_egress_for(state);
       return true;
   }
@@ -147,8 +148,11 @@ class QuicServer::PImplCallback final : public QuicConnectionPImpl::Callback {
     callback_.on_connected(cid_, std::move(event.peer_public_key), is_outbound_);
   }
 
-  void on_stream_data(StreamDataEvent event) override {
-    callback_.on_stream(cid_, event.sid, std::move(event.data), event.fin);
+  td::Status on_stream_data(StreamDataEvent event) override {
+    return callback_.on_stream(cid_, event.sid, std::move(event.data), event.fin);
+  }
+  void on_stream_closed(QuicStreamID sid) override {
+    return callback_.on_stream_closed(cid_, sid);
   }
 
  private:
@@ -179,11 +183,14 @@ td::Result<std::shared_ptr<QuicServer::ConnectionState>> QuicServer::get_or_crea
   QuicConnectionId cid = p_impl->get_primary_scid();
   QuicConnectionId temp_cid = vc.dcid;
 
-  auto state = std::make_shared<ConnectionState>(ConnectionState{.impl_ = std::move(p_impl),
-                                                                 .remote_address = msg_in.address,
-                                                                 .cid = cid,
-                                                                 .temp_cid = temp_cid,
-                                                                 .is_outbound = false});
+  auto state = std::make_shared<ConnectionState>(ConnectionState{
+      .impl_ = std::move(p_impl),
+      .remote_address = msg_in.address,
+      .cid = cid,
+      .temp_cid = temp_cid,
+      .blocked_packet = std::nullopt,
+      .is_outbound = false,
+  });
   LOG(INFO) << "creating " << *state;
 
   // Store by BOTH current temporary dcid and cid we just generated for the server
@@ -205,7 +212,13 @@ td::Result<QuicConnectionId> QuicServer::connect(td::Slice host, int port, td::E
   QuicConnectionId cid = p_impl->get_primary_scid();
 
   auto state = std::make_shared<ConnectionState>(ConnectionState{
-      .impl_ = std::move(p_impl), .remote_address = remote_address, .cid = cid, .temp_cid = {}, .is_outbound = true});
+      .impl_ = std::move(p_impl),
+      .remote_address = remote_address,
+      .cid = cid,
+      .temp_cid = {},
+      .blocked_packet = std::nullopt,
+      .is_outbound = true,
+  });
   LOG(INFO) << "creating " << *state;
 
   connections_[cid] = state;
@@ -257,6 +270,17 @@ void QuicServer::drain_ingress() {
 }
 
 void QuicServer::flush_egress_for(ConnectionState &state, EgressData data) {
+  if (state.blocked_packet.has_value()) {
+    bool unblocked = false;
+    auto &[packet_addr, packet_data] = *state.blocked_packet;
+    td::UdpSocketFd::OutboundMessage msg{.to = &packet_addr, .data = packet_data};
+    auto status = fd_.send_message(msg, unblocked);
+    if (!status.is_ok() || unblocked) {
+      state.blocked_packet.reset();
+      state.impl_->unblock_streams();
+    }
+  }
+
   td::PerfWarningTimer w("flush_egress_for", 0.1);
   if (data.stream_data.has_value()) {
     auto &stream_data = data.stream_data.value();
@@ -274,7 +298,8 @@ void QuicServer::flush_egress_for(ConnectionState &state, EgressData data) {
       td::UdpSocketFd::OutboundMessage msg{.to = &msg_out.address, .data = td::Slice{msg_out.storage}};
       TRY_STATUS(fd_.send_message(msg, sent));
       if (!sent) {
-        LOG(WARNING) << "outbound message lost to " << msg_out.address;
+        state.impl_->block_streams();
+        state.blocked_packet = std::pair{msg_out.address, td::BufferSlice{msg_out.storage}};
       }
       return td::Status::OK();
     };
@@ -300,7 +325,8 @@ void QuicServer::flush_egress_for(ConnectionState &state, EgressData data) {
     td::UdpSocketFd::OutboundMessage msg{.to = &msg_out.address, .data = td::Slice{msg_out.storage}};
     TRY_STATUS(fd_.send_message(msg, run));
     if (!run) {
-      LOG(WARNING) << "outbound message lost to " << msg_out.address;
+      state.impl_->block_streams();
+      state.blocked_packet = std::pair{msg_out.address, td::BufferSlice{msg_out.storage}};
     }
     return td::Status::OK();
   };

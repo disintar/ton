@@ -74,7 +74,8 @@ struct QuicConnectionPImpl {
 
     virtual void set_connection_id(QuicConnectionId cid) = 0;
     virtual void on_handshake_completed(HandshakeCompletedEvent event) = 0;
-    virtual void on_stream_data(StreamDataEvent event) = 0;
+    virtual td::Status on_stream_data(StreamDataEvent event) = 0;
+    virtual void on_stream_closed(QuicStreamID sid) = 0;
 
     virtual ~Callback() = default;
   };
@@ -82,7 +83,8 @@ struct QuicConnectionPImpl {
   constexpr static size_t DEFAULT_WINDOW = 1 << 20;
   constexpr static size_t CID_LENGTH = 16;
   constexpr static size_t DEFAULT_PARALLEL_STREAMS_LIMIT = 1024;
-  constexpr static ngtcp2_duration DEFAULT_IDLE_TIMEOUT = 5 * NGTCP2_SECONDS;
+  constexpr static ngtcp2_duration DEFAULT_IDLE_TIMEOUT = 15 * NGTCP2_SECONDS;
+  constexpr static ngtcp2_duration DEFAULT_KEEP_ALIVE_TIMEOUT = 5 * NGTCP2_SECONDS;
 
   struct PrivateTag {};
 
@@ -111,6 +113,9 @@ struct QuicConnectionPImpl {
   [[nodiscard]] td::Result<ExpiryAction> handle_expiry();
 
   [[nodiscard]] QuicConnectionId get_primary_scid() const;
+
+  void block_streams();
+  void unblock_streams();
 
   [[nodiscard]] td::Result<QuicStreamID> open_stream();
   [[nodiscard]] td::Status write_stream(UdpMessageBuffer& msg_out, QuicStreamID sid, td::BufferSlice data, bool fin);
@@ -149,6 +154,7 @@ struct QuicConnectionPImpl {
   ngtcp2_crypto_conn_ref conn_ref_{};
 
   std::unordered_map<QuicStreamID, OutboundStreamState> streams_;
+  bool streams_blocked_ = false;
 
   ngtcp2_conn* conn() const {
     CHECK(conn_);

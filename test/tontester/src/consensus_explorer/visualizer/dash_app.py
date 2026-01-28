@@ -1,11 +1,11 @@
 from typing import cast, final
 
-from dash import Dash, dcc, html, Input, Output, State, callback_context
 import plotly.graph_objects as go  # pyright: ignore[reportMissingTypeStubs]
+from dash import Dash, Input, Output, State, callback_context, dcc, html
 from dash.exceptions import PreventUpdate
 
-from .figure_builder import FigureBuilder
 from ..parser import Parser
+from .figure_builder import FigureBuilder
 
 
 @final
@@ -17,8 +17,8 @@ class DashApp:
         self._app: Dash = Dash(__name__)
 
     def update_data(self, _url: str):
-        self._data = self._parser.parse()
-        self._builder = FigureBuilder(self._data)
+        # self._data = self._parser.parse()
+        # self._builder = FigureBuilder(self._data)
         valgroups = sorted(set(s.valgroup_id for s in self._data.slots))
         options = [{"label": g, "value": g} for g in valgroups]
         value = valgroups[0] if valgroups else ""

@@ -35,11 +35,11 @@
 
 namespace ton::liteserver {
 class LiteServerDaemon : public td::actor::Actor {
- public:
+public:
   LiteServerDaemon(std::string db_root, std::string server_config_path, std::string ipaddr, std::string config_path) {
     db_root_ = std::move(db_root);
     server_config_ = std::move(server_config_path);
-    tmp_ipaddr_ = std::move(ipaddr);  // only for first run (generate config)
+    tmp_ipaddr_ = std::move(ipaddr); // only for first run (generate config)
     global_config_ = std::move(config_path);
   }
 
@@ -58,11 +58,11 @@ class LiteServerDaemon : public td::actor::Actor {
     load_config();
   }
 
-  void sync_complete(const ton::validator::BlockHandle &handle) {
+  void sync_complete(const ton::validator::BlockHandle& handle) {
     LOG(WARNING) << "Sync complete: " << handle->id().to_str();
 
     // Start LightServers
-    for (auto &s : config_.liteservers) {
+    for (auto& s : config_.liteservers) {
       auto key = ton::adnl::AdnlNodeIdFull{keys_[s.second]};
 
       // add admin to lslimiter
@@ -78,7 +78,7 @@ class LiteServerDaemon : public td::actor::Actor {
     }
   }
 
- private:
+private:
   std::string db_root_;
   std::string server_config_;
   std::string tmp_ipaddr_;
@@ -121,48 +121,65 @@ class LiteServerDaemon : public td::actor::Actor {
     td::actor::send_closure(lslimiter_, &LiteServerLimiter::set_validator_manager, validator_manager_.get());
 
     class Callback : public ton::validator::ValidatorManagerInterface::Callback {
-     public:
+    public:
       void initial_read_complete(ton::validator::BlockHandle handle) override {
         LOG(DEBUG) << "Initial read complete: " << handle->id().to_str();
         td::actor::send_closure(id_, &LiteServerDaemon::sync_complete, handle);
       }
+
       void on_new_masterchain_block(td::Ref<ton::validator::MasterchainState> state,
                                     std::set<ton::ShardIdFull> shards_to_monitor) override {
       }
+
       void send_ihr_message(AccountIdPrefixFull dst, td::BufferSlice data) override {
       }
+
       void send_ext_message(AccountIdPrefixFull dst, td::BufferSlice data) override {
         td::actor::send_closure(id_, &LiteServerDaemon::send_ext_message, dst, std::move(data));
       }
+
       void send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) override {
       }
+
       void send_block_candidate(BlockIdExt block_id, CatchainSeqno cc_seqno, td::uint32 validator_set_hash,
-                                          td::BufferSlice data, int mode) override {
+                                td::BufferSlice data, int mode) override {
       };
+
       void send_broadcast(validator::BlockBroadcast broadcast, int mode) override {
       }
+
       void download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                           td::Promise<validator::ReceivedBlock> promise) override {
       }
+
       void download_zero_state(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                td::Promise<td::BufferSlice> promise) override {
       }
+
       void download_persistent_state(BlockIdExt id, BlockIdExt masterchain_block_id,
                                      validator::PersistentStateType type, td::uint32 priority,
                                      td::Timestamp timeout, td::Promise<td::BufferSlice> promise) override {
       }
-      void download_block_proof(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout, td::Promise<td::BufferSlice> promise) override {
+
+      void download_block_proof(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
+                                td::Promise<td::BufferSlice> promise) override {
       }
-      void download_block_proof_link(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,  td::Promise<td::BufferSlice> promise) override {
+
+      void download_block_proof_link(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
+                                     td::Promise<td::BufferSlice> promise) override {
       }
-      void get_next_key_blocks(BlockIdExt block_id, td::Timestamp timeout,  td::Promise<std::vector<BlockIdExt>> promise) override {
+
+      void get_next_key_blocks(BlockIdExt block_id, td::Timestamp timeout,
+                               td::Promise<std::vector<BlockIdExt>> promise) override {
       }
+
       void download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
                             td::Timestamp timeout, td::Promise<std::string> promise) override {
       }
+
       void download_out_msg_queue_proof(
-              ton::ShardIdFull dst_shard, std::vector<ton::BlockIdExt> blocks, block::ImportedMsgQueueLimits limits,
-              td::Timestamp timeout, td::Promise<std::vector<td::Ref<ton::validator::OutMsgQueueProof>>> promise) override {
+          ton::ShardIdFull dst_shard, std::vector<ton::BlockIdExt> blocks, block::ImportedMsgQueueLimits limits,
+          td::Timestamp timeout, td::Promise<std::vector<td::Ref<ton::validator::OutMsgQueueProof>>> promise) override {
       }
 
       void new_key_block(ton::validator::BlockHandle handle) override {
@@ -171,11 +188,12 @@ class LiteServerDaemon : public td::actor::Actor {
       Callback(td::actor::ActorId<LiteServerDaemon> id) : id_(id) {
       }
 
-     private:
+    private:
       td::actor::ActorId<LiteServerDaemon> id_;
     };
 
-    auto P_cb = td::PromiseCreator::lambda([](td::Unit R) {});
+    auto P_cb = td::PromiseCreator::lambda([](td::Unit R) {
+    });
     td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::install_callback,
                             std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
   }
@@ -212,7 +230,7 @@ class LiteServerDaemon : public td::actor::Actor {
     addr_list.set_version(static_cast<td::int32>(td::Clocks::system()));
     addr_list.set_reinit_date(adnl::Adnl::adnl_start_time());
 
-    for (auto &adnl : config_.adnl_ids) {
+    for (auto& adnl : config_.adnl_ids) {
       adnl::AdnlNodeIdFull local_id_full = adnl::AdnlNodeIdFull::create(keys_[adnl.first].tl()).move_as_ok();
       local_id_ = local_id_full.compute_short_id();
       td::actor::send_closure(adnl_, &adnl::Adnl::add_id, local_id_full, addr_list, static_cast<td::uint8>(0));
@@ -220,7 +238,7 @@ class LiteServerDaemon : public td::actor::Actor {
     td::actor::send_closure(adnl_, &ton::adnl::Adnl::add_static_nodes_from_config, std::move(adnl_static_nodes_));
 
     // Start DHT
-    for (auto &dht : config_.dht_ids) {
+    for (auto& dht : config_.dht_ids) {
       auto D =
           ton::dht::Dht::create(ton::adnl::AdnlNodeIdShort{dht}, db_root_, dht_config_, keyring_.get(), adnl_.get());
       D.ensure();
@@ -240,21 +258,27 @@ class LiteServerDaemon : public td::actor::Actor {
       std::_Exit(2);
     }
     // Start Overlay
+    ton::overlay::OverlayManagerBufferLimits buffer_limits{
+        .max_packets = 1024,
+        .max_data_size = 2 << 20,
+    };
     overlay_manager_ = ton::overlay::Overlays::create(db_root_, keyring_.get(), adnl_.get(),
-                                                      dht_nodes_[default_dht_node_].get(), config_.overlay_prefix);
+                                                      dht_nodes_[default_dht_node_].get(), buffer_limits,
+                                                      config_.overlay_prefix);
 
     // Start client
     if (!config_.full_node_slaves.empty()) {
       std::vector<std::pair<ton::adnl::AdnlNodeIdFull, td::IPAddress>> vec;
       class Cb : public ton::adnl::AdnlExtClient::Callback {
-       public:
+      public:
         void on_ready() override {
         }
+
         void on_stop_ready() override {
         }
       };
 
-      for (auto &x : config_.full_node_slaves) {
+      for (auto& x : config_.full_node_slaves) {
         // AdnlNodeIdFull dst, td::IPAddress dst_addr,  std::unique_ptr<AdnlExtClient::Callback> callback
         full_node_client_ =
             ton::adnl::AdnlExtClient::create(ton::adnl::AdnlNodeIdFull{x.key}, x.addr, std::make_unique<Cb>());
@@ -271,11 +295,11 @@ class LiteServerDaemon : public td::actor::Actor {
     if (to_load_keys == 0) {
       LOG(WARNING) << "ADNL available on: " << config_.addr_;
 
-      for (auto &t : config_.adnl_ids) {
+      for (auto& t : config_.adnl_ids) {
         LOG(WARNING) << "ADNL pub: " << keys_[t.first].ed25519_value().raw().to_hex();
       }
 
-      for (auto &[t, e] : config_.liteservers) {
+      for (auto& [t, e] : config_.liteservers) {
         LOG(WARNING) << "LiteServer port: " << t << " pub: " << keys_[e].ed25519_value().raw().to_hex();
       }
 
@@ -304,20 +328,22 @@ class LiteServerDaemon : public td::actor::Actor {
 
       auto pk = ton::PrivateKey{ton::privkeys::Ed25519::random()};
       auto id = pk.compute_short_id();
-      td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false, [](td::Unit) {});
+      td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false, [](td::Unit) {
+      });
       config.config_add_adnl_addr(id, 0).ensure();
       config.config_add_dht_node(id).ensure();
 
       auto ls_pk = ton::PrivateKey{ton::privkeys::Ed25519::random()};
       auto ls_id = ls_pk.compute_short_id();
-      td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(ls_pk), false, [](td::Unit) {});
+      td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(ls_pk), false, [](td::Unit) {
+      });
       config.config_add_lite_server(ls_id, ls_port).ensure();
 
       auto ss = td::json_encode<std::string>(td::ToJson(*config.tl().get()), true);
 
       auto S = td::write_file(server_config_, ss);
       if (S.is_ok()) {
-        stop();  // todo: wait keyring_ save keys
+        stop(); // todo: wait keyring_ save keys
         return;
       } else {
         LOG(ERROR) << S.move_as_error();
@@ -345,7 +371,7 @@ class LiteServerDaemon : public td::actor::Actor {
       }
 
       config_ = ton::liteserver::Config{conf};
-      for (auto &key : config_.keys_refcnt) {
+      for (auto& key : config_.keys_refcnt) {
         to_load_keys++;
 
         auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ton::PublicKey> R) mutable {
@@ -402,7 +428,7 @@ class LiteServerDaemon : public td::actor::Actor {
 
     std::vector<ton::BlockIdExt> h;
     h.reserve(conf.validator_->hardforks_.size());
-    for (auto &x : conf.validator_->hardforks_) {
+    for (auto& x : conf.validator_->hardforks_) {
       auto b = ton::create_block_id(x);
       if (!b.is_masterchain()) {
         return td::Status::Error(ton::ErrorCode::error,
@@ -411,7 +437,7 @@ class LiteServerDaemon : public td::actor::Actor {
       if (!b.is_valid_full()) {
         return td::Status::Error(ton::ErrorCode::error, "[validator/hardforks] section contains invalid block_id");
       }
-      for (auto &y : h) {
+      for (auto& y : h) {
         if (y.is_valid() && y.seqno() >= b.seqno()) {
           y.invalidate();
         }
@@ -422,9 +448,9 @@ class LiteServerDaemon : public td::actor::Actor {
     return td::Status::OK();
   }
 };
-}  // namespace ton::liteserver
+} // namespace ton::liteserver
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   SET_VERBOSITY_LEVEL(verbosity_DEBUG);
 
   td::OptionParser p;
@@ -465,12 +491,22 @@ int main(int argc, char **argv) {
     return (verbosity >= 0 && verbosity <= 9) ? td::Status::OK() : td::Status::Error("verbosity must be 0..9");
   });
 
-  p.add_option('D', "db", "root for dbs", [&](td::Slice fname) { db_root = fname.str(); });
-  p.add_option('C', "config", "global config path", [&](td::Slice fname) { config_path = fname.str(); });
-  p.add_option('S', "server-config", "server config path", [&](td::Slice fname) { server_config_path = fname.str(); });
-  p.add_option('I', "ip", "ip address", [&](td::Slice ipaddr_) { ipaddr = ipaddr_.str(); });
+  p.add_option('D', "db", "root for dbs", [&](td::Slice fname) {
+    db_root = fname.str();
+  });
+  p.add_option('C', "config", "global config path", [&](td::Slice fname) {
+    config_path = fname.str();
+  });
+  p.add_option('S', "server-config", "server config path", [&](td::Slice fname) {
+    server_config_path = fname.str();
+  });
+  p.add_option('I', "ip", "ip address", [&](td::Slice ipaddr_) {
+    ipaddr = ipaddr_.str();
+  });
   p.add_option('F', "full-node-config", "full node config path",
-               [&](td::Slice fname) { full_node_config_path = fname.str(); });
+               [&](td::Slice fname) {
+                 full_node_config_path = fname.str();
+               });
 
   auto S = p.run(argc, argv);
   if (S.is_error()) {
