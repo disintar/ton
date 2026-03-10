@@ -103,10 +103,6 @@ elseif (ANDROID OR NOT NIX)
     --enable-static
     --disable-shared
   )
-  if (APPLE)
-    execute_process(COMMAND xcrun --show-sdk-path OUTPUT_VARIABLE APPLE_SDK_PATH OUTPUT_STRIP_TRAILING_WHITESPACE)
-    list(APPEND SODIUM_CONFIGURE_ARGS "SDKROOT=${APPLE_SDK_PATH}")
-  endif()
   if (ANDROID)
     list(APPEND SODIUM_CONFIGURE_ARGS --host=${TON_ANDROID_HOST})
   endif()

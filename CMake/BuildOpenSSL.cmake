@@ -54,6 +54,11 @@ if (NOT OPENSSL_CRYPTO_LIBRARY)
     set(OPENSSL_INCLUDE_DIR ${OPENSSL_BINARY_DIR}/include)
     if (APPLE)
       execute_process(
+        COMMAND xcrun --show-sdk-path
+        OUTPUT_VARIABLE MACOS_SDK_PATH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+      )
+      execute_process(
         COMMAND uname -m
         OUTPUT_VARIABLE MACOS_ARCH
         OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -63,7 +68,7 @@ if (NOT OPENSSL_CRYPTO_LIBRARY)
       else()
         set(OPENSSL_DARWIN_TARGET darwin64-x86_64-cc)
       endif()
-      set(CMD ./Configure ${OPENSSL_DARWIN_TARGET} --prefix=${OPENSSL_BINARY_DIR} no-shared no-dso no-unit-test no-tests no-apps enable-quic --libdir=lib)
+      set(CMD ./Configure ${OPENSSL_DARWIN_TARGET} --prefix=${OPENSSL_BINARY_DIR} no-shared no-dso no-unit-test no-tests no-apps enable-quic --libdir=lib "-isysroot ${MACOS_SDK_PATH}")
     elseif (MINGW)
       set(OPENSSL_MINGW_CFLAGS "-DSIO_UDP_NETRESET=SIO_UDP_CONNRESET")
       if ("$ENV{MSYSTEM}" STREQUAL "UCRT64")
