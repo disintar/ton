@@ -23,8 +23,6 @@
 #include "impl/out-msg-queue-proof.hpp"
 #include "net/download-archive-slice.hpp"
 #include "net/download-block-new.hpp"
-#include "net/download-block.hpp"
-#include "net/download-next-block.hpp"
 #include "net/download-proof.hpp"
 #include "net/download-state.hpp"
 #include "net/get-next-key-blocks.hpp"
@@ -34,6 +32,7 @@
 #include "td/utils/buffer.h"
 #include "td/utils/overloaded.h"
 #include "tl/tl_json.h"
+#include "ton/ton-io.hpp"
 #include "ton/ton-shard.h"
 #include "ton/ton-tl.hpp"
 
@@ -179,27 +178,20 @@ void FullNodeShardImpl::try_get_next_block(td::Timestamp timeout, td::Promise<Re
   }
 
   auto &b = choose_neighbour();
-  if (!b.adnl_id.is_zero() && b.version_major >= 1) {
-    VLOG(FULL_NODE_DEBUG) << "using new download method with adnlid=" << b.adnl_id;
-    td::actor::create_actor<DownloadBlockNew>("downloadnext", adnl_id_, overlay_id_, handle_->id(), b.adnl_id,
-                                              download_next_priority(), timeout, validator_manager_, rldp_, overlays_,
-                                              adnl_, client_, create_neighbour_promise(b, std::move(promise)))
-        .release();
-  } else {
-    VLOG(FULL_NODE_DEBUG) << "using old download method with adnlid=" << b.adnl_id;
-    td::actor::create_actor<DownloadNextBlock>("downloadnext", adnl_id_, overlay_id_, handle_, b.adnl_id,
-                                               download_next_priority(), timeout, validator_manager_, rldp_, overlays_,
-                                               adnl_, client_, create_neighbour_promise(b, std::move(promise)))
-        .release();
-  }
+  td::actor::create_actor<DownloadBlockNew>("downloadnext", adnl_id_, overlay_id_, handle_->id(), b.adnl_id,
+                                            download_next_priority(), timeout, validator_manager_, rldp_, overlays_,
+                                            adnl_, client_, create_neighbour_promise(b, std::move(promise)))
+      .release();
 }
 
 void FullNodeShardImpl::got_next_block(td::Result<BlockHandle> R) {
   if (R.is_error()) {
-    if (R.error().code() == ErrorCode::timeout || R.error().code() == ErrorCode::notready) {
-      get_next_block();
-      return;
+    if (R.error().code() != ErrorCode::timeout && R.error().code() != ErrorCode::notready) {
+      LOG(WARNING) << "Failed to get next block: " << R.move_as_error();
     }
+    delay_action([SelfId = actor_id(this)]() { td::actor::send_closure(SelfId, &FullNodeShardImpl::get_next_block); },
+                 td::Timestamp::in(0.1));
+    return;
   }
   attempt_ = 0;
   R.ensure();
@@ -626,7 +618,8 @@ void FullNodeShardImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::tonNod
 
 void FullNodeShardImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_getOutMsgQueueProof &query,
                                       td::Promise<td::BufferSlice> promise) {
-  std::vector<BlockIdExt> blocks;
+  promise.set_error(td::Status::Error("not supported yet"));
+  /*std::vector<BlockIdExt> blocks;
   for (const auto &x : query.blocks_) {
     BlockIdExt id = create_block_id(x);
     if (!id.is_valid_ext()) {
@@ -669,7 +662,7 @@ void FullNodeShardImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::tonNod
         td::actor::create_actor<BuildOutMsgQueueProof>("buildqueueproof", dst_shard, std::move(blocks), limits, manager,
                                                        std::move(P))
             .release();
-      });
+      });*/
 }
 
 void FullNodeShardImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_downloadPersistentStateSliceV2 &query,
@@ -781,6 +774,10 @@ void FullNodeShardImpl::process_block_candidate_broadcast(PublicKeyHash src, ton
   td::BufferSlice data;
   auto S = deserialize_block_candidate_broadcast(query, block_id, cc_seqno, validator_set_hash, data,
                                                  overlay::Overlays::max_fec_broadcast_size(), k_called_from_public);
+  if (S.is_error()) {
+    VLOG(FULL_NODE_WARNING) << "received bad block candidate from " << src << " : " << S;
+    return;
+  }
   if (data.size() > FullNode::max_block_size()) {
     VLOG(FULL_NODE_WARNING) << "received block candidate with too big size from " << src;
     return;
@@ -992,19 +989,10 @@ void FullNodeShardImpl::send_broadcast(BlockBroadcast broadcast) {
 void FullNodeShardImpl::download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                        td::Promise<ReceivedBlock> promise) {
   auto &b = choose_neighbour();
-  if (!b.adnl_id.is_zero() && b.version_major >= 1) {
-    VLOG(FULL_NODE_DEBUG) << "new block download";
-    td::actor::create_actor<DownloadBlockNew>("downloadreq", id, adnl_id_, overlay_id_, b.adnl_id, priority, timeout,
-                                              validator_manager_, rldp_, overlays_, adnl_, client_,
-                                              create_neighbour_promise(b, std::move(promise)))
-        .release();
-  } else {
-    VLOG(FULL_NODE_DEBUG) << "old block download";
-    td::actor::create_actor<DownloadBlock>("downloadreq", id, adnl_id_, overlay_id_, b.adnl_id, priority, timeout,
-                                           validator_manager_, rldp_, overlays_, adnl_, client_,
-                                           create_neighbour_promise(b, std::move(promise)))
-        .release();
-  }
+  td::actor::create_actor<DownloadBlockNew>("downloadreq", id, adnl_id_, overlay_id_, b.adnl_id, priority, timeout,
+                                            validator_manager_, rldp_, overlays_, adnl_, client_,
+                                            create_neighbour_promise(b, std::move(promise)))
+      .release();
 }
 
 void FullNodeShardImpl::download_zero_state(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,

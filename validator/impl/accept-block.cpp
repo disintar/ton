@@ -58,7 +58,6 @@ AcceptBlockQuery::AcceptBlockQuery(BlockIdExt id, td::Ref<BlockData> data, std::
   state_keep_old_hash_.clear();
   state_old_hash_.clear();
   state_hash_.clear();
-  CHECK(prev_.size() > 0);
 }
 
 AcceptBlockQuery::AcceptBlockQuery(AcceptBlockQuery::IsFake fake, BlockIdExt id, td::Ref<BlockData> data,
@@ -81,16 +80,13 @@ AcceptBlockQuery::AcceptBlockQuery(AcceptBlockQuery::IsFake fake, BlockIdExt id,
   state_keep_old_hash_.clear();
   state_old_hash_.clear();
   state_hash_.clear();
-  CHECK(prev_.size() > 0);
 }
 
 AcceptBlockQuery::AcceptBlockQuery(ForceFork ffork, BlockIdExt id, td::Ref<BlockData> data,
                                    td::actor::ActorId<ValidatorManager> manager, td::Promise<td::Unit> promise)
     : id_(id)
     , data_(std::move(data))
-    , signatures_(block::BlockSignatureSet::create_ordinary(std::vector<BlockSignature>{},
-                                                            validator_set_->get_catchain_seqno(),
-                                                            validator_set_->get_validator_set_hash()))
+    , signatures_(block::BlockSignatureSet::create_ordinary(std::vector<BlockSignature>{}, 0, 0))
     , is_fake_(true)
     , is_fork_(true)
     , manager_(manager)
@@ -134,7 +130,7 @@ bool AcceptBlockQuery::precheck_header() {
   if (res.is_error()) {
     return fatal_error("invalid block header in AcceptBlock: "s + res.to_string());
   }
-  if (is_fork_) {
+  if (prev_.size() == 0) {
     prev_ = prev;
   } else if (prev_ != prev) {
     return fatal_error("invalid previous block reference(s) in block header");
@@ -203,7 +199,7 @@ bool AcceptBlockQuery::create_new_proof() {
     return fatal_error("non-masterchain block header of "s + id_.to_str() + " announces this block to be a key block");
   }
   // 3. check state update
-  vm::CellSlice upd_cs{vm::NoVmSpec(), blk.state_update};
+  vm::CellSlice upd_cs{vm::NoVm(), blk.state_update};
   if (!(upd_cs.is_special() && upd_cs.prefetch_long(8) == 4  // merkle update
         && upd_cs.size_ext() == 0x20228)) {
     return fatal_error("invalid Merkle update in block");
@@ -227,10 +223,11 @@ bool AcceptBlockQuery::create_new_proof() {
     }
   }
   // 5. finish constructing Merkle proof from visited cells
-  auto proof = vm::MerkleProof::generate(block_root_, usage_tree.get());
-  if (proof.is_null()) {
+  auto r_proof = vm::MerkleProof::generate(block_root_, usage_tree.get());
+  if (r_proof.is_error()) {
     return fatal_error("cannot create proof");
   }
+  auto proof = r_proof.move_as_ok();
   proof_roots_.push_back(proof);
   // 6. extract some information from state update
   state_old_hash_ = upd_cs.prefetch_ref(0)->get_hash(0).bits();
@@ -389,16 +386,16 @@ void AcceptBlockQuery::start_up() {
     fatal_error("a non-fake AcceptBlockQuery for a forced fork block");
     return;
   }
-  if (!is_fork_ && prev_.empty()) {
-    fatal_error("no previous blocks passed to AcceptBlockQuery");
-    return;
-  }
   if (is_fork_ && !is_masterchain()) {
     fatal_error("cannot accept a non-masterchain fork block");
     return;
   }
   if (is_fork_ && data_.is_null()) {
     fatal_error("cannot accept a fork block without explicit data");
+    return;
+  }
+  if (data_.is_null() && prev_.empty()) {
+    fatal_error("no explicit data and prev blocks provided");
     return;
   }
   if (data_.not_null() && !precheck_header()) {
@@ -416,9 +413,10 @@ void AcceptBlockQuery::start_up() {
 void AcceptBlockQuery::got_block_handle(BlockHandle handle) {
   VLOG(VALIDATOR_DEBUG) << "got_block_handle()";
   handle_ = std::move(handle);
-  if (handle_->received() && handle_->received_state() && (handle_->inited_signatures() || !signatures_->is_final()) &&
-      handle_->inited_split_after() && handle_->inited_merge_before() && handle_->inited_prev() &&
-      handle_->inited_logical_time() && handle_->inited_state_root_hash() &&
+  if (handle_->received() && handle_->received_state() &&
+      (handle_->inited_signatures() || !signatures_->is_final() || is_fork_) && handle_->inited_split_after() &&
+      handle_->inited_merge_before() && handle_->inited_prev() && handle_->inited_logical_time() &&
+      handle_->inited_state_root_hash() &&
       (is_masterchain() ? handle_->inited_proof() && handle_->is_applied() && handle_->inited_is_key_block()
                         : handle_->inited_proof_link()) &&
       send_broadcast_mode_ == 0) {
@@ -469,7 +467,7 @@ void AcceptBlockQuery::got_block_handle_cont() {
 
 void AcceptBlockQuery::written_block_data() {
   VLOG(VALIDATOR_DEBUG) << "written_block_data()";
-  if (handle_->inited_signatures() || !signatures_->is_final()) {
+  if (handle_->inited_signatures() || !signatures_->is_final() || is_fork_) {
     written_block_signatures();
     return;
   }
@@ -562,7 +560,8 @@ void AcceptBlockQuery::got_prev_state(td::Ref<ShardState> state) {
 
   state_keep_old_hash_ = state_->root_hash();
 
-  auto err = state_.write().apply_block(id_, data_);
+  vm::StoreCellHint hint;
+  auto err = state_.write().apply_block(id_, data_, &hint);
   if (err.is_error()) {
     abort_query(std::move(err));
     return;
@@ -570,7 +569,7 @@ void AcceptBlockQuery::got_prev_state(td::Ref<ShardState> state) {
 
   handle_->set_split(state_->before_split());
 
-  td::actor::send_closure(manager_, &ValidatorManager::set_block_state, handle_, state_,
+  td::actor::send_closure(manager_, &ValidatorManager::set_block_state, handle_, state_, std::move(hint),
                           [SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
                             check_send_error(SelfId, R) ||
                                 td::actor::send_closure_bool(SelfId, &AcceptBlockQuery::written_state, R.move_as_ok());
@@ -767,11 +766,12 @@ bool AcceptBlockQuery::unpack_proof_link(BlockIdExt id, Ref<ProofLink> proof_lin
     return fatal_error("block proof link is for another block: expected "s + id.to_str() + ", found " +
                        proof_blk_id.to_str());
   }
-  auto virt_root = vm::MerkleProof::virtualize(proof.root);
-  if (virt_root.is_null()) {
+  auto r_virt_root = vm::MerkleProof::virtualize(proof.root);
+  if (r_virt_root.is_error()) {
     return fatal_error("block proof link for block "s + id.to_str() +
                        " does not contain a valid Merkle proof for the block header");
   }
+  auto virt_root = r_virt_root.move_as_ok();
   RootHash virt_hash{virt_root->get_hash().bits()};
   if (virt_hash != id.root_hash) {
     return fatal_error("block proof link for block "s + id.to_str() +

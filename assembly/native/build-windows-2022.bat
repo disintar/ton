@@ -2,6 +2,16 @@ REM execute this script inside elevated (Run as Administrator) console "x64 Nati
 
 echo off
 
+set "SCRIPT_DIR=%~dp0"
+for %%I in ("%SCRIPT_DIR%.") do set "SCRIPT_DIR=%%~fI"
+set "ROOT_DIR=%SCRIPT_DIR%"
+if not exist "%ROOT_DIR%\third-party" (
+  for %%I in ("%SCRIPT_DIR%\..\..") do set "ROOT_DIR=%%~fI"
+)
+
+echo Using repo root: %ROOT_DIR%
+cd /d "%ROOT_DIR%"
+
 echo Installing chocolatey windows package manager...
 @"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))" && SET "PATH=%PATH%;%ALLUSERSPROFILE%\chocolatey\bin"
 choco -?
@@ -12,35 +22,13 @@ IF %errorlevel% NEQ 0 (
 
 choco feature enable -n allowEmptyChecksums
 
-echo Installing pkgconfiglite...
-choco install -y pkgconfiglite
+echo Installing tools...
+choco install -y pkgconfiglite ninja nasm
 IF %errorlevel% NEQ 0 (
-  echo Can't install pkgconfiglite
+  echo Can't install tools
   exit /b %errorlevel%
 )
-
-echo Installing ninja...
-choco install -y ninja
-IF %errorlevel% NEQ 0 (
-  echo Can't install ninja
-  exit /b %errorlevel%
-)
-
-echo Installing ccache...
-choco install -y ccache
-IF %errorlevel% NEQ 0 (
-  echo Can't install ccache
-  exit /b %errorlevel%
-)
-
-echo Installing nasm...
-choco install -y nasm
 SET PATH=%PATH%;C:\Program Files\NASM
-where nasm
-IF %errorlevel% NEQ 0 (
-  echo Can't install nasm
-  exit /b %errorlevel%
-)
 
 if not exist "third_libs" (
     mkdir "third_libs"
@@ -49,6 +37,7 @@ cd third_libs
 
 set third_libs=%cd%
 echo %third_libs%
+<<<<<<< HEAD
 
 if not exist "zlib" (
   git clone https://github.com/madler/zlib.git
@@ -112,6 +101,9 @@ if not exist "libmicrohttpd" (
 ) else (
   echo Using libmicrohttpd...
 )
+=======
+set "third_party=%ROOT_DIR%\third-party"
+>>>>>>> mainnet/testnet
 
 cd ..
 echo Current dir %cd%
@@ -119,7 +111,10 @@ echo Current dir %cd%
 mkdir build
 cd build
 cmake -GNinja  -DCMAKE_BUILD_TYPE=Release ^
+-DCCACHE_FOUND= ^
+-DCMAKE_CXX_COMPILER_LAUNCHER= ^
 -DPORTABLE=1 ^
+<<<<<<< HEAD
 -DTON_USE_PYTHON=1 ^
 -DRDKAFKA_ROOT=%RDKAFKA_ROOT% ^
 -DSODIUM_USE_STATIC_LIBS=1 ^
@@ -140,6 +135,8 @@ cmake -GNinja  -DCMAKE_BUILD_TYPE=Release ^
 -DOPENSSL_CRYPTO_LIBRARY=%third_libs%\openssl\libcrypto_static.lib ^
 -DOPENSSL_ROOT_DIR=%third_libs%\openssl ^
 -DOPENSSL_USE_STATIC_LIBS=TRUE ^
+=======
+>>>>>>> mainnet/testnet
 -DCMAKE_CXX_FLAGS="/DTD_WINDOWS=1 /EHsc /bigobj" ..
 
 IF %errorlevel% NEQ 0 (

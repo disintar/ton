@@ -928,7 +928,7 @@ class InMemoryBagOfCellsDb : public DynamicBagOfCellsDb {
     return td::Status::OK();
   }
 
-  td::Status prepare_commit() override {
+  td::Status prepare_commit(StoreCellHint hint = {}) override {
     CHECK(info_.empty());
     for (auto &to_inc : to_inc_) {
       auto new_root = do_inc(to_inc);
@@ -941,7 +941,8 @@ class InMemoryBagOfCellsDb : public DynamicBagOfCellsDb {
     to_inc_ = {};
     return td::Status::OK();
   }
-  void prepare_commit_async(std::shared_ptr<AsyncExecutor> executor, td::Promise<td::Unit> promise) override {
+  void prepare_commit_async(std::shared_ptr<AsyncExecutor> executor, StoreCellHint hint,
+                            td::Promise<td::Unit> promise) override {
     TRY_STATUS_PROMISE(promise, prepare_commit());
     promise.set_value(td::Unit());
   }

@@ -162,7 +162,7 @@ adnl.stats.localIdPackets ts_start:double ts_end:double
     decrypted_packets:(vector adnl.stats.ipPackets) dropped_packets:(vector adnl.stats.ipPackets) = adnl.stats.LocalIdPackets;
 adnl.stats.localId short_id:int256
     current_decrypt:(vector adnl.stats.ipPackets)
-    packets_recent:adnl.stats.localIdPackets packets_total:adnl.stats.localIdPackets
+    packets_recent:adnl.stats.localIdPackets
     peers:(vector adnl.stats.peerPair) = adnl.stats.LocalId;
 adnl.stats timestamp:double local_ids:(vector adnl.stats.localId) = adnl.Stats;
 
@@ -525,8 +525,6 @@ tonNode.getCapabilities = tonNode.Capabilities;
 tonNode.slave.sendExtMessage message:tonNode.externalMessage = tonNode.Success;
 
 tonNode.query = Object;
-
-tonNode.requestFastSyncOverlayMemberCertificate sign_by:int256 adnl_id:int256 slot:int = overlay.MemberCertificate;
 
 ---types---
 
@@ -1027,8 +1025,6 @@ shardBlockVerifier.confirmBlocks blocks:(vector tonNode.blockIdExt) = shardBlock
 ---functions---
 collatorNode.generateBlock shard:tonNode.shardId cc_seqno:int prev_blocks:(vector tonNode.blockIdExt)
     creator:int256 round:int first_block_round:int priority:int = collatorNode.Candidate;
-collatorNode.generateBlockOptimistic shard:tonNode.shardId cc_seqno:int prev_blocks:(vector tonNode.blockIdExt)
-    creator:int256 round:int first_block_round:int priority:int = collatorNode.Candidate;
 collatorNode.requestBlockCallback flags:# block_id:tonNode.BlockIdExt = collatorNode.Candidate;
 collatorNode.ping flags:# = collatorNode.Pong;
 
@@ -1225,6 +1221,23 @@ consensus.simplex.db.key.candidateResolver.candidateInfo candidateId:consensus.c
 consensus.simplex.db.candidateResolver.candidateInfo leader_id:int candidate_hash_data:consensus.CandidateHashData signature:bytes = consensus.simplex.db.candidateResolver.CandidateInfo;
 consensus.simplex.db.key.candidateResolver.notarCert candidateId:consensus.candidateId = consensus.simplex.db.key.candidateResolver.NotarCert;
 consensus.simplex.db.candidateResolver.notarCert notar:consensus.simplex.voteSignatureSet = consensus.simplex.db.candidateResolver.NotarCert;
+
+consensus.stats.block id:tonNode.blockIdExt = consensus.stats.CandidateBlock;
+consensus.stats.empty = consensus.stats.CandidateBlock;
+
+consensus.stats.id workchain:int shard:long cc_seqno:int idx:int total_validators:int weight:long total_weight:long slots_per_leader_window:int = consensus.stats.Event;
+consensus.stats.collateStarted target_slot:int = consensus.stats.Event;
+consensus.stats.collateFinished target_slot:int id:consensus.candidateId = consensus.stats.Event;
+consensus.stats.collatedEmpty id:consensus.candidateId = consensus.stats.Event;
+consensus.stats.candidateReceived id:consensus.candidateId parent:consensus.CandidateParent block:consensus.stats.CandidateBlock is_collator:Bool = consensus.stats.Event;
+consensus.stats.validationStarted id:consensus.candidateId = consensus.stats.Event;
+consensus.stats.validationFinished id:consensus.candidateId = consensus.stats.Event;
+consensus.stats.blockAccepted id:consensus.candidateId = consensus.stats.Event;
+consensus.stats.timestampedEvent ts:double event:consensus.stats.Event = consensus.stats.TimestampedEvent;
+consensus.stats.events id:int256 events:(vector consensus.stats.timestampedEvent) = consensus.stats.Events;
+
+consensus.simplex.stats.voted vote:consensus.simplex.UnsignedVote = consensus.stats.Event;
+consensus.simplex.stats.certObserved vote:consensus.simplex.UnsignedVote = consensus.stats.Event;
 
 ---functions---
 consensus.simplex.requestCandidate id:consensus.CandidateId want_candidate:Bool want_notar:Bool = consensus.simplex.CandidateAndCert;

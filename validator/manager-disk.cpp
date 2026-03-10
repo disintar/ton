@@ -318,7 +318,7 @@ void ValidatorManagerImpl::sync_complete(td::Promise<td::Unit> promise) {
                                   .prev = prev,
                                   .creator = created_by,
                                   .validator_set = val_set},
-                    actor_id(this), td::Timestamp::in(10.0), {}, std::move(P));
+                    actor_id(this), {}, std::move(P));
 }
 
 void ValidatorManagerImpl::validate_fake(BlockCandidate candidate, std::vector<BlockIdExt> prev, BlockIdExt last,
@@ -911,9 +911,9 @@ void ValidatorManagerImpl::finished_wait_data(BlockIdExt block_id, td::Result<td
   }
 }
 
-void ValidatorManagerImpl::set_block_state(BlockHandle handle, td::Ref<ShardState> state,
+void ValidatorManagerImpl::set_block_state(BlockHandle handle, td::Ref<ShardState> state, vm::StoreCellHint hint,
                                            td::Promise<td::Ref<ShardState>> promise) {
-  td::actor::send_closure(db_, &Db::store_block_state, handle, state, std::move(promise));
+  td::actor::send_closure(db_, &Db::store_block_state, handle, state, std::move(hint), std::move(promise));
 }
 
 void ValidatorManagerImpl::store_block_state_part(BlockId effective_block, td::Ref<vm::Cell> cell,
@@ -926,9 +926,9 @@ void ValidatorManagerImpl::set_block_state_from_data(BlockHandle handle, td::Ref
   td::actor::send_closure(db_, &Db::store_block_state_from_data, handle, block, std::move(promise));
 }
 
-void ValidatorManagerImpl::set_block_state_from_data_preliminary(std::vector<td::Ref<BlockData>> blocks,
-                                                                 td::Promise<td::Unit> promise) {
-  td::actor::send_closure(db_, &Db::store_block_state_from_data_preliminary, std::move(blocks), std::move(promise));
+void ValidatorManagerImpl::set_block_state_from_data_bulk(std::vector<td::Ref<BlockData>> blocks,
+                                                          td::Promise<td::Unit> promise) {
+  td::actor::send_closure(db_, &Db::store_block_state_from_data_bulk, std::move(blocks), std::move(promise));
 }
 
 void ValidatorManagerImpl::get_cell_db_reader(td::Promise<std::shared_ptr<vm::CellDbReader>> promise) {

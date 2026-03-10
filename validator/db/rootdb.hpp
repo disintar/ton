@@ -92,12 +92,11 @@ public:
                            td::Promise<BlockCandidate> promise) override;
   void get_block_candidate_by_block_id(BlockIdExt id, td::Promise<BlockCandidate> promise) override;
 
-  void store_block_state(BlockHandle handle, td::Ref<ShardState> state,
+  void store_block_state(BlockHandle handle, td::Ref<ShardState> state, vm::StoreCellHint hint,
                          td::Promise<td::Ref<ShardState>> promise) override;
   void store_block_state_from_data(BlockHandle handle, td::Ref<BlockData> block,
                                    td::Promise<td::Ref<ShardState>> promise) override;
-  void store_block_state_from_data_preliminary(std::vector<td::Ref<BlockData>> blocks,
-                                               td::Promise<td::Unit> promise) override;
+  void store_block_state_from_data_bulk(std::vector<td::Ref<BlockData>> blocks, td::Promise<td::Unit> promise) override;
   void get_block_state(ConstBlockHandle handle, td::Promise<td::Ref<ShardState>> promise) override;
   void store_block_state_part(BlockId effective_block, td::Ref<vm::Cell> cell,
                               td::Promise<td::Ref<vm::DataCell>> promise) override;
@@ -173,8 +172,10 @@ public:
   void get_archive_slice(td::uint64 archive_id, td::uint64 offset, td::uint32 limit,
                          td::Promise<td::BufferSlice> promise) override;
   void set_async_mode(bool mode, td::Promise<td::Unit> promise) override;
+  void add_handle_to_archive(BlockHandle handle, td::Promise<td::Unit> promise) override;
+  void set_archive_current_shard_split_depth(td::uint32 value) override;
 
-  void run_gc(UnixTime mc_ts, UnixTime gc_ts, double archive_ttl) override;
+  void run_gc(Ref<MasterchainState> shard_client_state, UnixTime gc_ts, double archive_ttl) override;
   void add_persistent_state_description(td::Ref<PersistentStateDescription> desc,
                                         td::Promise<td::Unit> promise) override;
   void get_persistent_state_descriptions(

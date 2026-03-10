@@ -151,7 +151,6 @@ class ValidateQuery : public td::actor::Actor {
   bool full_collated_data_{false};
   bool prev_key_block_exists_{false};
   bool debug_checks_{false};
-  bool outq_cleanup_partial_{false};
   bool parallel_accounts_validation_{false};
   bool parallel_accounts_validation_pending_{false};
   bool check_account_failed_{false};
@@ -164,8 +163,8 @@ class ValidateQuery : public td::actor::Actor {
   td::BitArray<64> shard_pfx_;
   int shard_pfx_len_;
   td::Bits256 created_by_;
-  Ref<BlockData> optimistic_prev_block_;
   std::vector<Ref<vm::Cell>> preloaded_prev_block_state_roots_;
+  bool skip_store_candidate_ = false;
   bool is_new_consensus_ = false;
 
   Ref<vm::Cell> prev_state_root_;
@@ -218,7 +217,7 @@ class ValidateQuery : public td::actor::Actor {
   UnixTime prev_now_{~0u}, now_{~0u};
   td::optional<td::uint64> now_ms_;
 
-  ton::Bits256 rand_seed_;
+  td::Bits256 rand_seed_ = td::Bits256::zero();
   std::vector<block::StoragePrices> storage_prices_;
   block::StoragePhaseConfig storage_phase_cfg_{&storage_prices_};
   block::ComputePhaseConfig compute_phase_cfg_;
@@ -254,6 +253,7 @@ class ValidateQuery : public td::actor::Actor {
 
   std::map<std::pair<StdSmcAddress, td::uint64>, Ref<vm::Cell>> removed_dispatch_queue_messages_;
   std::map<std::pair<StdSmcAddress, td::uint64>, Ref<vm::Cell>> new_dispatch_queue_messages_;
+  std::set<StdSmcAddress> accounts_with_dispatch_queue_diff_;
   std::set<StdSmcAddress> account_expected_defer_all_messages_;
   td::uint64 old_out_msg_queue_size_ = 0, new_out_msg_queue_size_ = 0;
   bool out_msg_queue_size_known_ = false;
@@ -288,8 +288,6 @@ class ValidateQuery : public td::actor::Actor {
   void start_up() override;
 
   void load_prev_states();
-  bool process_optimistic_prev_block();
-  void after_get_shard_state_optimistic(td::Result<Ref<ShardState>> res, td::PerfLogAction token);
 
   bool save_candidate();
   void written_candidate(td::PerfLogAction token);

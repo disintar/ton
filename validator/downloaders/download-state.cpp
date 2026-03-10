@@ -39,7 +39,7 @@ class SplitStateDeserializer {
     CHECK(split_depth <= 63 && shard_prefix_length < static_cast<int>(split_depth));
 
     try {
-      TRY_RESULT(header, vm::MerkleProof::try_virtualize(wrapped_header));
+      TRY_RESULT(header, vm::MerkleProof::virtualize(wrapped_header));
 
       if (RootHash{header->get_hash().bits()} != root_hash) {
         return td::Status::Error("Hash mismatch in split state header");
@@ -463,7 +463,8 @@ void DownloadShardState::written_shard_state_file() {
     R.ensure();
     td::actor::send_closure(SelfId, &DownloadShardState::written_shard_state, R.move_as_ok());
   });
-  td::actor::send_closure(manager_, &ValidatorManager::set_block_state, handle_, std::move(state_), std::move(P));
+  td::actor::send_closure(manager_, &ValidatorManager::set_block_state, handle_, std::move(state_), vm::StoreCellHint{},
+                          std::move(P));
 }
 
 void DownloadShardState::written_shard_state(td::Ref<ShardState> state) {

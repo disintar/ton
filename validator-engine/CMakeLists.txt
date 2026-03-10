@@ -23,9 +23,9 @@ set(VALIDATOR_ENGINE_SOURCE
         BlockRequestReceiverKafka.cpp)
 
 add_executable(validator-engine ${VALIDATOR_ENGINE_SOURCE})
-target_link_libraries(validator-engine overlay tdutils tdactor adnl tl_api dht
-  rldp rldp2 catchain validatorsession full-node quic validator ton_validator validator
-  fift-lib memprof git ${JEMALLOC_LIBRARIES} ${MHD_LIBRARY})
+target_link_libraries(validator-engine metrics overlay tdutils tdactor adnl tl_api dht
+  rldp rldp2 quic catchain validatorsession full-node validator ton_validator validator
+  fift-lib memprof git ${JEMALLOC_LIBRARIES}  ${MHD_LIBRARY})
 
 target_include_directories(validator-engine PUBLIC ${MHD_INCLUDE_DIR})
 

@@ -278,7 +278,7 @@ class StaticBagOfCellsDbLazyImpl : public StaticBagOfCellsDb {
   }
   template <class T>
   T check_result(T&& to_check) {
-    CHECK(status_.is_ok());
+    CHECK(!has_error_.load());
     if (to_check.is_error()) {
       std::lock_guard<std::mutex> guard(status_mutex_);
       has_error_.store(true);
@@ -390,8 +390,8 @@ class StaticBagOfCellsDbLazyImpl : public StaticBagOfCellsDb {
     if (parse_res <= 0) {
       return td::Status::Error("bag-of-cell error: failed to read header");
     }
-    if (info_.total_size < data_.size()) {
-      return td::Status::Error("bag-of-cell error: not enough data");
+    if (info_.total_size != data_.size()) {
+      return td::Status::Error("bag-of-cell error: wrong data size");
     }
     if (options_.check_crc32c && info_.has_crc32c) {
       std::string buf(td::narrow_cast<std::size_t>(info_.total_size), '\0');

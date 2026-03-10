@@ -691,76 +691,75 @@ namespace ton {
           return cs_ref.is_null() || visit(*cs_ref);
         }
 
-        void LiteQuery::continue_getBlockHeader(BlockIdExt blkid, int mode, Ref<ton::validator::BlockData> block) {
-          LOG(DEBUG) << "obtained data for getBlockHeader(" << blkid.to_str() << ", " << mode << ")";
-          CHECK(block.not_null());
-          CHECK(block->block_id() == blkid);
-          auto block_root = block->root_cell();
-          if (block_root.is_null()) {
-            fatal_error("block has no valid root cell");
-            return;
-          }
-          // create block header proof
-          RootHash rhash{block_root->get_hash().bits()};
-          CHECK(rhash == blkid.root_hash);
-          vm::MerkleProofBuilder mpb{block_root};
-          block::gen::Block::Record blk;
-          block::gen::BlockInfo::Record info;
-          if (!(tlb::unpack_cell(mpb.root(), blk) && tlb::unpack_cell(blk.info, info))) {
-            fatal_error("cannot unpack block header");
-            return;
-          }
-          if (mode & 1) {
-            // with state_update
-            vm::CellSlice upd_cs{vm::NoVmSpec(), blk.state_update};
-            if (!(upd_cs.is_special() && upd_cs.prefetch_long(8) == 4  // merkle update
-                  && upd_cs.size_ext() == 0x20228)) {
-              fatal_error("invalid Merkle update in block");
-              return;
-            }
-          }
-          visit(info.master_ref);
-          visit(info.prev_ref);
-          visit(info.prev_vert_ref);
-          if (mode & 2) {
-            // with value flow
-            visit(blk.value_flow);
-          }
-          if (mode & 16) {
-            // with extra
-            block::gen::BlockExtra::Record extra;
-            if (!tlb::unpack_cell(blk.extra, extra)) {
-              fatal_error("cannot unpack BlockExtra in block");
-              return;
-            }
-            if (blkid.is_masterchain()) {
-              auto mc_extra_root = extra.custom->prefetch_ref();
-              block::gen::McBlockExtra::Record mc_extra;
-              if (!(mc_extra_root.not_null() && tlb::unpack_cell(std::move(mc_extra_root), mc_extra))) {
-                fatal_error("cannot unpack McBlockExtra in block");
-                return;
-              }
-              if (mode & 32) {
-                // with ShardHashes
-                visit(mc_extra.shard_hashes);
-              }
-              if (mode & 64) {
-                // with PrevBlkSignatures
-                visit(mc_extra.r1.prev_blk_signatures);
-              }
-            }
-          }
-          auto proof_data = mpb.extract_proof_boc();
-          if (proof_data.is_error()) {
-            fatal_error(proof_data.move_as_error());
-            return;
-          }
-          // send answer
-          auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_blockHeader>(
-                  ton::create_tl_lite_block_id(blkid),
-                  mode, proof_data.move_as_ok());
-          finish_query(std::move(b));
-        }
+void LiteQuery::continue_getBlockHeader(BlockIdExt blkid, int mode, Ref<ton::validator::BlockData> block) {
+  LOG(INFO) << "obtained data for getBlockHeader(" << blkid.to_str() << ", " << mode << ")";
+  CHECK(block.not_null());
+  CHECK(block->block_id() == blkid);
+  auto block_root = block->root_cell();
+  if (block_root.is_null()) {
+    fatal_error("block has no valid root cell");
+    return;
+  }
+  // create block header proof
+  RootHash rhash{block_root->get_hash().bits()};
+  CHECK(rhash == blkid.root_hash);
+  vm::MerkleProofBuilder mpb{block_root};
+  block::gen::Block::Record blk;
+  block::gen::BlockInfo::Record info;
+  if (!(tlb::unpack_cell(mpb.root(), blk) && tlb::unpack_cell(blk.info, info))) {
+    fatal_error("cannot unpack block header");
+    return;
+  }
+  if (mode & 1) {
+    // with state_update
+    vm::CellSlice upd_cs{vm::NoVm(), blk.state_update};
+    if (!(upd_cs.is_special() && upd_cs.prefetch_long(8) == 4  // merkle update
+          && upd_cs.size_ext() == 0x20228)) {
+      fatal_error("invalid Merkle update in block");
+      return;
+    }
+  }
+  visit(info.master_ref);
+  visit(info.prev_ref);
+  visit(info.prev_vert_ref);
+  if (mode & 2) {
+    // with value flow
+    visit(blk.value_flow);
+  }
+  if (mode & 16) {
+    // with extra
+    block::gen::BlockExtra::Record extra;
+    if (!tlb::unpack_cell(blk.extra, extra)) {
+      fatal_error("cannot unpack BlockExtra in block");
+      return;
+    }
+    if (blkid.is_masterchain()) {
+      auto mc_extra_root = extra.custom->prefetch_ref();
+      block::gen::McBlockExtra::Record mc_extra;
+      if (!(mc_extra_root.not_null() && tlb::unpack_cell(std::move(mc_extra_root), mc_extra))) {
+        fatal_error("cannot unpack McBlockExtra in block");
+        return;
+      }
+      if (mode & 32) {
+        // with ShardHashes
+        visit(mc_extra.shard_hashes);
+      }
+      if (mode & 64) {
+        // with PrevBlkSignatures
+        visit(mc_extra.r1.prev_blk_signatures);
+      }
+    }
+  }
+  auto proof_data = mpb.extract_proof_boc();
+  if (proof_data.is_error()) {
+    fatal_error(proof_data.move_as_error());
+    return;
+  }
+  // send answer
+  auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_blockHeader>(ton::create_tl_lite_block_id(blkid),
+                                                                                  mode, proof_data.move_as_ok());
+  finish_query(std::move(b));
+}
 
         void LiteQuery::perform_getState(BlockIdExt blkid) {
           LOG(INFO) << "started a getState(" << blkid.to_str() << ") liteserver query";
@@ -1481,36 +1480,33 @@ void LiteQuery::perform_runSmcMethod(BlockIdExt blkid, WorkchainId workchain, St
           return make_state_root_proof(proof, state->root_cell(), block->root_cell(), blkid);
         }
 
-        bool LiteQuery::make_state_root_proof(Ref<vm::Cell> &proof, Ref<vm::Cell> state_root, Ref<vm::Cell> block_root,
-                                              const BlockIdExt &blkid) {
-          CHECK(block_root.not_null() && state_root.not_null());
-          RootHash rhash{block_root->get_hash().bits()};
-          if (rhash != blkid.root_hash) {
-            // TODO: can raised on readonly
-            return fatal_error("rhash != blkid.root_hash, cannot make proof, try one more time");
-          };
-          vm::MerkleProofBuilder pb{std::move(block_root)};
-          block::gen::Block::Record blk;
-          block::gen::BlockInfo::Record info;
-          if (!(tlb::unpack_cell(pb.root(), blk) && tlb::unpack_cell(blk.info, info) &&
-                block::gen::BlkPrevInfo(info.after_merge).validate_ref(info.prev_ref))) {
-            return fatal_error("cannot unpack block header");
-          }
-          vm::CellSlice upd_cs{vm::NoVmSpec(), blk.state_update};
-          if (!(upd_cs.is_special() && upd_cs.prefetch_long(8) == 4  // merkle update
-                && upd_cs.size_ext() == 0x20228)) {
-            return fatal_error("invalid Merkle update in block");
-          }
-          auto upd_hash = upd_cs.prefetch_ref(1)->get_hash(0);
-          auto state_hash = state_root->get_hash();
-          if (upd_hash != state_hash) {
-            return fatal_error("cannot construct Merkle proof for given masterchain state because of hash mismatch");
-          }
-          if (!pb.extract_proof_to(proof)) {
-            return fatal_error("unknown error creating Merkle proof");
-          }
-          return true;
-        }
+bool LiteQuery::make_state_root_proof(Ref<vm::Cell>& proof, Ref<vm::Cell> state_root, Ref<vm::Cell> block_root,
+                                      const BlockIdExt& blkid) {
+  CHECK(block_root.not_null() && state_root.not_null());
+  RootHash rhash{block_root->get_hash().bits()};
+  CHECK(rhash == blkid.root_hash);
+  vm::MerkleProofBuilder pb{std::move(block_root)};
+  block::gen::Block::Record blk;
+  block::gen::BlockInfo::Record info;
+  if (!(tlb::unpack_cell(pb.root(), blk) && tlb::unpack_cell(blk.info, info) &&
+        block::gen::BlkPrevInfo(info.after_merge).validate_ref(info.prev_ref))) {
+    return fatal_error("cannot unpack block header");
+  }
+  vm::CellSlice upd_cs{vm::NoVm(), blk.state_update};
+  if (!(upd_cs.is_special() && upd_cs.prefetch_long(8) == 4  // merkle update
+        && upd_cs.size_ext() == 0x20228)) {
+    return fatal_error("invalid Merkle update in block");
+  }
+  auto upd_hash = upd_cs.prefetch_ref(1)->get_hash(0);
+  auto state_hash = state_root->get_hash();
+  if (upd_hash != state_hash) {
+    return fatal_error("cannot construct Merkle proof for given masterchain state because of hash mismatch");
+  }
+  if (!pb.extract_proof_to(proof)) {
+    return fatal_error("unknown error creating Merkle proof");
+  }
+  return true;
+}
 
         bool LiteQuery::make_shard_info_proof(Ref<vm::Cell> &proof, Ref<block::McShardHash> &info, ShardIdFull shard,
                                               ShardIdFull &true_shard, Ref<vm::Cell> &leaf, bool &found, bool exact) {
@@ -2466,37 +2462,39 @@ void LiteQuery::perform_getConfigParams(BlockIdExt blkid, int mode, std::vector<
           }
           lookup_header_proof_ = proof_data.move_as_ok();
 
-          bool include_prev = mode_ & 6;
-          if (include_prev) {
-            BlockIdExt prev_blkid;
-            for (auto &p: prev) {
-              if (ton::shard_contains(p.shard_full(), req_prefix)) {
-                prev_blkid = p;
-              }
-            }
-            CHECK(prev_blkid.is_valid());
-            get_block_handle_checked(prev_blkid, [Self = actor_id(this), masterchain_ref_seqno, manager = manager_](
-                    td::Result<ConstBlockHandle> R) mutable {
-                if (R.is_error()) {
-                  td::actor::send_closure(Self, &LiteQuery::abort_query, R.move_as_error());
-                  return;
-                }
-                td::actor::send_closure(manager, &ValidatorManager::get_block_data_from_db, R.move_as_ok(),
-                                        [Self, masterchain_ref_seqno](td::Result<Ref<BlockData>> res) mutable {
-                                            if (res.is_error()) {
-                                              td::actor::send_closure(Self, &LiteQuery::abort_query,
-                                                                      res.move_as_error());
-                                              return;
-                                            }
-                                            td::actor::send_closure(Self,
-                                                                    &LiteQuery::continue_lookupBlockWithProof_gotPrevBlockData,
-                                                                    res.move_as_ok(), masterchain_ref_seqno);
-                                        });
-            });
-          } else {
-            continue_lookupBlockWithProof_gotPrevBlockData(Ref<BlockData>(), masterchain_ref_seqno);
-          }
-        }
+  bool include_prev = mode_ & 6;
+  if (include_prev) {
+    BlockIdExt prev_blkid;
+    for (auto& p : prev) {
+      if (ton::shard_contains(p.shard_full(), req_prefix)) {
+        prev_blkid = p;
+      }
+    }
+    if (!prev_blkid.is_valid()) {
+      fatal_error("failed to choose previous block");
+      return;
+    }
+    get_block_handle_checked(prev_blkid, [Self = actor_id(this), masterchain_ref_seqno,
+                                          manager = manager_](td::Result<ConstBlockHandle> R) mutable {
+      if (R.is_error()) {
+        td::actor::send_closure(Self, &LiteQuery::abort_query, R.move_as_error());
+        return;
+      }
+      td::actor::send_closure(manager, &ValidatorManager::get_block_data_from_db, R.move_as_ok(),
+                              [Self, masterchain_ref_seqno](td::Result<Ref<BlockData>> res) mutable {
+                                if (res.is_error()) {
+                                  td::actor::send_closure(Self, &LiteQuery::abort_query, res.move_as_error());
+                                  return;
+                                }
+                                td::actor::send_closure(Self,
+                                                        &LiteQuery::continue_lookupBlockWithProof_gotPrevBlockData,
+                                                        res.move_as_ok(), masterchain_ref_seqno);
+                              });
+    });
+  } else {
+    continue_lookupBlockWithProof_gotPrevBlockData(Ref<BlockData>(), masterchain_ref_seqno);
+  }
+}
 
         void LiteQuery::continue_lookupBlockWithProof_gotPrevBlockData(Ref<BlockData> prev_block,
                                                                        BlockSeqno masterchain_ref_seqno) {
@@ -2802,110 +2800,109 @@ static td::Result<tl_object_ptr<lite_api::liteServer_transactionMetadata>> get_i
       metadata.initiator_lt);
 }
 
-        void LiteQuery::finish_listBlockTransactions(int mode, int req_count) {
-          LOG(INFO)
-          << "completing a listBlockTransactions(" << base_blk_id_.to_str() << ", " << mode << ", " << req_count
-          << ", " << acc_addr_.to_hex() << ", " << trans_lt_ << ") liteserver query";
-          constexpr int max_answer_transactions = 256;
-          CHECK(block_.not_null());
-          auto block_root = block_->root_cell();
-          CHECK(block_root.not_null());
-          RootHash rhash{block_root->get_hash().bits()};
-          CHECK(rhash == base_blk_id_.root_hash);
-          vm::MerkleProofBuilder pb;
-          auto virt_root = block_root;
-          if (mode & 32) {
-            // proof requested
-            virt_root = pb.init(std::move(virt_root));
-          }
-          if ((mode & 192) == 64) {  // reverse order, no starting point
-            acc_addr_.set_ones();
-            trans_lt_ = ~0ULL;
-          }
-          bool with_metadata = mode & 256;
-          mode &= ~256;
-          std::vector<tl_object_ptr<lite_api::liteServer_transactionId>> result;
-          bool eof = false;
-          ton::LogicalTime reverse = (mode & 64) ? ~0ULL : 0;
-          try {
-            block::gen::Block::Record blk;
-            block::gen::BlockExtra::Record extra;
-            if (!(tlb::unpack_cell(virt_root, blk) && tlb::unpack_cell(std::move(blk.extra), extra))) {
-              fatal_error("cannot find account transaction data in block "s + base_blk_id_.to_str());
-              return;
-            }
-            vm::AugmentedDictionary acc_dict{vm::load_cell_slice_ref(extra.account_blocks), 256,
-                                             block::tlb::aug_ShardAccountBlocks};
-            int count = 0;
-            bool allow_same = true;
-            td::Bits256 cur_addr = acc_addr_;
-            while (!eof && count < req_count && count < max_answer_transactions) {
-              Ref<vm::CellSlice> value;
-              try {
-                value = acc_dict.extract_value(
-                        acc_dict.vm::DictionaryFixed::lookup_nearest_key(cur_addr.bits(), 256, !reverse, allow_same));
-              } catch (vm::VmError err) {
-                fatal_error("error while traversing account block dictionary: "s + err.get_msg());
-                return;
-              }
-              if (value.is_null()) {
-                eof = true;
-                break;
-              }
-              allow_same = false;
-              if (cur_addr != acc_addr_) {
-                trans_lt_ = reverse;
-              }
-              block::gen::AccountBlock::Record acc_blk;
-              if (!(tlb::csr_unpack(std::move(value), acc_blk) && acc_blk.account_addr == cur_addr)) {
-                fatal_error("invalid AccountBlock for account "s + cur_addr.to_hex());
-                return;
-              }
-              vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
-                                                 block::tlb::aug_AccountTransactions};
-              td::BitArray<64> cur_trans{(long long) trans_lt_};
-              while (count < req_count && count < max_answer_transactions) {
-                Ref<vm::Cell> tvalue;
-                try {
-                  tvalue = trans_dict.extract_value_ref(
-                          trans_dict.vm::DictionaryFixed::lookup_nearest_key(cur_trans.bits(), 64, !reverse));
-                } catch (vm::VmError err) {
-                  fatal_error("error while traversing transaction dictionary of an AccountBlock: "s + err.get_msg());
-                  return;
-                }
-                if (tvalue.is_null()) {
-                  trans_lt_ = reverse;
-                  break;
-                }
-                tl_object_ptr<lite_api::liteServer_transactionMetadata> metadata;
-                if (with_metadata) {
-                  auto r_metadata = get_in_msg_metadata(extra.in_msg_descr, tvalue);
-                  if (r_metadata.is_error()) {
-                    fatal_error(r_metadata.move_as_error());
-                    return;
-                  }
-                  metadata = r_metadata.move_as_ok();
-                }
-                result.push_back(create_tl_object<lite_api::liteServer_transactionId>(
-                        mode | (metadata ? 256 : 0), cur_addr, cur_trans.to_long(), tvalue->get_hash().bits(),
-                        std::move(metadata)));
-                ++count;
-              }
-            }
-          } catch (vm::VmError err) {
-            fatal_error("error while parsing AccountBlocks of block "s + base_blk_id_.to_str() + " : " + err.get_msg());
+void LiteQuery::finish_listBlockTransactions(int mode, int req_count) {
+  LOG(INFO) << "completing a listBlockTransactions(" << base_blk_id_.to_str() << ", " << mode << ", " << req_count
+            << ", " << acc_addr_.to_hex() << ", " << trans_lt_ << ") liteserver query";
+  constexpr int max_answer_transactions = 256;
+  CHECK(block_.not_null());
+  auto block_root = block_->root_cell();
+  CHECK(block_root.not_null());
+  RootHash rhash{block_root->get_hash().bits()};
+  CHECK(rhash == base_blk_id_.root_hash);
+  vm::MerkleProofBuilder pb;
+  auto virt_root = block_root;
+  if (mode & 32) {
+    // proof requested
+    virt_root = pb.init(std::move(virt_root));
+  }
+  if ((mode & 192) == 64) {  // reverse order, no starting point
+    acc_addr_.set_ones();
+    trans_lt_ = ~0ULL;
+  }
+  bool with_metadata = mode & 256;
+  mode &= ~256;
+  std::vector<tl_object_ptr<lite_api::liteServer_transactionId>> result;
+  bool eof = false;
+  ton::LogicalTime reverse = (mode & 64) ? ~0ULL : 0;
+  try {
+    block::gen::Block::Record blk;
+    block::gen::BlockExtra::Record extra;
+    if (!(tlb::unpack_cell(virt_root, blk) && tlb::unpack_cell(std::move(blk.extra), extra))) {
+      fatal_error("cannot find account transaction data in block "s + base_blk_id_.to_str());
+      return;
+    }
+    vm::AugmentedDictionary acc_dict{vm::load_cell_slice_ref(extra.account_blocks), 256,
+                                     block::tlb::aug_ShardAccountBlocks};
+    int count = 0;
+    bool allow_same = true;
+    td::Bits256 cur_addr = acc_addr_;
+    while (!eof && count < req_count && count < max_answer_transactions) {
+      Ref<vm::CellSlice> value;
+      try {
+        value = acc_dict.extract_value(
+            acc_dict.vm::DictionaryFixed::lookup_nearest_key(cur_addr.bits(), 256, !reverse, allow_same));
+      } catch (vm::VmError& err) {
+        fatal_error("error while traversing account block dictionary: "s + err.get_msg());
+        return;
+      }
+      if (value.is_null()) {
+        eof = true;
+        break;
+      }
+      allow_same = false;
+      if (cur_addr != acc_addr_) {
+        trans_lt_ = reverse;
+      }
+      block::gen::AccountBlock::Record acc_blk;
+      if (!(tlb::csr_unpack(std::move(value), acc_blk) && acc_blk.account_addr == cur_addr)) {
+        fatal_error("invalid AccountBlock for account "s + cur_addr.to_hex());
+        return;
+      }
+      vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
+                                         block::tlb::aug_AccountTransactions};
+      td::BitArray<64> cur_trans{(long long)trans_lt_};
+      while (count < req_count && count < max_answer_transactions) {
+        Ref<vm::Cell> tvalue;
+        try {
+          tvalue = trans_dict.extract_value_ref(
+              trans_dict.vm::DictionaryFixed::lookup_nearest_key(cur_trans.bits(), 64, !reverse));
+        } catch (vm::VmError& err) {
+          fatal_error("error while traversing transaction dictionary of an AccountBlock: "s + err.get_msg());
+          return;
+        }
+        if (tvalue.is_null()) {
+          trans_lt_ = reverse;
+          break;
+        }
+        tl_object_ptr<lite_api::liteServer_transactionMetadata> metadata;
+        if (with_metadata) {
+          auto r_metadata = get_in_msg_metadata(extra.in_msg_descr, tvalue);
+          if (r_metadata.is_error()) {
+            fatal_error(r_metadata.move_as_error());
             return;
           }
-          td::BufferSlice proof_data;
-          if (mode & 32) {
-            // create proof
-            auto proof_boc = pb.extract_proof_boc();
-            if (proof_boc.is_error()) {
-              fatal_error(proof_boc.move_as_error());
-              return;
-            }
-            proof_data = proof_boc.move_as_ok();
-          }
+          metadata = r_metadata.move_as_ok();
+        }
+        result.push_back(create_tl_object<lite_api::liteServer_transactionId>(
+            mode | (metadata ? 256 : 0), cur_addr, cur_trans.to_long(), tvalue->get_hash().bits(),
+            std::move(metadata)));
+        ++count;
+      }
+    }
+  } catch (vm::VmError& err) {
+    fatal_error("error while parsing AccountBlocks of block "s + base_blk_id_.to_str() + " : " + err.get_msg());
+    return;
+  }
+  td::BufferSlice proof_data;
+  if (mode & 32) {
+    // create proof
+    auto proof_boc = pb.extract_proof_boc();
+    if (proof_boc.is_error()) {
+      fatal_error(proof_boc.move_as_error());
+      return;
+    }
+    proof_data = proof_boc.move_as_ok();
+  }
 
           LOG(INFO) << "listBlockTransactions() query completed";
           auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_blockTransactions>(
@@ -2956,113 +2953,112 @@ static td::Status process_all_in_msg_metadata(const Ref<vm::Cell>& in_msg_descr_
   return td::Status::OK();
 }
 
-        void LiteQuery::finish_listBlockTransactionsExt(int mode, int req_count) {
-          LOG(INFO)
-          << "completing a listBlockTransactionsExt(" << base_blk_id_.to_str() << ", " << mode << ", " << req_count
-          << ", " << acc_addr_.to_hex() << ", " << trans_lt_ << ") liteserver query";
-          constexpr int max_answer_transactions = 256;
-          CHECK(block_.not_null());
-          auto block_root = block_->root_cell();
-          CHECK(block_root.not_null());
-          RootHash rhash{block_root->get_hash().bits()};
-          CHECK(rhash == base_blk_id_.root_hash);
-          vm::MerkleProofBuilder pb;
-          auto virt_root = block_root;
-          if (mode & 256) {
-            // with msg metadata in proof
-            mode |= 32;
-          }
-          if (mode & 32) {
-            // proof requested
-            virt_root = pb.init(std::move(virt_root));
-          }
-          if ((mode & 192) == 64) {  // reverse order, no starting point
-            acc_addr_.set_ones();
-            trans_lt_ = ~0ULL;
-          }
-          std::vector<Ref<vm::Cell>> trans_roots;
-          bool eof = false;
-          ton::LogicalTime reverse = (mode & 64) ? ~0ULL : 0;
-          try {
-            block::gen::Block::Record blk;
-            block::gen::BlockExtra::Record extra;
-            if (!(tlb::unpack_cell(virt_root, blk) && tlb::unpack_cell(std::move(blk.extra), extra))) {
-              fatal_error("cannot find account transaction data in block "s + base_blk_id_.to_str());
-              return;
-            }
-            vm::AugmentedDictionary acc_dict{vm::load_cell_slice_ref(extra.account_blocks), 256,
-                                             block::tlb::aug_ShardAccountBlocks};
-            int count = 0;
-            bool allow_same = true;
-            td::Bits256 cur_addr = acc_addr_;
-            while (!eof && count < req_count && count < max_answer_transactions) {
-              Ref<vm::CellSlice> value;
-              try {
-                value = acc_dict.extract_value(
-                        acc_dict.vm::DictionaryFixed::lookup_nearest_key(cur_addr.bits(), 256, !reverse, allow_same));
-              } catch (vm::VmError err) {
-                fatal_error("error while traversing account block dictionary: "s + err.get_msg());
-                return;
-              }
-              if (value.is_null()) {
-                eof = true;
-                break;
-              }
-              allow_same = false;
-              if (cur_addr != acc_addr_) {
-                trans_lt_ = reverse;
-              }
-              block::gen::AccountBlock::Record acc_blk;
-              if (!(tlb::csr_unpack(std::move(value), acc_blk) && acc_blk.account_addr == cur_addr)) {
-                fatal_error("invalid AccountBlock for account "s + cur_addr.to_hex());
-                return;
-              }
-              vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
-                                                 block::tlb::aug_AccountTransactions};
-              td::BitArray<64> cur_trans{(long long) trans_lt_};
-              while (count < req_count && count < max_answer_transactions) {
-                Ref<vm::Cell> tvalue;
-                try {
-                  tvalue = trans_dict.extract_value_ref(
-                          trans_dict.vm::DictionaryFixed::lookup_nearest_key(cur_trans.bits(), 64, !reverse));
-                } catch (vm::VmError err) {
-                  fatal_error("error while traversing transaction dictionary of an AccountBlock: "s + err.get_msg());
-                  return;
-                }
-                if (tvalue.is_null()) {
-                  trans_lt_ = reverse;
-                  break;
-                }
-                trans_roots.push_back(std::move(tvalue));
-                ++count;
-              }
-            }
-            if (mode & 256) {
-              td::Status S = process_all_in_msg_metadata(extra.in_msg_descr, trans_roots);
-              if (S.is_error()) {
-                fatal_error(S.move_as_error());
-                return;
-              }
-            }
-          } catch (vm::VmError err) {
-            fatal_error("error while parsing AccountBlocks of block "s + base_blk_id_.to_str() + " : " + err.get_msg());
-            return;
-          }
-          td::BufferSlice proof_data;
-          if (mode & 32) {
-            // create proof
-            auto proof_boc = pb.extract_proof_boc();
-            if (proof_boc.is_error()) {
-              fatal_error(proof_boc.move_as_error());
-              return;
-            }
-            proof_data = proof_boc.move_as_ok();
-          }
-          auto res = vm::std_boc_serialize_multi(std::move(trans_roots));
-          if (res.is_error()) {
-            fatal_error(res.move_as_error());
-            return;
-          }
+void LiteQuery::finish_listBlockTransactionsExt(int mode, int req_count) {
+  LOG(INFO) << "completing a listBlockTransactionsExt(" << base_blk_id_.to_str() << ", " << mode << ", " << req_count
+            << ", " << acc_addr_.to_hex() << ", " << trans_lt_ << ") liteserver query";
+  constexpr int max_answer_transactions = 256;
+  CHECK(block_.not_null());
+  auto block_root = block_->root_cell();
+  CHECK(block_root.not_null());
+  RootHash rhash{block_root->get_hash().bits()};
+  CHECK(rhash == base_blk_id_.root_hash);
+  vm::MerkleProofBuilder pb;
+  auto virt_root = block_root;
+  if (mode & 256) {
+    // with msg metadata in proof
+    mode |= 32;
+  }
+  if (mode & 32) {
+    // proof requested
+    virt_root = pb.init(std::move(virt_root));
+  }
+  if ((mode & 192) == 64) {  // reverse order, no starting point
+    acc_addr_.set_ones();
+    trans_lt_ = ~0ULL;
+  }
+  std::vector<Ref<vm::Cell>> trans_roots;
+  bool eof = false;
+  ton::LogicalTime reverse = (mode & 64) ? ~0ULL : 0;
+  try {
+    block::gen::Block::Record blk;
+    block::gen::BlockExtra::Record extra;
+    if (!(tlb::unpack_cell(virt_root, blk) && tlb::unpack_cell(std::move(blk.extra), extra))) {
+      fatal_error("cannot find account transaction data in block "s + base_blk_id_.to_str());
+      return;
+    }
+    vm::AugmentedDictionary acc_dict{vm::load_cell_slice_ref(extra.account_blocks), 256,
+                                     block::tlb::aug_ShardAccountBlocks};
+    int count = 0;
+    bool allow_same = true;
+    td::Bits256 cur_addr = acc_addr_;
+    while (!eof && count < req_count && count < max_answer_transactions) {
+      Ref<vm::CellSlice> value;
+      try {
+        value = acc_dict.extract_value(
+            acc_dict.vm::DictionaryFixed::lookup_nearest_key(cur_addr.bits(), 256, !reverse, allow_same));
+      } catch (vm::VmError& err) {
+        fatal_error("error while traversing account block dictionary: "s + err.get_msg());
+        return;
+      }
+      if (value.is_null()) {
+        eof = true;
+        break;
+      }
+      allow_same = false;
+      if (cur_addr != acc_addr_) {
+        trans_lt_ = reverse;
+      }
+      block::gen::AccountBlock::Record acc_blk;
+      if (!(tlb::csr_unpack(std::move(value), acc_blk) && acc_blk.account_addr == cur_addr)) {
+        fatal_error("invalid AccountBlock for account "s + cur_addr.to_hex());
+        return;
+      }
+      vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), std::move(acc_blk.transactions), 64,
+                                         block::tlb::aug_AccountTransactions};
+      td::BitArray<64> cur_trans{(long long)trans_lt_};
+      while (count < req_count && count < max_answer_transactions) {
+        Ref<vm::Cell> tvalue;
+        try {
+          tvalue = trans_dict.extract_value_ref(
+              trans_dict.vm::DictionaryFixed::lookup_nearest_key(cur_trans.bits(), 64, !reverse));
+        } catch (vm::VmError& err) {
+          fatal_error("error while traversing transaction dictionary of an AccountBlock: "s + err.get_msg());
+          return;
+        }
+        if (tvalue.is_null()) {
+          trans_lt_ = reverse;
+          break;
+        }
+        trans_roots.push_back(std::move(tvalue));
+        ++count;
+      }
+    }
+    if (mode & 256) {
+      td::Status S = process_all_in_msg_metadata(extra.in_msg_descr, trans_roots);
+      if (S.is_error()) {
+        fatal_error(S.move_as_error());
+        return;
+      }
+    }
+  } catch (vm::VmError& err) {
+    fatal_error("error while parsing AccountBlocks of block "s + base_blk_id_.to_str() + " : " + err.get_msg());
+    return;
+  }
+  td::BufferSlice proof_data;
+  if (mode & 32) {
+    // create proof
+    auto proof_boc = pb.extract_proof_boc();
+    if (proof_boc.is_error()) {
+      fatal_error(proof_boc.move_as_error());
+      return;
+    }
+    proof_data = proof_boc.move_as_ok();
+  }
+  auto res = vm::std_boc_serialize_multi(std::move(trans_roots));
+  if (res.is_error()) {
+    fatal_error(res.move_as_error());
+    return;
+  }
 
           auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_blockTransactionsExt>(
                   ton::create_tl_lite_block_id(base_blk_id_), req_count, !eof, res.move_as_ok(), std::move(proof_data));
@@ -3769,16 +3765,16 @@ bool LiteQuery::finish_proof_chain(ton::BlockIdExt id) {
           });
         }
 
-        void LiteQuery::perform_getBlockOutMsgQueueSize(int mode, BlockIdExt blkid) {
-          LOG(INFO) << "started a getBlockOutMsgQueueSize(" << blkid.to_str() << ", " << mode << ") liteserver query";
-          mode_ = mode;
-          if (!blkid.is_valid_full()) {
-            fatal_error("invalid BlockIdExt");
-            return;
-          }
-          set_continuation([=]() -> void { finish_getBlockOutMsgQueueSize(); });
-          request_block_data_state(blkid);
-        }
+void LiteQuery::perform_getBlockOutMsgQueueSize(int mode, BlockIdExt blkid) {
+  LOG(INFO) << "started a getBlockOutMsgQueueSize(" << blkid.to_str() << ", " << mode << ") liteserver query";
+  mode_ = mode;
+  if (!blkid.is_valid_full()) {
+    fatal_error("invalid BlockIdExt");
+    return;
+  }
+  set_continuation([this]() -> void { finish_getBlockOutMsgQueueSize(); });
+  request_block_data_state(blkid);
+}
 
         void LiteQuery::finish_getBlockOutMsgQueueSize() {
           LOG(INFO) << "completing getBlockOutNsgQueueSize() query";
@@ -3847,7 +3843,7 @@ void LiteQuery::perform_getDispatchQueueInfo(int mode, BlockIdExt blkid, StdSmcA
     fatal_error("invalid max_accounts");
     return;
   }
-  set_continuation([=]() -> void { finish_getDispatchQueueInfo(after_addr, max_accounts); });
+  set_continuation([=, this]() -> void { finish_getDispatchQueueInfo(after_addr, max_accounts); });
   request_block_data_state(blkid);
 }
 
@@ -3953,7 +3949,7 @@ void LiteQuery::perform_getDispatchQueueMessages(int mode, BlockIdExt blkid, Std
     fatal_error("invalid max_messages");
     return;
   }
-  set_continuation([=]() -> void { finish_getDispatchQueueMessages(addr, lt, max_messages); });
+  set_continuation([=, this]() -> void { finish_getDispatchQueueMessages(addr, lt, max_messages); });
   request_block_data_state(blkid);
 }
 

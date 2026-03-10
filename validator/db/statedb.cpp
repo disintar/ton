@@ -191,9 +191,9 @@ namespace ton {
                 vec.push_back(create_tl_block_id(e));
             }
 
-            kv_->begin_write_batch().ensure();
-            kv_->set(key.as_slice(), create_serialize_tl_object<ton_api::db_state_hardforks>(std::move(vec))).ensure();
-            kv_->commit_write_batch();
+  kv_->begin_write_batch().ensure();
+  kv_->set(key.as_slice(), create_serialize_tl_object<ton_api::db_state_hardforks>(std::move(vec))).ensure();
+  kv_->commit_write_batch().ensure();
 
             promise.set_value(td::Unit());
         }

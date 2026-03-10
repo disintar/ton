@@ -185,7 +185,14 @@ class CatChainInst : public td::actor::Actor {
   }
 
   void create_fork() {
+    if (height_ == 0 || prev_values_.empty()) {
+      LOG(WARNING) << "Skipping fork, source_id=" << idx_ << ", no blocks yet";
+      return;
+    }
     auto height = height_ - 1;  //td::Random::fast(0, height_ - 1);
+    if (height >= prev_values_.size()) {
+      height = static_cast<td::uint32>(prev_values_.size() - 1);
+    }
     LOG(WARNING) << "Creating fork, source_id=" << idx_ << ", height=" << height;
 
     auto sum = prev_values_[height] + 1;
@@ -254,7 +261,7 @@ int main(int argc, char *argv[]) {
         auto pub1 = pk1.compute_public_key();
         n.adnl_id_full = ton::adnl::AdnlNodeIdFull{pub1};
         n.adnl_id = ton::adnl::AdnlNodeIdShort{pub1.compute_short_id()};
-        td::actor::send_closure(keyring, &ton::keyring::Keyring::add_key, std::move(pk1), true, [](td::Unit) {});
+        td::actor::send_closure(keyring, &ton::keyring::Keyring::add_key, std::move(pk1), true, [](td::Result<>) {});
         td::actor::send_closure(adnl, &ton::adnl::Adnl::add_id, ton::adnl::AdnlNodeIdFull{pub1}, addr,
                                 static_cast<td::uint8>(0));
         td::actor::send_closure(network_manager, &ton::adnl::TestLoopbackNetworkManager::add_node_id, n.adnl_id, true,
@@ -264,7 +271,7 @@ int main(int argc, char *argv[]) {
         auto pub2 = pk2.compute_public_key();
         n.id_full = pub2;
         n.id = pub2.compute_short_id();
-        td::actor::send_closure(keyring, &ton::keyring::Keyring::add_key, std::move(pk2), true, [](td::Unit) {});
+        td::actor::send_closure(keyring, &ton::keyring::Keyring::add_key, std::move(pk2), true, [](td::Result<>) {});
 
         LOG(DEBUG) << "created node " << n.adnl_id << " " << n.id;
       }

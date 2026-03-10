@@ -178,12 +178,12 @@ bool StdAddress::operator==(const StdAddress& other) const {
          testnet == other.testnet;
 }
 
-int parse_hex_digit(int c) {
+static int parse_hex_digit(int c) {
   if (c >= '0' && c <= '9') {
     return c - '0';
   }
   c |= 0x20;
-  if (c >= 'a' && c <= 'z') {
+  if (c >= 'a' && c <= 'f') {
     return c - 'a' + 10;
   }
   return -1;
@@ -1873,7 +1873,8 @@ bool check_one_config_param(Ref<vm::CellSlice> cs_ref, td::ConstBitPtr key, td::
   } else if (idx < 0) {
     return true;
   }
-  bool ok = block::gen::ConfigParam{idx}.validate_ref(1024, std::move(cell));
+  unsigned cfg_idx = static_cast<unsigned>(idx);
+  bool ok = block::gen::ConfigParam{cfg_idx}.validate_ref(1024, std::move(cell));
   if (!ok) {
     LOG(ERROR) << "configuration parameter #" << idx << " is invalid";
   }
@@ -2028,9 +2029,9 @@ td::Status unpack_block_prev_blk_try(Ref<vm::Cell> block_root, const ton::BlockI
                                      ton::BlockIdExt* fetch_blkid) {
   try {
     return unpack_block_prev_blk_ext(std::move(block_root), id, prev, mc_blkid, after_split, fetch_blkid);
-  } catch (vm::VmError err) {
+  } catch (vm::VmError& err) {
     return td::Status::Error(std::string{"error while processing Merkle proof: "} + err.get_msg());
-  } catch (vm::VmVirtError err) {
+  } catch (vm::VmVirtError& err) {
     return td::Status::Error(std::string{"error while processing Merkle proof: "} + err.get_msg());
   }
 }
@@ -2068,7 +2069,9 @@ td::Status unpack_block_prev_blk_ext(Ref<vm::Cell> block_root, const ton::BlockI
   block::gen::ExtBlkRef::Record prev1, prev2;
   if (info.after_merge) {
     auto cs = vm::load_cell_slice(std::move(info.prev_ref));
-    CHECK(cs.size_ext() == 0x20000);  // prev_blks_info$_ prev1:^ExtBlkRef prev2:^ExtBlkRef = BlkPrevInfo 1;
+    if (cs.size_ext() != 0x20000) {  // prev_blks_info$_ prev1:^ExtBlkRef prev2:^ExtBlkRef = BlkPrevInfo 1;
+      return td::Status::Error("invalid previous block references in block header");
+    }
     if (!(tlb::unpack_cell(cs.prefetch_ref(0), prev1) && tlb::unpack_cell(cs.prefetch_ref(1), prev2))) {
       return td::Status::Error("cannot unpack two previous block references from block header");
     }
@@ -2133,7 +2136,7 @@ td::Status check_block_header(Ref<vm::Cell> block_root, const ton::BlockIdExt& i
     return td::Status::Error("block has invalid not_master flag in its (Merkelized) header");
   }
   if (store_shard_hash_to) {
-    vm::CellSlice upd_cs{vm::NoVmSpec(), blk.state_update};
+    vm::CellSlice upd_cs{vm::NoVm(), blk.state_update};
     if (!(upd_cs.is_special() && upd_cs.prefetch_long(8) == 4  // merkle update
           && upd_cs.size_ext() == 0x20228)) {
       return td::Status::Error("invalid Merkle update in block header");
@@ -2230,9 +2233,9 @@ td::Result<Ref<vm::Cell>> get_block_transaction_try(Ref<vm::Cell> block_root, to
                                                     const ton::StdSmcAddress& addr, ton::LogicalTime lt) {
   try {
     return get_block_transaction(std::move(block_root), workchain, addr, lt);
-  } catch (vm::VmError err) {
+  } catch (vm::VmError& err) {
     return td::Status::Error(std::string{"error while extracting transaction from block : "} + err.get_msg());
-  } catch (vm::VmVirtError err) {
+  } catch (vm::VmVirtError& err) {
     return td::Status::Error(std::string{"virtualization error while traversing transaction proof : "} + err.get_msg());
   }
 }
@@ -2381,9 +2384,10 @@ bool parse_hex_hash(const char* str, const char* end, td::Bits256& hash) {
     int c = *str++, x = c - '0';
     if (x < 0) {
       return false;
-    } else if (x > 10) {
+    }
+    if (x >= 10) {
       x = (c | 0x20) - ('a' - 10);
-      if (x < 10 || x > 16) {
+      if (x < 10 || x >= 16) {
         return false;
       }
     }

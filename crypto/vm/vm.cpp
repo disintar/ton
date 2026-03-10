@@ -705,19 +705,19 @@ return res;
 }
 
 Ref<vm::Cell> lookup_library_in(td::ConstBitPtr key, vm::Dictionary& dict) {
-try {
-  auto val = dict.lookup(key, 256);
-  if (val.is_null() || !val->have_refs()) {
+  try {
+    auto val = dict.lookup(key, 256);
+    if (val.is_null() || !val->have_refs()) {
+      return {};
+    }
+    auto root = val->prefetch_ref();
+    if (root.not_null() && !root->get_hash().bits().compare(key, 256)) {
+      return root;
+    }
+    return {};
+  } catch (vm::VmError&) {
     return {};
   }
-  auto root = val->prefetch_ref();
-  if (root.not_null() && !root->get_hash().bits().compare(key, 256)) {
-    return root;
-  }
-  return {};
-} catch (vm::VmError) {
-  return {};
-}
 }
 
 Ref<vm::Cell> lookup_library_in(td::ConstBitPtr key, Ref<vm::Cell> lib_root) {

@@ -172,7 +172,7 @@ class ValidatorManagerImpl : public ValidatorManager {
 
   void get_block_handle(BlockIdExt id, bool force, td::Promise<BlockHandle> promise) override;
 
-  void set_block_state(BlockHandle handle, td::Ref<ShardState> state,
+  void set_block_state(BlockHandle handle, td::Ref<ShardState> state, vm::StoreCellHint hint,
                        td::Promise<td::Ref<ShardState>> promise) override {
     UNREACHABLE();
   }
@@ -185,8 +185,7 @@ class ValidatorManagerImpl : public ValidatorManager {
                                  td::Promise<td::Ref<ShardState>> promise) override {
     UNREACHABLE();
   }
-  void set_block_state_from_data_preliminary(std::vector<td::Ref<BlockData>> blocks,
-                                             td::Promise<td::Unit> promise) override {
+  void set_block_state_from_data_bulk(std::vector<td::Ref<BlockData>> blocks, td::Promise<td::Unit> promise) override {
     UNREACHABLE();
   }
   void get_cell_db_reader(td::Promise<std::shared_ptr<vm::CellDbReader>> promise) override;

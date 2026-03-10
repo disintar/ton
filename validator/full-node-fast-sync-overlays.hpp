@@ -65,14 +65,17 @@ class FullNodeFastSyncOverlay : public td::actor::Actor {
   void set_validators(std::vector<PublicKeyHash> root_public_keys,
                       std::vector<adnl::AdnlNodeIdShort> current_validators_adnl);
   void set_member_certificate(overlay::OverlayMemberCertificate member_certificate);
-  void set_receive_broadcasts(bool value);
+  void set_params(bool receive_broadcasts, bool send_twostep_broadcasts,
+                  td::actor::ActorId<adnl::AdnlSenderEx> adnl_sender);
 
   FullNodeFastSyncOverlay(adnl::AdnlNodeIdShort local_id, ShardIdFull shard, FileHash zero_state_file_hash,
                           std::vector<PublicKeyHash> root_public_keys,
                           std::vector<adnl::AdnlNodeIdShort> current_validators_adnl,
                           overlay::OverlayMemberCertificate member_certificate, bool receive_broadcasts,
-                          double broadcast_speed_multiplier, td::actor::ActorId<keyring::Keyring> keyring,
-                          td::actor::ActorId<adnl::Adnl> adnl, td::actor::ActorId<overlay::Overlays> overlays,
+                          bool send_twostep_broadcasts, double broadcast_speed_multiplier,
+                          td::actor::ActorId<keyring::Keyring> keyring, td::actor::ActorId<adnl::Adnl> adnl,
+                          td::actor::ActorId<adnl::AdnlSenderEx> adnl_sender,
+                          td::actor::ActorId<overlay::Overlays> overlays,
                           td::actor::ActorId<ValidatorManagerInterface> validator_manager,
                           td::actor::ActorId<FullNode> full_node)
       : local_id_(local_id)
@@ -81,10 +84,12 @@ class FullNodeFastSyncOverlay : public td::actor::Actor {
       , current_validators_adnl_(std::move(current_validators_adnl))
       , member_certificate_(std::move(member_certificate))
       , receive_broadcasts_(receive_broadcasts)
+      , send_twostep_broadcasts_(send_twostep_broadcasts)
       , broadcast_speed_multiplier_(broadcast_speed_multiplier)
       , zero_state_file_hash_(zero_state_file_hash)
       , keyring_(keyring)
       , adnl_(adnl)
+      , adnl_sender_(adnl_sender)
       , overlays_(overlays)
       , validator_manager_(validator_manager)
       , full_node_(full_node) {
@@ -97,11 +102,13 @@ class FullNodeFastSyncOverlay : public td::actor::Actor {
   std::vector<adnl::AdnlNodeIdShort> current_validators_adnl_;
   overlay::OverlayMemberCertificate member_certificate_;
   bool receive_broadcasts_;
+  bool send_twostep_broadcasts_;
   double broadcast_speed_multiplier_;
   FileHash zero_state_file_hash_;
 
   td::actor::ActorId<keyring::Keyring> keyring_;
   td::actor::ActorId<adnl::Adnl> adnl_;
+  td::actor::ActorId<adnl::AdnlSenderEx> adnl_sender_;
   td::actor::ActorId<overlay::Overlays> overlays_;
   td::actor::ActorId<ValidatorManagerInterface> validator_manager_;
   td::actor::ActorId<FullNode> full_node_;
@@ -127,7 +134,8 @@ class FullNodeFastSyncOverlays {
   void update_overlays(td::Ref<MasterchainState> state, std::set<adnl::AdnlNodeIdShort> my_adnl_ids,
                        std::set<ShardIdFull> monitoring_shards, const FileHash& zero_state_file_hash,
                        double broadcast_speed_multiplier, const td::actor::ActorId<keyring::Keyring>& keyring,
-                       const td::actor::ActorId<adnl::Adnl>& adnl,
+                       const td::actor::ActorId<adnl::Adnl>& adnl, const td::actor::ActorId<rldp2::Rldp>& rldp2,
+                       const td::actor::ActorId<quic::QuicSender>& quic,
                        const td::actor::ActorId<overlay::Overlays>& overlays,
                        const td::actor::ActorId<ValidatorManagerInterface>& validator_manager,
                        const td::actor::ActorId<FullNode>& full_node);

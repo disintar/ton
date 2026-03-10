@@ -34,6 +34,7 @@
 #include "auto/tl/ton_api.hpp"
 #include "auto/tl/ton_api_json.h"
 #include "dht/dht.h"
+#include "metrics/prometheus-exporter.h"
 #include "quic/quic-sender.h"
 #include "rldp/rldp.h"
 #include "rldp2/rldp.h"
@@ -251,6 +252,7 @@ class ValidatorEngine : public td::actor::Actor {
   bool celldb_preload_all_ = false;
   bool celldb_in_memory_ = false;
   bool celldb_disable_bloom_filter_ = false;
+  bool unsynced_liteserver_ = false;
   td::optional<double> catchain_max_block_delay_, catchain_max_block_delay_slow_;
   bool read_config_ = false;
   bool started_keyring_ = false;
@@ -360,6 +362,9 @@ class ValidatorEngine : public td::actor::Actor {
   void set_celldb_disable_bloom_filter(bool value) {
     celldb_disable_bloom_filter_ = value;
   }
+  void set_unsynced_liteserver(bool value) {
+    unsynced_liteserver_ = value;
+  }
   void set_catchain_max_block_delay(double value) {
     catchain_max_block_delay_ = value;
   }
@@ -438,6 +443,7 @@ class ValidatorEngine : public td::actor::Actor {
 
   void start_up() override;
   ValidatorEngine() {
+    exporter_ = ton::PrometheusExporter::create();
   }
 
   // load config
@@ -491,6 +497,8 @@ class ValidatorEngine : public td::actor::Actor {
   void alarm() override;
   void run();
 
+  void export_metrics(td::IPAddress address);
+
   void get_current_validator_perm_key(td::Promise<std::pair<ton::PublicKey, size_t>> promise);
 
   void try_add_adnl_node(ton::PublicKeyHash pub, AdnlCategory cat, td::Promise<td::Unit> promise);
@@ -532,9 +540,6 @@ class ValidatorEngine : public td::actor::Actor {
   void issue_fast_sync_overlay_certificate(ton::PublicKeyHash issue_by, ton::adnl::AdnlNodeIdShort issue_to,
                                            td::uint32 flags, td::int32 slot, td::int32 expire_at,
                                            td::Promise<ton::overlay::OverlayMemberCertificate> promise);
-  void process_fast_sync_overlay_certificate_request(ton::PublicKeyHash issue_by, ton::adnl::AdnlNodeIdShort issue_to,
-                                                     td::uint32 flags, td::int32 slot, td::int32 expire_at,
-                                                     td::Promise<ton::overlay::OverlayMemberCertificate> promise);
   ton::PublicKeyHash find_local_validator_for_cert_issuing();
 
   std::string custom_overlays_config_file() const {

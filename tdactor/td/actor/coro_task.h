@@ -135,7 +135,9 @@ struct promise_value : promise_common {
   [[no_unique_address]] ResultT result;
 
   template <class TT>
-  void return_value(TT&& v) noexcept {
+  void return_value(TT&& v) noexcept
+    requires requires { result = std::forward<TT>(v); }
+  {
     result = std::forward<TT>(v);
   }
 
@@ -153,9 +155,6 @@ struct promise_value : promise_common {
     return std::move(result);
   }
 };
-
-template <class T>
-struct Task;
 
 template <class T>
 struct StartedTask;
@@ -473,11 +472,8 @@ struct [[nodiscard]] StartedTask {
     using U = detail::UnwrapTDResult<Ret>::Type;
     return [](Self task, FDecayed fn) mutable -> Task<U> {
       co_await become_lightweight();
-      auto value = co_await std::move(task).wrap();
-      if (value.is_error()) {
-        co_return value.move_as_error();
-      }
-      co_return co_await detail::make_awaitable(fn(value.move_as_ok()));
+      auto value = co_await std::move(task);
+      co_return co_await detail::make_awaitable(fn(std::move(value)));
     }(std::move(*this), std::forward<F>(f));
   }
 
