@@ -195,26 +195,26 @@ namespace pylite {
                                                                       std::move(public_key.key), response_obj_,
                                                                       timeout_);
 
-              scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::run); });
+              scheduler_.run_in_context([&] { send_closure(engine, &LiteClientActorEngine::run); });
           });
           scheduler_thread_ = td::thread([&] { scheduler_.run(); });
         };
 
         ~PyLiteClient() {
-          scheduler_.run_in_context_external([&] { engine.reset(); });
-          scheduler_.run_in_context_external([] { td::actor::SchedulerContext::get().stop(); });
+          scheduler_.run_in_context([&] { engine.reset(); });
+          scheduler_.run_in_context([] { td::actor::SchedulerContext::get().stop(); });
           scheduler_thread_.join();
         }
 
         bool get_connected() {
-          scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::get_connected); });
+          scheduler_.run_in_context([&] { send_closure(engine, &LiteClientActorEngine::get_connected); });
           auto response = wait_response();
           Connected *connected = static_cast<Connected *>(response.get());
           return connected->connected;
         }
 
         std::int32_t get_time() {
-          scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::get_time); });
+          scheduler_.run_in_context([&] { send_closure(engine, &LiteClientActorEngine::get_time); });
           auto response = wait_response();
           GetTimeResponse *time = dynamic_cast<GetTimeResponse *>(response.get());
           if (time->success) {
@@ -225,7 +225,7 @@ namespace pylite {
         }
 
         int send_message(PyCell &cell) {
-          scheduler_.run_in_context_external(
+          scheduler_.run_in_context(
                   [&] { send_closure(engine, &LiteClientActorEngine::send_message, cell.my_cell); });
           auto response = wait_response();
           if (response->success) {
@@ -293,8 +293,8 @@ namespace pylite {
         std::vector<std::tuple<ShortKeyHex, int, td::int64, td::int64, bool>> admin_getStatData();
 
         void stop() {
-          scheduler_.run_in_context_external([&] { engine.reset(); });
-          scheduler_.run_in_context_external([] { td::actor::SchedulerContext::get().stop(); });
+          scheduler_.run_in_context([&] { engine.reset(); });
+          scheduler_.run_in_context([] { td::actor::SchedulerContext::get().stop(); });
           scheduler_thread_.join();
           scheduler_.stop();
         }

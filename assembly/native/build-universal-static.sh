@@ -47,9 +47,6 @@ rm -rf .ninja* CMakeCache.txt CMakeFiles
 if [[ "$OSTYPE" == "darwin"* ]]; then
   echo "CC=$(xcrun -find clang)"  >> $GITHUB_ENV
   echo "CXX=$(xcrun -find clang++)" >> $GITHUB_ENV
-#  export CC="$(brew --prefix llvm@16)/bin/clang"
-#  export CXX="$(brew --prefix llvm@16)/bin/clang++"
-  export OPENSSL_LIBS="$OPENSSL_PATH/lib/libcrypto.a"
 else
   echo "Detected Linux"
   # Detect available clang version (prefer 16, then 18, 20, 17, 19; fallback to default clang)
@@ -73,12 +70,6 @@ else
   else
     export CC=$(command -v clang-"$v")
     export CXX=$(command -v clang++-"$v")
-  fi
-  # Prefer lib, fallback to lib64 for OpenSSL static lib location
-  if [ -f "$OPENSSL_PATH/lib/libcrypto.a" ]; then
-    export OPENSSL_LIBS="$OPENSSL_PATH/lib/libcrypto.a"
-  else
-    export OPENSSL_LIBS="$OPENSSL_PATH/lib64/libcrypto.a"
   fi
 fi
 
@@ -119,21 +110,6 @@ cmake -GNinja .. \
   -DCMAKE_EXE_LINKER_FLAGS="${LINUX_LINKER_FLAGS}" \
   -DTON_USE_PYTHON=1 \
   -DRDKAFKA_ROOT=$RDKAFKA_ROOT \
-  -DOPENSSL_FOUND=1 \
-  -DOPENSSL_INCLUDE_DIR=$OPENSSL_PATH/include \
-  -DOPENSSL_CRYPTO_LIBRARY=$OPENSSL_LIBS \
-  -DZLIB_FOUND=1 \
-  -DZLIB_INCLUDE_DIR=$ZLIB_PATH \
-  -DZLIB_LIBRARIES=$ZLIB_PATH/lib/libz.a \
-  -DSODIUM_FOUND=1 \
-  -DSODIUM_INCLUDE_DIR=$SODIUM_PATH/include \
-  -DSODIUM_LIBRARY_RELEASE=$SODIUM_PATH/lib/libsodium.a \
-  -DMHD_FOUND=1 \
-  -DMHD_INCLUDE_DIR=$LIBMICROHTTPD_PATH/include \
-  -DMHD_LIBRARY=$LIBMICROHTTPD_PATH/lib/libmicrohttpd.a \
-  -DLZ4_FOUND=1 \
-  -DLZ4_INCLUDE_DIRS=$LZ4_PATH/include \
-  -DLZ4_LIBRARIES=$LZ4_PATH/lib/liblz4.a \
   ${EXTRA_CMAKE_ARGS} \
 #  -DTON_USE_JEMALLOC=ON
 

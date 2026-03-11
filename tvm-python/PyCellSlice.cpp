@@ -63,7 +63,7 @@ bool PyCellSlice::begins_with_bits(unsigned bits, const std::string &n) const {
 }
 
 bool PyCellSlice::begins_with(const std::string &n) const {
-  return my_cell_slice.begins_with(std::stoull(n));
+  return my_cell_slice.begins_with(my_cell_slice.size(), std::stoull(n));
 }
 
 bool PyCellSlice::begins_with_skip_bits(int bits, const std::string &value) {
@@ -105,7 +105,7 @@ PyCellSlice PyCellSlice::preload_subslice_ext(unsigned int size) {
 
 bool PyCellSlice::begins_with_skip(const std::string &value) {
   auto n = std::stoull(value);
-  return my_cell_slice.begins_with_skip(n);
+  return my_cell_slice.begins_with_skip(my_cell_slice.size(), n);
 }
 
 std::string PyCellSlice::load_int(unsigned n) {

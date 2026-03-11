@@ -699,7 +699,7 @@ class StateIndexer : public td::actor::Actor {
     dumper_->storeState(std::move(final_id), std::move(final_json));
 
     LOG(DEBUG) << "received & parsed state from db " << block_id.to_str();
-    dec_promise(1);
+    dec_promise.set_value(1);
     stop();
     return true;
   }
@@ -1801,7 +1801,7 @@ class IndexerWorker : public td::actor::Actor {
       } else {
         auto root_cell = R.move_as_ok();
         auto block_id = handle->id();
-        td::Promise<td::int32> Pfinal = td::PromiseCreator::lambda([SelfId = SelfId](td::int32 a) {
+        td::Promise<td::int32> Pfinal = td::PromiseCreator::lambda([SelfId = SelfId](td::Result<td::int32> a_res) {
           td::actor::send_closure(SelfId, &IndexerWorker::decrease_state_padding);
         });
 
@@ -1992,7 +1992,7 @@ class Indexer : public td::actor::Actor {
       td::actor::ActorId<Indexer> id_;
     };
 
-    auto P_cb = td::PromiseCreator::lambda([](td::Unit R) {});
+    auto P_cb = td::PromiseCreator::lambda([](td::Result<td::Unit> R) {});
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::install_callback,
                             std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
     LOG(DEBUG) << "Callback installed";
@@ -2122,8 +2122,10 @@ class Indexer : public td::actor::Actor {
 
           td::actor::send_closure(w->get(), &IndexerWorker::set_seqno_range, seqno_first - 1, end + 1);
 
-          auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::uint32 s) {
-            td::actor::send_closure(SelfId, &Indexer::shutdown_worker, s);
+          auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::uint32> s_res) {
+            if (s_res.is_ok()) {
+              td::actor::send_closure(SelfId, &Indexer::shutdown_worker, s_res.move_as_ok());
+            }
           });
 
           td::actor::send_closure(w->get(), &IndexerWorker::set_initial_data, std::move(P), validator_manager_.get());
@@ -2139,8 +2141,11 @@ class Indexer : public td::actor::Actor {
     LOG(WARNING) << "Sync complete: " << handle->id().to_str();
 
     for (auto &w : workers) {
-      auto P = td::PromiseCreator::lambda(
-          [SelfId = actor_id(this)](td::uint32 s) { td::actor::send_closure(SelfId, &Indexer::shutdown_worker, s); });
+      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::uint32> s_res) {
+        if (s_res.is_ok()) {
+          td::actor::send_closure(SelfId, &Indexer::shutdown_worker, s_res.move_as_ok());
+        }
+      });
 
       td::actor::send_closure(w, &IndexerWorker::set_initial_data, std::move(P), validator_manager_.get());
     }
@@ -2271,7 +2276,7 @@ class IndexerSimple : public td::actor::Actor {
       td::actor::ActorId<IndexerSimple> id_;
     };
 
-    auto P_cb = td::PromiseCreator::lambda([](td::Unit R) {});
+    auto P_cb = td::PromiseCreator::lambda([](td::Result<td::Unit> R) {});
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::install_callback,
                             std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
     LOG(DEBUG) << "Callback installed";
@@ -2376,8 +2381,10 @@ class IndexerSimple : public td::actor::Actor {
 
       auto w = &workers.back();
 
-      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::uint32 s) {
-        td::actor::send_closure(SelfId, &IndexerSimple::shutdown_worker, s);
+      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::uint32> s_res) {
+        if (s_res.is_ok()) {
+          td::actor::send_closure(SelfId, &IndexerSimple::shutdown_worker, s_res.move_as_ok());
+        }
       });
 
       td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size_);

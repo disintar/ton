@@ -1,6 +1,6 @@
 include(AndroidThirdParty)
 
-if (NOT SECP256K1_LIBRARY)
+if (NOT SECP256K1_LIBRARY OR NOT EXISTS ${SECP256K1_LIBRARY})
   set(SECP256K1_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third-party/secp256k1)
   set(SECP256K1_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/third-party/secp256k1)
   set(SECP256K1_BUILD_DIR ${SECP256K1_BINARY_DIR}/src)
@@ -119,10 +119,23 @@ if (NOT SECP256K1_LIBRARY)
     file(MAKE_DIRECTORY ${SECP256K1_INCLUDE_DIR})
     file(MAKE_DIRECTORY ${SECP256K1_BUILD_DIR})
 
+    if (APPLE)
+      execute_process(
+        COMMAND xcrun --show-sdk-path
+        OUTPUT_VARIABLE MACOS_SDK_PATH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+      )
+      if (SECP256K1_CFLAGS)
+        set(SECP256K1_CFLAGS "${SECP256K1_CFLAGS} -isysroot ${MACOS_SDK_PATH}")
+      else()
+        set(SECP256K1_CFLAGS "-isysroot ${MACOS_SDK_PATH}")
+      endif()
+    endif()
+
     if (CMAKE_C_FLAGS)
-      set(SECP256K1_CFLAGS "${CMAKE_C_FLAGS} -fPIC")
+      set(SECP256K1_CFLAGS "${SECP256K1_CFLAGS} ${CMAKE_C_FLAGS} -fPIC")
     else()
-      set(SECP256K1_CFLAGS "-fPIC")
+      set(SECP256K1_CFLAGS "${SECP256K1_CFLAGS} -fPIC")
     endif()
 
     set(SECP256K1_CONFIGURE_ARGS
@@ -176,6 +189,8 @@ if (NOT SECP256K1_LIBRARY)
           AR=${SECP256K1_AR}
           RANLIB=${SECP256K1_RANLIB}
           CFLAGS=${SECP256K1_CFLAGS}
+          LDFLAGS=
+          CPPFLAGS=
           ./configure ${SECP256K1_CONFIGURE_ARGS}
         COMMAND ${CMAKE_COMMAND} -E chdir ${SECP256K1_BUILD_DIR} ${CMAKE_COMMAND} -E env
           CC=${SECP256K1_CC}
@@ -183,6 +198,8 @@ if (NOT SECP256K1_LIBRARY)
           AR=${SECP256K1_AR}
           RANLIB=${SECP256K1_RANLIB}
           CFLAGS=${SECP256K1_CFLAGS}
+          LDFLAGS=
+          CPPFLAGS=
           make clean
         COMMAND ${CMAKE_COMMAND} -E chdir ${SECP256K1_BUILD_DIR} ${CMAKE_COMMAND} -E env
           CC=${SECP256K1_CC}
@@ -190,6 +207,8 @@ if (NOT SECP256K1_LIBRARY)
           AR=${SECP256K1_AR}
           RANLIB=${SECP256K1_RANLIB}
           CFLAGS=${SECP256K1_CFLAGS}
+          LDFLAGS=
+          CPPFLAGS=
           make -j16
         COMMAND ${CMAKE_COMMAND} -E chdir ${SECP256K1_BUILD_DIR} ${CMAKE_COMMAND} -E env
           CC=${SECP256K1_CC}
@@ -197,10 +216,12 @@ if (NOT SECP256K1_LIBRARY)
           AR=${SECP256K1_AR}
           RANLIB=${SECP256K1_RANLIB}
           CFLAGS=${SECP256K1_CFLAGS}
+          LDFLAGS=
+          CPPFLAGS=
           make install
         COMMAND ${SECP256K1_RANLIB} ${SECP256K1_LIBRARY}
         COMMENT "Build secp256k1"
-        DEPENDS ${SECP256K1_SOURCE_DIR}
+        DEPENDS ${SECP256K1_SOURCE_DIR}/configure.ac
         OUTPUT ${SECP256K1_LIBRARY}
       )
     endif()
@@ -208,5 +229,9 @@ if (NOT SECP256K1_LIBRARY)
 else()
   message(STATUS "Use Secp256k1: ${SECP256K1_LIBRARY}")
 endif()
+
+message(STATUS "SECP256K1_LIBRARY: ${SECP256K1_LIBRARY}")
+message(STATUS "SECP256K1_BINARY_DIR: ${SECP256K1_BINARY_DIR}")
+message(STATUS "SECP256K1_SOURCE_DIR: ${SECP256K1_SOURCE_DIR}")
 
 add_custom_target(secp256k1 DEPENDS ${SECP256K1_LIBRARY})

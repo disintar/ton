@@ -443,7 +443,7 @@ class ValidatorEngine : public td::actor::Actor {
 
   void start_up() override;
   ValidatorEngine() {
-    exporter_ = ton::PrometheusExporter::create();
+//    exporter_ = ton::PrometheusExporter::create();
   }
 
   // load config

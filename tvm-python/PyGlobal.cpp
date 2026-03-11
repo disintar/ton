@@ -57,7 +57,7 @@ void stop_scheduler_thread() {
   if (scheduler_running) {
     std::lock_guard<std::mutex> lock(scheduler_init_mutex);
     if (thread_local_scheduler) {
-      thread_local_scheduler->run_in_context_external([] {
+      thread_local_scheduler->run_in_context([] {
         td::actor::SchedulerContext::get().stop();
       });
     }
@@ -71,7 +71,7 @@ void stop_scheduler_thread() {
 }
 
 void execute_async(std::function<void()> f) {
-  get_thread_scheduler()->run_in_context_external([&] {
+  get_thread_scheduler()->run_in_context([&] {
     td::actor::create_actor<pyglobal::Runner>("executeasync", std::move(f)).release();
   });
 }

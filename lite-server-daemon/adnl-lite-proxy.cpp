@@ -848,7 +848,7 @@ namespace ton::liteserver {
 
           if (!(limits.find(short_id) != limits.end())) {
             LOG(WARNING) << "User " << pubk.to_hex() << " is new, process add to users";
-            td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false, [](td::Unit) {});
+            td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false, td::Promise<td::Unit>());
             users_.push_back(pubk);
 
             std::vector<td::Bits256> users(users_);

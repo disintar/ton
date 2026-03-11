@@ -1060,8 +1060,8 @@ void ArchiveManager::reinit() {
   }
 }
 
-void ArchiveManager::run_gc(UnixTime mc_ts, UnixTime gc_ts, double archive_ttl) {
-  auto p = get_temp_package_id_by_unixtime((double)mc_ts - TEMP_PACKAGES_TTL);
+void ArchiveManager::run_gc(td::Ref<MasterchainState> shard_client_state, UnixTime gc_ts, double archive_ttl) {
+  auto p = get_temp_package_id_by_unixtime((double)gc_ts - TEMP_PACKAGES_TTL);
   std::vector<PackageId> to_delete;
   for (auto &x : temp_files_) {
     if (x.first < p) {
@@ -1072,7 +1072,7 @@ void ArchiveManager::run_gc(UnixTime mc_ts, UnixTime gc_ts, double archive_ttl) 
         x.first != temp_files_.rbegin()->first) {
       td::actor::send_closure(
           x.second.file_actor_id(), &ArchiveSlice::get_temp_max_seqnos,
-          [=, id = x.first, SelfId = actor_id(this)](td::Result<std::map<ShardIdFull, BlockSeqno>> R) {
+          [=, id = x.first, shard_client_state = shard_client_state, SelfId = actor_id(this)](td::Result<std::map<ShardIdFull, BlockSeqno>> R) {
             if (R.is_error()) {
               return;
             }

@@ -35,7 +35,10 @@ std::map<std::string, std::variant<int, std::string>> parse_anycast(vm::CellSlic
   block::gen::Anycast::Record anycast_parsed;
   CHECK(tlb::unpack(anycast, anycast_parsed));
 
-  return {{"depth", anycast_parsed.depth}, {"rewrite_pfx", anycast_parsed.rewrite_pfx->to_binary()}};
+  std::map<std::string, std::variant<int, std::string>> res;
+  res["depth"] = (int)anycast_parsed.depth;
+  res["rewrite_pfx"] = anycast_parsed.rewrite_pfx->to_binary();
+  return res;
 };
 
 std::unordered_map<vm::CellHash, std::string> cache;

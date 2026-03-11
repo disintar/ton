@@ -163,9 +163,6 @@ if (TON_USE_ROCKSDB)
     set(WITH_TSAN ${TON_USE_TSAN} CACHE BOOL "")
     set(WITH_UBSAN ${TON_USE_UBSAN} CACHE BOOL "")
     add_subdirectory(third-party/rocksdb EXCLUDE_FROM_ALL)
-    # Broken CMake in rocksdb alters properties it has no business changing.
-    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE)
-    set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK)
   endfunction()
   rocksdb_scope()
 endif()
@@ -394,11 +391,12 @@ elseif (CLANG OR GCC)
     #use "-Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/export_list" for exported symbols
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fvisibility=hidden -Wl,-dead_strip,-x,-S")
     set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -fvisibility=hidden -Wl,-dead_strip,-x,-S")
-    # Generate dSYM bundles for proper stack traces with libbacktrace (for Ninja/Make generators)
+    # Generate dSYM bundles for proper stack traces with libbacktrace.
+    # CMake's link script executes commands without a shell; appending "&& dsymutil"
+    # breaks link commands (e.g. c++ sees "&&" as an argument). Keep this opt-in.
     if(NOT DSYMUTIL_LINK_CONFIGURED AND NOT CMAKE_GENERATOR MATCHES "Xcode" AND CMAKE_BUILD_TYPE MATCHES "Debug|RelWithDebInfo")
       set(DSYMUTIL_LINK_CONFIGURED TRUE CACHE INTERNAL "dSYM generation configured in linker")
-      set(CMAKE_C_LINK_EXECUTABLE "${CMAKE_C_LINK_EXECUTABLE} && dsymutil <TARGET>")
-      set(CMAKE_CXX_LINK_EXECUTABLE "${CMAKE_CXX_LINK_EXECUTABLE} && dsymutil <TARGET>")
+      option(TON_USE_DSYMUTIL "Run dsymutil after linking (requires explicit target-level commands)" OFF)
     endif()
   else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections")

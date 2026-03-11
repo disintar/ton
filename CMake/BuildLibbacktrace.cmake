@@ -62,6 +62,15 @@ set(LIBBACKTRACE_CONFIGURE_ARGS
   --with-pic
 )
 
+if(APPLE)
+  execute_process(
+    COMMAND xcrun --show-sdk-path
+    OUTPUT_VARIABLE MACOS_SDK_PATH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -isysroot ${MACOS_SDK_PATH}")
+endif()
+
 # For cross-compilation, pass the host triplet
 if(CMAKE_CROSSCOMPILING AND CMAKE_C_COMPILER_TARGET)
   list(APPEND LIBBACKTRACE_CONFIGURE_ARGS --host=${CMAKE_C_COMPILER_TARGET})

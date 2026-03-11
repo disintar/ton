@@ -192,7 +192,7 @@ private:
       td::actor::ActorId<LiteServerDaemon> id_;
     };
 
-    auto P_cb = td::PromiseCreator::lambda([](td::Unit R) {
+    auto P_cb = td::PromiseCreator::lambda([](td::Result<td::Unit> R) {
     });
     td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::install_callback,
                             std::make_unique<Callback>(actor_id(this)), std::move(P_cb));
@@ -328,15 +328,13 @@ private:
 
       auto pk = ton::PrivateKey{ton::privkeys::Ed25519::random()};
       auto id = pk.compute_short_id();
-      td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false, [](td::Unit) {
-      });
+      td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false, td::Promise<td::Unit>());
       config.config_add_adnl_addr(id, 0).ensure();
       config.config_add_dht_node(id).ensure();
 
       auto ls_pk = ton::PrivateKey{ton::privkeys::Ed25519::random()};
       auto ls_id = ls_pk.compute_short_id();
-      td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(ls_pk), false, [](td::Unit) {
-      });
+      td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(ls_pk), false, td::Promise<td::Unit>());
       config.config_add_lite_server(ls_id, ls_port).ensure();
 
       auto ss = td::json_encode<std::string>(td::ToJson(*config.tl().get()), true);

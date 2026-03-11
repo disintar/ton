@@ -349,7 +349,7 @@ namespace pylite {
             throw std::logic_error("Invalid address");
         }
 
-        scheduler_.run_in_context_external(
+        scheduler_.run_in_context(
                 [&] { send_closure(engine, &LiteClientActorEngine::get_AccountState, workchain, address_bits, blk); });
 
 
@@ -385,7 +385,7 @@ namespace pylite {
     }
 
     std::unique_ptr<ton::lite_api::liteServer_masterchainInfoExt> PyLiteClient::get_MasterchainInfoExt() {
-        scheduler_.run_in_context_external(
+        scheduler_.run_in_context(
                 [&] { send_closure(engine, &LiteClientActorEngine::get_MasterchainInfoExt, 0); });
 
         auto response = wait_response();
@@ -434,16 +434,17 @@ namespace pylite {
             throw std::logic_error(z.move_as_error().to_string());
         }
         auto root = z.move_as_ok();
-        auto virt_root = vm::MerkleProof::virtualize(root);
-        if (virt_root.is_null()) {
+        auto virt_root_res = vm::MerkleProof::virtualize(root);
+        if (virt_root_res.is_error()) {
             throw std::logic_error("block header proof for block " + blk_id.to_str() + " is not a valid Merkle proof");
         }
+        auto virt_root = virt_root_res.move_as_ok();
 
         return TestNode::BlockHdrInfo{blk_id, std::move(root), std::move(virt_root), f->mode_};
     }
 
     TestNode::BlockHdrInfo PyLiteClient::lookupBlock(int mode, ton::BlockId req_blkid, long long lt, long long time) {
-        scheduler_.run_in_context_external(
+        scheduler_.run_in_context(
                 [&] { send_closure(engine, &LiteClientActorEngine::lookupBlock, mode, req_blkid, lt, time); });
 
         auto response = wait_response();
@@ -459,7 +460,7 @@ namespace pylite {
 
     std::pair<ton::BlockIdExt, PyCell> PyLiteClient::get_ConfigAll(int mode, ton::BlockIdExt req_blkid,
                                                                    bool force_check_on_key_block) {
-        scheduler_.run_in_context_external(
+        scheduler_.run_in_context(
                 [&] { send_closure(engine, &LiteClientActorEngine::get_ConfigAll, mode, req_blkid); });
 
         auto response = wait_response();
@@ -508,11 +509,12 @@ namespace pylite {
                             "cannot virtualize configuration proof constructed from key block " + blkid.to_str());
                 }
 
-                block = vm::MerkleProof::virtualize(config_proof);
-                if (block.is_null()) {
+                auto virt_block_res = vm::MerkleProof::virtualize(config_proof);
+                if (virt_block_res.is_error()) {
                     throw std::logic_error(
                             "cannot virtualize configuration proof constructed from key block " + blkid.to_str());
                 }
+                block = virt_block_res.move_as_ok();
 
                 if (force_check_on_key_block) {
                     auto c = block::check_block_header_proof(block, req_blkid);
@@ -550,7 +552,7 @@ namespace pylite {
             throw std::logic_error("Invalid address");
         }
 
-        scheduler_.run_in_context_external([&] {
+        scheduler_.run_in_context([&] {
             send_closure(engine, &LiteClientActorEngine::get_Transactions, count, workchain, address_bits, lt,
                          hash_bits);
         });
@@ -598,7 +600,7 @@ namespace pylite {
     TestNode::BlockHdrInfo PyLiteClient::get_BlockHeader(ton::BlockIdExt req_blkid, int mode) {
 
 
-        scheduler_.run_in_context_external(
+        scheduler_.run_in_context(
                 [&] { send_closure(engine, &LiteClientActorEngine::get_BlockHeader, req_blkid, mode); });
 
         auto response = wait_response();
@@ -620,7 +622,7 @@ namespace pylite {
             throw std::logic_error("Invalid address");
         }
 
-        scheduler_.run_in_context_external([&] {
+        scheduler_.run_in_context([&] {
             send_closure(engine, &LiteClientActorEngine::get_OneTransaction, req_blkid, workchain, address_bits,
                          trans_lt);
         });
@@ -660,10 +662,11 @@ namespace pylite {
                 }
                 auto proof_root = P.move_as_ok();
                 try {
-                    auto block_root = vm::MerkleProof::virtualize(std::move(proof_root));
-                    if (block_root.is_null()) {
+                    auto block_root_res = vm::MerkleProof::virtualize(std::move(proof_root));
+                    if (block_root_res.is_error()) {
                         throw std::logic_error("transaction block proof is invalid");
                     }
+                    auto block_root = block_root_res.move_as_ok();
                     auto res1 = block::check_block_header_proof(block_root, blkid);
                     if (res1.is_error()) {
                         throw std::logic_error(
@@ -691,9 +694,9 @@ namespace pylite {
                                                trans_root->get_hash().bits().to_hex(256) + " but received data has " +
                                                root->get_hash().bits().to_hex(256));
                     }
-                } catch (vm::VmError err) {
+                } catch (const vm::VmError &err) {
                     throw std::logic_error("error while traversing block transaction proof");
-                } catch (vm::VmVirtError err) {
+                } catch (const vm::VmVirtError &err) {
                     throw std::logic_error("virtualization error while traversing block transaction proof");
                 }
                 if (root.is_null()) {
@@ -718,7 +721,7 @@ namespace pylite {
             throw std::logic_error("Invalid pubkey");
         }
 
-        scheduler_.run_in_context_external(
+        scheduler_.run_in_context(
                 [&] {
                     send_closure(engine, &LiteClientActorEngine::admin_AddUser, privkey_bits, valid_until, ratelimit);
                 });
@@ -745,7 +748,7 @@ namespace pylite {
             throw std::logic_error("Invalid pubkey");
         }
 
-        scheduler_.run_in_context_external(
+        scheduler_.run_in_context(
                 [&] {
                     send_closure(engine, &LiteClientActorEngine::admin_checkItemPublished, root_hash_bits, category);
                 });
@@ -768,7 +771,7 @@ namespace pylite {
     std::vector<std::tuple<ShortKeyHex, int, td::int64, td::int64, bool>> PyLiteClient::admin_getStatData() {
 
 
-        scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::admin_GetStatData); });
+        scheduler_.run_in_context([&] { send_closure(engine, &LiteClientActorEngine::admin_GetStatData); });
 
         auto response = wait_response();
         if (response->success) {
@@ -796,7 +799,7 @@ namespace pylite {
     };
 
     std::string PyLiteClient::get_ParsedBlockInfo(ton::BlockId blkid) {
-      scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::get_ParsedBlockInfo, blkid); });
+      scheduler_.run_in_context([&] { send_closure(engine, &LiteClientActorEngine::get_ParsedBlockInfo, blkid); });
 
       auto response = wait_response();
       if (response->success) {
@@ -814,7 +817,7 @@ namespace pylite {
     }
 
     PyCell PyLiteClient::get_Block(ton::BlockIdExt req_blkid) {
-        scheduler_.run_in_context_external([&] { send_closure(engine, &LiteClientActorEngine::get_Block, req_blkid); });
+        scheduler_.run_in_context([&] { send_closure(engine, &LiteClientActorEngine::get_Block, req_blkid); });
 
         auto response = wait_response();
         if (response->success) {
@@ -864,7 +867,7 @@ namespace pylite {
     std::vector<ton::BlockId> PyLiteClient::get_AllShardsInfo(ton::BlockIdExt req_blkid) {
 
 
-        scheduler_.run_in_context_external(
+        scheduler_.run_in_context(
                 [&] { send_closure(engine, &LiteClientActorEngine::get_AllShardsInfo, std::move(req_blkid)); });
 
         auto response = wait_response();
@@ -918,7 +921,7 @@ namespace pylite {
         }
 
         std::reverse(libs_bits.begin(), libs_bits.end());
-        scheduler_.run_in_context_external(
+        scheduler_.run_in_context(
                 [&] { send_closure(engine, &LiteClientActorEngine::get_Libraries, libs_bits); });
 
         auto response = wait_response();
@@ -953,7 +956,7 @@ namespace pylite {
     bool PyLiteClient::wait_connected(double wait) {
 
 
-        scheduler_.run_in_context_external(
+        scheduler_.run_in_context(
                 [&, wait] { send_closure(engine, &LiteClientActorEngine::wait_connected, wait); });
 
         auto response = wait_response();
@@ -966,7 +969,7 @@ namespace pylite {
 
     std::unique_ptr<ton::lite_api::liteServer_masterchainInfoExt>
     PyLiteClient::wait_masterchain_seqno(int seqno, int tm) {
-        scheduler_.run_in_context_external(
+        scheduler_.run_in_context(
                 [&] { send_closure(engine, &LiteClientActorEngine::wait_masterchain_seqno, seqno, tm); });
 
         auto response = wait_response();
@@ -1014,7 +1017,7 @@ namespace pylite {
             tmp = std::make_optional<td::Bits256>();
         }
 
-        scheduler_.run_in_context_external([&] {
+        scheduler_.run_in_context([&] {
             send_closure(engine, &LiteClientActorEngine::get_listBlockTransactionsExt, std::move(blkid), mode, count,
                          std::move(tmp), std::move(lt));
         });

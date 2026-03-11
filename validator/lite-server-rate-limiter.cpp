@@ -117,7 +117,8 @@ void LiteServerLimiter::process_add_user(td::Bits256 private_key, td::int64 vali
   if (!(limits.find(adnlkey.compute_short_id()) != limits.end())) {
     LOG(WARNING) << "User " << pubk.to_hex() << " is new, process add to users";
     // if not extending existing user
-    td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false, [](td::Unit) {});
+    td::actor::send_closure(keyring_, &keyring::Keyring::add_key, std::move(pk), false,
+                            td::PromiseCreator::lambda([](td::Result<td::Unit>) {}));
     users_.push_back(pubk);
 
     std::vector<td::Bits256> users(users_);
