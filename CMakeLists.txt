@@ -308,6 +308,25 @@ if (EXISTS ${TON_RDKAFKA_GENERATED_CONFIG} AND NOT WITH_CURL)
 endif()
 
 if (TARGET rdkafka)
+  set(TON_RDKAFKA_PUBLIC_INCLUDE_DIR
+    ${CMAKE_CURRENT_BINARY_DIR}/third-party/librdkafka/include)
+  set(TON_RDKAFKA_PUBLIC_INCLUDE_SUBDIR
+    ${TON_RDKAFKA_PUBLIC_INCLUDE_DIR}/librdkafka)
+  file(MAKE_DIRECTORY ${TON_RDKAFKA_PUBLIC_INCLUDE_SUBDIR})
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/third-party/librdkafka/src/rdkafka.h
+    ${TON_RDKAFKA_PUBLIC_INCLUDE_SUBDIR}/rdkafka.h
+    COPYONLY)
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/third-party/librdkafka/src/rdkafka_mock.h
+    ${TON_RDKAFKA_PUBLIC_INCLUDE_SUBDIR}/rdkafka_mock.h
+    COPYONLY)
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/third-party/librdkafka/src-cpp/rdkafkacpp.h
+    ${TON_RDKAFKA_PUBLIC_INCLUDE_SUBDIR}/rdkafkacpp.h
+    COPYONLY)
+  target_include_directories(rdkafka PUBLIC
+    $<BUILD_INTERFACE:${TON_RDKAFKA_PUBLIC_INCLUDE_DIR}>)
   if (TARGET OpenSSL)
     add_dependencies(rdkafka OpenSSL)
   endif()
