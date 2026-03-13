@@ -4,25 +4,6 @@ set -e
 set -o pipefail
 
 # ----------------------
-# Variables debug
-# ----------------------
-if [ -f ${RUNNER_TEMP:-/tmp}/3pp/3pp_env.sh ]; then
-  source ${RUNNER_TEMP:-/tmp}/3pp/3pp_env.sh
-  echo "✅ Sourced 3pp_env.sh"
-else
-  echo "⚠️  3pp_env.sh not found, skipping source"
-fi
-
-echo "=========== Variables ==========="
-echo "LZ4_PATH=$LZ4_PATH"
-echo "SODIUM_PATH=$SODIUM_PATH"
-echo "OPENSSL_PATH=$OPENSSL_PATH"
-echo "ZLIB_PATH=$ZLIB_PATH"
-echo "LIBMICROHTTPD_PATH=$LIBMICROHTTPD_PATH"
-echo "RDKAFKA_ROOT=$RDKAFKA_ROOT"
-echo "================================="
-
-# ----------------------
 # Setup ccache
 # ----------------------
 echo "Setting up ccache..."
@@ -75,11 +56,6 @@ fi
 
 echo "Using CC: $CC"
 echo "Using CXX: $CXX"
-echo "RDKAFKA_ROOT: ${RDKAFKA_ROOT}"
-if [ -n "${RDKAFKA_ROOT}" ]; then
-  ls -la "${RDKAFKA_ROOT}" || true
-  find "${RDKAFKA_ROOT}" -maxdepth 2 \( -type d -o -type f \) | sort || true
-fi
 
 # ----------------------
 # Configure with CMake
@@ -114,7 +90,6 @@ cmake -GNinja .. \
   -DCMAKE_CXX_FLAGS="-w -fPIC -pthread ${LINUX_LINKER_FLAGS}" \
   -DCMAKE_EXE_LINKER_FLAGS="${LINUX_LINKER_FLAGS}" \
   -DTON_USE_PYTHON=1 \
-  -DRdKafka_ROOT=$RDKAFKA_ROOT \
   ${EXTRA_CMAKE_ARGS} \
 #  -DTON_USE_JEMALLOC=ON
 

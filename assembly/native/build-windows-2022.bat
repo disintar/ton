@@ -31,14 +31,8 @@ IF %errorlevel% NEQ 0 (
 )
 SET "PATH=%PATH%;C:\Program Files\NASM"
 
-if not exist "third_libs" (
-    mkdir "third_libs"
-)
-set "third_libs=%ROOT_DIR%\third_libs"
+REM Building dependencies from third-party submodules...
 set "third_party=%ROOT_DIR%\third-party"
-
-# Building dependencies from third-party submodules...
-REM All dependencies are now built over existing cmakefiles in the main project build.
 
 cd /d "%ROOT_DIR%"
 if not exist build (
@@ -49,7 +43,6 @@ cd build
 cmake -GNinja  -DCMAKE_BUILD_TYPE=Release ^
 -DPORTABLE=1 ^
 -DTON_USE_PYTHON=1 ^
--DRDKAFKA_ROOT=%RDKAFKA_ROOT% ^
 -DCMAKE_CXX_FLAGS="/DTD_WINDOWS=1 /EHsc /bigobj" ..
 
 IF %errorlevel% NEQ 0 (

@@ -62,3 +62,6 @@
 	path = third-party/zlib
 	url = https://github.com/madler/zlib.git
 	ignore = all
+[submodule "third-party/librdkafka"]
+	path = third-party/librdkafka
+	url = https://github.com/confluentinc/librdkafka.git

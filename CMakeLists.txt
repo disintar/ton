@@ -280,7 +280,51 @@ if (USE_QUIC)
   endif()
 endif ()
 
-add_subdirectory(third-party/cppkafka)
+message("Add librdkafka")
+function(librdkafka_scope)
+  set(RDKAFKA_BUILD_STATIC ON CACHE BOOL "" FORCE)
+  set(RDKAFKA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(RDKAFKA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  set(WITH_ZLIB ON CACHE BOOL "" FORCE)
+  set(WITH_SSL ON CACHE BOOL "" FORCE)
+  set(WITH_SASL OFF CACHE BOOL "" FORCE)
+  set(WITH_CURL OFF CACHE BOOL "" FORCE)
+  set(WITH_ZSTD OFF CACHE BOOL "" FORCE)
+  set(ENABLE_LZ4_EXT ON CACHE BOOL "" FORCE)
+  add_subdirectory(third-party/librdkafka EXCLUDE_FROM_ALL)
+endfunction()
+librdkafka_scope()
+
+if (TARGET rdkafka)
+  if (TARGET OpenSSL)
+    add_dependencies(rdkafka OpenSSL)
+  endif()
+  if (TARGET zlib)
+    add_dependencies(rdkafka zlib)
+  endif()
+  if (TARGET lz4)
+    add_dependencies(rdkafka lz4)
+  endif()
+endif()
+
+set(TON_RDKAFKA_CONFIG_DIR ${CMAKE_BINARY_DIR}/cmake/RdKafka)
+file(MAKE_DIRECTORY ${TON_RDKAFKA_CONFIG_DIR})
+file(WRITE ${TON_RDKAFKA_CONFIG_DIR}/RdKafkaConfig.cmake
+  "if(NOT TARGET RdKafka::rdkafka)\n"
+  "  add_library(RdKafka::rdkafka ALIAS rdkafka)\n"
+  "endif()\n"
+  "set(RdKafka_FOUND TRUE)\n")
+set(RdKafka_DIR ${TON_RDKAFKA_CONFIG_DIR} CACHE PATH "RdKafka config directory" FORCE)
+
+set(CPPKAFKA_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(CPPKAFKA_DISABLE_TESTS ON CACHE BOOL "" FORCE)
+set(CPPKAFKA_DISABLE_EXAMPLES ON CACHE BOOL "" FORCE)
+set(CPPKAFKA_RDKAFKA_STATIC_LIB ON CACHE BOOL "" FORCE)
+add_subdirectory(third-party/cppkafka EXCLUDE_FROM_ALL)
+if (TARGET cppkafka AND TARGET rdkafka)
+  add_dependencies(cppkafka rdkafka)
+endif()
+
 set(CPPKAFKA_INCLUDE_DIRECTORIES third-party/cppkafka/include)
 include_directories(${CPPKAFKA_INCLUDE_DIRECTORIES}) # I feel bad for doing this, could not manage to do the proper way
 
