@@ -100,7 +100,7 @@ jobs:
           sudo apt-get update -y
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq \
             build-essential git cmake ninja-build automake libtool texinfo autoconf \
-            libc++-dev libc++abi-dev ccache libboost-all-dev pkg-config wget gh \
+            libc++-dev libc++abi-dev ccache libboost-all-dev pkg-config wget \
             libatomic1 libjemalloc-dev gdb
           sudo find / -type f -name "libatomic.so*" -print -delete 2>/dev/null || echo 'ok'
           
@@ -230,8 +230,12 @@ jobs:
 
       - name: Create release
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        run: |
-          gh release delete -y "$RELEASE_NAME" || true
-          gh release create --notes "Your binary sir" "$RELEASE_NAME" artifacts/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          artifacts: artifacts/*
+          body: Your binary sir
+          name: ${{ env.RELEASE_NAME }}
+          replacesArtifacts: true
+          tag: ${{ env.RELEASE_NAME }}
