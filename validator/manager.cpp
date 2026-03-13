@@ -3046,13 +3046,15 @@ void ValidatorManagerImpl::alarm() {
         td::StringBuilder sb;
         sb << "# HELP liteserver_stats_1m Liteserver stats (1 minute)\n";
         sb << "# TYPE liteserver_stats_1m gauge\n";
+        sb << "# HELP liteserver_stats_total Total number of liteserver requests during the last minute\n";
+        sb << "# TYPE liteserver_stats_total gauge\n";
         td::uint32 total = 0;
         for (const auto &p : ls_stats_) {
           sb << "liteserver_stats_1m{name=\"" << lite_query_name_by_id(p.first) << "\"} " << p.second << "\n";
           total += p.second;
         }
         if (total > 0) {
-          sb << "liteserver_stats_total { } " << total << "\n";
+          sb << "liteserver_stats_total " << total << "\n";
         }
         sb << "\n";
 

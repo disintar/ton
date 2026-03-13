@@ -149,8 +149,8 @@ void ExtMessagePool::complete_external_messages(std::vector<ExtMessage::Hash> to
 
 std::vector<std::pair<std::string, std::string>> ExtMessagePool::prepare_stats() {
   std::vector<std::pair<std::string, std::string>> vec;
-  vec.emplace_back("total.ext_msg_check",
-                   PSTRING() << "ok:" << total_check_ext_messages_ok_ << " error:" << total_check_ext_messages_error_);
+  vec.emplace_back("ext_msg_check_total{result=\"ok\"}", PSTRING() << total_check_ext_messages_ok_);
+  vec.emplace_back("ext_msg_check_total{result=\"error\"}", PSTRING() << total_check_ext_messages_error_);
   return vec;
 }
 
