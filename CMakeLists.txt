@@ -295,6 +295,18 @@ function(librdkafka_scope)
 endfunction()
 librdkafka_scope()
 
+set(TON_RDKAFKA_GENERATED_CONFIG
+  ${CMAKE_CURRENT_BINARY_DIR}/third-party/librdkafka/generated/config.h)
+if (EXISTS ${TON_RDKAFKA_GENERATED_CONFIG} AND NOT WITH_CURL)
+  file(READ ${TON_RDKAFKA_GENERATED_CONFIG} TON_RDKAFKA_CONFIG_CONTENT)
+  string(REPLACE
+    "#define WITH_OAUTHBEARER_OIDC 0"
+    "/* WITH_OAUTHBEARER_OIDC intentionally undefined: librdkafka guards curl headers with #ifdef in rdkafka_conf.c */"
+    TON_RDKAFKA_CONFIG_CONTENT
+    "${TON_RDKAFKA_CONFIG_CONTENT}")
+  file(WRITE ${TON_RDKAFKA_GENERATED_CONFIG} "${TON_RDKAFKA_CONFIG_CONTENT}")
+endif()
+
 if (TARGET rdkafka)
   if (TARGET OpenSSL)
     add_dependencies(rdkafka OpenSSL)
