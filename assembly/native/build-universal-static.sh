@@ -75,6 +75,11 @@ fi
 
 echo "Using CC: $CC"
 echo "Using CXX: $CXX"
+echo "RDKAFKA_ROOT: ${RDKAFKA_ROOT}"
+if [ -n "${RDKAFKA_ROOT}" ]; then
+  ls -la "${RDKAFKA_ROOT}" || true
+  find "${RDKAFKA_ROOT}" -maxdepth 2 \( -type d -o -type f \) | sort || true
+fi
 
 # ----------------------
 # Configure with CMake
@@ -109,7 +114,7 @@ cmake -GNinja .. \
   -DCMAKE_CXX_FLAGS="-w -fPIC -pthread ${LINUX_LINKER_FLAGS}" \
   -DCMAKE_EXE_LINKER_FLAGS="${LINUX_LINKER_FLAGS}" \
   -DTON_USE_PYTHON=1 \
-  -DRDKAFKA_ROOT=$RDKAFKA_ROOT \
+  -DRdKafka_ROOT=$RDKAFKA_ROOT \
   ${EXTRA_CMAKE_ARGS} \
 #  -DTON_USE_JEMALLOC=ON
 
