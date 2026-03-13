@@ -108,20 +108,24 @@ td::actor::Task<> ArchiveManager::move_block_to_archive(BlockHandle handle,
                                       handle->unix_time(), handle->logical_time(),
                                       handle->inited_is_key_block() && handle->is_key_block())
                : get_package_id(handle->masterchain_ref_block());
-  auto f = co_await get_file_desc(handle->id().shard_full(), p, handle->id().seqno(), handle->unix_time(),
-                                  handle->logical_time(), true);
+  auto f_result = get_file_desc(handle->id().shard_full(), p, handle->id().seqno(), handle->unix_time(),
+                                handle->logical_time(), true);
+  if (f_result.is_error()) {
+    co_return f_result.move_as_error();
+  }
+  auto f = f_result.move_as_ok();
 
   std::vector<td::actor::StartedTask<>> tasks;
   if (handle->inited_is_key_block() && handle->is_key_block() && handle->inited_unix_time() &&
       handle->inited_logical_time() && handle->inited_masterchain_ref_block()) {
-    auto f_key = co_await get_file_desc(handle->id().shard_full(), get_key_package_id(handle->masterchain_ref_block()),
-                                        handle->id().seqno(), handle->unix_time(), handle->logical_time(), true)
-                     .wrap();
+    auto f_key = get_file_desc(handle->id().shard_full(), get_key_package_id(handle->masterchain_ref_block()),
+                               handle->id().seqno(), handle->unix_time(), handle->logical_time(), true);
     if (f_key.is_ok()) {
+      auto f_key_desc = f_key.move_as_ok();
       for (auto &[file_ref, data] : files) {
         if (file_ref.ref().has<fileref::Proof>() || file_ref.ref().has<fileref::ProofLink>()) {
           tasks.push_back(
-              td::actor::ask(f_key.ok()->file_actor_id(), &ArchiveSlice::add_file, handle, file_ref, data.clone()));
+              td::actor::ask(f_key_desc->file_actor_id(), &ArchiveSlice::add_file, handle, file_ref, data.clone()));
         }
       }
     }
