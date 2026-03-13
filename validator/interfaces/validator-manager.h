@@ -35,7 +35,10 @@
 #include "proof.h"
 #include "shard-block.h"
 #include "shard.h"
-#include "validator-engine/prometheus/PrometheusExporterActor.h"
+
+namespace ton {
+class PrometheusExporterActor;
+}
 
 namespace ton {
 

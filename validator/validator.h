@@ -33,7 +33,6 @@
 #include "interfaces/proof.h"
 #include "interfaces/shard.h"
 #include "validator-engine/IBlockParser.hpp"
-#include "validator-engine/prometheus/PrometheusExporterActor.h"
 #include "overlay/overlays.h"
 #include "td/actor/actor.h"
 #include "td/actor/coro_task.h"
@@ -41,6 +40,10 @@
 #include "ton/ton-types.h"
 
 #include "types.h"
+
+namespace ton {
+class PrometheusExporterActor;
+}
 
 namespace ton {
 

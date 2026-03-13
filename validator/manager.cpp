@@ -52,6 +52,7 @@
 #include "validate-broadcast.hpp"
 #include "validator-group.hpp"
 #include "validator-engine/BlockParserAsync.hpp"
+#include "validator-engine/prometheus/PrometheusExporterActor.h"
 #include <fstream>
 
 namespace ton {
