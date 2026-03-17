@@ -390,6 +390,12 @@ target_link_libraries(fift PUBLIC fift-lib git)
 if (WINGETOPT_FOUND)
   target_link_libraries_system(fift wingetopt)
 endif()
+if ((CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU") AND
+    (CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$"))
+  # fift/fift-lib are executed during build (GenFif); keep ISA baseline portable for CI runners.
+  target_compile_options(fift-lib PRIVATE -march=x86-64 -mtune=generic)
+  target_compile_options(fift PRIVATE -march=x86-64 -mtune=generic)
+endif()
 
 add_library(src_parser OBJECT ${PARSER_SOURCE})
 target_include_directories(src_parser PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
