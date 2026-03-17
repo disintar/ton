@@ -6392,9 +6392,13 @@ bool Collator::create_block_candidate() {
   auto new_block_id_ext = ton::BlockIdExt{ton::BlockId{shard_, new_block_seqno}, new_block->get_hash().bits(),
                                           block::compute_file_hash(blk_slice.as_slice())};
   // 3. create a BlockCandidate
-  block_candidate = std::make_unique<BlockCandidate>(params_.creator, new_block_id_ext,
-                                                     block::compute_file_hash(cdata_slice.as_slice()),
-                                                     blk_slice.clone(), cdata_slice.clone());
+  block_candidate = std::make_unique<BlockCandidate>(BlockCandidate{
+      params_.creator,
+      new_block_id_ext,
+      block::compute_file_hash(cdata_slice.as_slice()),
+      blk_slice.clone(),
+      cdata_slice.clone(),
+  });
   bool need_out_msg_queue_broadcasts = false;  // Not supported yet
   if (need_out_msg_queue_broadcasts) {
     // we can't generate two proofs at the same time for the same root (it is not currently supported by cells)
