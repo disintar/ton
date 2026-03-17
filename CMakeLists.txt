@@ -91,6 +91,11 @@ option(TON_USE_TSAN "Use \"ON\" to enable ThreadSanitizer." OFF)
 option(TON_USE_UBSAN "Use \"ON\" to enable UndefinedBehaviorSanitizer." OFF)
 option(TON_USE_COVERAGE "Use \"ON\" to enable code coverage with gcov." OFF)
 set(TON_ARCH "native" CACHE STRING "Architecture, will be passed to -march=")
+if (DEFINED ENV{CI} AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+    CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$" AND TON_ARCH STREQUAL "native")
+  # Keep CI binaries portable across heterogeneous x86_64 runners and avoid runtime SIGILL in build-time tools.
+  set(TON_ARCH "x86-64" CACHE STRING "Architecture, will be passed to -march=" FORCE)
+endif()
 
 option(TON_PRINT_BACKTRACE_ON_CRASH "Attempt to print a backtrace when a fatal signal is caught" ON)
 option(TON_INSERT_GDB_HOOKS "Insert GDB hooks" OFF)

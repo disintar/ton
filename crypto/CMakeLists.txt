@@ -491,13 +491,7 @@ if (JEMALLOC_FOUND)
 endif()
 
 file(MAKE_DIRECTORY smartcont/auto)
-set(TON_ENABLE_SMARTCONT_GEN_DEFAULT ON)
-if (DEFINED ENV{CI} AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
-    CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
-  # CI runners may expose heterogeneous/masked CPU features; avoid running build-time JIT-like generators there.
-  set(TON_ENABLE_SMARTCONT_GEN_DEFAULT OFF)
-endif()
-option(TON_ENABLE_SMARTCONT_GEN "Regenerate crypto/smartcont/auto sources during build" ${TON_ENABLE_SMARTCONT_GEN_DEFAULT})
+option(TON_ENABLE_SMARTCONT_GEN "Regenerate crypto/smartcont/auto sources during build" ON)
 if (NOT CMAKE_CROSSCOMPILING OR USE_EMSCRIPTEN)
   set(GENERATE_TLB_CMD tlbc)
   if (NOT USE_EMSCRIPTEN)
