@@ -1520,6 +1520,7 @@ void ValidatorEngine::alarm() {
 
       if (need_write) {
         write_config([](td::Result<>) {});
+        write_config([](td::Result<>) {});
       }
 
       if (prometheus_available_) {
@@ -5747,6 +5748,15 @@ int main(int argc, char *argv[]) {
     acts.push_back([&x, addr] { td::actor::send_closure(x, &ValidatorEngine::export_metrics, addr); });
     return td::Status::OK();
   });
+  p.add_checked_option(
+      '\0', "quic-flood-control", "per-IP limit for QUIC connections (-1 to disable)", [&](td::Slice arg) {
+        TRY_RESULT(l, td::to_integer_safe<int64_t>(arg));
+        acts.push_back([&, l = l >= 0 ? std::optional<size_t>{l} : std::optional<size_t>{std::nullopt}] {
+          td::actor::send_closure(x, &ValidatorEngine::set_quic_options,
+                                  ton::quic::QuicServer::Options{.flood_control = l});
+        });
+        return td::Status::OK();
+      });
   auto S = p.run(argc, argv);
   if (S.is_error()) {
     LOG(ERROR) << "failed to parse options: " << S.move_as_error();

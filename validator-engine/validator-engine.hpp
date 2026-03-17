@@ -283,6 +283,7 @@ class ValidatorEngine : public td::actor::Actor {
 
   std::set<ton::CatchainSeqno> unsafe_catchains_;
   std::map<ton::BlockSeqno, std::pair<ton::CatchainSeqno, td::uint32>> unsafe_catchain_rotations_;
+  ton::quic::QuicServer::Options quic_options_ = {};
 
  public:
   static constexpr td::uint8 max_cat() {
@@ -435,6 +436,9 @@ class ValidatorEngine : public td::actor::Actor {
   void set_ratelimit_medium(size_t count) {
     full_node_options_.ratelimit_medium_ = count;
   }
+  void set_quic_options(ton::quic::QuicServer::Options options) {
+    quic_options_ = std::move(options);
+  }
 
   void set_prometheus_port(td::uint32 port){
     prometheus_available_ = true;
@@ -442,9 +446,7 @@ class ValidatorEngine : public td::actor::Actor {
   }
 
   void start_up() override;
-  ValidatorEngine() {
-//    exporter_ = ton::PrometheusExporter::create();
-  }
+  ValidatorEngine() = default;
 
   // load config
   td::Status load_global_config();

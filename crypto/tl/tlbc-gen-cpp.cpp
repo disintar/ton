@@ -218,18 +218,17 @@ unsigned long long CppTypeCode::compute_selector_mask() const {
 
 struct HexConstWriter {
   unsigned long long mask;
-  explicit HexConstWriter(unsigned long long _mask) : mask(_mask){};
-  void write(std::ostream& os, bool suffix = true) const;
+  explicit HexConstWriter(unsigned long long _mask) : mask(_mask) {};
+  void write(std::ostream& os) const;
 };
 
-void HexConstWriter::write(std::ostream& os, bool suffix) const {
+void HexConstWriter::write(std::ostream& os) const {
   if (mask < 32) {
     os << mask;
   } else {
     os << "0x" << std::hex << mask << std::dec;
   }
-
-  if (suffix & (mask >= (1ULL << 31))) {
+  if (mask >= (1ULL << 31)) {
     os << (mask >= (1ULL << 32) ? "ULL" : "U");
   }
 }
@@ -2882,40 +2881,6 @@ void CppTypeCode::ConsRecord::declare_record(std::ostream& os, std::string nl, i
     }
     fi.field.type->show(os, &constr);
     os << std::endl;
-  }
-  if (n) {
-    os << nl << "  " << cpp_name << "() = default;\n";
-    std::vector<std::string> ctor_args;
-    os << nl << "  " << cpp_name << "(";
-    int i = 0, j = 0;
-    for (const ConsField& fi : cpp_fields) {
-      if (!fi.implicit) {
-        std::string arg = rec_cpp_ids.new_ident(std::string{"_"} + fi.name);
-        ctor_args.push_back(arg);
-        if (i++) {
-          os << ", ";
-        }
-        fi.print_type(os, true);
-        os << " " << arg;
-      }
-    }
-    os << ") : ";
-    i = 0;
-    for (const ConsField& fi : cpp_fields) {
-      if (i++) {
-        os << ", ";
-      }
-      os << fi.name << "(";
-      if (fi.implicit) {
-        os << (fi.ctype == ct_int32 ? "0" : fi.ctype == ct_uint32 ? "0u" : fi.ctype == ct_bool ? "false" : "nullptr");
-      } else if (fi.get_cvt().needs_move()) {
-        os << "std::move(" << ctor_args.at(j++) << ")";
-      } else {
-        os << ctor_args.at(j++);
-      }
-      os << ")";
-    }
-    os << " {}\n";
   }
   os << nl << "};\n";
   declared = true;

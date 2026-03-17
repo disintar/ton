@@ -228,6 +228,9 @@ td::Status DhtUpdateRuleSignature::check_value(const DhtValue &value) {
   if (value.key().public_key().is_overlay()) {
     return td::Status::Error(ErrorCode::protoviolation, "invalid key type");
   }
+  if (value.key().public_key().is_overlay()) {
+    return td::Status::Error(ErrorCode::protoviolation, "invalid key type");
+  }
   TRY_RESULT(E, value.key().public_key().create_encryptor());
   auto tl = value.tl();
   auto sig = std::move(tl->signature_);
@@ -260,6 +263,9 @@ td::Status DhtUpdateRuleAnybody::check_value(const DhtValue &value) {
   if (value.key().public_key().is_overlay() || value.key().public_key().is_ed25519()) {
     return td::Status::Error(ErrorCode::protoviolation, "invalid key type");
   }
+  if (value.key().public_key().is_overlay() || value.key().public_key().is_ed25519()) {
+    return td::Status::Error(ErrorCode::protoviolation, "invalid key type");
+  }
   if (value.signature().size() > 0) {
     return td::Status::Error(ErrorCode::protoviolation, "cannot have signature in DhtUpdateRuleAnybody");
   }
@@ -284,6 +290,9 @@ td::Status DhtUpdateRuleOverlayNodes::check_value(const DhtValue &value) {
   if (value.value().size() > DhtValue::max_value_size()) {
     return td::Status::Error(ErrorCode::protoviolation, "too big value, size: " + std::to_string(value.value().size()
     ));
+  }
+  if (!value.key().public_key().is_overlay()) {
+    return td::Status::Error(ErrorCode::protoviolation, "invalid key type");
   }
   if (!value.key().public_key().is_overlay()) {
     return td::Status::Error(ErrorCode::protoviolation, "invalid key type");

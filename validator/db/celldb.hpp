@@ -225,8 +225,7 @@ class CellDb : public CellDbBase {
 
   void flush_db_stats(std::string stats);
 
-  CellDb(td::actor::ActorId<RootDb> root_db, std::string path, td::Ref<ValidatorManagerOptions> opts,
-         bool read_only = false)
+  CellDb(td::actor::ActorId<RootDb> root_db, std::string path, td::Ref<ValidatorManagerOptions> opts, bool read_only = false)
       : root_db_(root_db), path_(path), opts_(opts), read_only_(read_only) {
   }
 

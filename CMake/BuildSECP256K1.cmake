@@ -1,6 +1,6 @@
 include(AndroidThirdParty)
 
-if (NOT SECP256K1_LIBRARY OR NOT EXISTS ${SECP256K1_LIBRARY})
+if (NOT SECP256K1_LIBRARY OR (SECP256K1_LIBRARY AND NOT EXISTS ${SECP256K1_LIBRARY}))
   set(SECP256K1_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third-party/secp256k1)
   set(SECP256K1_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/third-party/secp256k1)
   set(SECP256K1_BUILD_DIR ${SECP256K1_BINARY_DIR}/src)
@@ -119,23 +119,25 @@ if (NOT SECP256K1_LIBRARY OR NOT EXISTS ${SECP256K1_LIBRARY})
     file(MAKE_DIRECTORY ${SECP256K1_INCLUDE_DIR})
     file(MAKE_DIRECTORY ${SECP256K1_BUILD_DIR})
 
-    if (APPLE)
-      execute_process(
-        COMMAND xcrun --show-sdk-path
-        OUTPUT_VARIABLE MACOS_SDK_PATH
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-      )
-      if (SECP256K1_CFLAGS)
-        set(SECP256K1_CFLAGS "${SECP256K1_CFLAGS} -isysroot ${MACOS_SDK_PATH}")
-      else()
-        set(SECP256K1_CFLAGS "-isysroot ${MACOS_SDK_PATH}")
-      endif()
-    endif()
-
     if (CMAKE_C_FLAGS)
-      set(SECP256K1_CFLAGS "${SECP256K1_CFLAGS} ${CMAKE_C_FLAGS} -fPIC")
+      set(SECP256K1_CFLAGS "${CMAKE_C_FLAGS} -fPIC")
     else()
-      set(SECP256K1_CFLAGS "${SECP256K1_CFLAGS} -fPIC")
+      set(SECP256K1_CFLAGS "-fPIC")
+    endif()
+    if (APPLE)
+      if (CMAKE_OSX_SYSROOT)
+        set(SECP256K1_SDKROOT "${CMAKE_OSX_SYSROOT}")
+      else()
+        execute_process(
+          COMMAND xcrun --sdk macosx --show-sdk-path
+          OUTPUT_VARIABLE SECP256K1_SDKROOT
+          OUTPUT_STRIP_TRAILING_WHITESPACE
+          ERROR_QUIET
+        )
+      endif()
+      if (NOT SECP256K1_SDKROOT)
+        message(FATAL_ERROR "Failed to detect macOS SDK path for secp256k1 build")
+      endif()
     endif()
 
     set(SECP256K1_CONFIGURE_ARGS
@@ -182,15 +184,21 @@ if (NOT SECP256K1_LIBRARY OR NOT EXISTS ${SECP256K1_LIBRARY})
         COMMAND ${CMAKE_COMMAND} -E rm -rf ${SECP256K1_BUILD_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${SECP256K1_SOURCE_DIR} ${SECP256K1_BUILD_DIR}
         COMMAND ${CMAKE_COMMAND} -E rm -f ${SECP256K1_LIBRARY}
-        COMMAND ${CMAKE_COMMAND} -E chdir ${SECP256K1_BUILD_DIR} ./autogen.sh
+        COMMAND ${CMAKE_COMMAND} -E chdir ${SECP256K1_BUILD_DIR} ${CMAKE_COMMAND} -E env
+          LC_ALL=C
+          LANG=C
+          LC_CTYPE=C
+          ./autogen.sh
         COMMAND ${CMAKE_COMMAND} -E chdir ${SECP256K1_BUILD_DIR} ${CMAKE_COMMAND} -E env
           CC=${SECP256K1_CC}
           CXX=${SECP256K1_CXX}
           AR=${SECP256K1_AR}
           RANLIB=${SECP256K1_RANLIB}
           CFLAGS=${SECP256K1_CFLAGS}
-          LDFLAGS=
-          CPPFLAGS=
+          LC_ALL=C
+          LANG=C
+          LC_CTYPE=C
+          SDKROOT=${SECP256K1_SDKROOT}
           ./configure ${SECP256K1_CONFIGURE_ARGS}
         COMMAND ${CMAKE_COMMAND} -E chdir ${SECP256K1_BUILD_DIR} ${CMAKE_COMMAND} -E env
           CC=${SECP256K1_CC}
@@ -198,8 +206,10 @@ if (NOT SECP256K1_LIBRARY OR NOT EXISTS ${SECP256K1_LIBRARY})
           AR=${SECP256K1_AR}
           RANLIB=${SECP256K1_RANLIB}
           CFLAGS=${SECP256K1_CFLAGS}
-          LDFLAGS=
-          CPPFLAGS=
+          LC_ALL=C
+          LANG=C
+          LC_CTYPE=C
+          SDKROOT=${SECP256K1_SDKROOT}
           make clean
         COMMAND ${CMAKE_COMMAND} -E chdir ${SECP256K1_BUILD_DIR} ${CMAKE_COMMAND} -E env
           CC=${SECP256K1_CC}
@@ -207,8 +217,10 @@ if (NOT SECP256K1_LIBRARY OR NOT EXISTS ${SECP256K1_LIBRARY})
           AR=${SECP256K1_AR}
           RANLIB=${SECP256K1_RANLIB}
           CFLAGS=${SECP256K1_CFLAGS}
-          LDFLAGS=
-          CPPFLAGS=
+          LC_ALL=C
+          LANG=C
+          LC_CTYPE=C
+          SDKROOT=${SECP256K1_SDKROOT}
           make -j16
         COMMAND ${CMAKE_COMMAND} -E chdir ${SECP256K1_BUILD_DIR} ${CMAKE_COMMAND} -E env
           CC=${SECP256K1_CC}
@@ -216,12 +228,14 @@ if (NOT SECP256K1_LIBRARY OR NOT EXISTS ${SECP256K1_LIBRARY})
           AR=${SECP256K1_AR}
           RANLIB=${SECP256K1_RANLIB}
           CFLAGS=${SECP256K1_CFLAGS}
-          LDFLAGS=
-          CPPFLAGS=
+          LC_ALL=C
+          LANG=C
+          LC_CTYPE=C
+          SDKROOT=${SECP256K1_SDKROOT}
           make install
         COMMAND ${SECP256K1_RANLIB} ${SECP256K1_LIBRARY}
         COMMENT "Build secp256k1"
-        DEPENDS ${SECP256K1_SOURCE_DIR}/configure.ac
+        DEPENDS ${SECP256K1_SOURCE_DIR}
         OUTPUT ${SECP256K1_LIBRARY}
       )
     endif()

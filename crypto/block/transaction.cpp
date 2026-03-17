@@ -45,6 +45,21 @@
 #define FAIL_UNLESS_ERRCODE(condition, err) \
   FAIL_UNLESS_ERRCODE_MSG(condition, err, PSTRING() << "Transaction check falied: " << #condition)
 
+#define FAIL_UNLESS_MSG(condition, msg) \
+  if (!(condition)) {                   \
+    LOG(ERROR) << (msg);                \
+    return {};                          \
+  }
+#define FAIL_UNLESS(condition) FAIL_UNLESS_MSG(condition, PSTRING() << "Transaction check falied: " << #condition)
+
+#define FAIL_UNLESS_ERRCODE_MSG(condition, err, msg) \
+  if (!(condition)) {                                \
+    LOG(ERROR) << (msg);                             \
+    return (err);                                    \
+  }
+#define FAIL_UNLESS_ERRCODE(condition, err) \
+  FAIL_UNLESS_ERRCODE_MSG(condition, err, PSTRING() << "Transaction check falied: " << #condition)
+
 namespace {
 /**
  * Logger that stores the tail of log messages.

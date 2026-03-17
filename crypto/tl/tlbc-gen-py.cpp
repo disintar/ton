@@ -693,7 +693,7 @@ void PyTypeCode::generate_cons_tag_array(std::ostream& os, std::string nl, int o
       os << ", ";
     }
     auto tmp = HexConstWriter{constr.tag_bits ? (constr.tag >> (64 - constr.tag_bits)) : 0};
-    tmp.write(os, false);
+    tmp.write(os);
   }
   os << "]\n";
 }
@@ -1032,7 +1032,7 @@ void PyTypeCode::add_cons_tag_check(const Constructor& constr, int cidx, int opt
       if (l < 64) {
         ss << "assert cs.load_uint(" << l << ") == ";
         auto w = HexConstWriter{tag};
-        w.write(ss, false);
+        w.write(ss);
         ss << ", 'Cons tag check failed'\n";
       } else {
         //        ss << "cs.begins_with_skip_bits(" << l << ", ";
@@ -2059,7 +2059,7 @@ void PyTypeCode::add_cons_tag_store(const Constructor& constr, int cidx) {
     unsigned long long tag = (constr.tag >> (64 - l));
     ss << "cb.store_uint(";
     auto w = HexConstWriter{tag};
-    w.write(ss, false);
+    w.write(ss);
     ss << ", " << l << ")\n";
     actions.emplace_back(std::move(ss));
   }
@@ -2958,7 +2958,7 @@ void PyTypeCode::generate_get_tag_body(std::ostream& os, std::string nl) {
       }
       auto w = HexConstWriter{sm};
       os << nl << "return " << py_type_class_name << ".Tag(int(cs.bselect" << (always_has ? "(" : "_ext(") << d << ", ";
-      w.write(os, false);
+      w.write(os);
       os << ")))";
 
       return;
@@ -3024,7 +3024,7 @@ void PyTypeCode::generate_get_tag_body(std::ostream& os, std::string nl) {
     } else {
       os << nl << "tag = int(cs.bselect" << (always_has ? "(" : "_ext(") << d1 << ", ";
       auto w = HexConstWriter{mask};
-      w.write(os, false);
+      w.write(os);
       os << "))\n";
     }
 
@@ -3086,7 +3086,7 @@ void PyTypeCode::generate_fetch_enum_method(std::ostream& os, int options) {
     const Constructor& constr = *type.constructors.at(0);
     HexConstWriter w{constr.tag >> (64 - constr.tag_bits)};
     std::stringstream x;
-    w.write(x, false);
+    w.write(x);
 
     os << "        value = cs.load_uint(" << minl << ")\n"
        << "        assert value == " << x.str() << ", 'Not valid tag fetched'\n"
@@ -3130,7 +3130,7 @@ void PyTypeCode::generate_store_enum_method(std::ostream& os, int options) {
     const Constructor& constr = *type.constructors.at(0);
     HexConstWriter w{constr.tag >> (64 - constr.tag_bits)};
     std::ostringstream s;
-    w.write(s, false);
+    w.write(s);
 
     os << "        cb.store_uint(" << s.str() << ", " << minl << ")\n"
        << "        return True\n";

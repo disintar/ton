@@ -59,8 +59,6 @@ public:
                                  td::Promise<td::Ref<ShardState>> promise) = 0;
   virtual void store_block_state_from_data(BlockHandle handle, td::Ref<BlockData> block,
                                            td::Promise<td::Ref<ShardState>> promise) = 0;
-  virtual void store_block_state_from_data_preliminary(std::vector<td::Ref<BlockData>> blocks,
-                                                       td::Promise<td::Unit> promise) = 0;
   virtual void get_block_state_root_cell(ConstBlockHandle handle, td::Promise<td::Ref<vm::DataCell>> promise,
                                          bool force_load = false) = 0;
   virtual void store_block_state_from_data_bulk(std::vector<td::Ref<BlockData>> blocks,
