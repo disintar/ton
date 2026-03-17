@@ -74,6 +74,11 @@ if (NOT CMAKE_CROSSCOMPILING)
   set(GENERATE_COMMON_CMD generate_common)
   add_executable(generate_common ${TL_GENERATE_COMMON_SOURCE})
   target_link_libraries(generate_common PRIVATE tdtl tdutils)
+  if ((CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU") AND
+      (CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$"))
+    # generate_common is executed during the build; keep its ISA baseline portable on CI runners.
+    target_compile_options(generate_common PRIVATE -march=x86-64 -mtune=generic)
+  endif()
   add_custom_command(
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     COMMAND ${GENERATE_COMMON_CMD}
