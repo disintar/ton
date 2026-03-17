@@ -498,7 +498,7 @@ if (DEFINED ENV{CI} AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
   set(TON_ENABLE_SMARTCONT_GEN_DEFAULT OFF)
 endif()
 option(TON_ENABLE_SMARTCONT_GEN "Regenerate crypto/smartcont/auto sources during build" ${TON_ENABLE_SMARTCONT_GEN_DEFAULT})
-if (TON_ENABLE_SMARTCONT_GEN AND (NOT CMAKE_CROSSCOMPILING OR USE_EMSCRIPTEN))
+if (NOT CMAKE_CROSSCOMPILING OR USE_EMSCRIPTEN)
   set(GENERATE_TLB_CMD tlbc)
   if (NOT USE_EMSCRIPTEN)
     add_custom_command(
@@ -518,7 +518,9 @@ if (TON_ENABLE_SMARTCONT_GEN AND (NOT CMAKE_CROSSCOMPILING OR USE_EMSCRIPTEN))
   endif()
   add_custom_target(tlb_generate_block DEPENDS ${TLB_BLOCK_AUTO})
   add_dependencies(ton_block tlb_generate_block)
+endif()
 
+if (TON_ENABLE_SMARTCONT_GEN AND (NOT CMAKE_CROSSCOMPILING OR USE_EMSCRIPTEN))
   add_custom_target(gen_fif ALL)
   function(GenFif)
     set(options )
