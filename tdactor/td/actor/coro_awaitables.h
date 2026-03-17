@@ -297,7 +297,7 @@ template <class T>
 
 template <class T>
 [[nodiscard]] auto result_awaiter_wrap(Result<T>&& r) noexcept {
-  return detail::ReadyAwaitable<Result<T>>(std::move(r));
+  return detail::ReadyAwaitable<Result<T>>{std::move(r)};
 }
 
 }  // namespace td::actor

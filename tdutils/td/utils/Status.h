@@ -661,12 +661,12 @@ class Result {
 
   // Returns a wrapper that can be co_awaited to propagate errors in coroutines
   ResultUnwrap<T> try_unwrap() && {
-    return ResultUnwrap<T>(std::move(*this));
+    return ResultUnwrap<T>{std::move(*this)};
   }
 
   // Returns a wrapper that prevents error propagation when co_awaited
   ResultWrap<T> wrap() && {
-    return ResultWrap<T>(std::move(*this));
+    return ResultWrap<T>{std::move(*this)};
   }
 
  private:
