@@ -19,8 +19,9 @@ class QuicHttpServer : public td::actor::Actor {
     explicit ServerCallback(td::actor::ActorId<QuicHttpServer> server) : server_(std::move(server)) {
     }
 
-    void on_connected(ton::quic::QuicConnectionId cid, td::SecureString public_key, bool is_outbound) override {
+    td::Status on_connected(ton::quic::QuicConnectionId cid, td::SecureString public_key, bool is_outbound) override {
       td::actor::send_closure(server_, &QuicHttpServer::on_connected, cid, std::move(public_key));
+      return td::Status::OK();
     }
 
     td::Status on_stream(ton::quic::QuicConnectionId cid, ton::quic::QuicStreamID sid, td::BufferSlice data,
@@ -37,6 +38,9 @@ class QuicHttpServer : public td::actor::Actor {
     }
 
     void on_stream_closed(ton::quic::QuicConnectionId cid, ton::quic::QuicStreamID sid) override {
+    }
+
+    void set_peer_mtu_callback(std::function<td::uint64(ton::adnl::AdnlNodeIdShort)> f) override {
     }
 
    private:
@@ -56,7 +60,7 @@ class QuicHttpServer : public td::actor::Actor {
     auto public_key_b64 = td::base64_encode(public_key_r.ok().as_octet_string().as_slice());
 
     auto cb = std::make_unique<ServerCallback>(actor_id(this));
-    auto R = ton::quic::QuicServer::create(port_, std::move(server_key_), std::move(cb), alpn_.as_slice(),
+    auto R = ton::quic::QuicServer::create(port_, std::move(server_key_), std::move(cb), 1 << 20, alpn_.as_slice(),
                                            bind_host_.as_slice());
     if (R.is_error()) {
       LOG(ERROR) << "failed to start QUIC server: " << R.error();
@@ -147,21 +151,31 @@ class QuicHttpServer : public td::actor::Actor {
 };
 
 int main(int argc, char **argv) {
-  SET_VERBOSITY_LEVEL(verbosity_INFO);
-
   std::optional<td::BufferSlice> alpn;
   std::optional<td::BufferSlice> bind_host;
   std::optional<int> port;
+  int verbosity = verbosity_INFO;
 
   td::OptionParser p;
   p.set_description("HTTP/1.1-over-QUIC demo server (hq-interop) using RPK");
   p.add_option('a', "alpn", "ALPN (default: hq-interop)", [&](td::Slice arg) { alpn = td::BufferSlice(arg); });
   p.add_option('b', "bind", "bind host (default: 0.0.0.0)", [&](td::Slice arg) { bind_host = td::BufferSlice(arg); });
+  p.add_checked_option('v', "verbosity", "verbosity level: 0=fatal, 1=error, 2=warning, 3=info, 4=debug",
+                       [&](td::Slice arg) {
+                         TRY_RESULT(level, td::to_integer_safe<int>(arg));
+                         if (level < verbosity_FATAL || level > verbosity_DEBUG) {
+                           return td::Status::Error("verbosity must be in range [0, 4]");
+                         }
+                         verbosity = level;
+                         return td::Status::OK();
+                       });
   p.add_checked_option('p', "port", "UDP port to listen on", [&](td::Slice arg) {
     TRY_RESULT_ASSIGN(port, td::to_integer_safe<int>(arg));
     return td::Status::OK();
   });
   p.run(argc, argv).ensure();
+
+  SET_VERBOSITY_LEVEL(verbosity);
 
   if (!alpn.has_value()) {
     alpn = td::BufferSlice("hq-interop");

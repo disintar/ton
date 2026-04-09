@@ -39,8 +39,6 @@ static const double EXPECTED_INITIAL_SYNC_DURATION = 5.0;
 static const td::uint32 OVERLAY_MAX_ALLOWED_PACKET_SIZE = 16 * 1024 * 1024;
 static const double NEIGHBOURS_ROTATE_INTERVAL_MIN = 60;
 static const double NEIGHBOURS_ROTATE_INTERVAL_MAX = 120;
-static const td::uint32 MAX_QUERY_BLOCKS = 100;
-static const td::uint32 MAX_QUERY_HEIGHT = 100;
 static const td::uint32 GET_DIFFERENCE_MAX_SEND = 100;
 static const double GET_DIFFERENCE_TIMEOUT = 5.0;
 static const double GET_BLOCK_TIMEOUT = 2.0;
@@ -524,6 +522,7 @@ void CatChainReceiverImpl::start_up() {
     root_keys.emplace(get_source(i)->get_hash(), OVERLAY_MAX_ALLOWED_PACKET_SIZE);
   }
   overlay::OverlayOptions overlay_options;
+  overlay_options.name_ = "catchain." + incarnation_.to_hex().substr(0, 4);
   overlay_options.broadcast_speed_multiplier_ = opts_.broadcast_speed_multiplier;
   overlay_options.private_ping_peers_ = true;
   overlay_options.twostep_broadcast_sender_ = adnl_sender_;

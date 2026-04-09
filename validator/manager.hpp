@@ -58,6 +58,7 @@ class WaitBlockState;
 class WaitZeroState;
 class WaitShardState;
 class WaitBlockData;
+class AppliedExtMessageCleanupActor;
 
 class BlockHandleLru : public td::ListNode {
  public:
@@ -206,6 +207,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   td::LRUCache<BlockIdExt, td::Unit> cached_checked_shard_block_descriptions_{/* max_size = */ 1024};
 
   td::actor::ActorOwn<ExtMessagePool> ext_message_pool_;
+  td::actor::ActorOwn<AppliedExtMessageCleanupActor> applied_ext_message_cleanup_actor_;
 
  private:
   // VALIDATOR GROUPS
@@ -267,12 +269,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   void update_shards();
   void update_shard_blocks();
   void updated_init_block(BlockIdExt last_rotate_block_id,
-                          std::set<ValidatorSessionId> old_destroyed_validator_sessions) {
-    last_rotate_block_id_ = last_rotate_block_id;
-    for (const auto &s : old_destroyed_validator_sessions) {
-      destroyed_validator_sessions_.erase(s);
-    }
-  }
+                          std::set<ValidatorSessionId> old_destroyed_validator_sessions);
   void got_next_gc_masterchain_handle(BlockHandle handle);
   void got_next_gc_masterchain_state(BlockHandle handle, td::Ref<MasterchainState> state);
   void advance_gc(BlockHandle handle, td::Ref<MasterchainState> state);
@@ -423,13 +420,13 @@ class ValidatorManagerImpl : public ValidatorManager {
                                 td::Promise<td::Ref<MessageQueue>> promise) override;
   void wait_block_message_queue_short(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                       td::Promise<td::Ref<MessageQueue>> promise) override;
-  void get_external_messages(ShardIdFull shard,
-                             td::Promise<std::vector<std::pair<td::Ref<ExtMessage>, int>>> promise) override;
+  void get_external_messages(ShardIdFull shard, std::unique_ptr<ExtMsgCallback> callback) override;
   void get_ihr_messages(ShardIdFull shard, td::Promise<std::vector<td::Ref<IhrMessage>>> promise) override;
   void get_shard_blocks_for_collator(BlockIdExt masterchain_block_id,
                                      td::Promise<std::vector<td::Ref<ShardTopBlockDescription>>> promise) override;
   void complete_external_messages(std::vector<ExtMessage::Hash> to_delay,
                                   std::vector<ExtMessage::Hash> to_delete) override;
+  void cleanup_applied_external_messages(BlockHandle handle, td::Ref<BlockData> block) override;
   void complete_ihr_messages(std::vector<IhrMessage::Hash> to_delay, std::vector<IhrMessage::Hash> to_delete) override;
 
   void set_next_block(BlockIdExt prev, BlockIdExt next, td::Promise<td::Unit> promise) override;

@@ -460,7 +460,7 @@ void ValidateQuery::load_prev_states() {
  * @returns True if the block candidate was successfully unpacked, false otherwise.
  */
 bool ValidateQuery::unpack_block_candidate() {
-  vm::BagOfCells boc1, boc2;
+  vm::BagOfCells boc1;
   // 1. deserialize block itself
   FileHash fhash = block::compute_file_hash(block_candidate.data);
   if (fhash != id_.file_hash) {
@@ -497,15 +497,11 @@ bool ValidateQuery::unpack_block_candidate() {
   }
   // ...
   // 8. deserialize collated data
-  auto res2 = boc2.deserialize(block_candidate.collated_data);
+  auto res2 = vm::std_boc_deserialize_multi(block_candidate.collated_data);
   if (res2.is_error()) {
     return reject_query("cannot deserialize collated data", res2.move_as_error());
   }
-  int n = boc2.get_root_count();
-  REJECT_UNLESS(n >= 0);
-  for (int i = 0; i < n; i++) {
-    collated_roots_.emplace_back(boc2.get_root_cell(i));
-  }
+  collated_roots_ = res2.move_as_ok();
   // 9. extract/classify collated data
   return extract_collated_data();
 }
@@ -677,7 +673,7 @@ bool ValidateQuery::extract_collated_data_from(Ref<vm::Cell> croot, int idx) {
     if (!ins.second) {
       return reject_query("Merkle proof with duplicate virtual root hash "s + virt_hash.to_hex());
     }
-    full_collated_data_ = true;
+    // full_collated_data_ = true;
     return true;
   }
   if (block::gen::t_TopBlockDescrSet.has_valid_tag(cs)) {
@@ -707,7 +703,7 @@ bool ValidateQuery::extract_collated_data_from(Ref<vm::Cell> croot, int idx) {
     if (!virt_account_storage_dicts_.emplace(virt_root->get_hash().bits(), virt_root).second) {
       return reject_query("duplicate AccountStorageDictProof");
     }
-    full_collated_data_ = true;
+    // full_collated_data_ = true;
     return true;
   }
   if (block::gen::t_ConsensusExtraData.has_valid_tag(cs)) {
@@ -1722,66 +1718,73 @@ bool ValidateQuery::request_neighbor_queues() {
  * @param res The obtained outbound queue.
  */
 void ValidateQuery::got_neighbor_out_queue(int i, td::Result<Ref<MessageQueue>> res, td::PerfLogAction token) {
-  token.finish(res);
-  --pending;
-  if (res.is_error()) {
-    fatal_error(res.move_as_error());
-    return;
-  }
-  Ref<MessageQueue> outq_descr = res.move_as_ok();
-  block::McShardDescr& descr = neighbors_.at(i);
-  LOG(WARNING) << "obtained outbound queue for neighbor #" << i << " : " << descr.shard().to_str();
-  if (outq_descr->get_block_id() != descr.blk_) {
-    LOG(DEBUG) << "outq_descr->id = " << outq_descr->get_block_id().to_str() << " ; descr.id = " << descr.blk_.to_str();
-    fatal_error(
-        -667, "invalid outbound queue information returned for "s + descr.shard().to_str() + " : id or hash mismatch");
-    return;
-  }
-  if (outq_descr->root_cell().is_null()) {
-    fatal_error("no OutMsgQueueInfo in queue info in a neighbor state");
-    return;
-  }
-  block::gen::OutMsgQueueInfo::Record qinfo;
-  if (!tlb::unpack_cell(outq_descr->root_cell(), qinfo)) {
-    fatal_error("cannot unpack neighbor output queue info");
-    return;
-  }
-  descr.set_queue_root(qinfo.out_queue->prefetch_ref(0));
-  // TODO: comment the next two lines in the future when the output queues become huge
-  // (do this carefully)
-  if (debug_checks_) {
-    REJECT_UNLESS_VOID(block::gen::t_OutMsgQueueInfo.validate_ref(1000000, outq_descr->root_cell()));
-    REJECT_UNLESS_VOID(block::tlb::t_OutMsgQueueInfo.validate_ref(1000000, outq_descr->root_cell()));
-  }
-  // unpack ProcessedUpto
-  LOG(DEBUG) << "unpacking ProcessedUpto of neighbor " << descr.blk_.to_str();
-  if (verbosity >= 2) {
-    FLOG(INFO) {
-      block::gen::t_ProcessedInfo.print(sb, qinfo.proc_info);
-      qinfo.proc_info->print_rec(sb);
-    };
-  }
-  descr.processed_upto = block::MsgProcessedUptoCollection::unpack(descr.shard(), qinfo.proc_info);
-  if (!descr.processed_upto) {
-    fatal_error("cannot unpack ProcessedUpto in neighbor output queue info for neighbor "s + descr.blk_.to_str());
-    return;
-  }
-  outq_descr.clear();
-  do {
-    // require masterchain blocks referred to in ProcessedUpto
-    // TODO: perform this only if there are messages for this shard in our output queue
-    // .. (have to check the above condition and perform a `break` here) ..
-    // ..
-    for (const auto& entry : descr.processed_upto->list) {
-      Ref<MasterchainStateQ> state;
-      if (!request_aux_mc_state(entry.mc_seqno, state)) {
-        return;
-      }
+  try {
+    token.finish(res);
+    --pending;
+    if (res.is_error()) {
+      fatal_error(res.move_as_error());
+      return;
     }
-  } while (false);
-  if (!pending) {
-    LOG(INFO) << "all neighbor output queues fetched";
-    try_validate();
+    Ref<MessageQueue> outq_descr = res.move_as_ok();
+    block::McShardDescr& descr = neighbors_.at(i);
+    LOG(WARNING) << "obtained outbound queue for neighbor #" << i << " : " << descr.shard().to_str();
+    if (outq_descr->get_block_id() != descr.blk_) {
+      LOG(DEBUG) << "outq_descr->id = " << outq_descr->get_block_id().to_str()
+                 << " ; descr.id = " << descr.blk_.to_str();
+      fatal_error(-667, "invalid outbound queue information returned for "s + descr.shard().to_str() +
+                            " : id or hash mismatch");
+      return;
+    }
+    if (outq_descr->root_cell().is_null()) {
+      fatal_error("no OutMsgQueueInfo in queue info in a neighbor state");
+      return;
+    }
+    block::gen::OutMsgQueueInfo::Record qinfo;
+    if (!tlb::unpack_cell(outq_descr->root_cell(), qinfo)) {
+      fatal_error("cannot unpack neighbor output queue info");
+      return;
+    }
+    descr.set_queue_root(qinfo.out_queue->prefetch_ref(0));
+    // TODO: comment the next two lines in the future when the output queues become huge
+    // (do this carefully)
+    if (debug_checks_) {
+      REJECT_UNLESS_VOID(block::gen::t_OutMsgQueueInfo.validate_ref(1000000, outq_descr->root_cell()));
+      REJECT_UNLESS_VOID(block::tlb::t_OutMsgQueueInfo.validate_ref(1000000, outq_descr->root_cell()));
+    }
+    // unpack ProcessedUpto
+    LOG(DEBUG) << "unpacking ProcessedUpto of neighbor " << descr.blk_.to_str();
+    if (verbosity >= 2) {
+      FLOG(INFO) {
+        block::gen::t_ProcessedInfo.print(sb, qinfo.proc_info);
+        qinfo.proc_info->print_rec(sb);
+      };
+    }
+    descr.processed_upto = block::MsgProcessedUptoCollection::unpack(descr.shard(), qinfo.proc_info);
+    if (!descr.processed_upto) {
+      fatal_error("cannot unpack ProcessedUpto in neighbor output queue info for neighbor "s + descr.blk_.to_str());
+      return;
+    }
+    outq_descr.clear();
+    do {
+      // require masterchain blocks referred to in ProcessedUpto
+      // TODO: perform this only if there are messages for this shard in our output queue
+      // .. (have to check the above condition and perform a `break` here) ..
+      // ..
+      for (const auto& entry : descr.processed_upto->list) {
+        Ref<MasterchainStateQ> state;
+        if (!request_aux_mc_state(entry.mc_seqno, state)) {
+          return;
+        }
+      }
+    } while (false);
+    if (!pending) {
+      LOG(INFO) << "all neighbor output queues fetched";
+      try_validate();
+    }
+  } catch (vm::VmError& err) {
+    fatal_error(err.get_msg(), -666);
+  } catch (vm::VmVirtError& err) {
+    reject_query(err.get_msg());
   }
 }
 
@@ -7403,32 +7406,38 @@ bool ValidateQuery::try_validate() {
   try {
     if (stage_ == 0) {
       LOG(WARNING) << "try_validate stage 0";
-      if (!compute_prev_state()) {
-        return fatal_error(-666, "cannot compute previous state");
-      }
-      if (!compute_next_state()) {
-        return reject_query("cannot compute next state");
-      }
-      if (!request_neighbor_queues()) {
-        return fatal_error("cannot request neighbor output queues");
-      }
-      if (!unpack_prev_state()) {
-        return fatal_error("cannot unpack previous state");
-      }
-      if (!unpack_next_state()) {
-        return fatal_error("cannot unpack previous state");
-      }
-      if (is_masterchain() && !check_shard_layout()) {
-        return fatal_error("new shard layout is invalid");
-      }
-      if (!check_cur_validator_set()) {
-        return fatal_error("current validator set is not entitled to generate this block");
-      }
-      if (!check_utime_lt()) {
-        return reject_query("creation utime/lt of the new block is invalid");
-      }
-      if (!prepare_out_msg_queue_size()) {
-        return reject_query("cannot request out msg queue size");
+      {
+        td::RealCpuTimer timer;
+        SCOPE_EXIT {
+          stats_.work_time.unpack_state += timer.elapsed_both();
+        };
+        if (!compute_prev_state()) {
+          return fatal_error(-666, "cannot compute previous state");
+        }
+        if (!compute_next_state()) {
+          return reject_query("cannot compute next state");
+        }
+        if (!request_neighbor_queues()) {
+          return fatal_error("cannot request neighbor output queues");
+        }
+        if (!unpack_prev_state()) {
+          return fatal_error("cannot unpack previous state");
+        }
+        if (!unpack_next_state()) {
+          return fatal_error("cannot unpack previous state");
+        }
+        if (is_masterchain() && !check_shard_layout()) {
+          return fatal_error("new shard layout is invalid");
+        }
+        if (!check_cur_validator_set()) {
+          return fatal_error("current validator set is not entitled to generate this block");
+        }
+        if (!check_utime_lt()) {
+          return reject_query("creation utime/lt of the new block is invalid");
+        }
+        if (!prepare_out_msg_queue_size()) {
+          return reject_query("cannot request out msg queue size");
+        }
       }
       stage_ = 1;
       if (pending) {
@@ -7438,50 +7447,116 @@ bool ValidateQuery::try_validate() {
     if (stage_ == 1) {
       LOG(WARNING) << "try_validate stage 1";
       LOG(INFO) << "running automated validity checks for block candidate " << id_.to_str();
-      if (!block::gen::t_Block.validate_ref(10000000, block_root_)) {
-        return reject_query("block "s + id_.to_str() + " failed to pass automated validity checks");
+      {
+        td::RealCpuTimer timer;
+        SCOPE_EXIT {
+          stats_.work_time.validate_block_tlb += timer.elapsed_both();
+        };
+        if (!block::gen::t_Block.validate_ref(10000000, block_root_)) {
+          return reject_query("block "s + id_.to_str() + " failed to pass automated validity checks");
+        }
+        if (!fix_all_processed_upto()) {
+          return fatal_error("cannot adjust all ProcessedUpto of neighbor and previous blocks");
+        }
+        if (!add_trivial_neighbor()) {
+          return fatal_error("cannot add previous block as a trivial neighbor");
+        }
+        if (!unpack_block_data()) {
+          return reject_query("cannot unpack block data");
+        }
       }
-      if (!fix_all_processed_upto()) {
-        return fatal_error("cannot adjust all ProcessedUpto of neighbor and previous blocks");
+      {
+        td::RealCpuTimer timer;
+        SCOPE_EXIT {
+          stats_.work_time.precheck_account_updates += timer.elapsed_both();
+        };
+        if (!precheck_account_updates()) {
+          return reject_query("invalid AccountState update");
+        }
       }
-      if (!add_trivial_neighbor()) {
-        return fatal_error("cannot add previous block as a trivial neighbor");
+      {
+        td::RealCpuTimer timer;
+        SCOPE_EXIT {
+          stats_.work_time.precheck_account_transactions += timer.elapsed_both();
+        };
+        if (!precheck_account_transactions()) {
+          return reject_query("invalid collection of account transactions in ShardAccountBlocks");
+        }
       }
-      if (!unpack_block_data()) {
-        return reject_query("cannot unpack block data");
+      {
+        td::RealCpuTimer timer;
+        SCOPE_EXIT {
+          stats_.work_time.precheck_msg_queue += timer.elapsed_both();
+        };
+        if (!precheck_message_queue_update()) {
+          return reject_query("invalid OutMsgQueue update");
+        }
       }
-      if (!precheck_account_updates()) {
-        return reject_query("invalid AccountState update");
+      {
+        td::RealCpuTimer timer;
+        SCOPE_EXIT {
+          stats_.work_time.unpack_dispatch_queue += timer.elapsed_both();
+        };
+        if (!unpack_dispatch_queue_update()) {
+          return reject_query("invalid DispatchQueue update");
+        }
       }
-      if (!precheck_account_transactions()) {
-        return reject_query("invalid collection of account transactions in ShardAccountBlocks");
+      {
+        td::RealCpuTimer timer;
+        SCOPE_EXIT {
+          stats_.work_time.check_in_msg_descr += timer.elapsed_both();
+        };
+        if (!check_in_msg_descr()) {
+          return reject_query("invalid InMsgDescr");
+        }
       }
-      if (!precheck_message_queue_update()) {
-        return reject_query("invalid OutMsgQueue update");
+      {
+        td::RealCpuTimer timer;
+        SCOPE_EXIT {
+          stats_.work_time.check_out_msg_descr += timer.elapsed_both();
+        };
+        if (!check_out_msg_descr()) {
+          return reject_query("invalid OutMsgDescr");
+        }
       }
-      if (!unpack_dispatch_queue_update()) {
-        return reject_query("invalid DispatchQueue update");
+      {
+        td::RealCpuTimer timer;
+        SCOPE_EXIT {
+          stats_.work_time.check_dispatch_queue += timer.elapsed_both();
+        };
+        if (!check_dispatch_queue_update()) {
+          return reject_query("invalid OutMsgDescr");
+        }
       }
-      if (!check_in_msg_descr()) {
-        return reject_query("invalid InMsgDescr");
+      {
+        td::RealCpuTimer timer;
+        SCOPE_EXIT {
+          stats_.work_time.check_processed_upto += timer.elapsed_both();
+        };
+        if (!check_processed_upto()) {
+          return reject_query("invalid ProcessedInfo");
+        }
       }
-      if (!check_out_msg_descr()) {
-        return reject_query("invalid OutMsgDescr");
+      {
+        td::RealCpuTimer timer;
+        SCOPE_EXIT {
+          stats_.work_time.check_in_queue += timer.elapsed_both();
+        };
+        if (!check_in_queue()) {
+          return reject_query("cannot check inbound message queues");
+        }
+        if (after_merge_ && !check_delivered_dequeued()) {
+          return reject_query("cannot check delivery status of all outbound messages");
+        }
       }
-      if (!check_dispatch_queue_update()) {
-        return reject_query("invalid OutMsgDescr");
-      }
-      if (!check_processed_upto()) {
-        return reject_query("invalid ProcessedInfo");
-      }
-      if (!check_in_queue()) {
-        return reject_query("cannot check inbound message queues");
-      }
-      if (after_merge_ && !check_delivered_dequeued()) {
-        return reject_query("cannot check delivery status of all outbound messages");
-      }
-      if (!check_transactions()) {
-        return reject_query("invalid collection of account transactions in ShardAccountBlocks");
+      {
+        td::RealCpuTimer timer;
+        SCOPE_EXIT {
+          stats_.work_time.check_transactions += timer.elapsed_both();
+        };
+        if (!check_transactions()) {
+          return reject_query("invalid collection of account transactions in ShardAccountBlocks");
+        }
       }
       stage_ = 2;
       if (parallel_accounts_validation_) {
@@ -7490,6 +7565,10 @@ bool ValidateQuery::try_validate() {
     }
     if (stage_ == 2) {
       LOG(WARNING) << "try_validate stage 2";
+      td::RealCpuTimer timer;
+      SCOPE_EXIT {
+        stats_.work_time.check_new_state += timer.elapsed_both();
+      };
       if (!check_all_ticktock_processed()) {
         return reject_query("not all tick-tock transactions have been run for special accounts");
       }

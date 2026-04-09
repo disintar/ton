@@ -226,7 +226,7 @@ private:
 
     // Start ADNL
     adnl::AdnlAddressList addr_list;
-    addr_list.add_udp_address(config_.addr_).ensure();
+    addr_list.add_udp_adnl_address(config_.addr_).ensure();
     addr_list.set_version(static_cast<td::int32>(td::Clocks::system()));
     addr_list.set_reinit_date(adnl::Adnl::adnl_start_time());
 

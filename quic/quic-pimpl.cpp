@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstring>
 #include <limits>
 #include <openssl/ssl.h>
@@ -30,6 +31,15 @@ static td::Timestamp from_ngtcp2_tstamp(ngtcp2_tstamp ns) {
   return td::Timestamp::at(static_cast<double>(ns) * 1e-9);
 }
 
+static void apply_platform_pmtu_policy(ngtcp2_settings& settings) {
+  if (td::UdpSocketFd::has_pmtudisc_probe()) {
+    return;
+  }
+  // Without socket-level PMTU probe mode, stay at QUIC's safe minimum and avoid PMTUD growth.
+  settings.max_tx_udp_payload_size = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
+  settings.no_pmtud = 1;
+}
+
 td::Result<std::unique_ptr<QuicConnectionPImpl>> QuicConnectionPImpl::create_client(
     const td::IPAddress& local_address, const td::IPAddress& remote_address, const td::Ed25519::PrivateKey& client_key,
     td::Slice alpn, std::unique_ptr<Callback> callback, QuicConnectionOptions options) {
@@ -46,12 +56,13 @@ td::Result<std::unique_ptr<QuicConnectionPImpl>> QuicConnectionPImpl::create_cli
 
 td::Result<std::unique_ptr<QuicConnectionPImpl>> QuicConnectionPImpl::create_server(
     const td::IPAddress& local_address, const td::IPAddress& remote_address, const td::Ed25519::PrivateKey& server_key,
-    td::Slice alpn, const VersionCid& vc, std::unique_ptr<Callback> callback, QuicConnectionOptions options) {
+    td::Slice alpn, const ServerInitialInfo& initial, std::unique_ptr<Callback> callback,
+    QuicConnectionOptions options) {
   auto p_impl =
       std::make_unique<QuicConnectionPImpl>(PrivateTag{}, local_address, remote_address, std::move(callback), options);
 
   TRY_STATUS(p_impl->init_tls_server_rpk(server_key, alpn));
-  TRY_STATUS(p_impl->init_quic_server(vc));
+  TRY_STATUS(p_impl->init_quic_server(initial));
 
   p_impl->callback_->set_connection_id(p_impl->primary_scid_);
 
@@ -157,13 +168,14 @@ void QuicConnectionPImpl::setup_settings_and_params(ngtcp2_settings& settings, n
   auto cc_alg_id = static_cast<size_t>(options.cc_algo);
   CHECK(cc_alg_id < std::size(CC_ALGO_MAP));
   settings.cc_algo = CC_ALGO_MAP[cc_alg_id];
+  apply_platform_pmtu_policy(settings);
 
   ngtcp2_transport_params_default(&params);
   params.max_idle_timeout = options.idle_timeout;
   params.initial_max_streams_bidi = options.max_streams_bidi;
-  params.initial_max_stream_data_bidi_remote = options.max_stream_window;
-  params.initial_max_stream_data_bidi_local = options.max_stream_window;
-  params.initial_max_data = options.max_window;
+  params.initial_max_stream_data_bidi_remote = options.initial_max_stream_data_bidi_remote;
+  params.initial_max_stream_data_bidi_local = options.initial_max_stream_data_bidi_local;
+  params.initial_max_data = options.initial_max_data;
 }
 
 void QuicConnectionPImpl::setup_ngtcp2_callbacks(ngtcp2_callbacks& callbacks, bool is_client) {
@@ -226,7 +238,7 @@ td::Status QuicConnectionPImpl::init_quic_client() {
   return td::Status::OK();
 }
 
-td::Status QuicConnectionPImpl::init_quic_server(const VersionCid& vc) {
+td::Status QuicConnectionPImpl::init_quic_server(const ServerInitialInfo& initial) {
   ngtcp2_callbacks callbacks{};
   setup_ngtcp2_callbacks(callbacks, false);
 
@@ -235,17 +247,21 @@ td::Status QuicConnectionPImpl::init_quic_server(const VersionCid& vc) {
   setup_settings_and_params(settings, params, options_);
 
   params.original_dcid_present = 1;
-  params.original_dcid = QuicConnectionIdAccess::to_ngtcp2(vc.dcid);
+  params.original_dcid = QuicConnectionIdAccess::to_ngtcp2(initial.original_dcid);
+  if (initial.retry_scid.has_value()) {
+    params.retry_scid_present = 1;
+    params.retry_scid = QuicConnectionIdAccess::to_ngtcp2(*initial.retry_scid);
+  }
 
-  auto client_scid = QuicConnectionIdAccess::to_ngtcp2(vc.scid);
+  auto client_scid = QuicConnectionIdAccess::to_ngtcp2(initial.packet.scid);
   auto server_scid = QuicConnectionId::random();
   auto server_scid_raw = QuicConnectionIdAccess::to_ngtcp2(server_scid);
 
   ngtcp2_path path = make_path();
 
   ngtcp2_conn* new_conn = nullptr;
-  int rv = ngtcp2_conn_server_new(&new_conn, &client_scid, &server_scid_raw, &path, vc.version, &callbacks, &settings,
-                                  &params, nullptr, this);
+  int rv = ngtcp2_conn_server_new(&new_conn, &client_scid, &server_scid_raw, &path, initial.packet.version, &callbacks,
+                                  &settings, &params, nullptr, this);
   if (rv != 0) {
     return td::Status::Error(PSTRING() << "ngtcp2_conn_server_new failed: " << rv);
   }
@@ -521,6 +537,14 @@ void QuicConnectionPImpl::shutdown_stream(QuicStreamID sid) {
   ngtcp2_conn_shutdown_stream(conn(), 0, sid, 1);
 }
 
+void QuicConnectionPImpl::set_stream_receive_credit_from_max_size(QuicStreamID sid, td::uint64 max_size) {
+  td::uint64 target_credit =
+      std::clamp<td::uint64>(max_size, options_.initial_max_stream_data_bidi_local, options_.max_stream_window);
+  if (target_credit > options_.initial_max_stream_data_bidi_local) {
+    ngtcp2_conn_extend_max_stream_offset(conn(), sid, target_credit - options_.initial_max_stream_data_bidi_local);
+  }
+}
+
 td::Result<QuicStreamID> QuicConnectionPImpl::open_stream() {
   QuicStreamID sid;
 
@@ -627,7 +651,6 @@ int QuicConnectionPImpl::on_recv_stream_data(uint32_t flags, int64_t stream_id, 
   Callback::StreamDataEvent event{
       .sid = stream_id, .data = td::BufferSlice{data}, .fin = (flags & NGTCP2_STREAM_DATA_FLAG_FIN) != 0};
 
-  ngtcp2_conn_extend_max_stream_offset(conn(), stream_id, data.size());
   ngtcp2_conn_extend_max_offset(conn(), data.size());
 
   auto status = callback_->on_stream_data(std::move(event));
@@ -635,6 +658,8 @@ int QuicConnectionPImpl::on_recv_stream_data(uint32_t flags, int64_t stream_id, 
     shutdown_stream(stream_id);
     return 0;
   }
+
+  ngtcp2_conn_extend_max_stream_offset(conn(), stream_id, data.size());
 
   // bidi stream initiated by other party
   if (ngtcp2_is_bidi_stream(stream_id) && !ngtcp2_conn_is_local_stream(conn(), stream_id)) {
@@ -668,7 +693,9 @@ int QuicConnectionPImpl::on_acked_stream_data_offset(int64_t stream_id, uint64_t
 
 int QuicConnectionPImpl::on_stream_close(int64_t stream_id) {
   streams_.erase(stream_id);
-  ngtcp2_conn_extend_max_streams_bidi(conn(), 1);
+  if (ngtcp2_is_bidi_stream(stream_id) && !ngtcp2_conn_is_local_stream(conn(), stream_id)) {
+    ngtcp2_conn_extend_max_streams_bidi(conn(), 1);
+  }
   callback_->on_stream_closed(stream_id);
   return 0;
 }

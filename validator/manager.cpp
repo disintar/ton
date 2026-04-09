@@ -26,6 +26,7 @@
 #include "downloaders/wait-block-data.hpp"
 #include "downloaders/wait-block-state-merge.hpp"
 #include "downloaders/wait-block-state.hpp"
+#include "impl/applied-ext-message-cleanup.hpp"
 #include "interfaces/validator-full-id.h"
 #include "td/actor/MultiPromise.h"
 #include "td/actor/coro_utils.h"
@@ -662,6 +663,9 @@ void ValidatorManagerImpl::loaded_msg_queue_to_masterchain(td::Ref<ShardTopBlock
 }
 
 void ValidatorManagerImpl::set_shard_block_description_ready(td::Ref<ShardTopBlockDescription> desc) {
+  if (!desc->may_be_valid(last_masterchain_block_handle_, last_masterchain_state_)) {
+    return;
+  }
   auto id = ShardTopBlockDescriptionId{desc->block_id().shard_full(), desc->catchain_seqno()};
   auto it = shard_blocks_.find(id);
   if (it == shard_blocks_.end()) {
@@ -1109,10 +1113,8 @@ void ValidatorManagerImpl::wait_block_message_queue_short(BlockIdExt block_id, t
   get_block_handle(block_id, true, std::move(P));
 }
 
-void ValidatorManagerImpl::get_external_messages(
-    ShardIdFull shard, td::Promise<std::vector<std::pair<td::Ref<ExtMessage>, int>>> promise) {
-  td::actor::send_closure(ext_message_pool_, &ExtMessagePool::get_external_messages_for_collator, shard,
-                          std::move(promise));
+void ValidatorManagerImpl::get_external_messages(ShardIdFull shard, std::unique_ptr<ExtMsgCallback> callback) {
+  td::actor::send_closure(ext_message_pool_, &ExtMessagePool::install_collator_queue, shard, std::move(callback));
 }
 
 void ValidatorManagerImpl::get_ihr_messages(ShardIdFull shard, td::Promise<std::vector<td::Ref<IhrMessage>>> promise) {
@@ -1134,6 +1136,14 @@ void ValidatorManagerImpl::complete_external_messages(std::vector<ExtMessage::Ha
                                                       std::vector<ExtMessage::Hash> to_delete) {
   td::actor::send_closure(ext_message_pool_, &ExtMessagePool::complete_external_messages, std::move(to_delay),
                           std::move(to_delete));
+}
+
+void ValidatorManagerImpl::cleanup_applied_external_messages(BlockHandle handle, td::Ref<BlockData> block) {
+  if (applied_ext_message_cleanup_actor_.empty() || !handle) {
+    return;
+  }
+  td::actor::send_closure(applied_ext_message_cleanup_actor_, &AppliedExtMessageCleanupActor::cleanup_applied_block,
+                          std::move(handle), std::move(block));
 }
 
 void ValidatorManagerImpl::complete_ihr_messages(std::vector<IhrMessage::Hash> to_delay,
@@ -1932,6 +1942,8 @@ void ValidatorManagerImpl::start_up() {
   token_manager_ = td::actor::create_actor<TokenManager>("tokenmanager");
   storage_stat_cache_ = td::actor::create_actor<StorageStatCache>("storagestatcache");
   ext_message_pool_ = td::actor::create_actor<ExtMessagePool>("extmessages", opts_, actor_id(this));
+  applied_ext_message_cleanup_actor_ = td::actor::create_actor<AppliedExtMessageCleanupActor>(
+      "extmessagecleanup", ext_message_pool_.get(), actor_id(this));
   td::mkdir(db_root_ + "/tmp/").ensure();
   td::mkdir(db_root_ + "/catchains/").ensure();
 
@@ -2651,12 +2663,9 @@ void ValidatorManagerImpl::update_shards() {
   if (last_masterchain_state_->rotated_all_shards()) {
     CHECK(last_masterchain_block_handle_->received_state());
     auto P = td::PromiseCreator::lambda(
-        [SelfId = actor_id(this), db = db_.get(), block_id = last_masterchain_block_id_,
-         destroy_sessions = std::move(destroy_sessions),
+        [SelfId = actor_id(this), block_id = last_masterchain_block_id_, destroy_sessions = std::move(destroy_sessions),
          old_destroyed_validator_sessions = destroyed_validator_sessions_](td::Result<td::Unit> R) mutable {
           R.ensure();
-          td::actor::send_closure(db, &Db::update_destroyed_validator_sessions, std::vector<ValidatorSessionId>{},
-                                  [](td::Result<>) {});
           td::actor::send_closure(SelfId, &ValidatorManagerImpl::updated_init_block, block_id,
                                   std::move(old_destroyed_validator_sessions));
           destroy_sessions();
@@ -2717,6 +2726,20 @@ void ValidatorManagerImpl::update_shard_blocks() {
     } else {
       ++it;
     }
+  }
+}
+
+void ValidatorManagerImpl::updated_init_block(BlockIdExt last_rotate_block_id,
+                                              std::set<ValidatorSessionId> old_destroyed_validator_sessions) {
+  last_rotate_block_id_ = last_rotate_block_id;
+  for (const auto &s : old_destroyed_validator_sessions) {
+    destroyed_validator_sessions_.erase(s);
+  }
+  if (!old_destroyed_validator_sessions.empty()) {
+    td::actor::send_closure(
+        db_, &Db::update_destroyed_validator_sessions,
+        std::vector<ValidatorSessionId>(destroyed_validator_sessions_.begin(), destroyed_validator_sessions_.end()),
+        [](td::Result<> R) { R.ensure(); });
   }
 }
 

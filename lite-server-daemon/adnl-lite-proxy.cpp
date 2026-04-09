@@ -667,7 +667,7 @@ namespace ton::liteserver {
           td::mkdir(db_root_ + "/lite-proxy").ensure();
 
           adnl::AdnlAddressList addr_list;
-          addr_list.add_udp_address(adnl_address_).ensure();
+          addr_list.add_udp_adnl_address(adnl_address_).ensure();
           addr_list.set_version(static_cast<td::int32>(td::Clocks::system()));
           addr_list.set_reinit_date(adnl::Adnl::adnl_start_time());
 

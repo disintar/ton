@@ -114,8 +114,7 @@ std::string ActorStats::prepare_stats() {
   }
 
   sb << "\n";
-  sb << "#================================= ACTORS STATS =================================\n";
-  double max_delay = 0;
+  sb << "================================= ACTORS STATS =================================\n";
   ActorTypeStat sum_stat_forever;
   ActorTypeStat sum_stat_10m;
   ActorTypeStat sum_stat_10s;
@@ -252,7 +251,7 @@ std::string ActorStats::prepare_stats() {
   debug.dump(sb);
 
   for (auto &it : stats) {
-    auto key = main_key(it.first);
+    sb << "\t" << ActorTypeStatManager::get_class_name(it.first.name()) << "\n";
     describe(sb, it.first, ActorTypeStatManager::get_class_name(it.first.name()));
   }
   sb << "\n";

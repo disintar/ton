@@ -87,52 +87,26 @@ class ValidatorManagerMasterchainStarter : public td::actor::Actor {
   ValidatorManagerMasterchainStarter(td::Ref<ValidatorManagerOptions> opts,
                                      td::actor::ActorId<ValidatorManager> manager, td::actor::ActorId<Db> db,
                                      td::Promise<ValidatorManagerInitResult> promise, bool read_only = false)
-      : opts_(std::move(opts)), manager_(manager), db_(db), promise_(std::move(promise)), read_only_(read_only) {
+      : opts_(std::move(opts)), read_only_(read_only), manager_(manager), db_(db), promise_(std::move(promise)) {
   }
 
   void start_up() override;
-  void got_init_block_id(BlockIdExt block_id);
-  void failed_to_get_init_block_id();
-  void got_init_block_handle(BlockHandle handle);
-  void got_init_block_state(td::Ref<MasterchainState> state);
-  void got_gc_block_id(BlockIdExt block_id);
-  void got_gc_block_handle(BlockHandle handle);
-  void got_gc_block_state(td::Ref<MasterchainState> state);
-  void got_key_block_handle(BlockHandle handle);
-  void got_shard_block_id(BlockIdExt block_id);
-  void got_hardforks(std::vector<BlockIdExt> hardforks);
-  void got_truncate_block_seqno(BlockSeqno seqno);
-  void got_truncate_block_id(BlockIdExt block_id);
-  void got_truncate_block_handle(BlockHandle handle);
-  void got_truncate_state(td::Ref<MasterchainState> state);
-  void truncated_db();
-  void got_prev_key_block_handle(BlockHandle handle);
-  void truncated();
-  void rerun_get_shard_state();
-  void truncate_shard_next(BlockIdExt block_id, td::Promise<td::Unit> promise);
-  void truncated_next();
-  void written_next();
-  void start_shard_client();
-  void finish();
+  td::actor::Task<> run();
+  td::actor::Task<ValidatorManagerInitResult> run_inner();
+  td::actor::Task<> get_latest_applied_block();
+  td::actor::Task<> truncate(BlockSeqno truncate_seqno);
 
  private:
   td::Ref<ValidatorManagerOptions> opts_;
 
-  BlockIdExt block_id_;
+  bool read_only_ = false;
   BlockHandle handle_;
   td::Ref<MasterchainState> state_;
-  BlockHandle gc_handle_;
-  td::Ref<MasterchainState> gc_state_;
-  BlockHandle last_key_block_handle_;
-  bool has_new_hardforks_{false};
-  bool read_only_ = false;
 
   td::actor::ActorId<ValidatorManager> manager_;
   td::actor::ActorId<Db> db_;
 
   td::Promise<ValidatorManagerInitResult> promise_;
-
-  td::actor::ActorOwn<ShardClient> client_;
 };
 
 }  // namespace validator

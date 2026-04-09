@@ -668,28 +668,31 @@ namespace ton {
                                   });
         }
 
-        static bool visit(Ref<vm::Cell> cell);
+static bool visit(Ref<vm::Cell> cell, td::HashSet<vm::CellHash>* visited = nullptr);
 
-        static bool visit(const vm::CellSlice &cs) {
-          auto cnt = cs.size_refs();
-          bool res = true;
-          for (unsigned i = 0; i < cnt; i++) {
-            res &= visit(cs.prefetch_ref(i));
-          }
-          return res;
-        }
+static bool visit(const vm::CellSlice& cs, td::HashSet<vm::CellHash>* visited = nullptr) {
+  auto cnt = cs.size_refs();
+  bool res = true;
+  for (unsigned i = 0; i < cnt; i++) {
+    res &= visit(cs.prefetch_ref(i), visited);
+  }
+  return res;
+}
 
-        static bool visit(Ref<vm::Cell> cell) {
-          if (cell.is_null()) {
-            return true;
-          }
-          vm::CellSlice cs{vm::NoVm{}, std::move(cell)};
-          return visit(cs);
-        }
+static bool visit(Ref<vm::Cell> cell, td::HashSet<vm::CellHash>* visited) {
+  if (cell.is_null()) {
+    return true;
+  }
+  if (visited && !visited->insert(cell->get_hash()).second) {
+    return true;
+  }
+  vm::CellSlice cs{vm::NoVm{}, std::move(cell)};
+  return visit(cs, visited);
+}
 
-        static bool visit(Ref<vm::CellSlice> cs_ref) {
-          return cs_ref.is_null() || visit(*cs_ref);
-        }
+static bool visit(Ref<vm::CellSlice> cs_ref, td::HashSet<vm::CellHash>* visited = nullptr) {
+  return cs_ref.is_null() || visit(*cs_ref, visited);
+}
 
 void LiteQuery::continue_getBlockHeader(BlockIdExt blkid, int mode, Ref<ton::validator::BlockData> block) {
   LOG(INFO) << "obtained data for getBlockHeader(" << blkid.to_str() << ", " << mode << ")";
@@ -1637,8 +1640,11 @@ void LiteQuery::finish_getAccountState(td::BufferSlice shard_proof) {
       return;
     }
     auto rconfig = config.move_as_ok();
-    acc_state_promise_.set_value(
-        std::make_tuple(std::move(acc_csr), sstate.gen_utime, sstate.gen_lt, std::move(rconfig)));
+    if (acc_state_promise_) {
+      acc_state_promise_.set_value(
+          std::make_tuple(std::move(acc_csr), sstate.gen_utime, sstate.gen_lt, std::move(rconfig)));
+      stop();
+    }
     return;
   }
 
@@ -2249,15 +2255,18 @@ void LiteQuery::perform_getConfigParams(BlockIdExt blkid, int mode, std::vector<
     return;
   }
   try {
+    td::HashSet<vm::CellHash> visited;
     if (mode & 0x20000) {
-      visit(cfg->get_root_cell());
+      visit(cfg->get_root_cell(), &visited);
     } else if (mode & 0x10000) {
+      std::sort(param_list.begin(), param_list.end());
+      param_list.erase(std::unique(param_list.begin(), param_list.end()), param_list.end());
       for (int i : param_list) {
-        visit(cfg->get_config_param(i));
+        visit(cfg->get_config_param(i), &visited);
       }
     }
     if (!keyblk && mode & block::ConfigInfo::needPrevBlocks) {
-      ((block::ConfigInfo*)cfg.get())->get_prev_blocks_info();
+      ((block::ConfigInfo*)cfg.get())->get_prev_blocks_info().ignore();
     }
   } catch (vm::VmError& err) {
     fatal_error("error while traversing required configuration parameters: "s + err.get_msg());
@@ -3730,40 +3739,39 @@ bool LiteQuery::finish_proof_chain(ton::BlockIdExt id) {
                   });
         }
 
-        void LiteQuery::continue_getOutMsgQueueSizes(td::optional<ShardIdFull> shard, Ref<MasterchainState> state) {
-          std::vector<BlockIdExt> blocks;
-          if (!shard || shard_intersects(shard.value(), state->get_shard())) {
-            blocks.push_back(state->get_block_id());
-          }
-          for (auto &x: state->get_shards()) {
-            if (!shard || shard_intersects(shard.value(), x->shard())) {
-              blocks.push_back(x->top_block_id());
-            }
-          }
-          auto res = std::make_shared<std::vector<tl_object_ptr<lite_api::liteServer_outMsgQueueSize>>>(blocks.size());
-          td::MultiPromise mp;
-          auto ig = mp.init_guard();
-          for (size_t i = 0; i < blocks.size(); ++i) {
-            td::actor::send_closure(manager_, &ValidatorManager::get_out_msg_queue_size, blocks[i],
-                                    [promise = ig.get_promise(), res, i, id = blocks[i]](
-                                            td::Result<td::uint64> R) mutable {
-                                        TRY_RESULT_PROMISE(promise, value, std::move(R));
-                                        res->at(i) = create_tl_object<lite_api::liteServer_outMsgQueueSize>(
-                                                create_tl_lite_block_id(id), value);
-                                        promise.set_value(td::Unit());
-                                    });
-          }
-          ig.add_promise([Self = actor_id(this), res](td::Result<td::Unit> R) {
-              if (R.is_error()) {
-                td::actor::send_closure(Self, &LiteQuery::abort_query, R.move_as_error());
-                return;
-              }
-              td::actor::send_closure(Self, &LiteQuery::finish_query,
-                                      create_serialize_tl_object<lite_api::liteServer_outMsgQueueSizes>(
-                                              std::move(*res), Collator::get_skip_externals_queue_size()),
-                                      false);
-          });
-        }
+void LiteQuery::continue_getOutMsgQueueSizes(td::optional<ShardIdFull> shard, Ref<MasterchainState> state) {
+  std::vector<BlockIdExt> blocks;
+  if (!shard || shard_intersects(shard.value(), state->get_shard())) {
+    blocks.push_back(state->get_block_id());
+  }
+  for (auto& x : state->get_shards()) {
+    if (!shard || shard_intersects(shard.value(), x->shard())) {
+      blocks.push_back(x->top_block_id());
+    }
+  }
+  auto res = std::make_shared<std::vector<tl_object_ptr<lite_api::liteServer_outMsgQueueSize>>>(blocks.size());
+  td::MultiPromise mp;
+  auto ig = mp.init_guard();
+  for (size_t i = 0; i < blocks.size(); ++i) {
+    td::actor::send_closure(manager_, &ValidatorManager::get_out_msg_queue_size, blocks[i],
+                            [promise = ig.get_promise(), res, i, id = blocks[i]](td::Result<td::uint64> R) mutable {
+                              TRY_RESULT_PROMISE(promise, value, std::move(R));
+                              res->at(i) = create_tl_object<lite_api::liteServer_outMsgQueueSize>(
+                                  create_tl_lite_block_id(id), static_cast<td::uint32>(value));
+                              promise.set_value(td::Unit());
+                            });
+  }
+  ig.add_promise([Self = actor_id(this), res](td::Result<td::Unit> R) {
+    if (R.is_error()) {
+      td::actor::send_closure(Self, &LiteQuery::abort_query, R.move_as_error());
+      return;
+    }
+    td::actor::send_closure(Self, &LiteQuery::finish_query,
+                            create_serialize_tl_object<lite_api::liteServer_outMsgQueueSizes>(
+                                std::move(*res), Collator::get_skip_externals_queue_size()),
+                            false);
+  });
+}
 
 void LiteQuery::perform_getBlockOutMsgQueueSize(int mode, BlockIdExt blkid) {
   LOG(INFO) << "started a getBlockOutMsgQueueSize(" << blkid.to_str() << ", " << mode << ") liteserver query";

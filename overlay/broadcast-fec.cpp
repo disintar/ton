@@ -46,12 +46,13 @@ class BroadcastFec : public td::ListNode {
 
  public:
   BroadcastFec(Overlay::BroadcastHash hash, Overlay::BroadcastDataHash data_hash, td::uint32 flags, td::uint32 date,
-               PublicKey src, fec::FecType fec_type)
+               PublicKey src, std::shared_ptr<Certificate> certificate, fec::FecType fec_type)
       : hash_(hash)
       , data_hash_(data_hash)
       , flags_(flags)
       , date_(date)
       , src_(std::move(src))
+      , certificate_(std::move(certificate))
       , fec_type_(std::move(fec_type)) {
   }
 
@@ -179,6 +180,7 @@ class BroadcastFec : public td::ListNode {
   td::uint32 flags_;
   td::uint32 date_;
   PublicKey src_;
+  std::shared_ptr<Certificate> certificate_;
   fec::FecType fec_type_;
 
   bool ready_ = false;
@@ -206,7 +208,7 @@ void BroadcastFec::broadcast_checked(OverlayImpl *overlay, td::Result<td::Unit> 
     td::actor::send_closure(actor_id(overlay), &OverlayImpl::update_peer_err_ctr, src_peer_id_, true);
     return;
   }
-  overlay->deliver_broadcast(src_.compute_short_id(), data_.clone());
+  overlay->deliver_broadcast(src_.compute_short_id(), data_.clone(), {});
   while (!parts_.empty()) {
     distribute_part(overlay, parts_.begin()->first);
   }
@@ -230,6 +232,7 @@ td::Status BroadcastFec::distribute_part(OverlayImpl *overlay, td::uint32 seqno)
   auto nodes = overlay->get_neighbours(overlay->propagate_broadcast_to());
   auto manager = overlay->overlay_manager();
 
+  auto &limiter = overlay->get_broadcasts_limiter(src_.compute_short_id(), certificate_.get());
   for (auto &n : nodes) {
     if (neighbour_completed(n)) {
       continue;
@@ -237,12 +240,14 @@ td::Status BroadcastFec::distribute_part(OverlayImpl *overlay, td::uint32 seqno)
     if (neighbour_received(n)) {
       td::actor::send_closure(manager, &OverlayManager::send_message, n, overlay->local_id(), overlay->overlay_id(),
                               data_short.clone());
+      limiter.register_out_traffic(data_short.size());
     } else {
       if (hash_.count_leading_zeroes() >= 12) {
         VLOG(OVERLAY_INFO) << "broadcast " << hash_ << ": sending part " << seqno << " to " << n;
       }
       td::actor::send_closure(manager, &OverlayManager::send_message, n, overlay->local_id(), overlay->overlay_id(),
                               data.clone());
+      limiter.register_out_traffic(data.size());
     }
   }
   return td::Status::OK();
@@ -305,7 +310,7 @@ td::Status BroadcastFecPart::run_checks(OverlayImpl *overlay, BroadcastFec *bcas
   if (bcast && bcast->received_part(seqno_)) {
     return td::Status::Error(ErrorCode::notready, "duplicate part");
   }
-  auto r = overlay->check_source_eligible(source_, cert_.get(), broadcast_size_, true);
+  auto r = overlay->check_source_eligible(source_, cert_.get(), broadcast_size_, true, src_peer_id_);
   if (r == BroadcastCheckResult::Forbidden) {
     return td::Status::Error(ErrorCode::error, "broadcast is forbidden");
   }
@@ -315,8 +320,8 @@ td::Status BroadcastFecPart::run_checks(OverlayImpl *overlay, BroadcastFec *bcas
   } else if (bcast) {
     TRY_STATUS(bcast->is_eligible_sender(source_));
   }
-  TRY_RESULT(encryptor, overlay->get_encryptor(source_));
-  TRY_STATUS(encryptor->check_signature(to_sign().as_slice(), signature_.as_slice()));
+  TD_PERF_COUNTER(check_signature_overlay_broadcast_fec);
+  TRY_STATUS(overlay->check_signature_from_peer(source_, to_sign(), signature_, src_peer_id_));
   return td::Status::OK();
 }
 
@@ -351,7 +356,7 @@ td::Status BroadcastFecPart::run(OverlayImpl *overlay, BroadcastFec &bcast) {
             });
         overlay->check_broadcast(bcast.src_.compute_short_id(), R.move_as_ok(), std::move(P));
       } else {
-        overlay->deliver_broadcast(bcast.src_.compute_short_id(), R.move_as_ok());
+        overlay->deliver_broadcast(bcast.src_.compute_short_id(), R.move_as_ok(), {});
       }
     }
   }
@@ -485,6 +490,9 @@ td::Status BroadcastsFec::process_broadcast(OverlayImpl *overlay, adnl::AdnlNode
   if (fec_type.size() != (td::uint32)broadcast->data_size_) {
     return td::Status::Error("data size mismatch");
   }
+  if ((size_t)broadcast->seqno_ >= fec_type.symbols_count() * 2 + 4) {
+    return td::Status::Error("too big seqno");
+  }
   auto broadcast_hash = compute_broadcast_id(source.compute_short_id(), fec_type, broadcast->data_hash_,
                                              broadcast->data_size_, broadcast->flags_);
   auto part_hash = compute_broadcast_part_id(broadcast_hash, part_data_hash, broadcast->seqno_);
@@ -557,7 +565,9 @@ td::Status BroadcastsFec::process(OverlayImpl *overlay, BroadcastFecPart &part) 
     }
     TRY_STATUS(part.run_checks(overlay, nullptr));
     auto bcast = std::make_unique<BroadcastFec>(part.broadcast_hash_, part.broadcast_data_hash_, part.flags_,
-                                                part.date_, part.source_, part.fec_type_);
+                                                part.date_, part.source_, part.cert_, part.fec_type_);
+    overlay->get_broadcasts_limiter(part.source_.compute_short_id(), part.cert_.get())
+        .register_broadcast(part.broadcast_size_);
     TRY_STATUS(bcast->run_checks());
     TRY_STATUS(bcast->init_fec_type());
     lru_.put(bcast.get());
