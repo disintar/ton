@@ -36,14 +36,20 @@ namespace ton::validator {
       }
 
       const std::string key = getKey(id);
-      {
-        std::lock_guard<std::mutex> lock(maps_mtx_);
-        LOG(WARNING) << "[publish-apply] ready block=" << id.to_str() << " t=" << td::Time::now();
-        stored_applied_[key] = id;
-      }
-      enqueuePublishBlockApplied(id.id.workchain, id.id.shard, parseBlockApplied(id));
+      const double started_at = td::Time::now();
+      LOG(WARNING) << "[publish-apply] ready block=" << id.to_str() << " t=" << started_at;
+
+      auto promise_try_sync = td::PromiseCreator::lambda(
+          [this, key, id, started_at](td::Result<std::tuple<td::string, td::string>> sync_result) mutable {
+            LOG(WARNING) << "[publish-apply] sync-done block=" << id.to_str()
+                         << " duration_ms=" << (td::Time::now() - started_at) * 1000.0
+                         << " root_hash=" << id.root_hash.to_hex();
+            onAppliedSyncResult(std::move(key), id, std::move(sync_result));
+          });
+      td::actor::send_closure(cluster_sync_, &ClusterPublishSync::sync_block_state,
+                              std::make_tuple(id.root_hash, parseBlockApplied(id), td::string{}),
+                              std::move(promise_try_sync));
       P.set_value(std::make_tuple("", ""));
-      maybePublishBlockData(key);
     }
 
     void BlockParser::storeBlockData(ConstBlockHandle handle, td::Ref<BlockData> block,
@@ -394,6 +400,27 @@ namespace ton::validator {
       if (!state_json.empty()) {
         LOG(WARNING) << "[publish-state] kafka-enqueue block=" << key;
         enqueuePublishBlockState(wc, shard, state_json);
+      }
+      maybePublishBlockData(std::move(key));
+    }
+
+    void BlockParser::onAppliedSyncResult(std::string key, BlockIdExt id,
+                                          td::Result<std::tuple<td::string, td::string>> R) {
+      td::string applied_json;
+      {
+        std::lock_guard<std::mutex> lock(maps_mtx_);
+        if (R.is_error()) {
+          return;
+        }
+
+        auto synced = R.move_as_ok();
+        applied_json = std::get<0>(synced);
+        stored_applied_[key] = id;
+      }
+
+      if (!applied_json.empty()) {
+        LOG(WARNING) << "[publish-apply] kafka-enqueue block=" << key;
+        enqueuePublishBlockApplied(id.id.workchain, id.id.shard, applied_json);
       }
       maybePublishBlockData(std::move(key));
     }

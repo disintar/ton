@@ -54,7 +54,7 @@ void PrometheusExporter::on_request(RequestPtr request, PayloadPtr, td::Promise<
   }
 
   response->add_header({"Transfer-Encoding", "Chunked"});
-  response->add_header({"Content-Type", "application/openmetrics-text; version=1.0.0; charset=utf-8"});
+  response->add_header({"Content-Type", "application/openmetrics-text; version=1.0.0; charset=utf-8; escaping=allow-utf-8"});
   response->complete_parse_header();
 
   auto payload = response->create_empty_payload().move_as_ok();

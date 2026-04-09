@@ -163,6 +163,8 @@ namespace ton {
 	            void onStateParsed(std::string key, BlockIdExt id,
 	                               td::Result<std::tuple<td::Bits256, td::string, td::string>> R);
 	            void onStateSyncResult(std::string key, td::Result<std::tuple<td::string, td::string>> R);
+	            void onAppliedSyncResult(std::string key, BlockIdExt id,
+	                                     td::Result<std::tuple<td::string, td::string>> R);
 	            void maybePublishBlockData(std::string key);
 	            void cleanupPublishedStateLocked(const std::string &key);
 	            void handleBlockProgress(BlockIdExt id, td::Promise<std::tuple<td::string, td::string>> P);

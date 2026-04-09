@@ -114,7 +114,7 @@ std::string ActorStats::prepare_stats() {
   }
 
   sb << "\n";
-  sb << "================================= ACTORS STATS =================================\n";
+  sb << "#================================= ACTORS STATS =================================\n";
   ActorTypeStat sum_stat_forever;
   ActorTypeStat sum_stat_10m;
   ActorTypeStat sum_stat_10s;

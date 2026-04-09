@@ -1,6 +1,29 @@
 #include "validator-engine/prometheus/PrometheusExporterActor.h"
 
 namespace ton {
+    namespace {
+      std::string sanitize_metrics_blob(td::Slice raw) {
+        std::stringstream in(raw.str());
+        std::stringstream out;
+        std::string line;
+
+        while (std::getline(in, line)) {
+          if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+          }
+
+          auto first_non_space = line.find_first_not_of(" \t");
+          if (first_non_space != std::string::npos && line[first_non_space] == '=') {
+            out << '#';
+          }
+
+          out << line << '\n';
+        }
+
+        return out.str();
+      }
+    }  // namespace
+
     std::mutex status_mutex;
 
     std::shared_ptr<TonNodeStatus> get_ton_node_status() {
@@ -22,11 +45,11 @@ namespace ton {
         ss << x.first << " " << x.second << "\n";
       }
 
-      ss << "\n" << validator_manager_actor_stats;
+      ss << "\n" << sanitize_metrics_blob(validator_manager_actor_stats);
       ss << "\n# Liteserver stats\n\n";
-      ss << "\n" << liteserver_stats;
+      ss << "\n" << sanitize_metrics_blob(liteserver_stats);
       ss << "\n# Liteserver credentials\n\n";
-      ss << "\n" << liteserver_credentials;
+      ss << "\n" << sanitize_metrics_blob(liteserver_credentials);
 
       return ss.str();
     }

@@ -41,7 +41,9 @@ async def main():
         await network.wait_mc_block(seqno=1)
 
         actor_stats = await nodes[0].engine_console.get_actor_stats()
-        assert "= ACTORS STATS =" in actor_stats and "= PERF COUNTERS =" in actor_stats
+        assert "#================================= ACTORS STATS =================================" in actor_stats
+        assert "#================================= PERF COUNTERS ================================" in actor_stats
+        assert actor_stats.rstrip().endswith("# EOF")
 
         _ = await network.wait_block(workchain=0, shard=-(2**63), seqno=1)
 
