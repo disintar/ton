@@ -230,6 +230,25 @@ void WaitBlockState::failed_to_get_prev_state(td::Status reason) {
 void WaitBlockState::got_prev_state(td::Ref<ShardState> state) {
   prev_state_ = std::move(state);
 
+  if (handle_->merge_before() && prev_state_2_.is_null()) {
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
+      if (R.is_error()) {
+        td::actor::send_closure(SelfId, &WaitBlockState::failed_to_get_prev_state,
+                                R.move_as_error_prefix("second prev state wait error: "));
+      } else {
+        td::actor::send_closure(SelfId, &WaitBlockState::got_prev_state_2, R.move_as_ok());
+      }
+    });
+    td::actor::send_closure(manager_, &ValidatorManager::wait_block_state_short, handle_->one_prev(false), priority_,
+                            timeout_, false, std::move(P));
+    return;
+  }
+
+  start();
+}
+
+void WaitBlockState::got_prev_state_2(td::Ref<ShardState> state) {
+  prev_state_2_ = std::move(state);
   start();
 }
 
@@ -304,6 +323,10 @@ void WaitBlockState::apply() {
   td::PerfWarningTimer t{"applyblocktostate", 0.1};
   vm::StoreCellHint hint;
   td::optional<td::Ref<vm::Cell>> prev_root_cell = prev_state_->root_cell();
+  td::optional<td::Ref<vm::Cell>> prev_root_cell_2;
+  if (prev_state_2_.not_null()) {
+    prev_root_cell_2 = prev_state_2_->root_cell();
+  }
   auto S = prev_state_.write().apply_block(handle_->id(), block_, &hint);
   if (S.is_error()) {
     abort_query(S.move_as_error_prefix("apply error: "));
@@ -317,7 +340,8 @@ void WaitBlockState::apply() {
       }
     });
     ConstBlockHandle handle(handle_);
-    publisher->storeComputedBlockState(handle, block_, prev_state_->root_cell(), std::move(prev_root_cell), {},
+    publisher->storeComputedBlockState(handle, block_, prev_state_->root_cell(), std::move(prev_root_cell),
+                                       std::move(prev_root_cell_2),
                                        std::move(P));
   }
 

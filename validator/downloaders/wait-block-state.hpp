@@ -56,6 +56,7 @@ class WaitBlockState : public td::actor::Actor {
   void got_state_from_db(td::Ref<ShardState> data, bool force_reading);
   void got_state_from_static_file(td::Ref<ShardState> state, td::BufferSlice data);
   void got_prev_state(td::Ref<ShardState> state);
+  void got_prev_state_2(td::Ref<ShardState> state);
   void failed_to_get_prev_state(td::Status reason);
   void got_block_data(td::Ref<BlockData> data);
   void failed_to_get_block_data(td::Status reason);
@@ -103,6 +104,7 @@ class WaitBlockState : public td::actor::Actor {
   td::Ref<PersistentStateDescription> persistent_state_desc_;
 
   td::Ref<ShardState> prev_state_;
+  td::Ref<ShardState> prev_state_2_;
   td::Ref<BlockData> block_;
 
   bool reading_from_db_ = false;

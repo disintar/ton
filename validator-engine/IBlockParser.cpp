@@ -93,7 +93,7 @@ namespace ton::validator {
       const auto prev_ids = handle->prev();
       cacheLiveStateLocked(handle->id(), state);
 
-      if (!handle->merge_before() && prev_state && !prev_ids.empty()) {
+      if (prev_state && !prev_ids.empty()) {
         cacheLiveStateLocked(prev_ids[0], prev_state.value());
       }
       if (prev_state_2 && prev_ids.size() > 1) {

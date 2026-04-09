@@ -558,8 +558,22 @@ void AcceptBlockQuery::got_prev_state(td::Ref<ShardState> state) {
   VLOG(VALIDATOR_DEBUG) << "got prev state";
   state_ = std::move(state);
 
+  if (handle_->merge_before() && prev_state_2_.is_null()) {
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
+      check_send_error(SelfId, R) ||
+          td::actor::send_closure_bool(SelfId, &AcceptBlockQuery::got_prev_state_2, R.move_as_ok());
+    });
+    td::actor::send_closure(manager_, &ValidatorManager::wait_block_state_short, handle_->one_prev(false), priority(),
+                            timeout_, false, std::move(P));
+    return;
+  }
+
   state_keep_old_hash_ = state_->root_hash();
   td::optional<td::Ref<vm::Cell>> prev_root_cell = state_->root_cell();
+  td::optional<td::Ref<vm::Cell>> prev_root_cell_2;
+  if (prev_state_2_.not_null()) {
+    prev_root_cell_2 = prev_state_2_->root_cell();
+  }
 
   vm::StoreCellHint hint;
   auto err = state_.write().apply_block(id_, data_, &hint);
@@ -577,7 +591,8 @@ void AcceptBlockQuery::got_prev_state(td::Ref<ShardState> state) {
       }
     });
     ConstBlockHandle handle(handle_);
-    publisher->storeComputedBlockState(handle, data_, state_->root_cell(), std::move(prev_root_cell), {},
+    publisher->storeComputedBlockState(handle, data_, state_->root_cell(), std::move(prev_root_cell),
+                                       std::move(prev_root_cell_2),
                                        std::move(P));
   }
 
@@ -586,6 +601,11 @@ void AcceptBlockQuery::got_prev_state(td::Ref<ShardState> state) {
                             check_send_error(SelfId, R) ||
                                 td::actor::send_closure_bool(SelfId, &AcceptBlockQuery::written_state, R.move_as_ok());
                           });
+}
+
+void AcceptBlockQuery::got_prev_state_2(td::Ref<ShardState> state) {
+  prev_state_2_ = std::move(state);
+  got_prev_state(state_);
 }
 
 void AcceptBlockQuery::written_state(td::Ref<ShardState> upd_state) {

@@ -330,7 +330,9 @@ class ActorTypeStatRef {
     }
     CHECK(in_queue_since);
     auto ts = td::Clocks::rdtsc();
-    ref_->on_delay(ts, ts - in_queue_since);
+    // On some systems TSC values observed on different cores may briefly appear
+    // non-monotonic, so clamp negative deltas instead of underflowing to UINT64_MAX.
+    ref_->on_delay(ts, ts > in_queue_since ? ts - in_queue_since : 0);
   }
   void start_execute() {
     if (!ref_) {

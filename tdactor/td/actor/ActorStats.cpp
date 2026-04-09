@@ -251,7 +251,6 @@ std::string ActorStats::prepare_stats() {
   debug.dump(sb);
 
   for (auto &it : stats) {
-    sb << "\t" << ActorTypeStatManager::get_class_name(it.first.name()) << "\n";
     describe(sb, it.first, ActorTypeStatManager::get_class_name(it.first.name()));
   }
   sb << "\n";

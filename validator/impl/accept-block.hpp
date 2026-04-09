@@ -77,6 +77,7 @@ class AcceptBlockQuery : public td::actor::Actor {
   void written_block_info();
   void got_block_data(td::Ref<BlockData> data);
   void got_prev_state(td::Ref<ShardState> state);
+  void got_prev_state_2(td::Ref<ShardState> state);
   void written_state(td::Ref<ShardState> state);
   void written_block_proof();
   void got_last_mc_block(std::pair<td::Ref<MasterchainState>, BlockIdExt> last);
@@ -113,6 +114,7 @@ class AcceptBlockQuery : public td::actor::Actor {
   Ref<ProofLink> proof_link_;
 
   Ref<ShardState> state_;
+  Ref<ShardState> prev_state_2_;
   Ref<vm::Cell> block_root_;
   LogicalTime lt_;
   UnixTime created_at_;
