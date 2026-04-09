@@ -22,8 +22,10 @@ namespace ton::validator {
 
     BlockParser::~BlockParser() {
       running_ = false;
+      publish_applied_cv_.notify_all();
       publish_blocks_cv_.notify_all();
       publish_states_cv_.notify_all();
+      publish_applied_thread_.join();
       publish_blocks_thread_.join();
       publish_states_thread_.join();
     }
@@ -370,6 +372,7 @@ namespace ton::validator {
 
     void BlockParser::onStateSyncResult(std::string key, td::Result<std::tuple<td::string, td::string>> R) {
       td::string state_json;
+      td::string block_json;
       td::int32 wc = 0;
       unsigned long long shard = 0;
       {
@@ -392,16 +395,24 @@ namespace ton::validator {
         if (!it->second.state_published) {
           it->second.state_published = true;
           state_json = it->second.state_json;
-          wc = it->second.id.id.workchain;
-          shard = it->second.id.id.shard;
         }
+        if (!it->second.block_published) {
+          it->second.block_published = true;
+          block_json = it->second.block_json;
+        }
+        wc = it->second.id.id.workchain;
+        shard = it->second.id.id.shard;
+        cleanupPublishedStateLocked(key);
       }
 
       if (!state_json.empty()) {
         LOG(WARNING) << "[publish-state] kafka-enqueue block=" << key;
         enqueuePublishBlockState(wc, shard, state_json);
       }
-      maybePublishBlockData(std::move(key));
+      if (!block_json.empty()) {
+        LOG(WARNING) << "[publish-block] kafka-enqueue block=" << key;
+        enqueuePublishBlockData(wc, shard, block_json);
+      }
     }
 
     void BlockParser::onAppliedSyncResult(std::string key, BlockIdExt id,
@@ -422,7 +433,6 @@ namespace ton::validator {
         LOG(WARNING) << "[publish-apply] kafka-enqueue block=" << key;
         enqueuePublishBlockApplied(id.id.workchain, id.id.shard, applied_json);
       }
-      maybePublishBlockData(std::move(key));
     }
 
     void BlockParser::maybePublishBlockData(std::string key) {
@@ -440,10 +450,6 @@ namespace ton::validator {
           cleanupPublishedStateLocked(key);
           return;
         }
-        if (stored_applied_.find(key) == stored_applied_.end()) {
-          return;
-        }
-
         parsed_it->second.block_published = true;
         block_json = parsed_it->second.block_json;
         wc = parsed_it->second.id.id.workchain;
@@ -471,7 +477,6 @@ namespace ton::validator {
 
       parsed_states_.erase(parsed_it);
       state_parse_started_.erase(key);
-      stored_applied_.erase(key);
       stored_prev_states_.erase(key);
     }
 
@@ -481,7 +486,6 @@ namespace ton::validator {
         std::lock_guard<std::mutex> lock(maps_mtx_);
         maybeStartStatePublish(id);
       }
-      maybePublishBlockData(getKey(id));
     }
 
     std::string BlockParser::parseBlockApplied(BlockIdExt id) {
