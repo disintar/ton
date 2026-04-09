@@ -6,20 +6,6 @@
 
 namespace ton::validator {
 
-    namespace {
-      bool read_startup_window(const char *name, int fallback) {
-        const char *value = std::getenv(name);
-        if (value == nullptr) {
-          return fallback;
-        }
-        try {
-          return std::stoi(value);
-        } catch (...) {
-          return fallback;
-        }
-      }
-    }
-
     std::string BlockParser::getKey(const BlockIdExt &id) {
       return std::to_string(id.id.workchain) + ":" + std::to_string(id.id.shard) + ":" + std::to_string(id.id.seqno);
     }
@@ -32,17 +18,12 @@ namespace ton::validator {
             : publisher_(std::move(publisher)), publish_applied_thread_(&BlockParser::publish_applied_worker, this),
               publish_blocks_thread_(&BlockParser::publish_blocks_worker, this),
               publish_states_thread_(&BlockParser::publish_states_worker, this) {
-      const int startup_before = read_startup_window("STARTUP_BLOCKS_DOWNLOAD_BEFORE", 1);
-      const int startup_after = read_startup_window("STARTUP_BLOCKS_DOWNLOAD_AFTER", 1);
-      fresh_only_mode_ = (startup_before == 0 && startup_after == 0);
     }
 
     BlockParser::~BlockParser() {
       running_ = false;
-      publish_applied_cv_.notify_all();
       publish_blocks_cv_.notify_all();
       publish_states_cv_.notify_all();
-      publish_applied_thread_.join();
       publish_blocks_thread_.join();
       publish_states_thread_.join();
     }
@@ -53,27 +34,16 @@ namespace ton::validator {
         P.set_value(std::make_tuple("", ""));
         return;
       }
-      if (shouldSuppressPublishing()) {
-        LOG(WARNING) << "Skip applied during startup sync: " << id.to_str();
-        P.set_value(std::make_tuple("", ""));
-        return;
-      }
 
       const std::string key = getKey(id);
-      const double started_at = td::Time::now();
-      LOG(WARNING) << "[publish-apply] ready block=" << id.to_str() << " t=" << started_at;
-
-      auto promise_try_sync = td::PromiseCreator::lambda(
-          [this, key, id, started_at](td::Result<std::tuple<td::string, td::string>> sync_result) mutable {
-            LOG(WARNING) << "[publish-apply] sync-done block=" << id.to_str()
-                         << " duration_ms=" << (td::Time::now() - started_at) * 1000.0
-                         << " root_hash=" << id.root_hash.to_hex();
-            onAppliedSyncResult(std::move(key), id, std::move(sync_result));
-          });
-      td::actor::send_closure(cluster_sync_, &ClusterPublishSync::sync_block_state,
-                              std::make_tuple(id.root_hash, parseBlockApplied(id), td::string{}),
-                              std::move(promise_try_sync));
+      {
+        std::lock_guard<std::mutex> lock(maps_mtx_);
+        LOG(WARNING) << "[publish-apply] ready block=" << id.to_str() << " t=" << td::Time::now();
+        stored_applied_[key] = id;
+      }
+      enqueuePublishBlockApplied(id.id.workchain, id.id.shard, parseBlockApplied(id));
       P.set_value(std::make_tuple("", ""));
+      maybePublishBlockData(key);
     }
 
     void BlockParser::storeBlockData(ConstBlockHandle handle, td::Ref<BlockData> block,
@@ -85,11 +55,6 @@ namespace ton::validator {
       }
 
       if (!startup_replay_mode_) {
-        P.set_value(std::make_tuple("", ""));
-        return;
-      }
-      if (shouldSuppressPublishing()) {
-        LOG(WARNING) << "Skip startup block data during startup sync: " << handle->id().to_str();
         P.set_value(std::make_tuple("", ""));
         return;
       }
@@ -120,11 +85,6 @@ namespace ton::validator {
         P.set_value(std::make_tuple("", ""));
         return;
       }
-      if (shouldSuppressPublishing()) {
-        LOG(WARNING) << "Skip computed state during startup sync: " << handle->id().to_str();
-        P.set_value(std::make_tuple("", ""));
-        return;
-      }
 
       std::lock_guard<std::mutex> lock(maps_mtx_);
       const double now = td::Time::now();
@@ -133,7 +93,7 @@ namespace ton::validator {
       const auto prev_ids = handle->prev();
       cacheLiveStateLocked(handle->id(), state);
 
-      if (prev_state && !prev_ids.empty()) {
+      if (!handle->merge_before() && prev_state && !prev_ids.empty()) {
         cacheLiveStateLocked(prev_ids[0], prev_state.value());
       }
       if (prev_state_2 && prev_ids.size() > 1) {
@@ -178,11 +138,6 @@ namespace ton::validator {
         P.set_value(std::make_tuple("", ""));
         return;
       }
-      if (shouldSuppressPublishing()) {
-        LOG(WARNING) << "Skip startup state during startup sync: " << handle->id().to_str();
-        P.set_value(std::make_tuple("", ""));
-        return;
-      }
 
       std::lock_guard<std::mutex> lock(maps_mtx_);
       LOG(WARNING) << "[publish-state] rootdb-ready block=" << handle->id().to_str() << " t=" << td::Time::now();
@@ -211,11 +166,6 @@ namespace ton::validator {
       }
 
       if (!startup_replay_mode_) {
-        P.set_value(std::make_tuple("", ""));
-        return;
-      }
-      if (shouldSuppressPublishing()) {
-        LOG(WARNING) << "Skip startup state-with-prev during startup sync: " << handle->id().to_str();
         P.set_value(std::make_tuple("", ""));
         return;
       }
@@ -401,17 +351,6 @@ namespace ton::validator {
       LOG(WARNING) << "[publish-state] index-done block=" << id.to_str()
                    << " duration_ms=" << (started_at - parse_started_at) * 1000.0;
 
-      if (fresh_only_mode_ && !startup_replay_mode_ && !isFreshBlockJson(std::get<1>(result))) {
-        LOG(WARNING) << "[publish-state] skip-stale block=" << id.to_str();
-        std::lock_guard<std::mutex> lock(maps_mtx_);
-        auto it = parsed_states_.find(key);
-        if (it != parsed_states_.end()) {
-          it->second.skip_due_to_sync = true;
-        }
-        cleanupPublishedStateLocked(key);
-        return;
-      }
-
       auto promise_try_sync = td::PromiseCreator::lambda(
           [this, key, root_hash, started_at, id](td::Result<std::tuple<td::string, td::string>> sync_result) mutable {
             LOG(WARNING) << "[publish-state] sync-done block=" << id.to_str()
@@ -425,9 +364,6 @@ namespace ton::validator {
 
     void BlockParser::onStateSyncResult(std::string key, td::Result<std::tuple<td::string, td::string>> R) {
       td::string state_json;
-      td::string block_json;
-      td::string applied_json;
-      BlockIdExt applied_id;
       td::int32 wc = 0;
       unsigned long long shard = 0;
       {
@@ -450,64 +386,16 @@ namespace ton::validator {
         if (!it->second.state_published) {
           it->second.state_published = true;
           state_json = it->second.state_json;
+          wc = it->second.id.id.workchain;
+          shard = it->second.id.id.shard;
         }
-        if (!it->second.block_published) {
-          it->second.block_published = true;
-          block_json = it->second.block_json;
-        }
-        auto applied_it = pending_applied_.find(key);
-        if (applied_it != pending_applied_.end()) {
-          applied_id = applied_it->second.first;
-          applied_json = applied_it->second.second;
-          pending_applied_.erase(applied_it);
-        }
-        wc = it->second.id.id.workchain;
-        shard = it->second.id.id.shard;
-        cleanupPublishedStateLocked(key);
       }
 
       if (!state_json.empty()) {
         LOG(WARNING) << "[publish-state] kafka-enqueue block=" << key;
         enqueuePublishBlockState(wc, shard, state_json);
       }
-      if (!block_json.empty()) {
-        LOG(WARNING) << "[publish-block] kafka-enqueue block=" << key;
-        enqueuePublishBlockData(wc, shard, block_json);
-      }
-      if (!applied_json.empty()) {
-        LOG(WARNING) << "[publish-apply] kafka-enqueue block=" << key;
-        enqueuePublishBlockApplied(applied_id.id.workchain, applied_id.id.shard, applied_json);
-      }
-    }
-
-    void BlockParser::onAppliedSyncResult(std::string key, BlockIdExt id,
-                                          td::Result<std::tuple<td::string, td::string>> R) {
-      td::string applied_json;
-      {
-        std::lock_guard<std::mutex> lock(maps_mtx_);
-        if (R.is_error()) {
-          pending_applied_.erase(key);
-          return;
-        }
-
-        auto synced = R.move_as_ok();
-        applied_json = std::get<0>(synced);
-        if (fresh_only_mode_) {
-          pending_applied_[key] = {id, applied_json};
-          auto parsed_it = parsed_states_.find(key);
-          if (parsed_it != parsed_states_.end() && parsed_it->second.publish_allowed && !parsed_it->second.skip_due_to_sync) {
-            // state sync already released this key path; publish apply now
-            pending_applied_.erase(key);
-          } else {
-            applied_json.clear();
-          }
-        }
-      }
-
-      if (!applied_json.empty()) {
-        LOG(WARNING) << "[publish-apply] kafka-enqueue block=" << key;
-        enqueuePublishBlockApplied(id.id.workchain, id.id.shard, applied_json);
-      }
+      maybePublishBlockData(std::move(key));
     }
 
     void BlockParser::maybePublishBlockData(std::string key) {
@@ -525,6 +413,10 @@ namespace ton::validator {
           cleanupPublishedStateLocked(key);
           return;
         }
+        if (stored_applied_.find(key) == stored_applied_.end()) {
+          return;
+        }
+
         parsed_it->second.block_published = true;
         block_json = parsed_it->second.block_json;
         wc = parsed_it->second.id.id.workchain;
@@ -552,8 +444,8 @@ namespace ton::validator {
 
       parsed_states_.erase(parsed_it);
       state_parse_started_.erase(key);
+      stored_applied_.erase(key);
       stored_prev_states_.erase(key);
-      pending_applied_.erase(key);
     }
 
     void BlockParser::handleBlockProgress(BlockIdExt id, td::Promise<std::tuple<td::string, td::string>> P) {
@@ -562,6 +454,7 @@ namespace ton::validator {
         std::lock_guard<std::mutex> lock(maps_mtx_);
         maybeStartStatePublish(id);
       }
+      maybePublishBlockData(getKey(id));
     }
 
     std::string BlockParser::parseBlockApplied(BlockIdExt id) {
@@ -580,21 +473,6 @@ namespace ton::validator {
       }
 
       return dump;
-    }
-
-    bool BlockParser::shouldSuppressPublishing() const {
-      return fresh_only_mode_ && startup_replay_mode_;
-    }
-
-    bool BlockParser::isFreshBlockJson(const td::string &block_json) const {
-      try {
-        const auto parsed = json::parse(block_json);
-        const auto gen_utime = parsed.at("BlockInfo").at("gen_utime").get<double>();
-        return gen_utime >= (td::Time::now() - 5.0);
-      } catch (const std::exception &e) {
-        LOG(WARNING) << "Failed to parse block freshness from json: " << e.what();
-        return false;
-      }
     }
 
     void BlockParser::enqueuePublishBlockApplied(td::int32 wc, unsigned long long shard, const std::string &json) {
