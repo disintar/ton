@@ -559,6 +559,7 @@ void AcceptBlockQuery::got_prev_state(td::Ref<ShardState> state) {
   state_ = std::move(state);
 
   state_keep_old_hash_ = state_->root_hash();
+  td::optional<td::Ref<vm::Cell>> prev_root_cell = state_->root_cell();
 
   vm::StoreCellHint hint;
   auto err = state_.write().apply_block(id_, data_, &hint);
@@ -568,6 +569,16 @@ void AcceptBlockQuery::got_prev_state(td::Ref<ShardState> state) {
   }
 
   handle_->set_split(state_->before_split());
+
+  if (auto publisher = manager_.get_actor_unsafe().get_block_publisher()) {
+    auto P = td::PromiseCreator::lambda([handle_id = handle_->id()](td::Result<std::tuple<std::string, std::string>> R) {
+      if (R.is_error()) {
+        LOG(ERROR) << "Failed to register early computed state for publish " << handle_id.to_str() << ": " << R.error();
+      }
+    });
+    ConstBlockHandle handle(handle_);
+    publisher->storeComputedBlockState(handle, data_, state_->root_cell(), std::move(prev_root_cell), std::move(P));
+  }
 
   td::actor::send_closure(manager_, &ValidatorManager::set_block_state, handle_, state_, std::move(hint),
                           [SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {

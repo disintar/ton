@@ -1,6 +1,7 @@
 #include "BlockPublisherKafka.hpp"
 #include "blockchain-indexer/json-utils.hpp"
 #include "tdutils/td/utils/Random.h"
+#include "td/utils/Time.h"
 
 namespace ton::validator {
 
@@ -16,7 +17,7 @@ namespace ton::validator {
 
     void BlockPublisherKafka::publishBlockApplied(int wc, unsigned long long shard, std::string json) {
       std::lock_guard<std::mutex> guard(net_mtx);
-      LOG(DEBUG) << "[block-applied] Sending " << json.size() << " bytes to Kafka";
+      const auto started_at = td::Time::now();
       try {
         const char *value = getenv("KAFKA_APPLY_TOPIC");
 
@@ -43,6 +44,8 @@ namespace ton::validator {
 
         producer.produce(cppkafka::MessageBuilder(value ? value : "block-applied-mainnet").partition(p).payload(json));
         deliver();
+        LOG(WARNING) << "[publish-apply] kafka-done wc=" << wc << " shard=" << shard
+                     << " duration_ms=" << (td::Time::now() - started_at) * 1000.0;
       } catch (std::exception &e) {
         const auto id = to_string(json::parse(json)["id"]);
         LOG(ERROR) << "Error while sending block applied (" << id << ") to kafka: " << e.what();
@@ -61,7 +64,7 @@ namespace ton::validator {
 
     void BlockPublisherKafka::publishBlockData(int wc, unsigned long long shard, std::string json) {
       std::lock_guard<std::mutex> guard(net_mtx);
-      LOG(DEBUG) << "[block-data] Sending " << json.size() << " bytes to Kafka";
+      const auto started_at = td::Time::now();
       try {
         const char *value = getenv("KAFKA_BLOCK_TOPIC");
 
@@ -83,6 +86,8 @@ namespace ton::validator {
 
         producer.produce(cppkafka::MessageBuilder(value ? value : "block-data-mainnet").partition(p).payload(json));
         deliver();
+        LOG(WARNING) << "[publish-block] kafka-done wc=" << wc << " shard=" << shard
+                     << " duration_ms=" << (td::Time::now() - started_at) * 1000.0;
       } catch (std::exception &e) {
         const auto id = to_string(json::parse(json)["id"]);
         LOG(ERROR) << "Error while sending block data (" << id << ") to kafka: " << e.what();
@@ -117,7 +122,7 @@ namespace ton::validator {
 
     void BlockPublisherKafka::publishBlockState(int wc, unsigned long long shard, std::string json) {
       std::lock_guard<std::mutex> guard(net_mtx);
-      LOG(DEBUG) << "[block-state] Sending " << json.size() << " bytes to Kafka";
+      const auto started_at = td::Time::now();
       try {
         const char *value = getenv("KAFKA_STATE_TOPIC");
 
@@ -144,6 +149,8 @@ namespace ton::validator {
 
         producer.produce(cppkafka::MessageBuilder(value ? value : "block-state-mainnet").partition(p).payload(json));
         deliver();
+        LOG(WARNING) << "[publish-state] kafka-done wc=" << wc << " shard=" << shard
+                     << " duration_ms=" << (td::Time::now() - started_at) * 1000.0;
       } catch (std::exception &e) {
         const auto id = to_string(json::parse(json)["id"]);
         LOG(ERROR) << "Error while sending block state (" << id << ") to kafka: " << e.what();

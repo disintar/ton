@@ -303,10 +303,21 @@ void WaitBlockState::apply() {
   TD_PERF_COUNTER(apply_block_to_state);
   td::PerfWarningTimer t{"applyblocktostate", 0.1};
   vm::StoreCellHint hint;
+  td::optional<td::Ref<vm::Cell>> prev_root_cell = prev_state_->root_cell();
   auto S = prev_state_.write().apply_block(handle_->id(), block_, &hint);
   if (S.is_error()) {
     abort_query(S.move_as_error_prefix("apply error: "));
     return;
+  }
+
+  if (auto publisher = manager_.get_actor_unsafe().get_block_publisher()) {
+    auto P = td::PromiseCreator::lambda([handle_id = handle_->id()](td::Result<std::tuple<std::string, std::string>> R) {
+      if (R.is_error()) {
+        LOG(ERROR) << "Failed to register early wait-state for publish " << handle_id.to_str() << ": " << R.error();
+      }
+    });
+    ConstBlockHandle handle(handle_);
+    publisher->storeComputedBlockState(handle, block_, prev_state_->root_cell(), std::move(prev_root_cell), std::move(P));
   }
 
   td::actor::send_closure(manager_, &ValidatorManager::set_block_state, handle_, prev_state_, std::move(hint),

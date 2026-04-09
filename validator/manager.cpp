@@ -2260,66 +2260,30 @@ void ValidatorManagerImpl::completed_prestart_sync() {
               auto last_prev_state = prev_states.back();
               prev_states.pop_back();
 
-              const auto shard = last_handle->id().id.shard;
-              const auto wc = last_handle->id().id.workchain;
-
-              // TODO: store promises in BlockParserAsync
-              auto P = td::PromiseCreator::lambda(
-                  [publisher_ = publisher, shard, wc](td::Result<std::tuple<std::string, std::string>> R) {
-                    if (R.is_ok()) {
-                      const auto answer = R.move_as_ok();
-
-                      // skip
-                      if (!std::get<0>(answer).empty()) {
-                        const auto f = R.move_as_ok();
-                        auto publisher = publisher_->get();
-                        publisher->enqueuePublishBlockData(wc, shard, std::get<0>(answer));
-                        publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
-                      }
-                    } else {
-                      LOG(ERROR) << "Skip publish block!";
-                    }
-                  });
+              auto P = td::PromiseCreator::lambda([handle_id = last_handle->id()](td::Result<std::tuple<std::string, std::string>> R) {
+                if (R.is_error()) {
+                  LOG(ERROR) << "Failed to register startup block data for publish " << handle_id.to_str() << ": "
+                             << R.error();
+                }
+              });
 
               publisher->get()->storeBlockData(last_handle, last_data, std::move(P));
 
-              // TODO: store promises in BlockParserAsync
-              auto P2 = td::PromiseCreator::lambda(
-                  [publisher_ = publisher, shard, wc](td::Result<std::tuple<std::string, std::string>> R) {
-                    if (R.is_ok()) {
-                      const auto answer = R.move_as_ok();
-
-                      // skip
-                      if (!std::get<0>(answer).empty()) {
-                        const auto f = R.move_as_ok();
-                        auto publisher = publisher_->get();
-                        publisher->enqueuePublishBlockData(wc, shard, std::get<0>(answer));
-                        publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
-                      }
-                    } else {
-                      LOG(ERROR) << "Skip publish block!";
-                    }
-                  });
+              auto P2 = td::PromiseCreator::lambda([handle_id = last_handle->id()](td::Result<std::tuple<std::string, std::string>> R) {
+                if (R.is_error()) {
+                  LOG(ERROR) << "Failed to register startup state for publish " << handle_id.to_str() << ": "
+                             << R.error();
+                }
+              });
 
               publisher->get()->storeBlockStateWithPrev(last_handle, last_prev_state, last_state, std::move(P2));
 
-              // TODO: store promises in BlockParserAsync
-              auto P3 = td::PromiseCreator::lambda(
-                  [publisher_ = publisher, shard, wc](td::Result<std::tuple<std::string, std::string>> R) {
-                    if (R.is_ok()) {
-                      const auto answer = R.move_as_ok();
-
-                      // skip
-                      if (!std::get<0>(answer).empty()) {
-                        const auto f = R.move_as_ok();
-                        auto publisher = publisher_->get();
-                        publisher->enqueuePublishBlockData(wc, shard, std::get<0>(answer));
-                        publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
-                      }
-                    } else {
-                      LOG(ERROR) << "Skip publish block!";
-                    }
-                  });
+              auto P3 = td::PromiseCreator::lambda([handle_id = last_handle->id()](td::Result<std::tuple<std::string, std::string>> R) {
+                if (R.is_error()) {
+                  LOG(ERROR) << "Failed to register startup applied block for publish " << handle_id.to_str() << ": "
+                             << R.error();
+                }
+              });
 
               publisher->get()->storeBlockApplied(last_handle->id(), std::move(P3));
             }

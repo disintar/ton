@@ -7,6 +7,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <functional>
+#include <set>
 #include "validator/interfaces/block-handle.h"
 #include "validator/interfaces/block.h"
 #include "validator/interfaces/shard.h"
@@ -43,15 +44,18 @@ namespace ton {
 
             ~BlockParser();
 
-        public:
-            void storeBlockApplied(BlockIdExt id, td::Promise<std::tuple<td::string, td::string>> P);
+	        public:
+	            void storeBlockApplied(BlockIdExt id, td::Promise<std::tuple<td::string, td::string>> P);
 
             void set_cluster_sync(td::actor::ActorId<ClusterPublishSync> sync_actor) {
               cluster_sync_ = std::move(sync_actor);
             }
 
-            void storeBlockData(ConstBlockHandle handle, td::Ref<BlockData> block,
-                                td::Promise<std::tuple<td::string, td::string>> P);
+	            void storeBlockData(ConstBlockHandle handle, td::Ref<BlockData> block,
+	                                td::Promise<std::tuple<td::string, td::string>> P);
+	            void storeComputedBlockState(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state,
+	                                         td::optional<td::Ref<vm::Cell>> prev_state,
+	                                         td::Promise<std::tuple<td::string, td::string>> P);
 
             bool process_out_msgs(const std::vector<json> &data);
 
@@ -117,10 +121,34 @@ namespace ton {
 
             void enqueuePublishBlockState(td::int32 wc, unsigned long long shard, const std::string &json);
 
-        private:
-            void handleBlockProgress(BlockIdExt id, td::Promise<std::tuple<td::string, td::string>> P);
+	        private:
+		            struct ParsedBlockState {
+		              BlockIdExt id;
+		              td::string block_json;
+		              td::string state_json;
+		              bool publish_allowed{false};
+		              bool block_published{false};
+		              bool state_published{false};
+		              bool skip_due_to_sync{false};
+		              double state_ready_at{0.0};
+		              double parse_started_at{0.0};
+		              double parse_finished_at{0.0};
+		              double sync_started_at{0.0};
+		            };
 
-            std::string parseBlockApplied(BlockIdExt id);
+		            static std::string getKey(const BlockIdExt &id);
+		            void startStatePublishLocked(const std::string &key, const BlockIdExt &id, ConstBlockHandle handle,
+		                                         td::Ref<BlockData> data, td::Ref<vm::Cell> state,
+		                                         td::optional<td::Ref<vm::Cell>> prev_state_opt, double state_ready_at);
+		            void maybeStartStatePublish(const BlockIdExt &id);
+	            void onStateParsed(std::string key, BlockIdExt id,
+	                               td::Result<std::tuple<td::Bits256, td::string, td::string>> R);
+	            void onStateSyncResult(std::string key, td::Result<std::tuple<td::string, td::string>> R);
+	            void maybePublishBlockData(std::string key);
+	            void cleanupPublishedStateLocked(const std::string &key);
+	            void handleBlockProgress(BlockIdExt id, td::Promise<std::tuple<td::string, td::string>> P);
+
+	            std::string parseBlockApplied(BlockIdExt id);
 
             void publish_applied_worker();
 
@@ -135,11 +163,13 @@ namespace ton {
             std::map<unsigned long long, int> shard_to_partition{};
             int max_partition = 0;
 
-            std::mutex maps_mtx_;
-            std::map<std::string, BlockIdExt> stored_applied_;
-            std::map<std::string, std::vector<std::pair<ConstBlockHandle, td::Ref<BlockData>>>> stored_blocks_;      // multimap?
-            std::map<std::string, std::vector<std::pair<ConstBlockHandle, td::Ref<vm::Cell>>>> stored_states_;       // multimap?
-            std::map<std::string, std::vector<std::pair<ConstBlockHandle, td::Ref<vm::Cell>>>> stored_prev_states_;  // multimap?
+	            std::mutex maps_mtx_;
+	            std::map<std::string, BlockIdExt> stored_applied_;
+	            std::map<std::string, std::vector<std::pair<ConstBlockHandle, td::Ref<BlockData>>>> stored_blocks_;      // multimap?
+	            std::map<std::string, std::vector<std::pair<ConstBlockHandle, td::Ref<vm::Cell>>>> stored_states_;       // multimap?
+	            std::map<std::string, std::vector<std::pair<ConstBlockHandle, td::Ref<vm::Cell>>>> stored_prev_states_;  // multimap?
+	            std::map<std::string, ParsedBlockState> parsed_states_;
+	            std::set<std::string> state_parse_started_;
 
             // mb rewrite with https://github.com/andreiavrammsd/cpp-channel
 

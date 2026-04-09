@@ -33,7 +33,6 @@ namespace validator {
 
 void RootDb::store_block_data(BlockHandle handle, td::Ref<BlockData> block, td::Promise<td::Unit> promise) {
   if (publisher_) {
-    const auto shard = handle->id().id.shard;
     const auto wc = handle->id().id.workchain;
 
     if (wc == -1) {
@@ -72,21 +71,11 @@ void RootDb::store_block_data(BlockHandle handle, td::Ref<BlockData> block, td::
 
     const auto handle_id = handle->id();
 
-    auto P = td::PromiseCreator::lambda(
-        [handle_id, publisher = publisher_, shard, wc](td::Result<std::tuple<std::string, std::string>> R) {
-          if (R.is_ok()) {
-            const auto answer = R.move_as_ok();
-
-            // skip
-            if (!std::get<0>(answer).empty()) {
-              LOG(DEBUG) << "Send parsed data&state: " << handle_id.to_str();
-              publisher->enqueuePublishBlockData(wc, shard, std::get<0>(answer));
-              publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
-            }
-          } else {
-            LOG(ERROR) << "Skip publish block!";
-          }
-        });
+    auto P = td::PromiseCreator::lambda([handle_id](td::Result<std::tuple<std::string, std::string>> R) {
+      if (R.is_error()) {
+        LOG(ERROR) << "Failed to register block data for publish " << handle_id.to_str() << ": " << R.error();
+      }
+    });
 
     ConstBlockHandle h(handle);
     publisher_->storeBlockData(h, block, std::move(P));
@@ -296,24 +285,12 @@ void RootDb::store_block_state(BlockHandle handle, td::Ref<ShardState> state, vm
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), next_handle = handle, next_state = state,
                                          publisher = publisher_, prev_id](td::Result<BlockHandle> R) mutable {
       const auto handle_id = next_handle->id();
-      const auto shard = next_handle->id().id.shard;
-      const auto wc = next_handle->id().id.workchain;
 
-      auto final_publish = td::PromiseCreator::lambda(
-          [handle_id, publisher, shard, wc](td::Result<std::tuple<std::string, std::string>> R) {
-            if (R.is_ok()) {
-              const auto answer = R.move_as_ok();
-
-              // skip
-              if (!std::get<0>(answer).empty()) {
-                LOG(DEBUG) << "Send parsed data&state: " << handle_id.to_str();
-                publisher->enqueuePublishBlockData(wc, shard, std::get<0>(answer));
-                publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
-              }
-            } else {
-              LOG(ERROR) << "Skip publish block!";
-            }
-          });
+      auto final_publish = td::PromiseCreator::lambda([handle_id](td::Result<std::tuple<std::string, std::string>> R) {
+        if (R.is_error()) {
+          LOG(ERROR) << "Failed to register state for publish " << handle_id.to_str() << ": " << R.error();
+        }
+      });
 
       if (R.is_error()) {
         LOG(ERROR) << "Can't find handle for prev block state " << prev_id.to_str() << " error: " << R.error().message();

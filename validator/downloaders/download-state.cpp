@@ -486,24 +486,11 @@ void DownloadShardState::written_shard_state(td::Ref<ShardState> state) {
   auto publisher_ = manager_.get_actor_unsafe().get_block_publisher();
   if (publisher_) {
     const auto handle_id = handle_->id();
-    const auto shard = handle_id.id.shard;
-    const auto wc = handle_id.id.workchain;
-
-    auto final_publish = td::PromiseCreator::lambda(
-        [handle_id, publisher = publisher_, shard, wc](td::Result<std::tuple<std::string, std::string>> R) {
-          if (R.is_ok()) {
-            const auto answer = R.move_as_ok();
-
-            // skip
-            if (!std::get<0>(answer).empty()) {
-              LOG(DEBUG) << "Send parsed data&state: " << handle_id.to_str();
-              publisher->enqueuePublishBlockData(wc, shard, std::get<0>(answer));
-              publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
-            }
-          } else {
-            LOG(ERROR) << "Skip publish block!";
-          }
-        });
+    auto final_publish = td::PromiseCreator::lambda([handle_id](td::Result<std::tuple<std::string, std::string>> R) {
+      if (R.is_error()) {
+        LOG(ERROR) << "Failed to register downloaded state for publish " << handle_id.to_str() << ": " << R.error();
+      }
+    });
     publisher_->storeBlockApplied(handle_->id(), std::move(final_publish));
   }
   handle_->set_split(state_->before_split());
