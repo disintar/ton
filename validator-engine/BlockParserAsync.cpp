@@ -233,13 +233,21 @@ namespace ton::validator {
         accounts = td::make_unique<vm::AugmentedDictionary>(vm::load_cell_slice_ref(shard_state.accounts), 256,
                                                             block::tlb::aug_ShardAccounts);
 
-        if (with_prev_state) {
+        if (prev_root_cell) {
           block::gen::ShardStateUnsplit::Record prev_shard_state;
           CHECK(tlb::unpack_cell(std::move(prev_root_cell.value()), prev_shard_state));
 
           prev_accounts = td::make_unique<vm::AugmentedDictionary>(
                   vm::load_cell_slice_ref(prev_shard_state.accounts),
                   256, block::tlb::aug_ShardAccounts);
+        }
+        if (prev_root_cell_2) {
+          block::gen::ShardStateUnsplit::Record prev_shard_state_2;
+          CHECK(tlb::unpack_cell(std::move(prev_root_cell_2.value()), prev_shard_state_2));
+
+          prev_accounts_2 = td::make_unique<vm::AugmentedDictionary>(
+              vm::load_cell_slice_ref(prev_shard_state_2.accounts),
+              256, block::tlb::aug_ShardAccounts);
         }
         if (accounts_keys.empty()) {
           td::actor::send_closure(actor_id(this), &AsyncStateIndexer::finalize);
@@ -279,7 +287,13 @@ namespace ton::validator {
           json data;
 
           if (with_prev_state && tx_count > 1) {
-            auto prev_acc = prev_accounts->lookup(account.cbits(), 256);
+            Ref<vm::CellSlice> prev_acc;
+            if (prev_accounts) {
+              prev_acc = prev_accounts->lookup(account.cbits(), 256);
+            }
+            if ((prev_acc.is_null() || (!prev_acc->have_refs() && prev_acc->empty())) && prev_accounts_2) {
+              prev_acc = prev_accounts_2->lookup(account.cbits(), 256);
+            }
 
             if (prev_acc.not_null() && (prev_acc->have_refs() || !prev_acc->empty())) {
               vm::CellBuilder b;
@@ -927,7 +941,7 @@ namespace ton::validator {
       //                    td::optional<td::Ref<vm::Cell>> prev_root_cell_, std::vector<td::Bits256> accounts_keys_,
       //                    BlockIdExt block_id_, td::Promise<std::string> final_promise_) {
 
-      td::actor::create_actor<AsyncStateIndexer>("AsyncStateIndexer", block_id_string, state, prev_state,
+      td::actor::create_actor<AsyncStateIndexer>("AsyncStateIndexer", block_id_string, state, prev_state, prev_state_2,
                                                  accounts_keys, id,
                                                  [SelfId = actor_id(this)](td::Result<std::string> potential_state) {
                                                      if (potential_state.is_error()) {

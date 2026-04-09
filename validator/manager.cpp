@@ -16,6 +16,7 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
+#include <cstdlib>
 #include <fstream>
 
 #include "auto/tl/lite_api.h"
@@ -2229,7 +2230,16 @@ void ValidatorManagerImpl::completed_prestart_sync() {
                << last_masterchain_block_id_;
 
   if (publisher_ != nullptr) {
-    //new_masterchain_block();
+    bool enable_startup_replay = false;
+    if (const char *env = std::getenv("KAFKA_STARTUP_REPLAY")) {
+      enable_startup_replay = std::atoi(env) == 1;
+    }
+
+    if (!enable_startup_replay) {
+      LOG(WARNING) << "Skip startup kafka replay, KAFKA_STARTUP_REPLAY is disabled";
+      callback_->initial_read_complete(last_masterchain_block_handle_);
+      return;
+    }
 
     LOG(WARNING) << "Start getting last blocks for sending them to kafka";
     auto P = td::PromiseCreator::lambda(
@@ -2246,6 +2256,8 @@ void ValidatorManagerImpl::completed_prestart_sync() {
             auto data = std::get<1>(item);
             auto states = std::get<2>(item);
             auto prev_states = std::get<3>(item);
+
+            publisher->get()->set_startup_replay_mode(true);
 
             while (!handles.empty()) {
               auto last_handle = handles.back();
@@ -2287,6 +2299,8 @@ void ValidatorManagerImpl::completed_prestart_sync() {
 
               publisher->get()->storeBlockApplied(last_handle->id(), std::move(P3));
             }
+
+            publisher->get()->set_startup_replay_mode(false);
           }
         });
 

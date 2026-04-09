@@ -577,7 +577,8 @@ void AcceptBlockQuery::got_prev_state(td::Ref<ShardState> state) {
       }
     });
     ConstBlockHandle handle(handle_);
-    publisher->storeComputedBlockState(handle, data_, state_->root_cell(), std::move(prev_root_cell), std::move(P));
+    publisher->storeComputedBlockState(handle, data_, state_->root_cell(), std::move(prev_root_cell), {},
+                                       std::move(P));
   }
 
   td::actor::send_closure(manager_, &ValidatorManager::set_block_state, handle_, state_, std::move(hint),

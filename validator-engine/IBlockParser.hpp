@@ -7,6 +7,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <functional>
+#include <deque>
 #include <set>
 #include "validator/interfaces/block-handle.h"
 #include "validator/interfaces/block.h"
@@ -51,10 +52,15 @@ namespace ton {
               cluster_sync_ = std::move(sync_actor);
             }
 
+            void set_startup_replay_mode(bool enabled) {
+              startup_replay_mode_ = enabled;
+            }
+
 	            void storeBlockData(ConstBlockHandle handle, td::Ref<BlockData> block,
 	                                td::Promise<std::tuple<td::string, td::string>> P);
 	            void storeComputedBlockState(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state,
 	                                         td::optional<td::Ref<vm::Cell>> prev_state,
+	                                         td::optional<td::Ref<vm::Cell>> prev_state_2,
 	                                         td::Promise<std::tuple<td::string, td::string>> P);
 
             bool process_out_msgs(const std::vector<json> &data);
@@ -130,17 +136,30 @@ namespace ton {
 		              bool block_published{false};
 		              bool state_published{false};
 		              bool skip_due_to_sync{false};
+		              bool live_mode{false};
 		              double state_ready_at{0.0};
 		              double parse_started_at{0.0};
 		              double parse_finished_at{0.0};
 		              double sync_started_at{0.0};
 		            };
 
+		            struct CachedLiveState {
+		              BlockIdExt id;
+		              td::Ref<vm::Cell> state;
+		              std::string lineage_key;
+		            };
+
 		            static std::string getKey(const BlockIdExt &id);
+		            static std::string getLineageKey(const BlockIdExt &id);
 		            void startStatePublishLocked(const std::string &key, const BlockIdExt &id, ConstBlockHandle handle,
 		                                         td::Ref<BlockData> data, td::Ref<vm::Cell> state,
-		                                         td::optional<td::Ref<vm::Cell>> prev_state_opt, double state_ready_at);
+		                                         td::optional<td::Ref<vm::Cell>> prev_state_opt,
+		                                         td::optional<td::Ref<vm::Cell>> prev_state_opt_2,
+		                                         double state_ready_at, bool live_mode);
 		            void maybeStartStatePublish(const BlockIdExt &id);
+	            void cacheLiveStateLocked(const BlockIdExt &id, td::Ref<vm::Cell> state);
+	            td::optional<td::Ref<vm::Cell>> findLiveStateLocked(const BlockIdExt &id) const;
+	            void evictLiveStatesLocked(const std::string &lineage_key);
 	            void onStateParsed(std::string key, BlockIdExt id,
 	                               td::Result<std::tuple<td::Bits256, td::string, td::string>> R);
 	            void onStateSyncResult(std::string key, td::Result<std::tuple<td::string, td::string>> R);
@@ -170,6 +189,9 @@ namespace ton {
 	            std::map<std::string, std::vector<std::pair<ConstBlockHandle, td::Ref<vm::Cell>>>> stored_prev_states_;  // multimap?
 	            std::map<std::string, ParsedBlockState> parsed_states_;
 	            std::set<std::string> state_parse_started_;
+	            std::map<std::string, CachedLiveState> live_state_cache_;
+	            std::map<std::string, std::deque<std::string>> live_state_lineages_;
+	            std::atomic_bool startup_replay_mode_{false};
 
             // mb rewrite with https://github.com/andreiavrammsd/cpp-channel
 

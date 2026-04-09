@@ -53,27 +53,28 @@ namespace ton::validator {
         td::Promise<std::string> final_promise;
         vm::Ref<vm::Cell> root_cell;
         td::optional<td::Ref<vm::Cell>> prev_root_cell;
+        td::optional<td::Ref<vm::Cell>> prev_root_cell_2;
         std::vector<std::pair<td::Bits256, int>> accounts_keys;
         bool with_prev_state;
         td::unique_ptr<vm::AugmentedDictionary> prev_accounts;
+        td::unique_ptr<vm::AugmentedDictionary> prev_accounts_2;
 
     public:
         AsyncStateIndexer(std::string block_id_string_, vm::Ref<vm::Cell> root_cell_,
                           td::optional<td::Ref<vm::Cell>> prev_root_cell_,
+                          td::optional<td::Ref<vm::Cell>> prev_root_cell_2_,
                           std::vector<std::pair<td::Bits256, int>> accounts_keys_, BlockIdExt block_id_,
                           td::Promise<std::string> final_promise_) {
             block_id = block_id_;
             block_id_string = std::move(block_id_string_);
             total_accounts = accounts_keys_.size();
             root_cell = std::move(root_cell_);
-            with_prev_state = true;
-            if (!prev_root_cell_) {
-                with_prev_state = false;
-            }
+            with_prev_state = static_cast<bool>(prev_root_cell_ || prev_root_cell_2_);
 
             LOG(INFO) << "Parse state: " << block_id.id.to_str() << " with prev state: " << with_prev_state;
 
             prev_root_cell = std::move(prev_root_cell_);
+            prev_root_cell_2 = std::move(prev_root_cell_2_);
             accounts_keys = std::move(accounts_keys_);
             final_promise = std::move(final_promise_);
         }
@@ -89,6 +90,7 @@ namespace ton::validator {
     public:
         BlockParserAsync(BlockIdExt id_, ConstBlockHandle handle_, td::Ref<BlockData> data_, td::Ref<vm::Cell> state_,
                          td::optional<td::Ref<vm::Cell>> prev_state_,
+                         td::optional<td::Ref<vm::Cell>> prev_state_2_,
                          td::Promise<std::tuple<td::Bits256, td::string, td::string>> P_,
                          td::Promise<std::tuple<td::vector<json>, td::Bits256, unsigned long long, int>> out_messages_promise_) {
             id = id_;
@@ -96,6 +98,7 @@ namespace ton::validator {
             data = std::move(data_);
             state = std::move(state_);
             prev_state = std::move(prev_state_);
+            prev_state_2 = std::move(prev_state_2_);
             P = std::move(P_);
             out_messages_promise = std::move(out_messages_promise_);
         }
@@ -116,6 +119,7 @@ namespace ton::validator {
         td::Ref<BlockData> data;
         td::Ref<vm::Cell> state;
         td::optional<td::Ref<vm::Cell>> prev_state;
+        td::optional<td::Ref<vm::Cell>> prev_state_2;
         td::Promise<std::tuple<td::Bits256, td::string, td::string>> P;
         td::Promise<std::tuple<td::vector<json>, td::Bits256, unsigned long long, int>> out_messages_promise;
         std::string parsed_data;

@@ -119,6 +119,7 @@ namespace ton {
                                                     block_,
                                                     current_state_->root_cell(),
                                                     left_prev_state_->root_cell(),
+                                                    td::optional<td::Ref<vm::Cell>>{},
                                                     std::move(P),
                                                     std::move(P0))
                   .release();

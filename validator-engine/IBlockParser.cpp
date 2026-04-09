@@ -10,6 +10,10 @@ namespace ton::validator {
       return std::to_string(id.id.workchain) + ":" + std::to_string(id.id.shard) + ":" + std::to_string(id.id.seqno);
     }
 
+    std::string BlockParser::getLineageKey(const BlockIdExt &id) {
+      return std::to_string(id.id.workchain) + ":" + std::to_string(id.id.shard);
+    }
+
     BlockParser::BlockParser(std::unique_ptr<IBLockPublisher> publisher)
             : publisher_(std::move(publisher)), publish_applied_thread_(&BlockParser::publish_applied_worker, this),
               publish_blocks_thread_(&BlockParser::publish_blocks_worker, this),
@@ -50,6 +54,11 @@ namespace ton::validator {
         return;
       }
 
+      if (!startup_replay_mode_) {
+        P.set_value(std::make_tuple("", ""));
+        return;
+      }
+
       std::lock_guard<std::mutex> lock(maps_mtx_);
       LOG(DEBUG) << "Store block: " << block->block_id().to_str();
       const std::string key = getKey(handle->id());
@@ -69,6 +78,7 @@ namespace ton::validator {
 
     void BlockParser::storeComputedBlockState(ConstBlockHandle handle, td::Ref<BlockData> block, td::Ref<vm::Cell> state,
                                               td::optional<td::Ref<vm::Cell>> prev_state,
+                                              td::optional<td::Ref<vm::Cell>> prev_state_2,
                                               td::Promise<std::tuple<td::string, td::string>> P) {
       if (!check_allowed_shard_parse(handle->id().id.workchain, handle->id().id.shard)) {
         LOG(WARNING) << "Skip computed state data: " << handle->id().id.to_str();
@@ -79,8 +89,40 @@ namespace ton::validator {
       std::lock_guard<std::mutex> lock(maps_mtx_);
       const double now = td::Time::now();
       LOG(WARNING) << "[publish-state] ready block=" << handle->id().to_str() << " t=" << now;
+
+      const auto prev_ids = handle->prev();
+      cacheLiveStateLocked(handle->id(), state);
+
+      if (!handle->merge_before() && prev_state && !prev_ids.empty()) {
+        cacheLiveStateLocked(prev_ids[0], prev_state.value());
+      }
+      if (prev_state_2 && prev_ids.size() > 1) {
+        cacheLiveStateLocked(prev_ids[1], prev_state_2.value());
+      }
+
+      td::optional<td::Ref<vm::Cell>> resolved_prev_state;
+      td::optional<td::Ref<vm::Cell>> resolved_prev_state_2;
+      if (!prev_ids.empty()) {
+        resolved_prev_state = findLiveStateLocked(prev_ids[0]);
+        if (!resolved_prev_state) {
+          LOG(WARNING) << "[publish-state] cache-miss block=" << handle->id().to_str()
+                       << " missing_prev=" << prev_ids[0].to_str();
+          P.set_value(std::make_tuple("", ""));
+          return;
+        }
+      }
+      if (prev_ids.size() > 1) {
+        resolved_prev_state_2 = findLiveStateLocked(prev_ids[1]);
+        if (!resolved_prev_state_2) {
+          LOG(WARNING) << "[publish-state] cache-miss block=" << handle->id().to_str()
+                       << " missing_prev=" << prev_ids[1].to_str();
+          P.set_value(std::make_tuple("", ""));
+          return;
+        }
+      }
+
       startStatePublishLocked(getKey(handle->id()), handle->id(), handle, std::move(block), std::move(state),
-                              std::move(prev_state), now);
+                              std::move(resolved_prev_state), std::move(resolved_prev_state_2), now, true);
       P.set_value(std::make_tuple("", ""));
     }
 
@@ -88,6 +130,11 @@ namespace ton::validator {
                                       td::Promise<std::tuple<td::string, td::string>> P) {
       if (!check_allowed_shard_parse(handle->id().id.workchain, handle->id().id.shard)) {
         LOG(WARNING) << "Skip state data: " << handle->id().id.to_str();
+        P.set_value(std::make_tuple("", ""));
+        return;
+      }
+
+      if (!startup_replay_mode_) {
         P.set_value(std::make_tuple("", ""));
         return;
       }
@@ -114,6 +161,11 @@ namespace ton::validator {
                                               td::Promise<std::tuple<td::string, td::string>> P) {
       if (!check_allowed_shard_parse(handle->id().id.workchain, handle->id().id.shard)) {
         LOG(WARNING) << "Skip state data with prev: " << handle->id().id.to_str();
+        P.set_value(std::make_tuple("", ""));
+        return;
+      }
+
+      if (!startup_replay_mode_) {
         P.set_value(std::make_tuple("", ""));
         return;
       }
@@ -148,13 +200,15 @@ namespace ton::validator {
     void BlockParser::startStatePublishLocked(const std::string &key, const BlockIdExt &id, ConstBlockHandle handle,
                                               td::Ref<BlockData> data, td::Ref<vm::Cell> state,
                                               td::optional<td::Ref<vm::Cell>> prev_state_opt,
-                                              double state_ready_at) {
+                                              td::optional<td::Ref<vm::Cell>> prev_state_opt_2,
+                                              double state_ready_at, bool live_mode) {
       if (state_parse_started_.count(key) != 0 || parsed_states_.count(key) != 0) {
         return;
       }
 
       state_parse_started_.insert(key);
       parsed_states_[key].id = id;
+      parsed_states_[key].live_mode = live_mode;
       parsed_states_[key].state_ready_at = state_ready_at;
       parsed_states_[key].parse_started_at = td::Time::now();
 
@@ -177,8 +231,41 @@ namespace ton::validator {
           });
 
       td::actor::create_actor<BlockParserAsync>("BlockParserAsync", id, handle, data, state, prev_state_opt,
-                                                std::move(promise_try_sync), std::move(Po))
+                                                prev_state_opt_2, std::move(promise_try_sync), std::move(Po))
           .release();
+    }
+
+    void BlockParser::cacheLiveStateLocked(const BlockIdExt &id, td::Ref<vm::Cell> state) {
+      const std::string key = getKey(id);
+      if (live_state_cache_.find(key) != live_state_cache_.end()) {
+        return;
+      }
+      const std::string lineage_key = getLineageKey(id);
+      live_state_cache_.emplace(key, CachedLiveState{id, std::move(state), lineage_key});
+      live_state_lineages_[lineage_key].push_back(key);
+      evictLiveStatesLocked(lineage_key);
+    }
+
+    td::optional<td::Ref<vm::Cell>> BlockParser::findLiveStateLocked(const BlockIdExt &id) const {
+      const auto it = live_state_cache_.find(getKey(id));
+      if (it == live_state_cache_.end()) {
+        return {};
+      }
+      return it->second.state;
+    }
+
+    void BlockParser::evictLiveStatesLocked(const std::string &lineage_key) {
+      auto it = live_state_lineages_.find(lineage_key);
+      if (it == live_state_lineages_.end()) {
+        return;
+      }
+      while (it->second.size() > 20) {
+        live_state_cache_.erase(it->second.front());
+        it->second.pop_front();
+      }
+      if (it->second.empty()) {
+        live_state_lineages_.erase(it);
+      }
     }
 
     void BlockParser::maybeStartStatePublish(const BlockIdExt &id) {
@@ -233,8 +320,8 @@ namespace ton::validator {
       if (with_prev_state) {
         stored_prev_states_.erase(prev_states_vec_found);
       }
-      startStatePublishLocked(key, id, handle, std::move(data), std::move(state), std::move(prev_state_opt),
-                              td::Time::now());
+      startStatePublishLocked(key, id, handle, std::move(data), std::move(state), std::move(prev_state_opt), {},
+                              td::Time::now(), false);
     }
 
     void BlockParser::onStateParsed(std::string key, BlockIdExt id,
