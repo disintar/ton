@@ -128,11 +128,12 @@ namespace ton {
             void enqueuePublishBlockState(td::int32 wc, unsigned long long shard, const std::string &json);
 
 	        private:
-		            struct ParsedBlockState {
+	            struct ParsedBlockState {
 		              BlockIdExt id;
 		              td::string block_json;
 		              td::string state_json;
 		              bool publish_allowed{false};
+		              bool apply_published{false};
 		              bool block_published{false};
 		              bool state_published{false};
 		              bool skip_due_to_sync{false};
@@ -141,6 +142,12 @@ namespace ton {
 		              double parse_started_at{0.0};
 		              double parse_finished_at{0.0};
 		              double sync_started_at{0.0};
+		            };
+
+		            struct PendingAppliedState {
+		              BlockIdExt id;
+		              td::string apply_json;
+		              bool ready{false};
 		            };
 
 		            struct CachedLiveState {
@@ -163,8 +170,10 @@ namespace ton {
 	            void onStateParsed(std::string key, BlockIdExt id,
 	                               td::Result<std::tuple<td::Bits256, td::string, td::string>> R);
 	            void onStateSyncResult(std::string key, td::Result<std::tuple<td::string, td::string>> R);
-	            void maybePublishBlockData(std::string key);
+	            void maybePublishBundle(std::string key);
 	            void cleanupPublishedStateLocked(const std::string &key);
+	            bool isCompletedLocked(const std::string &key) const;
+	            void markCompletedLocked(const std::string &key, const BlockIdExt &id);
 	            void handleBlockProgress(BlockIdExt id, td::Promise<std::tuple<td::string, td::string>> P);
 
 	            std::string parseBlockApplied(BlockIdExt id);
@@ -183,7 +192,7 @@ namespace ton {
             int max_partition = 0;
 
 	            std::mutex maps_mtx_;
-	            std::map<std::string, BlockIdExt> stored_applied_;
+	            std::map<std::string, PendingAppliedState> pending_applied_;
 	            std::map<std::string, std::vector<std::pair<ConstBlockHandle, td::Ref<BlockData>>>> stored_blocks_;      // multimap?
 	            std::map<std::string, std::vector<std::pair<ConstBlockHandle, td::Ref<vm::Cell>>>> stored_states_;       // multimap?
 	            std::map<std::string, std::vector<std::pair<ConstBlockHandle, td::Ref<vm::Cell>>>> stored_prev_states_;  // multimap?
@@ -191,6 +200,8 @@ namespace ton {
 	            std::set<std::string> state_parse_started_;
 	            std::map<std::string, CachedLiveState> live_state_cache_;
 	            std::map<std::string, std::deque<std::string>> live_state_lineages_;
+	            std::set<std::string> completed_keys_;
+	            std::map<std::string, std::deque<std::string>> completed_lineages_;
 	            std::atomic_bool startup_replay_mode_{false};
 
             // mb rewrite with https://github.com/andreiavrammsd/cpp-channel

@@ -22,8 +22,10 @@ namespace ton::validator {
 
     BlockParser::~BlockParser() {
       running_ = false;
+      publish_applied_cv_.notify_all();
       publish_blocks_cv_.notify_all();
       publish_states_cv_.notify_all();
+      publish_applied_thread_.join();
       publish_blocks_thread_.join();
       publish_states_thread_.join();
     }
@@ -38,12 +40,26 @@ namespace ton::validator {
       const std::string key = getKey(id);
       {
         std::lock_guard<std::mutex> lock(maps_mtx_);
+        if (isCompletedLocked(key)) {
+          LOG(WARNING) << "[publish-apply] skip-completed block=" << id.to_str();
+          P.set_value(std::make_tuple("", ""));
+          return;
+        }
+
+        auto &applied = pending_applied_[key];
+        if (applied.ready) {
+          LOG(WARNING) << "[publish-apply] skip-duplicate block=" << id.to_str();
+          P.set_value(std::make_tuple("", ""));
+          return;
+        }
+
         LOG(WARNING) << "[publish-apply] ready block=" << id.to_str() << " t=" << td::Time::now();
-        stored_applied_[key] = id;
+        applied.id = id;
+        applied.apply_json = parseBlockApplied(id);
+        applied.ready = true;
       }
-      enqueuePublishBlockApplied(id.id.workchain, id.id.shard, parseBlockApplied(id));
       P.set_value(std::make_tuple("", ""));
-      maybePublishBlockData(key);
+      maybePublishBundle(key);
     }
 
     void BlockParser::storeBlockData(ConstBlockHandle handle, td::Ref<BlockData> block,
@@ -59,9 +75,14 @@ namespace ton::validator {
         return;
       }
 
-      std::lock_guard<std::mutex> lock(maps_mtx_);
-      LOG(DEBUG) << "Store block: " << block->block_id().to_str();
       const std::string key = getKey(handle->id());
+      std::lock_guard<std::mutex> lock(maps_mtx_);
+      if (isCompletedLocked(key)) {
+        LOG(WARNING) << "Skip block data already completed: " << handle->id().to_str();
+        P.set_value(std::make_tuple("", ""));
+        return;
+      }
+      LOG(DEBUG) << "Store block: " << block->block_id().to_str();
       auto blocks_vec = stored_blocks_.find(key);
       if (blocks_vec == stored_blocks_.end()) {
         std::vector<std::pair<ConstBlockHandle, td::Ref<BlockData>>> vec;
@@ -86,7 +107,13 @@ namespace ton::validator {
         return;
       }
 
+      const std::string key = getKey(handle->id());
       std::lock_guard<std::mutex> lock(maps_mtx_);
+      if (isCompletedLocked(key)) {
+        LOG(WARNING) << "Skip computed state already completed: " << handle->id().to_str();
+        P.set_value(std::make_tuple("", ""));
+        return;
+      }
       const double now = td::Time::now();
       LOG(WARNING) << "[publish-state] ready block=" << handle->id().to_str() << " t=" << now;
 
@@ -121,7 +148,7 @@ namespace ton::validator {
         }
       }
 
-      startStatePublishLocked(getKey(handle->id()), handle->id(), handle, std::move(block), std::move(state),
+      startStatePublishLocked(key, handle->id(), handle, std::move(block), std::move(state),
                               std::move(resolved_prev_state), std::move(resolved_prev_state_2), now, true);
       P.set_value(std::make_tuple("", ""));
     }
@@ -139,9 +166,14 @@ namespace ton::validator {
         return;
       }
 
-      std::lock_guard<std::mutex> lock(maps_mtx_);
-      LOG(WARNING) << "[publish-state] rootdb-ready block=" << handle->id().to_str() << " t=" << td::Time::now();
       const std::string key = getKey(handle->id());
+      std::lock_guard<std::mutex> lock(maps_mtx_);
+      if (isCompletedLocked(key)) {
+        LOG(WARNING) << "Skip state data already completed: " << handle->id().to_str();
+        P.set_value(std::make_tuple("", ""));
+        return;
+      }
+      LOG(WARNING) << "[publish-state] rootdb-ready block=" << handle->id().to_str() << " t=" << td::Time::now();
       auto states_vec = stored_states_.find(key);
       if (states_vec == stored_states_.end()) {
         std::vector<std::pair<ConstBlockHandle, td::Ref<vm::Cell>>> vec;
@@ -170,10 +202,15 @@ namespace ton::validator {
         return;
       }
 
+      const std::string key = getKey(handle->id());
       std::lock_guard<std::mutex> lock(maps_mtx_);
+      if (isCompletedLocked(key)) {
+        LOG(WARNING) << "Skip state data with prev already completed: " << handle->id().to_str();
+        P.set_value(std::make_tuple("", ""));
+        return;
+      }
       LOG(WARNING) << "[publish-state] rootdb-ready-with-prev block=" << handle->id().to_str() << " t="
                    << td::Time::now();
-      const std::string key = getKey(handle->id());
       auto states_vec = stored_states_.find(key);
       if (states_vec == stored_states_.end()) {
         std::vector<std::pair<ConstBlockHandle, td::Ref<vm::Cell>>> vec;
@@ -202,6 +239,9 @@ namespace ton::validator {
                                               td::optional<td::Ref<vm::Cell>> prev_state_opt,
                                               td::optional<td::Ref<vm::Cell>> prev_state_opt_2,
                                               double state_ready_at, bool live_mode) {
+      if (isCompletedLocked(key)) {
+        return;
+      }
       if (state_parse_started_.count(key) != 0 || parsed_states_.count(key) != 0) {
         return;
       }
@@ -270,6 +310,9 @@ namespace ton::validator {
 
     void BlockParser::maybeStartStatePublish(const BlockIdExt &id) {
       const std::string key = getKey(id);
+      if (isCompletedLocked(key)) {
+        return;
+      }
       if (state_parse_started_.count(key) != 0 || parsed_states_.count(key) != 0) {
         return;
       }
@@ -363,9 +406,6 @@ namespace ton::validator {
     }
 
     void BlockParser::onStateSyncResult(std::string key, td::Result<std::tuple<td::string, td::string>> R) {
-      td::string state_json;
-      td::int32 wc = 0;
-      unsigned long long shard = 0;
       {
         std::lock_guard<std::mutex> lock(maps_mtx_);
         auto it = parsed_states_.find(key);
@@ -383,50 +423,90 @@ namespace ton::validator {
         it->second.publish_allowed = true;
         it->second.block_json = std::get<0>(synced);
         it->second.state_json = std::get<1>(synced);
-        if (!it->second.state_published) {
-          it->second.state_published = true;
-          state_json = it->second.state_json;
-          wc = it->second.id.id.workchain;
-          shard = it->second.id.id.shard;
-        }
       }
 
-      if (!state_json.empty()) {
-        LOG(WARNING) << "[publish-state] kafka-enqueue block=" << key;
-        enqueuePublishBlockState(wc, shard, state_json);
-      }
-      maybePublishBlockData(std::move(key));
+      maybePublishBundle(std::move(key));
     }
 
-    void BlockParser::maybePublishBlockData(std::string key) {
+    void BlockParser::maybePublishBundle(std::string key) {
+      td::string apply_json;
       td::string block_json;
+      td::string state_json;
       td::int32 wc = 0;
       unsigned long long shard = 0;
+      bool send_apply = false;
+      bool send_block = false;
+      bool send_state = false;
       {
         std::lock_guard<std::mutex> lock(maps_mtx_);
         auto parsed_it = parsed_states_.find(key);
         if (parsed_it == parsed_states_.end()) {
           return;
         }
-        if (!parsed_it->second.publish_allowed || parsed_it->second.block_published ||
-            parsed_it->second.skip_due_to_sync) {
+        if (!parsed_it->second.publish_allowed || parsed_it->second.skip_due_to_sync) {
           cleanupPublishedStateLocked(key);
           return;
         }
-        if (stored_applied_.find(key) == stored_applied_.end()) {
+
+        auto applied_it = pending_applied_.find(key);
+        if (applied_it == pending_applied_.end() || !applied_it->second.ready) {
           return;
         }
 
-        parsed_it->second.block_published = true;
-        block_json = parsed_it->second.block_json;
         wc = parsed_it->second.id.id.workchain;
         shard = parsed_it->second.id.id.shard;
+
+        if (!parsed_it->second.apply_published) {
+          parsed_it->second.apply_published = true;
+          apply_json = applied_it->second.apply_json;
+          send_apply = !apply_json.empty();
+        }
+        if (!parsed_it->second.state_published) {
+          parsed_it->second.state_published = true;
+          state_json = parsed_it->second.state_json;
+          send_state = !state_json.empty();
+        }
+        if (!parsed_it->second.block_published) {
+          parsed_it->second.block_published = true;
+          block_json = parsed_it->second.block_json;
+          send_block = !block_json.empty();
+        }
+
         cleanupPublishedStateLocked(key);
       }
 
-      if (!block_json.empty()) {
+      if (send_apply) {
+        LOG(WARNING) << "[publish-apply] kafka-enqueue block=" << key;
+        enqueuePublishBlockApplied(wc, shard, apply_json);
+      }
+      if (send_state) {
+        LOG(WARNING) << "[publish-state] kafka-enqueue block=" << key;
+        enqueuePublishBlockState(wc, shard, state_json);
+      }
+      if (send_block) {
         LOG(WARNING) << "[publish-block] kafka-enqueue block=" << key;
         enqueuePublishBlockData(wc, shard, block_json);
+      }
+    }
+
+    bool BlockParser::isCompletedLocked(const std::string &key) const {
+      return completed_keys_.count(key) != 0;
+    }
+
+    void BlockParser::markCompletedLocked(const std::string &key, const BlockIdExt &id) {
+      if (!completed_keys_.insert(key).second) {
+        return;
+      }
+
+      const std::string lineage_key = getLineageKey(id);
+      auto &lineage = completed_lineages_[lineage_key];
+      lineage.push_back(key);
+      while (lineage.size() > 2048) {
+        completed_keys_.erase(lineage.front());
+        lineage.pop_front();
+      }
+      if (lineage.empty()) {
+        completed_lineages_.erase(lineage_key);
       }
     }
 
@@ -437,15 +517,19 @@ namespace ton::validator {
       }
 
       const bool done = parsed_it->second.skip_due_to_sync ||
-                        (parsed_it->second.state_published && parsed_it->second.block_published);
+                        (parsed_it->second.apply_published && parsed_it->second.state_published &&
+                         parsed_it->second.block_published);
       if (!done) {
         return;
       }
 
+      markCompletedLocked(key, parsed_it->second.id);
       parsed_states_.erase(parsed_it);
       state_parse_started_.erase(key);
-      stored_applied_.erase(key);
+      pending_applied_.erase(key);
       stored_prev_states_.erase(key);
+      stored_blocks_.erase(key);
+      stored_states_.erase(key);
     }
 
     void BlockParser::handleBlockProgress(BlockIdExt id, td::Promise<std::tuple<td::string, td::string>> P) {
@@ -454,7 +538,7 @@ namespace ton::validator {
         std::lock_guard<std::mutex> lock(maps_mtx_);
         maybeStartStatePublish(id);
       }
-      maybePublishBlockData(getKey(id));
+      maybePublishBundle(getKey(id));
     }
 
     std::string BlockParser::parseBlockApplied(BlockIdExt id) {
