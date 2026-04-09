@@ -24,6 +24,7 @@
 using json = nlohmann::json;
 using td::Ref;
 
+using LibrariesMap = std::map<std::string, json>;
 
 std::vector<std::tuple<int, std::string>> parse_extra_currency(const Ref<vm::Cell> &extra);
 
@@ -36,6 +37,8 @@ std::string parseblock_snake_data_string(vm::CellSlice &cs, bool convert_to_utf8
 json parse_address(vm::CellSlice address);
 
 json parse_libraries(Ref<vm::Cell> lib_cell);
+LibrariesMap collect_libraries_map(Ref<vm::Cell> lib_cell);
+json make_libraries_v2_diff(const LibrariesMap &current, const LibrariesMap &previous);
 
 json parse_state_init(vm::CellSlice state_init);
 

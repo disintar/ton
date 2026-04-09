@@ -184,6 +184,68 @@ json parse_libraries(Ref<vm::Cell> lib_cell) {
   }
 }
 
+LibrariesMap collect_libraries_map(Ref<vm::Cell> lib_cell) {
+  LibrariesMap libs;
+
+  try {
+    auto libraries = vm::Dictionary{std::move(lib_cell), 256};
+
+    while (!libraries.is_empty()) {
+      td::BitArray<256> key{};
+      libraries.get_minmax_key(key);
+      LOG(DEBUG) << "Parse lib " << key.to_hex();
+
+      auto lib = libraries.lookup_delete(key);
+
+      block::gen::LibDescr::Record libdescr;
+      CHECK(tlb::unpack(lib.write(), libdescr));
+
+      std::vector<std::string> publishers;
+      auto libs_publishers = libdescr.publishers.write();
+
+      vm::CellBuilder cb;
+      Ref<vm::Cell> publishers_cell;
+      cb.append_cellslice(libs_publishers);
+      cb.finalize_to(publishers_cell);
+
+      auto publishers_dict = vm::Dictionary{publishers_cell, 256};
+      while (!publishers_dict.is_empty()) {
+        td::BitArray<256> publisher{};
+        publishers_dict.get_minmax_key(publisher);
+        publishers_dict.lookup_delete(publisher);
+        publishers.emplace_back(publisher.to_hex());
+      }
+
+      libs.emplace(key.to_hex(), json{{"hash", key.to_hex()},
+                                      {"lib", dump_as_boc(libdescr.lib)},
+                                      {"publishers", publishers}});
+    }
+  } catch (...) {
+    LOG(ERROR) << "ERROR IN LOADING LIBRARY";
+  }
+
+  return libs;
+}
+
+json make_libraries_v2_diff(const LibrariesMap &current, const LibrariesMap &previous) {
+  json added = json::array();
+  json removed = json::array();
+
+  for (const auto &[hash, data] : current) {
+    if (previous.find(hash) == previous.end()) {
+      added.emplace_back(data);
+    }
+  }
+
+  for (const auto &[hash, _] : previous) {
+    if (current.find(hash) == current.end()) {
+      removed.emplace_back(json{{"hash", hash}});
+    }
+  }
+
+  return json{{"version", 2}, {"added", std::move(added)}, {"removed", std::move(removed)}};
+}
+
 json parse_state_init(vm::CellSlice state_init) {
   td::Timer t;
   LOG(DEBUG) << "Start parse state init " << t;

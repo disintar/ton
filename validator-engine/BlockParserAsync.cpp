@@ -187,46 +187,34 @@ namespace ton::validator {
 
         LOG(DEBUG) << "Parsed accounts shard state main info " << block_id_string << " " << timer;
 
+        LibrariesMap current_libraries;
         if (shard_state.r1.libraries->have_refs()) {
-          auto libraries = vm::Dictionary{shard_state.r1.libraries->prefetch_ref(), 256};
-
-          std::vector<json> libs;
-          while (!libraries.is_empty()) {
-            td::BitArray<256> key{};
-            libraries.get_minmax_key(key);
-            auto lib = libraries.lookup_delete(key);
-
-            block::gen::LibDescr::Record libdescr;
-            CHECK(tlb::unpack(lib.write(), libdescr));
-
-            std::vector<std::string> publishers;
-
-            auto libs_publishers = libdescr.publishers.write();
-
-            vm::CellBuilder cb;
-            Ref<vm::Cell> cool_cell;
-
-            cb.append_cellslice(libs_publishers);
-            cb.finalize_to(cool_cell);
-
-            auto publishers_dict = vm::Dictionary{cool_cell, 256};
-
-            while (!publishers_dict.is_empty()) {
-              td::BitArray<256> publisher{};
-              publishers_dict.get_minmax_key(publisher);
-              publishers_dict.lookup_delete(publisher);
-
-              publishers.emplace_back(publisher.to_hex());
-            }
-
-            json data = {{"hash",       key.to_hex()},
-                         {"lib",        dump_as_boc(libdescr.lib)},
-                         {"publishers", publishers}};
-            libs.emplace_back(std::move(data));
-          }
-
-          answer["libraries"] = std::move(libs);
+          current_libraries = collect_libraries_map(shard_state.r1.libraries->prefetch_ref());
         }
+
+        LibrariesMap previous_libraries;
+        auto merge_previous_libraries = [&previous_libraries](const LibrariesMap &libs) {
+          for (const auto &[hash, data] : libs) {
+            previous_libraries[hash] = data;
+          }
+        };
+
+        if (prev_root_cell) {
+          block::gen::ShardStateUnsplit::Record prev_shard_state;
+          CHECK(tlb::unpack_cell(prev_root_cell.value(), prev_shard_state));
+          if (prev_shard_state.r1.libraries->have_refs()) {
+            merge_previous_libraries(collect_libraries_map(prev_shard_state.r1.libraries->prefetch_ref()));
+          }
+        }
+        if (prev_root_cell_2) {
+          block::gen::ShardStateUnsplit::Record prev_shard_state_2;
+          CHECK(tlb::unpack_cell(prev_root_cell_2.value(), prev_shard_state_2));
+          if (prev_shard_state_2.r1.libraries->have_refs()) {
+            merge_previous_libraries(collect_libraries_map(prev_shard_state_2.r1.libraries->prefetch_ref()));
+          }
+        }
+
+        answer["libraries"] = make_libraries_v2_diff(current_libraries, previous_libraries);
 
         LOG(DEBUG) << "Parse accounts states libs " << block_id_string << " " << timer;
 

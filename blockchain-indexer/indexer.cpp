@@ -433,12 +433,15 @@ class AccountIndexer : public td::actor::Actor {
 class StateIndexer : public td::actor::Actor {
   Dumper *dumper_;
   std::shared_ptr<vm::AugmentedDictionary> accounts;
+  LibrariesMap current_libraries_;
 
   bool after_merge;
   std::shared_ptr<vm::AugmentedDictionary> prev_accounts_left;
   ShardId prev_accounts_left_shard;
+  LibrariesMap prev_libraries_left_;
   std::shared_ptr<vm::AugmentedDictionary> prev_accounts_right;
   ShardId prev_accounts_right_shard;
+  LibrariesMap prev_libraries_right_;
 
   std::vector<json> json_accounts;
   std::string block_id_string;
@@ -553,42 +556,7 @@ class StateIndexer : public td::actor::Actor {
       LOG(DEBUG) << "Parsed accounts shard state main info " << block_id_string << " " << timer;
 
       if (shard_state.r1.libraries->have_refs()) {
-        auto libraries = vm::Dictionary{shard_state.r1.libraries->prefetch_ref(), 256};
-
-        std::vector<json> libs;
-        while (!libraries.is_empty()) {
-          td::BitArray<256> key{};
-          libraries.get_minmax_key(key);
-          auto lib = libraries.lookup_delete(key);
-
-          block::gen::LibDescr::Record libdescr;
-          CHECK(tlb::unpack(lib.write(), libdescr));
-
-          std::vector<std::string> publishers;
-
-          auto libs_publishers = libdescr.publishers.write();
-
-          vm::CellBuilder cb;
-          Ref<vm::Cell> cool_cell;
-
-          cb.append_cellslice(libs_publishers);
-          cb.finalize_to(cool_cell);
-
-          auto publishers_dict = vm::Dictionary{cool_cell, 256};
-
-          while (!publishers_dict.is_empty()) {
-            td::BitArray<256> publisher{};
-            publishers_dict.get_minmax_key(publisher);
-            publishers_dict.lookup_delete(publisher);
-
-            publishers.emplace_back(publisher.to_hex());
-          }
-
-          json data = {{"hash", key.to_hex()}, {"lib", dump_as_boc(libdescr.lib)}, {"publishers", publishers}};
-          libs.emplace_back(std::move(data));
-        }
-
-        answer["libraries"] = std::move(libs);
+        current_libraries_ = collect_libraries_map(shard_state.r1.libraries->prefetch_ref());
       }
 
       LOG(DEBUG) << "Parse accounts states libs " << block_id_string << " " << timer;
@@ -630,10 +598,16 @@ class StateIndexer : public td::actor::Actor {
       prev_accounts_left = std::make_shared<vm::AugmentedDictionary>(vm::load_cell_slice_ref(prev_shard_state.accounts),
                                                                      256, block::tlb::aug_ShardAccounts);
       prev_accounts_left_shard = shard_ident;
+      if (prev_shard_state.r1.libraries->have_refs()) {
+        prev_libraries_left_ = collect_libraries_map(prev_shard_state.r1.libraries->prefetch_ref());
+      }
     } else {
       prev_accounts_right = std::make_shared<vm::AugmentedDictionary>(
           vm::load_cell_slice_ref(prev_shard_state.accounts), 256, block::tlb::aug_ShardAccounts);
       prev_accounts_right_shard = shard_ident;
+      if (prev_shard_state.r1.libraries->have_refs()) {
+        prev_libraries_right_ = collect_libraries_map(prev_shard_state.r1.libraries->prefetch_ref());
+      }
     }
 
     if (left & after_merge) {
@@ -681,6 +655,11 @@ class StateIndexer : public td::actor::Actor {
   }
 
   bool finalize() {
+    LibrariesMap previous_libraries = prev_libraries_left_;
+    for (const auto &[hash, data] : prev_libraries_right_) {
+      previous_libraries[hash] = data;
+    }
+    answer["libraries"] = make_libraries_v2_diff(current_libraries_, previous_libraries);
     answer["accounts"] = json_accounts;
     LOG(DEBUG) << "Parse accounts states all accounts parsed " << block_id_string << " " << timer;
 
