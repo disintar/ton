@@ -168,6 +168,8 @@ namespace ton {
 	            void maybePublishBlockData(std::string key);
 	            void cleanupPublishedStateLocked(const std::string &key);
 	            void handleBlockProgress(BlockIdExt id, td::Promise<std::tuple<td::string, td::string>> P);
+	            bool shouldSuppressPublishing() const;
+	            bool isFreshBlockJson(const td::string &block_json) const;
 
 	            std::string parseBlockApplied(BlockIdExt id);
 
@@ -190,10 +192,12 @@ namespace ton {
 	            std::map<std::string, std::vector<std::pair<ConstBlockHandle, td::Ref<vm::Cell>>>> stored_states_;       // multimap?
 	            std::map<std::string, std::vector<std::pair<ConstBlockHandle, td::Ref<vm::Cell>>>> stored_prev_states_;  // multimap?
 	            std::map<std::string, ParsedBlockState> parsed_states_;
+	            std::map<std::string, std::pair<BlockIdExt, td::string>> pending_applied_;
 	            std::set<std::string> state_parse_started_;
 	            std::map<std::string, CachedLiveState> live_state_cache_;
 	            std::map<std::string, std::deque<std::string>> live_state_lineages_;
 	            std::atomic_bool startup_replay_mode_{false};
+	            bool fresh_only_mode_{false};
 
             // mb rewrite with https://github.com/andreiavrammsd/cpp-channel
 
