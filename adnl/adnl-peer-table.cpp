@@ -98,10 +98,9 @@ td::actor::ActorOwn<AdnlPeerPair> &AdnlPeerTableImpl::get_peer_pair(AdnlNodeIdSh
                                                                     AdnlPeerTableImpl::LocalIdInfo &local_id_info) {
   auto it = peer_info.peers.find(local_id);
   if (it == peer_info.peers.end()) {
-    it = peer_info.peers
-             .emplace(local_id, AdnlPeerPair::create(network_manager_, actor_id(this), local_id_info.mode,
-                                                     local_id_info.local_id.get(), dht_node_, local_id, peer_id))
-             .first;
+    it = peer_info.peers.try_emplace(local_id).first;
+    it->second.actor = AdnlPeerPair::create(network_manager_, actor_id(this), local_id_info.mode,
+                                            local_id_info.local_id.get(), dht_node_, local_id, peer_id);
     if (!peer_info.peer_id.empty()) {
       td::actor::send_closure(it->second.actor, &AdnlPeerPair::update_peer_id, peer_info.peer_id);
     }
