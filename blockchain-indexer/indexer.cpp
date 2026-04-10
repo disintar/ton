@@ -37,6 +37,8 @@
 #include <queue>
 #include <chrono>
 #include <thread>
+#include <unordered_set>
+#include <vector>
 
 int verbosity = 0;
 
@@ -46,6 +48,13 @@ namespace validator {
 
 class Dumper {
  public:
+  enum class ResultStatus {
+    Paired,
+    Error,
+    LoneBlock,
+    LoneState,
+  };
+
   explicit Dumper(std::string prefix, const std::size_t buffer_size)
       : prefix(std::move(prefix)), buffer_size(buffer_size) {
     joined.reserve(buffer_size);
@@ -53,6 +62,13 @@ class Dumper {
 
   ~Dumper() {
     forceDump();
+  }
+
+  void set_expected_counts(std::size_t requested_total, std::size_t unique_total) {
+    std::lock_guard<std::mutex> lock(results_mtx_);
+    expected_total_ = requested_total;
+    unique_expected_total_ = unique_total;
+    has_expected_counts_ = true;
   }
 
   void storeBlock(std::string id, std::string block) {
@@ -78,6 +94,7 @@ class Dumper {
         together += "}";
 
         joined.emplace_back(std::move(together));
+        mark_result_locked(tmp_id, ResultStatus::Paired, true);
         states.erase(state);
       }
 
@@ -112,6 +129,7 @@ class Dumper {
 
         //        json together = {{"id", std::move(id)}, {"block", std::move(block->second)}, {"state", std::move(state)}};
         joined.emplace_back(std::move(together));
+        mark_result_locked(tmp_id, ResultStatus::Paired, true);
         blocks.erase(block);
       }
 
@@ -123,13 +141,17 @@ class Dumper {
 
   void addError(std::string id, std::string type) {
     LOG(ERROR) << "We have error in " << id << " in " << type;
-    json data;
-    data = {
-        {"id", id},
-        {"type", type},
-    };
+    {
+      std::lock_guard<std::mutex> lock(store_mtx);
+      json data;
+      data = {
+          {"id", id},
+          {"type", type},
+      };
 
-    error.emplace_back(std::move(data));
+      error.emplace_back(std::move(data));
+      mark_result_locked(id, ResultStatus::Error);
+    }
   }
 
   void forceDump() {
@@ -137,6 +159,7 @@ class Dumper {
     dump();
     dumpLoners();
     dumpError();
+    dumpSummary();
     LOG(INFO) << "Finished force dumping";
   }
 
@@ -262,14 +285,68 @@ class Dumper {
       oss << prefix << "loners_" << tag << ".json";
       std::ofstream file(oss.str());
       file << to_dump.dump(-1);
+      file.close();
 
       std::ostringstream oss_ids;
       oss_ids << prefix << "loners_" << tag << "_ids.json";
       std::ofstream file_ids(oss_ids.str());
       file_ids << to_dump_ids.dump(-1);
+      file_ids.close();
+
+      for (const auto &entry : to_dump["blocks"]) {
+        mark_result_locked(entry["id"].get<std::string>(), ResultStatus::LoneBlock);
+      }
+      for (const auto &entry : to_dump["states"]) {
+        mark_result_locked(entry["id"].get<std::string>(), ResultStatus::LoneState);
+      }
 
       LOG(WARNING) << "Dumped " << lone_blocks_amount << " blocks without pair";
       LOG(WARNING) << "Dumped " << lone_states_amount << " states without pair";
+    }
+  }
+
+  void dumpSummary() {
+    std::lock_guard<std::mutex> lock(results_mtx_);
+
+    std::size_t paired = 0;
+    std::size_t errors = 0;
+    std::size_t lone_blocks = 0;
+    std::size_t lone_states = 0;
+
+    for (const auto &[id, status] : results_) {
+      switch (status) {
+        case ResultStatus::Paired:
+          ++paired;
+          break;
+        case ResultStatus::Error:
+          ++errors;
+          break;
+        case ResultStatus::LoneBlock:
+          ++lone_blocks;
+          break;
+        case ResultStatus::LoneState:
+          ++lone_states;
+          break;
+      }
+    }
+
+    const auto accounted = results_.size();
+    if (has_expected_counts_) {
+      LOG(WARNING) << "Summary: requested=" << expected_total_ << " unique_requested=" << unique_expected_total_
+                   << " duplicates=" << (expected_total_ - unique_expected_total_) << " accounted=" << accounted
+                   << " paired=" << paired << " errors=" << errors << " lone_blocks=" << lone_blocks
+                   << " lone_states=" << lone_states;
+    } else {
+      LOG(WARNING) << "Summary: accounted=" << accounted << " paired=" << paired << " errors=" << errors
+                   << " lone_blocks=" << lone_blocks << " lone_states=" << lone_states;
+    }
+  }
+
+  void mark_result_locked(const std::string &id, ResultStatus status, bool force = false) {
+    std::lock_guard<std::mutex> lock(results_mtx_);
+    auto it = results_.find(id);
+    if (it == results_.end() || force || (it->second != ResultStatus::Paired && it->second != ResultStatus::Error)) {
+      results_[id] = status;
     }
   }
 
@@ -283,6 +360,11 @@ class Dumper {
   std::vector<std::string> joined_ids;
   std::vector<json> error;
   const std::size_t buffer_size;
+  std::mutex results_mtx_;
+  std::unordered_map<std::string, ResultStatus> results_;
+  std::size_t expected_total_ = 0;
+  std::size_t unique_expected_total_ = 0;
+  bool has_expected_counts_ = false;
 };
 
 class AccountIndexer : public td::actor::Actor {
@@ -716,6 +798,9 @@ class IndexerWorker : public td::actor::Actor {
 
   bool allow_propagation = true;
   std::unique_ptr<std::vector<std::tuple<ton::WorkchainId, ton::ShardId, ton::BlockSeqno>>> to_parse;
+  std::vector<std::tuple<ton::WorkchainId, ton::ShardId, ton::BlockSeqno, td::uint32>> pending_simple_retries_;
+  static constexpr td::uint32 simple_retry_limit_ = 60;
+  static constexpr double simple_retry_delay_sec_ = 1.0;
 
  public:
   //  IndexerWorker(td::uint32 my_id_, Dumper *dumper) {
@@ -727,6 +812,57 @@ class IndexerWorker : public td::actor::Actor {
   IndexerWorker(td::uint32 my_id_, Dumper *dumper) {
     my_id = my_id_;
     dumper_ = dumper;
+  }
+
+  void alarm() override {
+    if (pending_simple_retries_.empty()) {
+      alarm_timestamp() = td::Timestamp::never();
+      return;
+    }
+
+    auto retries = std::move(pending_simple_retries_);
+    pending_simple_retries_.clear();
+    alarm_timestamp() = td::Timestamp::never();
+
+    for (const auto &[workchain, shard, seqno, retry] : retries) {
+      request_simple_block(workchain, shard, seqno, retry);
+    }
+  }
+
+  void request_simple_block(ton::WorkchainId workchainId, ton::ShardId shardId, ton::BlockSeqno blockSeqno,
+                            td::uint32 retry = 0) {
+    auto P = td::PromiseCreator::lambda(
+        [SelfId = actor_id(this), workchainId, shardId, blockSeqno, retry](td::Result<ConstBlockHandle> R) {
+          if (R.is_error()) {
+            td::actor::send_closure(SelfId, &IndexerWorker::handle_simple_block_lookup_error, workchainId, shardId,
+                                    blockSeqno, retry, R.move_as_error().to_string());
+          } else {
+            auto handle = R.move_as_ok();
+            LOG(DEBUG) << "got block from db " << handle->id().to_str();
+            td::actor::send_closure_later(SelfId, &IndexerWorker::got_block_handle, handle, false);
+          }
+        });
+
+    ton::AccountIdPrefixFull pfx{workchainId, shardId};
+    td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx, blockSeqno,
+                            std::move(P));
+  }
+
+  void handle_simple_block_lookup_error(ton::WorkchainId workchainId, ton::ShardId shardId, ton::BlockSeqno blockSeqno,
+                                        td::uint32 retry, std::string error) {
+    const auto block_id = std::to_string(workchainId) + ":" + std::to_string(shardId) + ":" + std::to_string(blockSeqno);
+    LOG(WARNING) << "Can't get block from db yet: " << block_id << " retry " << retry << "/" << simple_retry_limit_
+                 << " error: " << error;
+
+    if (retry < simple_retry_limit_) {
+      pending_simple_retries_.emplace_back(workchainId, shardId, blockSeqno, retry + 1);
+      alarm_timestamp().relax(td::Timestamp::in(simple_retry_delay_sec_));
+      return;
+    }
+
+    LOG(ERROR) << "Failed to get block after retries: " << block_id;
+    dumper_->addError(block_id, "block_handle");
+    td::actor::send_closure(actor_id(this), &IndexerWorker::decrease_block_padding);
   }
 
   void set_to_parse(td::Promise<td::uint32> promise, td::actor::ActorId<ton::validator::ValidatorManagerInterface> v,
@@ -749,22 +885,9 @@ class IndexerWorker : public td::actor::Actor {
       ton::ShardId shardId = std::get<1>(tuple);
       ton::BlockSeqno blockSeqno = std::get<2>(tuple);
 
-      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<ConstBlockHandle> R) {
-        if (R.is_error()) {
-          LOG(ERROR) << "Can't get handle from db: " << R.move_as_error().to_string();
-          td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
-        } else {
-          auto handle = R.move_as_ok();
-          LOG(DEBUG) << "got block from db " << handle->id().to_str();
-          td::actor::send_closure_later(SelfId, &IndexerWorker::got_block_handle, handle, false);
-        }
-      });
-
       td::actor::send_closure(actor_id(this), &ton::validator::IndexerWorker::increase_block_padding);
-      ton::AccountIdPrefixFull pfx{workchainId, shardId};
-      // todo: check applied on block handle
-      td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_by_seqno_from_db, pfx,
-                              blockSeqno, std::move(P));
+      td::actor::send_closure(actor_id(this), &ton::validator::IndexerWorker::request_simple_block, workchainId,
+                              shardId, blockSeqno, 0);
     }
   }
 
@@ -936,6 +1059,7 @@ class IndexerWorker : public td::actor::Actor {
       if (R.is_error()) {
         LOG(ERROR) << R.move_as_error().to_string() << " block error: " << block_id_string;
         dumper_->addError(block_id_string, "block");
+        td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
       } else {
         //        try {
         td::Timer timer;
@@ -952,6 +1076,8 @@ class IndexerWorker : public td::actor::Actor {
         auto block_root = block->root_cell();
         if (block_root.is_null()) {
           LOG(ERROR) << "block has no valid root cell";
+          dumper_->addError(block_id_string, "block_root");
+          td::actor::send_closure(SelfId, &IndexerWorker::decrease_block_padding);
           return;
         } else {
           LOG(DEBUG) << "Parse block got root cell: " << blkid.to_str() << " " << timer;
@@ -2138,6 +2264,12 @@ class IndexerSimple : public td::actor::Actor {
                 int dumper_size = 5000) {
     dumper_ = std::make_unique<Dumper>("dump_", dumper_size);
     whitelist = std::move(whitelist_);
+    std::unordered_set<std::string> unique_whitelist;
+    unique_whitelist.reserve(whitelist.size());
+    for (const auto &[wc, shard, seqno] : whitelist) {
+      unique_whitelist.emplace(std::to_string(wc) + ":" + std::to_string(shard) + ":" + std::to_string(seqno));
+    }
+    dumper_->set_expected_counts(whitelist.size(), unique_whitelist.size());
     threads = threads_;
     speed_ = speed;
 
@@ -2346,15 +2478,26 @@ class IndexerSimple : public td::actor::Actor {
     LOG(WARNING) << "Sync complete: " << handle->id().to_str();
 
     auto blocks_size = (unsigned int)whitelist.size();
+    if (blocks_size == 0) {
+      LOG(WARNING) << "No blocks to parse in simple mode";
+      dumper_->forceDump();
+      std::exit(0);
+    }
     auto workers_count = std::min(blocks_size, threads);
 
     LOG(WARNING) << "Workers: " << workers_count;
     LOG(WARNING) << "Total blocks to parse: " << blocks_size;
 
-    auto per_thread = (unsigned int)ceil(blocks_size / workers_count);
+    auto per_thread = (blocks_size + workers_count - 1) / workers_count;
     LOG(WARNING) << "Blocks per worker: " << per_thread;
 
     for (unsigned int i = 0; i < workers_count; i++) {
+      auto start = i * per_thread;
+      if (start >= blocks_size) {
+        break;
+      }
+      auto end = (unsigned int)std::min(blocks_size, start + per_thread) - 1;
+
       workers.push_back(td::actor::create_actor<ton::validator::IndexerWorker>("IndexerWorker #" + std::to_string(i), i,
                                                                                dumper_.get()));
 
@@ -2369,8 +2512,6 @@ class IndexerSimple : public td::actor::Actor {
       td::actor::send_closure(w->get(), &IndexerWorker::set_chunk_size, chunk_size_);
       td::actor::send_closure(w->get(), &IndexerWorker::set_display_speed, speed_);
 
-      auto start = i * per_thread;
-      auto end = (unsigned int)std::min(blocks_size - 1, i * per_thread + per_thread);
       LOG(WARNING) << "Set for IndexerWorker #" + std::to_string(i) << " blocks from " << start << " to " << end;
       td::actor::send_closure(
           w->get(), &IndexerWorker::set_to_parse, std::move(P), validator_manager_.get(),
