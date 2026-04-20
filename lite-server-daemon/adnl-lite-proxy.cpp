@@ -1834,7 +1834,7 @@ namespace ton::liteserver {
         int mode_;
         int cur_alarm = 0;
         std::tuple<ton::UnixTime, ton::BlockSeqno> best_time = std::make_tuple(0, 0);
-        int allowed_refire = 20;
+        int allowed_refire = 2;
         unsigned long to_update = 0;
         std::string db_root_;
         std::string config_path_;
