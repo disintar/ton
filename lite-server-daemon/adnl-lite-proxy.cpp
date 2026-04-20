@@ -181,7 +181,7 @@ namespace ton::liteserver {
         class Callback {
         public:
             virtual void refire(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
-                                td::Promise<td::BufferSlice> promise) = 0;
+                                td::Promise<td::BufferSlice> promise, td::BufferSlice last_response) = 0;
 
             virtual ~Callback() = default;
         };
@@ -226,16 +226,16 @@ namespace ton::liteserver {
                   // readonly have problems on sync cells, this is govnokod, sorry.
                   // I have not much time and knowledge to fix it other way.
                   std::vector<std::string> whitelist_for_refire{"not found", "get account state"};
-                  for (auto &s: whitelist_for_refire) {
-                    if (x.find(s) != std::string::npos) {
-                      // allow refire
-                      LOG(INFO) << "Refire with: " << s;
-                      callback_->refire(std::move(src_), std::move(dst_), std::move(request_),
-                                        std::move(promise_));
-                      stop();
-                      return;
-                    }
-                  }
+                      for (auto &s: whitelist_for_refire) {
+                        if (x.find(s) != std::string::npos) {
+                          // allow refire
+                          LOG(INFO) << "Refire with: " << s;
+                          callback_->refire(std::move(src_), std::move(dst_), std::move(request_),
+                                            std::move(promise_), std::move(data));
+                          stop();
+                          return;
+                        }
+                      }
                 }
                 res = td::Result<td::BufferSlice>{std::move(data)};
               }
@@ -808,13 +808,15 @@ namespace ton::liteserver {
           class Callback : public LiteClientFire::Callback {
           public:
               void refire(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
-                          td::Promise<td::BufferSlice> promise) override {
+                          td::Promise<td::BufferSlice> promise, td::BufferSlice last_response) override {
                 delay_action(
                         [ProxyId = id_, src = std::move(src), dst = std::move(dst), data = std::move(data),
-                                promise = std::move(promise), refire = refire_]() mutable {
-                            td::actor::send_closure(ProxyId, &LiteProxy::check_ext_query, std::move(src),
+                                promise = std::move(promise), last_response = std::move(last_response),
+                                refire = refire_]() mutable {
+                            td::actor::send_closure(ProxyId, &LiteProxy::check_ext_query_with_last_response, std::move(src),
                                                     std::move(dst),
-                                                    std::move(data), std::move(promise), refire + 1);
+                                                    std::move(data), std::move(promise), refire + 1,
+                                                    std::move(last_response));
                         },
                         td::Timestamp::in(0.03 * refire_));
               }
@@ -1011,9 +1013,6 @@ namespace ton::liteserver {
                   if (refire + 1 > allowed_refire) {
                     LOG(ERROR) << "Too deep refire";
                     query_statuses_.push_back({false, elapsed.elapsed(), compiled_query});
-                    auto res = create_serialize_tl_object<lite_api::liteServer_error>(error->code_,
-                                                                                      error->message_ +
-                                                                                      " : tried over all nodes");
 
                     td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, data.clone(), started_at,
                                             elapsed, false);
@@ -1037,9 +1036,6 @@ namespace ton::liteserver {
               if (refire + 1 > allowed_refire) {
                 LOG(ERROR) << "Too deep refire";
                 query_statuses_.push_back({false, elapsed.elapsed(), compiled_query});
-                auto res = create_serialize_tl_object<lite_api::liteServer_error>(error->code_,
-                                                                                  error->message_ +
-                                                                                  " : tried over all nodes");
 
                 td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, data.clone(), started_at,
                                         elapsed, false);
@@ -1198,9 +1194,20 @@ namespace ton::liteserver {
 
         void check_ext_query(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::BufferSlice data,
                              td::Promise<td::BufferSlice> promise, int refire = 0) {
+          check_ext_query_with_last_response(std::move(src), std::move(dst), std::move(data), std::move(promise),
+                                             refire, td::BufferSlice());
+        }
+
+        void check_ext_query_with_last_response(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst,
+                                                td::BufferSlice data, td::Promise<td::BufferSlice> promise,
+                                                int refire, td::BufferSlice last_response) {
           if (refire > allowed_refire) {
             LOG(ERROR) << "Too deep refire";  // todo: move to public LC
-            promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Too deep refire"));
+            if (!last_response.empty()) {
+              promise.set_value(std::move(last_response));
+            } else {
+              promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Too deep refire"));
+            }
             return;
           }
 
