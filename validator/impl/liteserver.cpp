@@ -2562,59 +2562,58 @@ void LiteQuery::perform_getConfigParams(BlockIdExt blkid, int mode, std::vector<
           }
         }
 
-        void LiteQuery::continue_lookupBlockWithProof_buildProofLinks(td::Ref<BlockData> cur_block,
-                                                                      std::vector<std::pair<BlockIdExt, td::Ref<vm::Cell>>> result) {
-          BlockIdExt cur_id = cur_block->block_id();
-          BlockIdExt prev_id;
-          vm::MerkleProofBuilder mpb{cur_block->root_cell()};
-          if (cur_id.is_masterchain()) {
-            base_blk_id_alt_ = cur_id;
-            block::gen::Block::Record blk;
-            block::gen::BlockExtra::Record extra;
-            block::gen::McBlockExtra::Record mc_extra;
-            if (!tlb::unpack_cell(mpb.root(), blk) || !tlb::unpack_cell(blk.extra, extra) ||
-                !extra.custom->have_refs() ||
-                !tlb::unpack_cell(extra.custom->prefetch_ref(), mc_extra)) {
-              fatal_error("cannot unpack header of block "s + cur_id.to_str());
-              return;
-            }
-            block::ShardConfig shards(mc_extra.shard_hashes->prefetch_ref());
-            ShardIdFull shard_id = blk_id_.shard_full();
-            shard_id.shard = (shard_id.shard & ~(1 << (63 - shard_id.pfx_len()))) | 1;
-            Ref<block::McShardHash> shard_hash = shards.get_shard_hash(shard_id, false);
-            if (shard_hash.is_null()) {
-              fatal_error("shard not found");
-              return;
-            }
-            prev_id = shard_hash->top_block_id();
-          } else {
-            std::vector<BlockIdExt> prev;
-            BlockIdExt mc_blkid;
-            bool after_split;
-            td::Status S = block::unpack_block_prev_blk_try(mpb.root(), cur_id, prev, mc_blkid, after_split);
-            if (S.is_error()) {
-              fatal_error(std::move(S));
-              return;
-            }
-            bool found = false;
-            for (const BlockIdExt &id: prev) {
-              if (shard_intersects(id.shard_full(), blk_id_.shard_full())) {
-                found = true;
-                prev_id = id;
-                break;
-              }
-            }
-            if (!found) {
-              fatal_error("failed to find block chain");
-              return;
-            }
-          }
-          auto proof = mpb.extract_proof();
-          if (proof.is_error()) {
-            fatal_error(proof.move_as_error_prefix("cannot serialize Merkle proof : "));
-            return;
-          }
-          result.emplace_back(prev_id, proof.move_as_ok());
+void LiteQuery::continue_lookupBlockWithProof_buildProofLinks(
+    td::Ref<BlockData> cur_block, std::vector<std::pair<BlockIdExt, td::Ref<vm::Cell>>> result) {
+  BlockIdExt cur_id = cur_block->block_id();
+  BlockIdExt prev_id;
+  vm::MerkleProofBuilder mpb{cur_block->root_cell()};
+  if (cur_id.is_masterchain()) {
+    base_blk_id_alt_ = cur_id;
+    block::gen::Block::Record blk;
+    block::gen::BlockExtra::Record extra;
+    block::gen::McBlockExtra::Record mc_extra;
+    if (!tlb::unpack_cell(mpb.root(), blk) || !tlb::unpack_cell(blk.extra, extra) || !extra.custom->have_refs() ||
+        !tlb::unpack_cell(extra.custom->prefetch_ref(), mc_extra)) {
+      fatal_error("cannot unpack header of block "s + cur_id.to_str());
+      return;
+    }
+    block::ShardConfig shards(mc_extra.shard_hashes->prefetch_ref());
+    ShardIdFull shard_id = blk_id_.shard_full();
+    shard_id.shard = (shard_id.shard & ~(1ULL << (63 - shard_id.pfx_len()))) | 1;
+    Ref<block::McShardHash> shard_hash = shards.get_shard_hash(shard_id, false);
+    if (shard_hash.is_null()) {
+      fatal_error("shard not found");
+      return;
+    }
+    prev_id = shard_hash->top_block_id();
+  } else {
+    std::vector<BlockIdExt> prev;
+    BlockIdExt mc_blkid;
+    bool after_split;
+    td::Status S = block::unpack_block_prev_blk_try(mpb.root(), cur_id, prev, mc_blkid, after_split);
+    if (S.is_error()) {
+      fatal_error(std::move(S));
+      return;
+    }
+    bool found = false;
+    for (const BlockIdExt& id : prev) {
+      if (shard_intersects(id.shard_full(), blk_id_.shard_full())) {
+        found = true;
+        prev_id = id;
+        break;
+      }
+    }
+    if (!found) {
+      fatal_error("failed to find block chain");
+      return;
+    }
+  }
+  auto proof = mpb.extract_proof();
+  if (proof.is_error()) {
+    fatal_error(proof.move_as_error_prefix("cannot serialize Merkle proof : "));
+    return;
+  }
+  result.emplace_back(prev_id, proof.move_as_ok());
 
           if (prev_id == blk_id_) {
             CHECK(base_blk_id_alt_.is_masterchain());
@@ -3285,14 +3284,13 @@ bool LiteQuery::construct_proof_link_forward_cont(ton::BlockIdExt cur, ton::Bloc
   try {
     Ref<vm::Cell> cur_root, next_root;
     // virtualize roots
-    ton::validator::ProofQ::VirtualizedProof virt1;
+    std::shared_ptr<vm::StaticBagOfCellsDb> boc;
     if (cur.seqno()) {
       auto vres1 = proof_link_->get_virtual_root();
       if (vres1.is_error()) {
         return fatal_error(vres1.move_as_error());
       }
-      virt1 = vres1.move_as_ok();
-      cur_root = virt1.root;
+      cur_root = vres1.ok().root;
     } else {
       // for zero state, lazily deserialize buffer_ instead
       vm::StaticBagOfCellsDbLazy::Options options;
@@ -3301,8 +3299,8 @@ bool LiteQuery::construct_proof_link_forward_cont(ton::BlockIdExt cur, ton::Bloc
       if (res.is_error()) {
         return fatal_error(res.move_as_error());
       }
-      virt1.boc = res.move_as_ok();
-      auto t_root = virt1.boc->get_root_cell(0);
+      boc = res.move_as_ok();
+      auto t_root = boc->get_root_cell(0);
       if (t_root.is_error()) {
         return fatal_error(t_root.move_as_error());
       }
@@ -3638,59 +3636,58 @@ bool LiteQuery::finish_proof_chain(ton::BlockIdExt id) {
           });
         }
 
-        void LiteQuery::continue_getShardBlockProof(Ref<BlockData> cur_block,
-                                                    std::vector<std::pair<BlockIdExt, td::BufferSlice>> result) {
-          BlockIdExt cur_id = cur_block->block_id();
-          BlockIdExt prev_id;
-          vm::MerkleProofBuilder mpb{cur_block->root_cell()};
-          if (cur_id.is_masterchain()) {
-            base_blk_id_ = cur_id;
-            block::gen::Block::Record blk;
-            block::gen::BlockExtra::Record extra;
-            block::gen::McBlockExtra::Record mc_extra;
-            if (!tlb::unpack_cell(mpb.root(), blk) || !tlb::unpack_cell(blk.extra, extra) ||
-                !extra.custom->have_refs() ||
-                !tlb::unpack_cell(extra.custom->prefetch_ref(), mc_extra)) {
-              fatal_error("cannot unpack header of block "s + cur_id.to_str());
-              return;
-            }
-            block::ShardConfig shards(mc_extra.shard_hashes->prefetch_ref());
-            ShardIdFull shard_id = blk_id_.shard_full();
-            shard_id.shard = (shard_id.shard & ~(1 << (63 - shard_id.pfx_len()))) | 1;
-            Ref<block::McShardHash> shard_hash = shards.get_shard_hash(shard_id, false);
-            if (shard_hash.is_null()) {
-              fatal_error("shard not found");
-              return;
-            }
-            prev_id = shard_hash->top_block_id();
-          } else {
-            std::vector<BlockIdExt> prev;
-            BlockIdExt mc_blkid;
-            bool after_split;
-            td::Status S = block::unpack_block_prev_blk_try(mpb.root(), cur_id, prev, mc_blkid, after_split);
-            if (S.is_error()) {
-              fatal_error(std::move(S));
-              return;
-            }
-            bool found = false;
-            for (const BlockIdExt &id: prev) {
-              if (shard_intersects(id.shard_full(), blk_id_.shard_full())) {
-                found = true;
-                prev_id = id;
-                break;
-              }
-            }
-            if (!found) {
-              fatal_error("failed to find block chain");
-              return;
-            }
-          }
-          auto proof = mpb.extract_proof_boc();
-          if (proof.is_error()) {
-            fatal_error(proof.move_as_error_prefix("cannot serialize Merkle proof : "));
-            return;
-          }
-          result.emplace_back(prev_id, proof.move_as_ok());
+void LiteQuery::continue_getShardBlockProof(Ref<BlockData> cur_block,
+                                            std::vector<std::pair<BlockIdExt, td::BufferSlice>> result) {
+  BlockIdExt cur_id = cur_block->block_id();
+  BlockIdExt prev_id;
+  vm::MerkleProofBuilder mpb{cur_block->root_cell()};
+  if (cur_id.is_masterchain()) {
+    base_blk_id_ = cur_id;
+    block::gen::Block::Record blk;
+    block::gen::BlockExtra::Record extra;
+    block::gen::McBlockExtra::Record mc_extra;
+    if (!tlb::unpack_cell(mpb.root(), blk) || !tlb::unpack_cell(blk.extra, extra) || !extra.custom->have_refs() ||
+        !tlb::unpack_cell(extra.custom->prefetch_ref(), mc_extra)) {
+      fatal_error("cannot unpack header of block "s + cur_id.to_str());
+      return;
+    }
+    block::ShardConfig shards(mc_extra.shard_hashes->prefetch_ref());
+    ShardIdFull shard_id = blk_id_.shard_full();
+    shard_id.shard = (shard_id.shard & ~(1ULL << (63 - shard_id.pfx_len()))) | 1;
+    Ref<block::McShardHash> shard_hash = shards.get_shard_hash(shard_id, false);
+    if (shard_hash.is_null()) {
+      fatal_error("shard not found");
+      return;
+    }
+    prev_id = shard_hash->top_block_id();
+  } else {
+    std::vector<BlockIdExt> prev;
+    BlockIdExt mc_blkid;
+    bool after_split;
+    td::Status S = block::unpack_block_prev_blk_try(mpb.root(), cur_id, prev, mc_blkid, after_split);
+    if (S.is_error()) {
+      fatal_error(std::move(S));
+      return;
+    }
+    bool found = false;
+    for (const BlockIdExt& id : prev) {
+      if (shard_intersects(id.shard_full(), blk_id_.shard_full())) {
+        found = true;
+        prev_id = id;
+        break;
+      }
+    }
+    if (!found) {
+      fatal_error("failed to find block chain");
+      return;
+    }
+  }
+  auto proof = mpb.extract_proof_boc();
+  if (proof.is_error()) {
+    fatal_error(proof.move_as_error_prefix("cannot serialize Merkle proof : "));
+    return;
+  }
+  result.emplace_back(prev_id, proof.move_as_ok());
 
           if (prev_id == blk_id_) {
             CHECK(base_blk_id_.is_masterchain());
