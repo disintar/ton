@@ -1072,7 +1072,7 @@ namespace ton::liteserver {
             if (refire + 1 > allowed_refire) {
               LOG(ERROR) << "Too deep refire";
               query_statuses_.push_back({false, elapsed.elapsed(), compiled_query});
-              auto res = create_serialize_tl_object<lite_api::liteServer_error>(228, error.message().str());
+              auto res = create_serialize_tl_object<lite_api::liteServer_error>(231, error.message().str());
               td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, data.clone(), started_at,
                                       elapsed, false);
               process_cache(std::move(data), res.clone(), compiled_query, elapsed);
@@ -1236,7 +1236,7 @@ namespace ton::liteserver {
                 }
 
                 if (std::time(nullptr) > std::get<0>(k)) {
-                  promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Key expired"));
+                  promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(229, "Key expired"));
                   LOG(INFO) << "Drop to: " << dst.bits256_value().to_hex() << " because of expired";
                   return;
                 }
@@ -1638,7 +1638,7 @@ namespace ton::liteserver {
 
             process_ext_query(src, dst, std::move(data), std::move(promise), refire, std::move(query_compiled));
           } else {
-            promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Server not ready"));
+            promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(230, "Server not ready"));
           }
         }
 
@@ -1841,7 +1841,7 @@ namespace ton::liteserver {
         int mode_;
         int cur_alarm = 0;
         std::tuple<ton::UnixTime, ton::BlockSeqno> best_time = std::make_tuple(0, 0);
-        int allowed_refire = 2;
+        int allowed_refire = 30;
         unsigned long to_update = 0;
         std::string db_root_;
         std::string config_path_;
