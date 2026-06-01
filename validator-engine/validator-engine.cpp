@@ -1507,6 +1507,10 @@ void ValidatorEngine::update_prometheus_exporter_stats() {
 
   if (allow_share_liteserver_credentials_) {
     std::string liteserver_credentials;
+    if (!config_.full_node.is_zero()) {
+      liteserver_credentials += "ton_fullnode_adnl{tag=\"" + liteserver_credentials_tag_ + "\",adnl=\"" +
+                                config_.full_node.bits256_value().to_hex() + "\"} 1\n";
+    }
     for (auto &ip: addrs_) {
       for (auto &[t, e]: config_.liteservers) {
         liteserver_credentials += "ton_liteserver_credentials{ip=\"" + ip.get_ip_str().str() + "\" port=\"" +
