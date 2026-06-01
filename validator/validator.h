@@ -312,7 +312,7 @@ class ValidatorManagerInterface : public td::actor::Actor {
                                         td::Promise<td::Unit> promise) = 0;
   virtual void validate_block(ReceivedBlock block, td::Promise<BlockHandle> promise) = 0;
   virtual void new_block_broadcast(BlockBroadcast broadcast, bool signatures_checked,
-                                   td::Promise<td::Unit> promise) = 0;
+                                   td::Promise<td::Unit> promise, bool from_custom_overlay = false) = 0;
   virtual void validate_block_broadcast_signatures(BlockBroadcast broadcast, td::Promise<td::Unit> promise) = 0;
 
   //virtual void create_validate_block(BlockId block, td::BufferSlice data, td::Promise<Block> promise) = 0;

@@ -51,13 +51,14 @@ class ValidateBroadcast : public td::actor::Actor {
   td::Ref<MasterchainState> zero_state_;
   bool signatures_only_;
   bool signatures_checked_;
+  bool from_custom_overlay_;
 
  public:
   ValidateBroadcast(BlockBroadcast broadcast, BlockHandle last_masterchain_block_handle,
                     td::Ref<MasterchainState> last_masterchain_state, BlockHandle last_known_masterchain_block_handle,
                     BlockParser* publisher,
                     td::actor::ActorId<ValidatorManager> manager, td::Timestamp timeout, td::Promise<td::Unit> promise,
-                    bool signatures_only = false, bool signatures_checked = false)
+                    bool signatures_only = false, bool signatures_checked = false, bool from_custom_overlay = false)
       : broadcast_(std::move(broadcast))
       , last_masterchain_block_handle_(std::move(last_masterchain_block_handle))
       , last_masterchain_state_(std::move(last_masterchain_state))
@@ -71,7 +72,8 @@ class ValidateBroadcast : public td::actor::Actor {
                       send_closure(manager, &ValidatorManager::add_perf_timer_stat, "validatebroadcast", duration);
                     })
       , signatures_only_(signatures_only)
-      , signatures_checked_(signatures_checked) {
+      , signatures_checked_(signatures_checked)
+      , from_custom_overlay_(from_custom_overlay) {
   }
 
   void start_up() override;

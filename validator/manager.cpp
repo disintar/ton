@@ -220,7 +220,7 @@ void ValidatorManagerImpl::validate_block(ReceivedBlock block, td::Promise<Block
 }
 
 void ValidatorManagerImpl::new_block_broadcast(BlockBroadcast broadcast, bool signatures_checked,
-                                               td::Promise<td::Unit> promise) {
+                                               td::Promise<td::Unit> promise, bool from_custom_overlay) {
   if (!started_) {
     promise.set_error(td::Status::Error(ErrorCode::notready, "node not started"));
     return;
@@ -241,7 +241,7 @@ void ValidatorManagerImpl::new_block_broadcast(BlockBroadcast broadcast, bool si
   td::actor::create_actor<ValidateBroadcast>(PSTRING() << "broadcast" << block_id.id.to_str(), std::move(broadcast),
                                              last_masterchain_block_handle_, last_masterchain_state_,
                                              last_known_key_block_handle_, publisher_.get(), actor_id(this), td::Timestamp::in(20.0),
-                                             std::move(promise), false, signatures_checked)
+                                             std::move(promise), false, signatures_checked, from_custom_overlay)
       .release();
 }
 

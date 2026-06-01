@@ -1,4 +1,5 @@
 #include "validator-engine/prometheus/PrometheusExporterActor.h"
+#include "validator/custom-overlay-metrics.h"
 
 namespace ton {
     namespace {
@@ -50,6 +51,14 @@ namespace ton {
       ss << "\n" << sanitize_metrics_blob(liteserver_stats);
       ss << "\n# Liteserver credentials\n\n";
       ss << "\n" << sanitize_metrics_blob(liteserver_credentials);
+      ss << "\n# HELP ton_custom_overlay_block_broadcasts_received_total Total valid block broadcasts received from custom overlays\n";
+      ss << "# TYPE ton_custom_overlay_block_broadcasts_received_total counter\n";
+      ss << "ton_custom_overlay_block_broadcasts_received_total "
+         << validator::fullnode::get_custom_overlay_block_broadcasts_received_total() << "\n";
+      ss << "# HELP ton_custom_overlay_block_broadcasts_applied_total Total custom overlay block broadcasts applied locally\n";
+      ss << "# TYPE ton_custom_overlay_block_broadcasts_applied_total counter\n";
+      ss << "ton_custom_overlay_block_broadcasts_applied_total "
+         << validator::fullnode::get_custom_overlay_block_broadcasts_applied_total() << "\n";
 
       return ss.str();
     }

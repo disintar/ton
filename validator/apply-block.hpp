@@ -40,7 +40,8 @@ namespace validator {
 class ApplyBlock : public td::actor::Actor {
  public:
   ApplyBlock(BlockIdExt id, td::Ref<BlockData> block, BlockIdExt masterchain_block_id,
-             td::actor::ActorId<ValidatorManager> manager, td::Timestamp timeout, td::Promise<td::Unit> promise)
+             td::actor::ActorId<ValidatorManager> manager, td::Timestamp timeout, td::Promise<td::Unit> promise,
+             bool from_custom_overlay = false)
       : id_(id)
       , block_(std::move(block))
       , masterchain_block_id_(masterchain_block_id)
@@ -49,7 +50,8 @@ class ApplyBlock : public td::actor::Actor {
       , promise_(std::move(promise))
       , perf_timer_("applyblock", 0.1, [manager](double duration) {
         send_closure(manager, &ValidatorManager::add_perf_timer_stat, "applyblock", duration);
-      }) {
+      })
+      , from_custom_overlay_(from_custom_overlay) {
   }
 
   static constexpr td::uint32 apply_block_priority() {
@@ -85,6 +87,7 @@ class ApplyBlock : public td::actor::Actor {
   td::Ref<ShardState> state_;
 
   td::PerfWarningTimer perf_timer_;
+  bool from_custom_overlay_;
 };
 
 }  // namespace validator

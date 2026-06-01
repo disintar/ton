@@ -23,6 +23,7 @@
 #include "validator/invariants.hpp"
 
 #include "apply-block.hpp"
+#include "custom-overlay-metrics.h"
 
 namespace ton {
 
@@ -275,6 +276,9 @@ void ApplyBlock::applied_prev() {
 void ApplyBlock::applied_set() {
   VLOG(VALIDATOR_DEBUG) << "applied_set";
   handle_->set_applied();
+  if (from_custom_overlay_) {
+    fullnode::record_custom_overlay_block_broadcast_applied();
+  }
   auto publisher_ = manager_.get_actor_unsafe().get_block_publisher();
   if (publisher_) {
     const auto handle_id = handle_->id();

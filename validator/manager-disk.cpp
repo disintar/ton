@@ -226,7 +226,7 @@ void ValidatorManagerImpl::validate_block(ReceivedBlock block, td::Promise<Block
 }
 
 void ValidatorManagerImpl::new_block_broadcast(BlockBroadcast broadcast, bool signatures_checked,
-                                               td::Promise<td::Unit> promise) {
+                                               td::Promise<td::Unit> promise, bool from_custom_overlay) {
   UNREACHABLE();
 }
 

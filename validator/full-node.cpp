@@ -25,6 +25,7 @@
 #include "ton/ton-io.hpp"
 #include "ton/ton-tl.hpp"
 
+#include "custom-overlay-metrics.h"
 #include "full-node.h"
 #include "full-node.hpp"
 
@@ -606,7 +607,10 @@ void FullNodeImpl::new_key_block(BlockHandle handle) {
   }
 }
 
-void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast, bool signatures_checked) {
+void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast, bool signatures_checked, bool from_custom_overlay) {
+  if (from_custom_overlay) {
+    record_custom_overlay_block_broadcast_received();
+  }
   send_block_broadcast_to_custom_overlays(broadcast);
   td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_block_broadcast, std::move(broadcast),
                           signatures_checked, [](td::Result<td::Unit> R) {
@@ -617,7 +621,8 @@ void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast, bool signat
                                 LOG(INFO) << "dropped broadcast: " << R.move_as_error();
                               }
                             }
-                          });
+                          },
+                          from_custom_overlay);
 }
 
 void FullNodeImpl::process_block_candidate_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno,

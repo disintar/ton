@@ -869,7 +869,7 @@ void FullNodeShardImpl::process_block_broadcast(PublicKeyHash src, ton_api::tonN
   //}
   VLOG(FULL_NODE_DEBUG) << "Received block broadcast " << (B.ok().sig_set->is_final() ? "" : "(approve signatures) ")
                         << "from " << src << ": " << B.ok().block_id.to_str();
-  td::actor::send_closure(full_node_, &FullNode::process_block_broadcast, B.move_as_ok(), false);
+  td::actor::send_closure(full_node_, &FullNode::process_block_broadcast, B.move_as_ok(), false, false);
 }
 
 void FullNodeShardImpl::obtain_state_for_decompression(PublicKeyHash src,
@@ -905,7 +905,7 @@ void FullNodeShardImpl::process_block_broadcast_with_state(PublicKeyHash src,
     return;
   }
   VLOG(FULL_NODE_DEBUG) << "Received block broadcast from " << src << ": " << B.ok().block_id.to_str();
-  td::actor::send_closure(full_node_, &FullNode::process_block_broadcast, B.move_as_ok(), true);
+  td::actor::send_closure(full_node_, &FullNode::process_block_broadcast, B.move_as_ok(), true, false);
 }
 
 void FullNodeShardImpl::receive_broadcast(PublicKeyHash src, td::BufferSlice broadcast) {

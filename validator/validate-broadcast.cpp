@@ -347,7 +347,7 @@ void ValidateBroadcast::checked_proof() {
 
     VLOG(VALIDATOR_DEBUG) << "apply block";
     td::actor::create_actor<ApplyBlock>(PSTRING() << "apply" << handle_->id().id.to_str(), handle_->id(), data_,
-                                        handle_->id(), manager_, timeout_, std::move(P))
+                                        handle_->id(), manager_, timeout_, std::move(P), from_custom_overlay_)
         .release();
   } else {
     finish_query();

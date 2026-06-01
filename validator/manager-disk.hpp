@@ -127,7 +127,8 @@ class ValidatorManagerImpl : public ValidatorManager {
   void validate_block(ReceivedBlock block, td::Promise<BlockHandle> promise) override;
   void update_lite_server_state(BlockIdExt shard_client, td::Ref<MasterchainState> state) override;
   void update_lite_server_state_final(BlockIdExt shard_client, td::Ref<MasterchainState> state);
-  void new_block_broadcast(BlockBroadcast broadcast, bool signatures_checked, td::Promise<td::Unit> promise) override;
+  void new_block_broadcast(BlockBroadcast broadcast, bool signatures_checked, td::Promise<td::Unit> promise,
+                           bool from_custom_overlay = false) override;
   void validate_block_broadcast_signatures(BlockBroadcast broadcast, td::Promise<td::Unit> promise) override;
   void wait_state_by_prev_blocks(BlockIdExt block_id, std::vector<BlockIdExt> prev_blocks,
                                  td::Promise<td::Ref<ShardState>> promise) override;
