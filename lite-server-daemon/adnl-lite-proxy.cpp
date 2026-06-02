@@ -1414,6 +1414,22 @@ namespace ton::liteserver {
           }
         }
 
+        td::Promise<td::BufferSlice> track_usage_duration(adnl::AdnlNodeIdShort dst, const td::BufferSlice &data,
+                                                          td::Promise<td::BufferSlice> promise) {
+          auto self_id = actor_id(this);
+          return td::PromiseCreator::lambda(
+                  [P = std::move(promise), SelfId = self_id, dst, data = data.clone(), elapsed = td::Timer()](
+                          td::Result<td::BufferSlice> R) mutable {
+                      td::actor::send_closure(SelfId, &LiteProxy::complete_usage_request, dst, data.clone(),
+                                              elapsed.elapsed());
+                      if (R.is_ok()) {
+                        P.set_value(R.move_as_ok());
+                      } else {
+                        P.set_error(R.move_as_error());
+                      }
+                  });
+        }
+
         void record_usage_request(adnl::AdnlNodeIdShort dst, const td::BufferSlice &data,
                                   const std::string &compiled_query, int refire, long long limit) {
           if (!usage_push_enabled_ || refire != 0) {
@@ -1636,9 +1652,10 @@ namespace ton::liteserver {
                                       std::move(promise), 0);
             }
           } else {
+            auto usage_promise = track_usage_duration(dst, data, std::move(promise));
             if (!uptodate_private_ls.empty()) {
               auto waiter = td::actor::create_actor<ton::liteserver::LiteClientFire>(
-                      "LSC::Fire", uptodate_private_ls.size(), src, dst, data.clone(), std::move(promise),
+                      "LSC::Fire", uptodate_private_ls.size(), src, dst, data.clone(), std::move(usage_promise),
                       make_refire_callback(refire))
                       .release();
               for (auto &s: uptodate_private_ls) {
@@ -1654,7 +1671,7 @@ namespace ton::liteserver {
               }
             } else {
               auto waiter = td::actor::create_actor<ton::liteserver::LiteClientFire>(
-                      "LSC::Fire", private_servers_.size(), src, dst, data.clone(), std::move(promise),
+                      "LSC::Fire", private_servers_.size(), src, dst, data.clone(), std::move(usage_promise),
                       make_refire_callback(refire))
                       .release();
 
