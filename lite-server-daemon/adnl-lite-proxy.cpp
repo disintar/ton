@@ -2,6 +2,7 @@
 #include "td/utils/logging.h"
 #include "td/utils/port/path.h"
 #include "td/actor/actor.h"
+#include "td/utils/base64.h"
 #include "td/utils/Time.h"
 #include "td/utils/filesystem.h"
 #include "td/utils/JsonBuilder.h"
@@ -38,9 +39,18 @@
 #include "crypto/block/mc-config.h"
 #include "lite-server-config.hpp"
 #include <algorithm>
+#include <cerrno>
 #include <queue>
 #include <chrono>
+#include <cstring>
+#include <fcntl.h>
+#include <netdb.h>
+#include <sstream>
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <sys/time.h>
 #include <thread>
+#include <unistd.h>
 #include <cppkafka/cppkafka.h>
 #include "blockchain-indexer/json.hpp"
 #include <chrono>
@@ -48,6 +58,10 @@
 #include "tl-utils/lite-utils.hpp"
 #include "tl/TlObject.h"
 #include "validator-engine/prometheus/PrometheusExporterActor.h"
+
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
 
 using ValidUntil = td::int64;
 using RateLimit = td::int32;
@@ -122,6 +136,194 @@ struct PublishedItem {
 };
 
 namespace ton::liteserver {
+    struct UsagePushUrl {
+        bool valid{false};
+        std::string original;
+        std::string host;
+        std::string port{"80"};
+        std::string path{"/"};
+    };
+
+    UsagePushUrl parse_usage_push_url(const std::string &url) {
+      UsagePushUrl result;
+      result.original = url;
+
+      const std::string prefix = "http://";
+      if (url.compare(0, prefix.size(), prefix) != 0) {
+        LOG(ERROR) << "DTON_PUSH_USAGE supports only http:// urls: " << url;
+        return result;
+      }
+
+      auto rest = url.substr(prefix.size());
+      auto slash_pos = rest.find('/');
+      auto authority = slash_pos == std::string::npos ? rest : rest.substr(0, slash_pos);
+      result.path = slash_pos == std::string::npos ? "/" : rest.substr(slash_pos);
+
+      if (authority.empty()) {
+        LOG(ERROR) << "DTON_PUSH_USAGE has empty host: " << url;
+        return result;
+      }
+
+      auto port_pos = authority.rfind(':');
+      if (port_pos != std::string::npos && port_pos + 1 < authority.size()) {
+        result.host = authority.substr(0, port_pos);
+        result.port = authority.substr(port_pos + 1);
+      } else {
+        result.host = authority;
+      }
+
+      if (result.host.empty()) {
+        LOG(ERROR) << "DTON_PUSH_USAGE has empty host: " << url;
+        return result;
+      }
+
+      result.valid = true;
+      return result;
+    }
+
+    bool usage_push_connect_with_timeout(int fd, const struct sockaddr *addr, socklen_t addr_len) {
+      int flags = fcntl(fd, F_GETFL, 0);
+      if (flags < 0) {
+        flags = 0;
+      }
+      fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
+      int rc = connect(fd, addr, addr_len);
+      if (rc == 0) {
+        fcntl(fd, F_SETFL, flags);
+        return true;
+      }
+      if (errno != EINPROGRESS) {
+        fcntl(fd, F_SETFL, flags);
+        return false;
+      }
+
+      fd_set write_fds;
+      FD_ZERO(&write_fds);
+      FD_SET(fd, &write_fds);
+      struct timeval timeout;
+      timeout.tv_sec = 3;
+      timeout.tv_usec = 0;
+
+      rc = select(fd + 1, nullptr, &write_fds, nullptr, &timeout);
+      if (rc <= 0) {
+        fcntl(fd, F_SETFL, flags);
+        return false;
+      }
+
+      int socket_error = 0;
+      socklen_t socket_error_len = sizeof(socket_error);
+      if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &socket_error, &socket_error_len) != 0 || socket_error != 0) {
+        errno = socket_error;
+        fcntl(fd, F_SETFL, flags);
+        return false;
+      }
+
+      fcntl(fd, F_SETFL, flags);
+      return true;
+    }
+
+    bool usage_push_send_all(int fd, const std::string &payload) {
+      const char *data = payload.data();
+      size_t left = payload.size();
+      while (left > 0) {
+        auto sent = send(fd, data, left, MSG_NOSIGNAL);
+        if (sent < 0) {
+          if (errno == EINTR) {
+            continue;
+          }
+          return false;
+        }
+        if (sent == 0) {
+          return false;
+        }
+        data += sent;
+        left -= static_cast<size_t>(sent);
+      }
+      return true;
+    }
+
+    bool usage_push_http_post(const UsagePushUrl &url, const std::string &body) {
+      struct addrinfo hints;
+      std::memset(&hints, 0, sizeof(hints));
+      hints.ai_family = AF_UNSPEC;
+      hints.ai_socktype = SOCK_STREAM;
+
+      struct addrinfo *addresses = nullptr;
+      auto gai_status = getaddrinfo(url.host.c_str(), url.port.c_str(), &hints, &addresses);
+      if (gai_status != 0) {
+        LOG(ERROR) << "Failed to resolve DTON_PUSH_USAGE host " << url.host << ": " << gai_strerror(gai_status);
+        return false;
+      }
+
+      int fd = -1;
+      for (auto addr = addresses; addr != nullptr; addr = addr->ai_next) {
+        fd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
+        if (fd < 0) {
+          continue;
+        }
+
+        if (usage_push_connect_with_timeout(fd, addr->ai_addr, static_cast<socklen_t>(addr->ai_addrlen))) {
+          break;
+        }
+
+        close(fd);
+        fd = -1;
+      }
+      freeaddrinfo(addresses);
+
+      if (fd < 0) {
+        LOG(ERROR) << "Failed to connect to DTON_PUSH_USAGE " << url.original;
+        return false;
+      }
+
+      struct timeval io_timeout;
+      io_timeout.tv_sec = 3;
+      io_timeout.tv_usec = 0;
+      setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &io_timeout, sizeof(io_timeout));
+      setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &io_timeout, sizeof(io_timeout));
+
+      std::ostringstream request;
+      request << "POST " << url.path << " HTTP/1.1\r\n"
+              << "Host: " << url.host;
+      if (url.port != "80") {
+        request << ":" << url.port;
+      }
+      request << "\r\n"
+              << "Content-Type: application/json\r\n"
+              << "Content-Length: " << body.size() << "\r\n"
+              << "Connection: close\r\n\r\n"
+              << body;
+
+      auto ok = usage_push_send_all(fd, request.str());
+      std::string response;
+      if (ok) {
+        char buffer[256];
+        auto received = recv(fd, buffer, sizeof(buffer) - 1, 0);
+        if (received > 0) {
+          buffer[received] = 0;
+          response.assign(buffer);
+        }
+      }
+      close(fd);
+
+      if (!ok) {
+        LOG(ERROR) << "Failed to send usage batch to DTON_PUSH_USAGE " << url.original;
+        return false;
+      }
+
+      std::istringstream response_stream(response);
+      std::string http_version;
+      int status_code = 0;
+      response_stream >> http_version >> status_code;
+      if (status_code < 200 || status_code >= 300) {
+        LOG(ERROR) << "DTON_PUSH_USAGE returned non-2xx status: " << status_code;
+        return false;
+      }
+
+      return true;
+    }
+
     // todo: separate from manager.hpp
     template<typename ResType>
     struct Waiter {
@@ -398,6 +600,15 @@ namespace ton::liteserver {
           global_config_ = std::move(global_config);
           mode_ = mode;
 
+          const char *usage_push_url = std::getenv("DTON_PUSH_USAGE");
+          if (usage_push_url != nullptr && usage_push_url[0] != '\0') {
+            usage_push_url_ = parse_usage_push_url(usage_push_url);
+            usage_push_enabled_ = usage_push_url_.valid;
+            usage_last_push_at_ = td::Clocks::system();
+            if (usage_push_enabled_) {
+              LOG(INFO) << "DTON usage push enabled: " << usage_push_url_.original;
+            }
+          }
         }
 
         std::unique_ptr<ton::adnl::AdnlExtClient::Callback> make_callback(adnl::AdnlNodeIdShort server) {
@@ -977,6 +1188,79 @@ namespace ton::liteserver {
           }
         }
 
+        void flush_usage_batch(bool force) {
+          if (!usage_push_enabled_ || usage_batch_.empty()) {
+            return;
+          }
+
+          auto now = td::Clocks::system();
+          if (!force && now - usage_last_push_at_ < 5.0) {
+            return;
+          }
+          usage_last_push_at_ = now;
+
+          std::vector<nlohmann::json> items;
+          items.swap(usage_batch_);
+
+          nlohmann::json batch;
+          batch["source"] = "lite-proxy";
+          batch["version"] = 1;
+          batch["sent_at"] = std::time(nullptr);
+          batch["count"] = items.size();
+          batch["items"] = std::move(items);
+
+          auto payload = batch.dump(-1);
+          auto url = usage_push_url_;
+          std::thread([url, payload = std::move(payload)]() {
+              usage_push_http_post(url, payload);
+          }).detach();
+        }
+
+        void append_usage_event(nlohmann::json event) {
+          if (!usage_push_enabled_) {
+            return;
+          }
+
+          usage_batch_.push_back(std::move(event));
+        }
+
+        void record_usage_request(adnl::AdnlNodeIdShort dst, const td::BufferSlice &data,
+                                  const std::string &compiled_query, int refire, long long limit) {
+          if (!usage_push_enabled_ || refire != 0) {
+            return;
+          }
+
+          std::string query_name = "UNKNOWN";
+          auto F = fetch_tl_object<lite_api::liteServer_query>(data.clone(), true);
+          if (F.is_ok()) {
+            auto real_data = F.move_as_ok()->data_.clone();
+            auto Fn = fetch_tl_object<ton::lite_api::Function>(real_data.clone(), true);
+            if (Fn.is_ok()) {
+              query_name = lite_query_name_by_id(Fn.move_as_ok()->get_id());
+            } else {
+              auto wait_data = real_data.clone();
+              auto Fmc = fetch_tl_prefix<lite_api::liteServer_waitMasterchainSeqno>(wait_data, true);
+              if (Fmc.is_ok()) {
+                query_name = "waitMasterchainSeqno";
+              }
+            }
+          }
+
+          nlohmann::json event;
+          event["client_key"] = dst.bits256_value().to_hex();
+          event["dst"] = dst.bits256_value().to_hex();
+          event["q"] = query_name;
+          event["query_name"] = query_name;
+          event["query"] = compiled_query;
+          event["started"] = std::time(nullptr);
+          event["refire"] = refire;
+          event["rps_limit"] = limit;
+          event["request_size"] = data.size();
+          event["request_b64"] = td::base64_encode(data.as_slice());
+
+          append_usage_event(std::move(event));
+        }
+
         void process_cache(td::BufferSlice data, td::BufferSlice result, const std::string &compiled_query = "",
                            td::Timer elapsed = {}) {
           std::string data_hash = compute_file_hash(data).to_hex();
@@ -1280,6 +1564,7 @@ namespace ton::liteserver {
                     LOG(INFO) << "Pass through wait for block: " << e->seqno_;
 
                     // Pass through
+                    record_usage_request(dst, data, query_compiled, refire, limit);
                     process_ext_query(src, dst, std::move(data),
                                       std::move(promise), refire, query_compiled);
                     return;
@@ -1289,6 +1574,7 @@ namespace ton::liteserver {
 
                     LOG(INFO) << "Send to wait: " << e->seqno_ << " wait: " << t;
 
+                    record_usage_request(dst, data, query_compiled, refire, limit);
                     auto Q = td::PromiseCreator::lambda(
                             [data = std::move(data),
                                     SelfId = actor_id(this),
@@ -1636,6 +1922,7 @@ namespace ton::liteserver {
               query_compiled = "notLiteServerQuery";
             }
 
+            record_usage_request(dst, data, query_compiled, refire, limit);
             process_ext_query(src, dst, std::move(data), std::move(promise), refire, std::move(query_compiled));
           } else {
             promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(230, "Server not ready"));
@@ -1708,6 +1995,8 @@ namespace ton::liteserver {
             query_statuses_.clear();
             LOG(ERROR) << "Query statuses too large, clear";
           }
+
+          flush_usage_batch(false);
         }
 
         void update_server_stats() {
@@ -1881,6 +2170,10 @@ namespace ton::liteserver {
         std::string stats_;
         td::actor::ActorOwn<ton::PrometheusExporterActor> prometheus_exporter_;
         std::vector<std::tuple<bool, double, std::string>> query_statuses_;
+        bool usage_push_enabled_{false};
+        UsagePushUrl usage_push_url_;
+        double usage_last_push_at_{0};
+        std::vector<nlohmann::json> usage_batch_;
     };
 }  // namespace ton::liteserver
 
