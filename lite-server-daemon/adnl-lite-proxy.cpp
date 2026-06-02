@@ -1363,13 +1363,31 @@ namespace ton::liteserver {
           }
           usage_last_push_at_ = now;
 
+          auto sent_at = std::time(nullptr);
           std::vector<nlohmann::json> items;
-          items.swap(usage_batch_);
+          std::vector<nlohmann::json> pending;
+          items.reserve(usage_batch_.size());
+          pending.reserve(usage_batch_.size());
+
+          for (auto &event: usage_batch_) {
+            auto started = event.is_object()
+                           ? static_cast<std::time_t>(event.value("started", static_cast<long long>(sent_at)))
+                           : sent_at;
+            if (force || !event.is_object() || event.contains("duration_ms") || sent_at - started > 30) {
+              items.push_back(std::move(event));
+            } else {
+              pending.push_back(std::move(event));
+            }
+          }
+          usage_batch_ = std::move(pending);
+          if (items.empty()) {
+            return;
+          }
 
           nlohmann::json batch;
           batch["source"] = "lite-proxy";
           batch["version"] = 1;
-          batch["sent_at"] = std::time(nullptr);
+          batch["sent_at"] = sent_at;
           batch["count"] = items.size();
           batch["items"] = std::move(items);
 
