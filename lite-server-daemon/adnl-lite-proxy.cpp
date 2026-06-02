@@ -1388,6 +1388,32 @@ namespace ton::liteserver {
           usage_batch_.push_back(std::move(event));
         }
 
+        void complete_usage_request(adnl::AdnlNodeIdShort dst, const td::BufferSlice &data, double elapsed_seconds) {
+          if (!usage_push_enabled_ || usage_batch_.empty()) {
+            return;
+          }
+
+          auto client_key = dst.bits256_value().to_hex();
+          auto request_b64 = td::base64_encode(data.as_slice());
+          auto duration_ms = static_cast<long long>(elapsed_seconds * 1000.0 + 0.5);
+
+          for (auto it = usage_batch_.rbegin(); it != usage_batch_.rend(); ++it) {
+            auto &event = *it;
+            if (!event.is_object() || event.contains("duration_ms")) {
+              continue;
+            }
+
+            if (event.value("client_key", std::string()) != client_key ||
+                event.value("request_b64", std::string()) != request_b64) {
+              continue;
+            }
+
+            event["duration_ms"] = duration_ms;
+            event["elapsed"] = elapsed_seconds;
+            return;
+          }
+        }
+
         void record_usage_request(adnl::AdnlNodeIdShort dst, const td::BufferSlice &data,
                                   const std::string &compiled_query, int refire, long long limit) {
           if (!usage_push_enabled_ || refire != 0) {
@@ -1434,6 +1460,7 @@ namespace ton::liteserver {
           if (it != cache_similar.end()) {
             for (auto &promise: it->second) {
               LOG(INFO) << "Found cache for request: " << data_hash << " query: " << compiled_query;
+              complete_usage_request(std::get<1>(promise), data, elapsed.elapsed());
               td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, std::get<1>(promise), data.clone(),
                                       std::get<0>(promise),
                                       elapsed, true);
@@ -1460,7 +1487,9 @@ namespace ton::liteserver {
                 if (error->message_.find(substring) != std::string::npos) {
                   if (refire + 1 > allowed_refire) {
                     LOG(ERROR) << "Too deep refire";
-                    query_statuses_.push_back({false, elapsed.elapsed(), compiled_query});
+                    auto elapsed_seconds = elapsed.elapsed();
+                    query_statuses_.push_back({false, elapsed_seconds, compiled_query});
+                    complete_usage_request(dst, data, elapsed_seconds);
 
                     td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, data.clone(), started_at,
                                             elapsed, false);
@@ -1483,7 +1512,9 @@ namespace ton::liteserver {
 
               if (refire + 1 > allowed_refire) {
                 LOG(ERROR) << "Too deep refire";
-                query_statuses_.push_back({false, elapsed.elapsed(), compiled_query});
+                auto elapsed_seconds = elapsed.elapsed();
+                query_statuses_.push_back({false, elapsed_seconds, compiled_query});
+                complete_usage_request(dst, data, elapsed_seconds);
 
                 td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, data.clone(), started_at,
                                         elapsed, false);
@@ -1503,7 +1534,9 @@ namespace ton::liteserver {
             } else {
               LOG(INFO)
               << "Query to: " << server_adnl << " success, Query: " << compiled_query << " Elapsed: " << elapsed;
-              query_statuses_.push_back({true, elapsed.elapsed(), compiled_query});
+              auto elapsed_seconds = elapsed.elapsed();
+              query_statuses_.push_back({true, elapsed_seconds, compiled_query});
+              complete_usage_request(dst, data, elapsed_seconds);
               td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, data.clone(), started_at,
                                       elapsed, false);
               process_cache(std::move(data), res.clone(), compiled_query, elapsed);
@@ -1519,7 +1552,9 @@ namespace ton::liteserver {
 
             if (refire + 1 > allowed_refire) {
               LOG(ERROR) << "Too deep refire";
-              query_statuses_.push_back({false, elapsed.elapsed(), compiled_query});
+              auto elapsed_seconds = elapsed.elapsed();
+              query_statuses_.push_back({false, elapsed_seconds, compiled_query});
+              complete_usage_request(dst, data, elapsed_seconds);
               auto res = create_serialize_tl_object<lite_api::liteServer_error>(231, error.message().str());
               td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, data.clone(), started_at,
                                       elapsed, false);
