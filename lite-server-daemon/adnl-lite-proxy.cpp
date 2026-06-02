@@ -44,7 +44,10 @@
 #include <chrono>
 #include <cstring>
 #include <fcntl.h>
+#include <memory>
 #include <netdb.h>
+#include <openssl/err.h>
+#include <openssl/ssl.h>
 #include <sstream>
 #include <sys/select.h>
 #include <sys/socket.h>
@@ -138,6 +141,7 @@ struct PublishedItem {
 namespace ton::liteserver {
     struct UsagePushUrl {
         bool valid{false};
+        bool tls{false};
         std::string original;
         std::string host;
         std::string port{"80"};
@@ -148,13 +152,23 @@ namespace ton::liteserver {
       UsagePushUrl result;
       result.original = url;
 
-      const std::string prefix = "http://";
-      if (url.compare(0, prefix.size(), prefix) != 0) {
-        LOG(ERROR) << "DTON_PUSH_USAGE supports only http:// urls: " << url;
+      const std::string http_prefix = "http://";
+      const std::string https_prefix = "https://";
+      size_t prefix_size = 0;
+      if (url.compare(0, http_prefix.size(), http_prefix) == 0) {
+        prefix_size = http_prefix.size();
+        result.tls = false;
+        result.port = "80";
+      } else if (url.compare(0, https_prefix.size(), https_prefix) == 0) {
+        prefix_size = https_prefix.size();
+        result.tls = true;
+        result.port = "443";
+      } else {
+        LOG(ERROR) << "DTON_PUSH_USAGE supports only http:// or https:// urls: " << url;
         return result;
       }
 
-      auto rest = url.substr(prefix.size());
+      auto rest = url.substr(prefix_size);
       auto slash_pos = rest.find('/');
       auto authority = slash_pos == std::string::npos ? rest : rest.substr(0, slash_pos);
       result.path = slash_pos == std::string::npos ? "/" : rest.substr(slash_pos);
@@ -164,12 +178,29 @@ namespace ton::liteserver {
         return result;
       }
 
-      auto port_pos = authority.rfind(':');
-      if (port_pos != std::string::npos && port_pos + 1 < authority.size()) {
-        result.host = authority.substr(0, port_pos);
-        result.port = authority.substr(port_pos + 1);
+      if (authority[0] == '[') {
+        auto close_pos = authority.find(']');
+        if (close_pos == std::string::npos) {
+          LOG(ERROR) << "DTON_PUSH_USAGE has invalid IPv6 host: " << url;
+          return result;
+        }
+        result.host = authority.substr(1, close_pos - 1);
+        if (close_pos + 1 < authority.size()) {
+          if (authority[close_pos + 1] != ':' || close_pos + 2 >= authority.size()) {
+            LOG(ERROR) << "DTON_PUSH_USAGE has invalid host port: " << url;
+            return result;
+          }
+          result.port = authority.substr(close_pos + 2);
+        }
       } else {
-        result.host = authority;
+        auto first_colon = authority.find(':');
+        auto last_colon = authority.rfind(':');
+        if (first_colon != std::string::npos && first_colon == last_colon && last_colon + 1 < authority.size()) {
+          result.host = authority.substr(0, last_colon);
+          result.port = authority.substr(last_colon + 1);
+        } else {
+          result.host = authority;
+        }
       }
 
       if (result.host.empty()) {
@@ -179,6 +210,36 @@ namespace ton::liteserver {
 
       result.valid = true;
       return result;
+    }
+
+    std::string usage_push_tls_error() {
+      auto err = ERR_get_error();
+      if (err == 0) {
+        return "unknown TLS error";
+      }
+      char buffer[256];
+      ERR_error_string_n(err, buffer, sizeof(buffer));
+      return buffer;
+    }
+
+    std::string usage_push_host_header(const UsagePushUrl &url) {
+      auto host = url.host.find(':') == std::string::npos ? url.host : "[" + url.host + "]";
+      bool default_port = (!url.tls && url.port == "80") || (url.tls && url.port == "443");
+      if (!default_port) {
+        host += ":" + url.port;
+      }
+      return host;
+    }
+
+    std::string usage_push_build_request(const UsagePushUrl &url, const std::string &body) {
+      std::ostringstream request;
+      request << "POST " << url.path << " HTTP/1.1\r\n"
+              << "Host: " << usage_push_host_header(url) << "\r\n"
+              << "Content-Type: application/json\r\n"
+              << "Content-Length: " << body.size() << "\r\n"
+              << "Connection: close\r\n\r\n"
+              << body;
+      return request.str();
     }
 
     bool usage_push_connect_with_timeout(int fd, const struct sockaddr *addr, socklen_t addr_len) {
@@ -243,7 +304,7 @@ namespace ton::liteserver {
       return true;
     }
 
-    bool usage_push_http_post(const UsagePushUrl &url, const std::string &body) {
+    int usage_push_open_socket(const UsagePushUrl &url) {
       struct addrinfo hints;
       std::memset(&hints, 0, sizeof(hints));
       hints.ai_family = AF_UNSPEC;
@@ -253,7 +314,7 @@ namespace ton::liteserver {
       auto gai_status = getaddrinfo(url.host.c_str(), url.port.c_str(), &hints, &addresses);
       if (gai_status != 0) {
         LOG(ERROR) << "Failed to resolve DTON_PUSH_USAGE host " << url.host << ": " << gai_strerror(gai_status);
-        return false;
+        return -1;
       }
 
       int fd = -1;
@@ -274,7 +335,7 @@ namespace ton::liteserver {
 
       if (fd < 0) {
         LOG(ERROR) << "Failed to connect to DTON_PUSH_USAGE " << url.original;
-        return false;
+        return -1;
       }
 
       struct timeval io_timeout;
@@ -283,19 +344,28 @@ namespace ton::liteserver {
       setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &io_timeout, sizeof(io_timeout));
       setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &io_timeout, sizeof(io_timeout));
 
-      std::ostringstream request;
-      request << "POST " << url.path << " HTTP/1.1\r\n"
-              << "Host: " << url.host;
-      if (url.port != "80") {
-        request << ":" << url.port;
-      }
-      request << "\r\n"
-              << "Content-Type: application/json\r\n"
-              << "Content-Length: " << body.size() << "\r\n"
-              << "Connection: close\r\n\r\n"
-              << body;
+      return fd;
+    }
 
-      auto ok = usage_push_send_all(fd, request.str());
+    bool usage_push_parse_status(const std::string &response, const UsagePushUrl &url) {
+      std::istringstream response_stream(response);
+      std::string http_version;
+      int status_code = 0;
+      response_stream >> http_version >> status_code;
+      if (status_code < 200 || status_code >= 300) {
+        LOG(ERROR) << "DTON_PUSH_USAGE returned non-2xx status: " << status_code << " for " << url.original;
+        return false;
+      }
+      return true;
+    }
+
+    bool usage_push_plain_post(const UsagePushUrl &url, const std::string &request) {
+      int fd = usage_push_open_socket(url);
+      if (fd < 0) {
+        return false;
+      }
+
+      auto ok = usage_push_send_all(fd, request);
       std::string response;
       if (ok) {
         char buffer[256];
@@ -312,16 +382,110 @@ namespace ton::liteserver {
         return false;
       }
 
-      std::istringstream response_stream(response);
-      std::string http_version;
-      int status_code = 0;
-      response_stream >> http_version >> status_code;
-      if (status_code < 200 || status_code >= 300) {
-        LOG(ERROR) << "DTON_PUSH_USAGE returned non-2xx status: " << status_code;
+      return usage_push_parse_status(response, url);
+    }
+
+    bool usage_push_ssl_write_all(SSL *ssl, const std::string &payload) {
+      const char *data = payload.data();
+      size_t left = payload.size();
+      while (left > 0) {
+        int chunk_size = static_cast<int>(std::min<size_t>(left, 16 * 1024));
+        auto written = SSL_write(ssl, data, chunk_size);
+        if (written <= 0) {
+          auto ssl_error = SSL_get_error(ssl, written);
+          if (ssl_error == SSL_ERROR_WANT_READ || ssl_error == SSL_ERROR_WANT_WRITE) {
+            continue;
+          }
+          return false;
+        }
+        data += written;
+        left -= static_cast<size_t>(written);
+      }
+      return true;
+    }
+
+    bool usage_push_tls_post(const UsagePushUrl &url, const std::string &request) {
+      int fd = usage_push_open_socket(url);
+      if (fd < 0) {
         return false;
       }
 
-      return true;
+      using SslCtxPtr = std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)>;
+      using SslPtr = std::unique_ptr<SSL, decltype(&SSL_free)>;
+
+      SslCtxPtr ctx(SSL_CTX_new(TLS_client_method()), SSL_CTX_free);
+      if (!ctx) {
+        LOG(ERROR) << "Failed to create DTON_PUSH_USAGE TLS context: " << usage_push_tls_error();
+        close(fd);
+        return false;
+      }
+
+      SSL_CTX_set_verify(ctx.get(), SSL_VERIFY_PEER, nullptr);
+      if (SSL_CTX_load_verify_locations(ctx.get(), "/etc/ssl/certs/ca-certificates.crt", "/etc/ssl/certs") != 1 &&
+          SSL_CTX_set_default_verify_paths(ctx.get()) != 1) {
+        LOG(ERROR) << "Failed to load default TLS verify paths for DTON_PUSH_USAGE: " << usage_push_tls_error();
+        close(fd);
+        return false;
+      }
+
+      SslPtr ssl(SSL_new(ctx.get()), SSL_free);
+      if (!ssl) {
+        LOG(ERROR) << "Failed to create DTON_PUSH_USAGE TLS session: " << usage_push_tls_error();
+        close(fd);
+        return false;
+      }
+
+      if (SSL_set_fd(ssl.get(), fd) != 1) {
+        LOG(ERROR) << "Failed to attach DTON_PUSH_USAGE socket to TLS session: " << usage_push_tls_error();
+        close(fd);
+        return false;
+      }
+      if (SSL_set_tlsext_host_name(ssl.get(), url.host.c_str()) != 1) {
+        LOG(ERROR) << "Failed to set DTON_PUSH_USAGE TLS SNI for " << url.host << ": " << usage_push_tls_error();
+        close(fd);
+        return false;
+      }
+      if (SSL_set1_host(ssl.get(), url.host.c_str()) != 1) {
+        LOG(ERROR) << "Failed to set DTON_PUSH_USAGE TLS host verification for " << url.host << ": "
+                   << usage_push_tls_error();
+        close(fd);
+        return false;
+      }
+
+      if (SSL_connect(ssl.get()) != 1) {
+        LOG(ERROR) << "Failed DTON_PUSH_USAGE TLS handshake for " << url.original << ": " << usage_push_tls_error();
+        close(fd);
+        return false;
+      }
+
+      auto ok = usage_push_ssl_write_all(ssl.get(), request);
+      std::string response;
+      if (ok) {
+        char buffer[256];
+        auto received = SSL_read(ssl.get(), buffer, sizeof(buffer) - 1);
+        if (received > 0) {
+          buffer[received] = 0;
+          response.assign(buffer);
+        }
+      }
+
+      SSL_shutdown(ssl.get());
+      close(fd);
+
+      if (!ok) {
+        LOG(ERROR) << "Failed to send usage batch to DTON_PUSH_USAGE " << url.original << " over TLS";
+        return false;
+      }
+
+      return usage_push_parse_status(response, url);
+    }
+
+    bool usage_push_http_post(const UsagePushUrl &url, const std::string &body) {
+      auto request = usage_push_build_request(url, body);
+      if (url.tls) {
+        return usage_push_tls_post(url, request);
+      }
+      return usage_push_plain_post(url, request);
     }
 
     // todo: separate from manager.hpp

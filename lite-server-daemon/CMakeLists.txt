@@ -7,6 +7,7 @@ add_executable(lite-proxy ${LITEPROXY_SOURCE})
 
 target_include_directories(lite-server  PUBLIC ${MHD_INCLUDE_DIR})
 target_include_directories(lite-proxy PUBLIC ${MHD_INCLUDE_DIR})
+target_include_directories(lite-proxy SYSTEM PRIVATE ${OPENSSL_INCLUDE_DIR})
 
 target_link_libraries(lite-server overlay tdutils tdactor adnl tl_api dht
         rldp rldp2 catchain validatorsession full-node validator-disk validator ton_validator validator
@@ -14,6 +15,10 @@ target_link_libraries(lite-server overlay tdutils tdactor adnl tl_api dht
 
 target_link_libraries(lite-proxy overlay tdutils tdactor adnl tl_api dht
         rldp rldp2 catchain validatorsession full-node validator-disk validator ton_validator validator
-        fift-lib memprof git ${JEMALLOC_LIBRARIES} cppkafka ${MHD_LIBRARY})
+        fift-lib memprof git ${JEMALLOC_LIBRARIES} cppkafka ${MHD_LIBRARY} ${OPENSSL_LIBRARIES})
+
+if (TARGET OpenSSL)
+  add_dependencies(lite-proxy OpenSSL)
+endif()
 
 install(TARGETS lite-server RUNTIME DESTINATION bin)
