@@ -46,6 +46,7 @@
 #include <fcntl.h>
 #include <memory>
 #include <netdb.h>
+#include <limits>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #include <sstream>
@@ -139,6 +140,52 @@ struct PublishedItem {
 };
 
 namespace ton::liteserver {
+    using ShardStatusKey = std::pair<td::int32, td::int64>;
+
+    struct LiteServerStatus {
+        ton::UnixTime master_utime{0};
+        ton::BlockSeqno master_seqno{0};
+        ton::BlockSeqno shard_client_master_seqno{0};
+        std::map<ShardStatusKey, ton::BlockSeqno> shard_seqnos;
+        bool shard_status_ok{false};
+    };
+
+    static std::tuple<ton::UnixTime, ton::BlockSeqno> status_master_time(const LiteServerStatus &status) {
+      return std::make_tuple(status.master_utime, status.master_seqno);
+    }
+
+    static ton::BlockSeqno status_ready_seqno(const LiteServerStatus &status) {
+      if (status.shard_status_ok && status.shard_client_master_seqno > 0) {
+        return status.shard_client_master_seqno;
+      }
+      return status.master_seqno;
+    }
+
+    static bool shard_key_intersects(const ShardStatusKey &a, const ShardStatusKey &b) {
+      if (a.first != b.first) {
+        return false;
+      }
+      return ton::shard_intersects(ton::ShardIdFull{a.first, static_cast<ton::ShardId>(a.second)},
+                                   ton::ShardIdFull{b.first, static_cast<ton::ShardId>(b.second)});
+    }
+
+    static bool find_shard_seqno(const LiteServerStatus &status, const ShardStatusKey &key,
+                                 ton::BlockSeqno &seqno) {
+      auto exact = status.shard_seqnos.find(key);
+      if (exact != status.shard_seqnos.end()) {
+        seqno = exact->second;
+        return true;
+      }
+      bool found = false;
+      for (const auto &item: status.shard_seqnos) {
+        if (shard_key_intersects(item.first, key)) {
+          seqno = found ? std::max(seqno, item.second) : item.second;
+          found = true;
+        }
+      }
+      return found;
+    }
+
     struct UsagePushUrl {
         bool valid{false};
         bool tls{false};
@@ -657,22 +704,27 @@ namespace ton::liteserver {
           send_raw(std::move(q), std::move(promise));
         }
 
-        void get_max_time(td::Promise<std::tuple<ton::UnixTime, ton::BlockSeqno>> promise) {
-          auto P = td::PromiseCreator::lambda([Pp = std::move(promise)](td::Result<td::BufferSlice> R) mutable {
+        void get_max_time(td::Promise<LiteServerStatus> promise) {
+          auto P = td::PromiseCreator::lambda([SelfId = actor_id(this),
+                                                      Pp = std::move(promise)](
+                  td::Result<td::BufferSlice> R) mutable {
+              LiteServerStatus status;
               if (R.is_ok()) {
                 auto answer = ton::fetch_tl_object<ton::lite_api::liteServer_masterchainInfoExt>(R.move_as_ok(),
                                                                                                  true);
 
                 if (answer.is_error()) {
-                  Pp.set_value(std::make_tuple(0, 0));
+                  Pp.set_value(std::move(status));
                   return;
                 }
 
                 auto x = answer.move_as_ok();
-                Pp.set_value(std::make_tuple((ton::UnixTime) x->last_utime_,
-                                             (ton::BlockSeqno) x->last_->seqno_));
+                status.master_utime = (ton::UnixTime) x->last_utime_;
+                status.master_seqno = (ton::BlockSeqno) x->last_->seqno_;
+                td::actor::send_closure(SelfId, &LiteServerClient::load_shard_status, std::move(status),
+                                        std::move(Pp));
               } else {
-                Pp.set_value(std::make_tuple(0, 0));
+                Pp.set_value(std::move(status));
               }
           });
 
@@ -681,7 +733,7 @@ namespace ton::liteserver {
                    std::move(P), 0.2);
         }
 
-        void get_max_time_lazy(int wait_seqno, td::Promise<std::tuple<ton::UnixTime, ton::BlockSeqno>> promise) {
+        void get_max_time_lazy(int wait_seqno, td::Promise<LiteServerStatus> promise) {
           if (last_lazy_call_ == 0) {
             last_lazy_call_ = (unsigned) std::time(nullptr);
           } else if ((unsigned) std::time(nullptr) - last_lazy_call_ < 5) {
@@ -702,9 +754,12 @@ namespace ton::liteserver {
                                                                                                  true);
 
                 if (answer.is_ok()) {
+                  LiteServerStatus status;
                   auto x = answer.move_as_ok();
-                  Pp.set_value(std::make_tuple((ton::UnixTime) x->last_utime_,
-                                               (ton::BlockSeqno) x->last_->seqno_));
+                  status.master_utime = (ton::UnixTime) x->last_utime_;
+                  status.master_seqno = (ton::BlockSeqno) x->last_->seqno_;
+                  td::actor::send_closure(SelfId, &LiteServerClient::load_shard_status, std::move(status),
+                                          std::move(Pp));
                   return;
                 }
               }
@@ -730,6 +785,39 @@ namespace ton::liteserver {
         }
 
     private:
+        void load_shard_status(LiteServerStatus status, td::Promise<LiteServerStatus> promise) {
+          auto P = td::PromiseCreator::lambda([status = std::move(status),
+                                                      Pp = std::move(promise)](
+                  td::Result<td::BufferSlice> R) mutable {
+              if (R.is_ok()) {
+                auto answer = ton::fetch_tl_object<ton::lite_api::liteServer_outMsgQueueSizes>(R.move_as_ok(), true);
+                if (answer.is_ok()) {
+                  auto x = answer.move_as_ok();
+                  for (const auto &item: x->shards_) {
+                    if (item == nullptr || item->id_ == nullptr) {
+                      continue;
+                    }
+                    auto &id = item->id_;
+                    if (id->workchain_ == ton::masterchainId) {
+                      status.shard_client_master_seqno =
+                              std::max(status.shard_client_master_seqno, (ton::BlockSeqno) id->seqno_);
+                    } else {
+                      status.shard_seqnos[{id->workchain_, id->shard_}] =
+                              std::max(status.shard_seqnos[{id->workchain_, id->shard_}],
+                                       (ton::BlockSeqno) id->seqno_);
+                    }
+                  }
+                  status.shard_status_ok = status.shard_client_master_seqno > 0 && !status.shard_seqnos.empty();
+                }
+              }
+              Pp.set_value(std::move(status));
+          });
+
+          qprocess(ton::serialize_tl_object(
+                           ton::create_tl_object<ton::lite_api::liteServer_getOutMsgQueueSizes>(0, 0, 0), true),
+                   std::move(P), 2.0);
+        }
+
         void qprocess(td::BufferSlice q, td::Promise<td::BufferSlice> promise, double timeout = 1.2) {
           auto P = td::PromiseCreator::lambda(
                   [Pp = std::move(promise)](td::Result<td::BufferSlice> R) mutable { Pp.set_result(std::move(R)); });
@@ -740,7 +828,7 @@ namespace ton::liteserver {
         }
 
         int current_seqno_;
-        td::Promise<std::tuple<ton::UnixTime, ton::BlockSeqno>> wait_promise_;
+        td::Promise<LiteServerStatus> wait_promise_;
         td::IPAddress address_;
         ton::adnl::AdnlNodeIdFull id_;
         ton::UnixTime last_lazy_call_ = 0;
@@ -773,6 +861,19 @@ namespace ton::liteserver {
               LOG(INFO) << "DTON usage push enabled: " << usage_push_url_.original;
             }
           }
+
+          const char *max_shard_lag = std::getenv("TON_BALANCER_MAX_SHARD_LAG");
+          if (max_shard_lag != nullptr && max_shard_lag[0] != '\0') {
+            char *end = nullptr;
+            auto parsed = std::strtoul(max_shard_lag, &end, 10);
+            if (end != max_shard_lag && *end == '\0' && parsed > 0 &&
+                parsed <= std::numeric_limits<ton::BlockSeqno>::max()) {
+              max_shard_lag_ = static_cast<ton::BlockSeqno>(parsed);
+            } else {
+              LOG(ERROR) << "Invalid TON_BALANCER_MAX_SHARD_LAG value: " << max_shard_lag;
+            }
+          }
+          LOG(INFO) << "Balancer max shard lag: " << max_shard_lag_;
         }
 
         std::unique_ptr<ton::adnl::AdnlExtClient::Callback> make_callback(adnl::AdnlNodeIdShort server) {
@@ -822,14 +923,38 @@ namespace ton::liteserver {
           LOG(INFO) << "Server: " << server.bits256_value().to_hex() << " now available";
           to_update++;
           auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), server](
-                  td::Result<std::tuple<ton::UnixTime, ton::BlockSeqno>> R) mutable {
+                  td::Result<LiteServerStatus> R) mutable {
               td::actor::send_closure(SelfId, &LiteProxy::server_update_time, server, R.move_as_ok(), true);
           });
 
           td::actor::send_closure(private_servers_[server].get(), &LiteServerClient::get_max_time, std::move(P));
         }
 
-        void server_update_time(adnl::AdnlNodeIdShort server, std::tuple<ton::UnixTime, ton::BlockSeqno> time,
+        ton::BlockSeqno calc_shard_lag(const LiteServerStatus &status,
+                                       const std::map<ShardStatusKey, ton::BlockSeqno> &best_shards,
+                                       ton::BlockSeqno best_shard_client_seqno) {
+          if (!status.shard_status_ok || best_shards.empty()) {
+            return std::numeric_limits<ton::BlockSeqno>::max();
+          }
+
+          ton::BlockSeqno max_lag = 0;
+          if (best_shard_client_seqno > status.shard_client_master_seqno) {
+            max_lag = std::max(max_lag, best_shard_client_seqno - status.shard_client_master_seqno);
+          }
+
+          for (const auto &best: best_shards) {
+            ton::BlockSeqno seqno = 0;
+            if (!find_shard_seqno(status, best.first, seqno)) {
+              return std::numeric_limits<ton::BlockSeqno>::max();
+            }
+            if (best.second > seqno) {
+              max_lag = std::max(max_lag, best.second - seqno);
+            }
+          }
+          return max_lag;
+        }
+
+        void server_update_time(adnl::AdnlNodeIdShort server, LiteServerStatus time,
                                 bool update = true) {
           if (!inited) {
             inited = true;
@@ -841,28 +966,73 @@ namespace ton::liteserver {
 
           private_time_updated++;
           private_servers_status_[server] = time;
-          if (std::get<0>(time) > std::get<0>(best_time)) {
-            best_time = time;
+          best_time = std::make_tuple(0, 0);
+          for (const auto &s: private_servers_status_) {
+            if (status_master_time(s.second) > best_time) {
+              best_time = status_master_time(s.second);
+            }
           }
 
 
           if (to_update == 0 or update == false) {
-            std::vector<adnl::AdnlNodeIdShort> uptodate;
-            int outdated{0};
+            std::vector<adnl::AdnlNodeIdShort> master_uptodate;
+            std::vector<adnl::AdnlNodeIdShort> shard_uptodate;
+            std::map<ShardStatusKey, ton::BlockSeqno> best_shards;
+            ton::BlockSeqno best_shard_client_seqno = 0;
+            int master_outdated{0};
+            int shard_outdated{0};
+            int shard_unknown{0};
 
             for (auto &s: private_servers_status_) {
-              if (best_time != s.second) {
-                outdated += 1;
-              } else {
-                uptodate.push_back(s.first);
+              if (best_time != status_master_time(s.second)) {
+                continue;
+              }
+              if (!s.second.shard_status_ok) {
+                continue;
+              }
+              best_shard_client_seqno = std::max(best_shard_client_seqno, s.second.shard_client_master_seqno);
+              for (const auto &shard: s.second.shard_seqnos) {
+                best_shards[shard.first] = std::max(best_shards[shard.first], shard.second);
               }
             }
 
-            uptodate_private_ls = std::move(uptodate);
+            private_servers_shard_lag_.clear();
+            for (auto &s: private_servers_status_) {
+              if (best_time != status_master_time(s.second)) {
+                master_outdated += 1;
+                continue;
+              }
+
+              master_uptodate.push_back(s.first);
+              auto shard_lag = calc_shard_lag(s.second, best_shards, best_shard_client_seqno);
+              private_servers_shard_lag_[s.first] = shard_lag;
+
+              if (shard_lag <= max_shard_lag_) {
+                shard_uptodate.push_back(s.first);
+              } else if (!s.second.shard_status_ok || best_shards.empty()) {
+                shard_unknown += 1;
+              } else {
+                shard_outdated += 1;
+              }
+            }
+
+            last_master_outdated_ = master_outdated;
+            last_shard_outdated_ = shard_outdated;
+            last_shard_unknown_ = shard_unknown;
+            last_shard_health_fallback_ = shard_uptodate.empty() && !master_uptodate.empty();
+            best_shard_client_seqno_ = best_shard_client_seqno;
+            best_shard_count_ = best_shards.size();
+
+            if (!shard_uptodate.empty()) {
+              uptodate_private_ls = std::move(shard_uptodate);
+            } else {
+              uptodate_private_ls = std::move(master_uptodate);
+            }
 
             while (!shard_client_waiters_.empty()) {
               auto it = shard_client_waiters_.begin();
-              if (it->first > std::get<1>(best_time)) {
+              auto ready_seqno = best_shard_client_seqno_ > 0 ? best_shard_client_seqno_ : std::get<1>(best_time);
+              if (it->first > ready_seqno) {
                 break;
               }
               for (auto &y: it->second.waiting_) {
@@ -875,7 +1045,11 @@ namespace ton::liteserver {
               LOG(INFO)
               << "Update LS uptodate: "
               << uptodate_private_ls.size()
-              << " outdated: " << outdated << " best time: " << time_to_human(std::get<0>(best_time));
+              << " master outdated: " << master_outdated
+              << " shard outdated: " << shard_outdated
+              << " shard unknown: " << shard_unknown
+              << " best time: " << time_to_human(std::get<0>(best_time))
+              << " shard client seqno: " << best_shard_client_seqno_;
 
               private_time_updated = 0;
             }
@@ -899,8 +1073,8 @@ namespace ton::liteserver {
                                    ton::BlockSeqno seqno) {
           ton::BlockSeqno to_find_seqno = std::get<1>(best_time);
 
-          if (std::get<0>(private_servers_status_[server]) >= std::get<0>(best_time)) {
-            to_find_seqno = std::get<1>(private_servers_status_[server]) + 1;
+          if (private_servers_status_[server].master_utime >= std::get<0>(best_time)) {
+            to_find_seqno = private_servers_status_[server].master_seqno + 1;
           }
 
           if (seqno >= to_find_seqno) {
@@ -908,13 +1082,13 @@ namespace ton::liteserver {
           }
 
           auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), server, to_find_seqno](
-                  td::Result<std::tuple<ton::UnixTime, ton::BlockSeqno>> R) mutable {
+                  td::Result<LiteServerStatus> R) mutable {
               auto res = R.move_as_ok();
 
               LOG(DEBUG)
-              << "Receive from server success: " << server.bits256_value().to_hex() << " seqno: " << std::get<1>(res)
+              << "Receive from server success: " << server.bits256_value().to_hex() << " seqno: " << res.master_seqno
               << " waited: " << to_find_seqno;
-              td::actor::send_closure(SelfId, &LiteProxy::go_lazy_update_server, server, std::get<1>(res));
+              td::actor::send_closure(SelfId, &LiteProxy::go_lazy_update_server, server, res.master_seqno);
               td::actor::send_closure(SelfId, &LiteProxy::server_update_time, server, std::move(res), false);
           });
 
@@ -926,6 +1100,13 @@ namespace ton::liteserver {
         void conn_closed(adnl::AdnlNodeIdShort server) {
           //    LOG(INFO) << "Server: " << server.bits256_value().to_hex() << " disconnected";
           private_servers_status_.erase(server);
+          private_servers_shard_lag_.erase(server);
+          best_time = std::make_tuple(0, 0);
+          for (const auto &s: private_servers_status_) {
+            if (status_master_time(s.second) > best_time) {
+              best_time = status_master_time(s.second);
+            }
+          }
 
           auto pos = std::find(uptodate_private_ls.begin(), uptodate_private_ls.end(), server);
           if (pos != uptodate_private_ls.end()) {
@@ -973,6 +1154,26 @@ namespace ton::liteserver {
           std::string final_status = stats_;
           final_status += "ton_balancer_best_time " + std::to_string(std::get<0>(best_time)) + "\n";
           final_status += "ton_balancer_available_servers " + std::to_string(uptodate_private_ls.size()) + "\n";
+          final_status += "ton_balancer_best_shard_client_seqno " + std::to_string(best_shard_client_seqno_) + "\n";
+          final_status += "ton_balancer_best_shard_count " + std::to_string(best_shard_count_) + "\n";
+          final_status += "ton_balancer_max_allowed_shard_lag " + std::to_string(max_shard_lag_) + "\n";
+          final_status += "ton_balancer_master_outdated_servers " + std::to_string(last_master_outdated_) + "\n";
+          final_status += "ton_balancer_shard_outdated_servers " + std::to_string(last_shard_outdated_) + "\n";
+          final_status += "ton_balancer_shard_unknown_servers " + std::to_string(last_shard_unknown_) + "\n";
+          final_status += "ton_balancer_shard_health_fallback " + std::to_string(last_shard_health_fallback_) + "\n";
+          for (const auto &s: private_servers_status_) {
+            auto lag_it = private_servers_shard_lag_.find(s.first);
+            auto lag = lag_it == private_servers_shard_lag_.end() ? std::numeric_limits<ton::BlockSeqno>::max()
+                                                                  : lag_it->second;
+            final_status += "ton_balancer_server_master_seqno{adnl_short=\"" + s.first.bits256_value().to_hex() +
+                            "\"} " + std::to_string(s.second.master_seqno) + "\n";
+            final_status += "ton_balancer_server_shard_client_seqno{adnl_short=\"" + s.first.bits256_value().to_hex() +
+                            "\"} " + std::to_string(s.second.shard_client_master_seqno) + "\n";
+            final_status += "ton_balancer_server_shard_lag{adnl_short=\"" + s.first.bits256_value().to_hex() +
+                            "\"} " + std::to_string(lag) + "\n";
+            final_status += "ton_balancer_server_shard_status_ok{adnl_short=\"" + s.first.bits256_value().to_hex() +
+                            "\"} " + std::to_string(s.second.shard_status_ok ? 1 : 0) + "\n";
+          }
           int success_count = 0, fail_count = 0;
           std::vector<double> elapsed_times;
 
@@ -1805,13 +2006,13 @@ namespace ton::liteserver {
                   ton::BlockSeqno last_master;
 
                   if (uptodate_private_ls.size() > 0) {
-                    last_master = std::get<1>(
+                    last_master = status_ready_seqno(
                             private_servers_status_[uptodate_private_ls[td::Random::fast(0,
                                                                                          td::narrow_cast<td::uint32>(
                                                                                                  uptodate_private_ls.size() -
                                                                                                  1))]]);
                   } else {
-                    last_master = std::get<1>(private_servers_status_.begin()->second);
+                    last_master = status_ready_seqno(private_servers_status_.begin()->second);
                   }
 
                   query_compiled = "waitSeqno: " + std::to_string(e->seqno_);
@@ -2261,7 +2462,7 @@ namespace ton::liteserver {
           for (auto &s: private_servers_) {
             auto P = td::PromiseCreator::lambda(
                     [SelfId = actor_id(this), server = s.first](
-                            td::Result<std::tuple<ton::UnixTime, ton::BlockSeqno>> R) mutable {
+                            td::Result<LiteServerStatus> R) mutable {
                         td::actor::send_closure(SelfId, &LiteProxy::server_update_time, server, R.move_as_ok(),
                                                 true);
                     });
@@ -2398,7 +2599,7 @@ namespace ton::liteserver {
         bool inited{false};
         std::vector<td::Bits256> users_;
         std::vector<LiteServerStatItem> stats_data_;
-        int private_time_updated;
+        int private_time_updated{0};
         int live_timeout = 20;
         std::map<ton::PublicKeyHash, ton::PublicKey> keys_;
         std::list<PublishedItem> publish_items;
@@ -2408,7 +2609,15 @@ namespace ton::liteserver {
         cppkafka::Producer producer;
         td::actor::ActorOwn<adnl::Adnl> adnl_;
         td::actor::ActorOwn<adnl::AdnlNetworkManager> adnl_network_manager_;
-        std::map<adnl::AdnlNodeIdShort, std::tuple<ton::UnixTime, ton::BlockSeqno>> private_servers_status_;
+        std::map<adnl::AdnlNodeIdShort, LiteServerStatus> private_servers_status_;
+        std::map<adnl::AdnlNodeIdShort, ton::BlockSeqno> private_servers_shard_lag_;
+        ton::BlockSeqno max_shard_lag_{16};
+        ton::BlockSeqno best_shard_client_seqno_{0};
+        size_t best_shard_count_{0};
+        int last_master_outdated_{0};
+        int last_shard_outdated_{0};
+        int last_shard_unknown_{0};
+        bool last_shard_health_fallback_{false};
         std::map<adnl::AdnlNodeIdShort, td::actor::ActorOwn<LiteServerClient>> private_servers_;
         std::map<adnl::AdnlNodeIdShort, td::actor::ActorOwn<LiteServerClient>> private_servers_lazy_clients_;
         std::map<adnl::AdnlNodeIdShort, long long> connections_count_;
