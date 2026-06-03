@@ -78,6 +78,21 @@ struct PublicFallbackRaceState {
   std::string last_error;
 };
 
+struct PublicArchiveFallbackRaceState {
+  PublicArchiveFallbackRaceState(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix,
+                                 td::Promise<std::string> promise)
+      : masterchain_seqno(masterchain_seqno), shard_prefix(shard_prefix), promise(std::move(promise)) {
+  }
+
+  BlockSeqno masterchain_seqno;
+  ShardIdFull shard_prefix;
+  td::Promise<std::string> promise;
+  std::mutex mutex;
+  std::size_t pending{2};
+  bool done{false};
+  std::string last_error;
+};
+
 void finish_public_fallback_race(std::shared_ptr<PublicFallbackRaceState> state, const char *source,
                                  td::Result<ReceivedBlock> R) {
   if (R.is_ok()) {
@@ -122,6 +137,59 @@ void finish_public_fallback_race(std::shared_ptr<PublicFallbackRaceState> state,
     log_fullnode_overlay_sync_stage(state->kind, state->block_id, "fullnode.race_done", source, "error",
                                     error_string);
     promise.set_error(td::Status::Error(ErrorCode::notready, PSTRING() << "custom and public overlay failed: "
+                                                                       << error_string));
+  }
+}
+
+void finish_public_archive_fallback_race(std::shared_ptr<PublicArchiveFallbackRaceState> state, const char *source,
+                                         td::Result<std::string> R) {
+  if (R.is_ok()) {
+    auto value = R.move_as_ok();
+    td::Promise<std::string> promise;
+    bool should_finish = false;
+    {
+      std::lock_guard<std::mutex> lock(state->mutex);
+      if (!state->done) {
+        state->done = true;
+        promise = std::move(state->promise);
+        should_finish = true;
+      }
+    }
+    if (should_finish) {
+      LOG(INFO) << "[archive-sync] stage=race_done source=" << source
+                << " seqno=" << state->masterchain_seqno
+                << " shard=" << state->shard_prefix.to_str()
+                << " result=ok";
+      promise.set_value(std::move(value));
+    }
+    return;
+  }
+
+  auto error = R.move_as_error();
+  td::Promise<std::string> promise;
+  bool should_finish = false;
+  auto error_string = error.to_string();
+  {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    if (state->done) {
+      return;
+    }
+    state->last_error = PSTRING() << source << ": " << error_string;
+    CHECK(state->pending > 0);
+    state->pending--;
+    if (state->pending == 0) {
+      state->done = true;
+      promise = std::move(state->promise);
+      should_finish = true;
+      error_string = state->last_error;
+    }
+  }
+  if (should_finish) {
+    LOG(INFO) << "[archive-sync] stage=race_done source=" << source
+              << " seqno=" << state->masterchain_seqno
+              << " shard=" << state->shard_prefix.to_str()
+              << " result=error reason=" << error_string;
+    promise.set_error(td::Status::Error(ErrorCode::notready, PSTRING() << "custom and public archive overlay failed: "
                                                                        << error_string));
   }
 }
@@ -756,24 +824,32 @@ void FullNodeImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFull sh
       }
       shard_served_by_custom_overlay = true;
       for (auto &[local_id, actor] : custom_overlay.actors_) {
+        auto state = std::make_shared<PublicArchiveFallbackRaceState>(masterchain_seqno, shard_prefix, std::move(promise));
         auto P = td::PromiseCreator::lambda(
-            [SelfId = actor_id(this), masterchain_seqno, shard_prefix, tmp_dir = tmp_dir, timeout,
-             promise = std::move(promise), name](td::Result<std::string> R) mutable {
-              if (R.is_ok()) {
-                promise.set_value(R.move_as_ok());
-                return;
+            [state, masterchain_seqno, shard_prefix, name](td::Result<std::string> R) mutable {
+              if (R.is_error()) {
+                auto error = R.error().to_string();
+                LOG(INFO) << "failed to download archive slice #" << masterchain_seqno << " " << shard_prefix.to_str()
+                          << " from custom overlay \"" << name << "\": " << error
+                          << "; public overlay fallback is already racing";
+                record_custom_overlay_sync_fallback(CustomOverlaySyncKind::Archive,
+                                                    CustomOverlaySyncFallbackReason::CustomError);
               }
-              record_custom_overlay_sync_fallback(CustomOverlaySyncKind::Archive, CustomOverlaySyncFallbackReason::CustomError);
-              record_public_overlay_sync_download(CustomOverlaySyncKind::Archive, PublicOverlaySyncReason::Fallback);
-              LOG(INFO) << "failed to download archive slice #" << masterchain_seqno << " " << shard_prefix.to_str()
-                        << " from custom overlay \"" << name << "\": " << R.move_as_error()
-                        << "; falling back to public overlay";
-              td::actor::send_closure(SelfId, &FullNodeImpl::download_archive_from_public_overlay,
-                                      masterchain_seqno, shard_prefix, std::move(tmp_dir), timeout,
-                                      std::move(promise));
+              finish_public_archive_fallback_race(std::move(state), "custom", std::move(R));
             });
+        auto PublicP = td::PromiseCreator::lambda([state](td::Result<std::string> R) mutable {
+          finish_public_archive_fallback_race(std::move(state), "public", std::move(R));
+        });
+        record_public_overlay_sync_download(CustomOverlaySyncKind::Archive, PublicOverlaySyncReason::Fallback);
+        LOG(INFO) << "[archive-sync] stage=race_start seqno=" << masterchain_seqno
+                  << " shard=" << shard_prefix.to_str()
+                  << " overlay=" << name
+                  << " local=" << local_id
+                  << " result=ok";
         td::actor::send_closure(actor, &FullNodeCustomOverlay::download_archive, masterchain_seqno, shard_prefix,
-                                std::move(tmp_dir), timeout, std::move(P));
+                                tmp_dir, timeout, std::move(P));
+        download_archive_from_public_overlay(masterchain_seqno, shard_prefix, std::move(tmp_dir), timeout,
+                                             std::move(PublicP));
         return;
       }
     }
