@@ -195,7 +195,7 @@ void ValidatorManagerImpl::validate_block_proof_rel(BlockIdExt block_id, BlockId
   }
 }
 
-void ValidatorManagerImpl::validate_block(ReceivedBlock block, td::Promise<BlockHandle> promise) {
+void ValidatorManagerImpl::on_next_masterchain_block(ReceivedBlock block, td::Promise<BlockHandle> promise) {
   auto blkid = block.id;
   auto pp = create_block(std::move(block));
   if (pp.is_error()) {

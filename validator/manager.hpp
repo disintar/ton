@@ -316,7 +316,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   void validate_block_proof_link(BlockIdExt block_id, td::BufferSlice proof, td::Promise<td::Unit> promise) override;
   void validate_block_proof_rel(BlockIdExt block_id, BlockIdExt rel_block_id, td::BufferSlice proof,
                                 td::Promise<td::Unit> promise) override;
-  void validate_block(ReceivedBlock block, td::Promise<BlockHandle> promise) override;
+  void on_next_masterchain_block(ReceivedBlock block, td::Promise<BlockHandle> promise) override;
   void new_block_broadcast(BlockBroadcast broadcast, bool signatures_checked, td::Promise<td::Unit> promise) override;
   void validate_block_broadcast_signatures(BlockBroadcast broadcast, td::Promise<td::Unit> promise) override;
   td::actor::Task<> validated_accepted_block_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno);
