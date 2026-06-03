@@ -1114,6 +1114,12 @@ void FullNodeShardImpl::get_next_key_blocks(BlockIdExt block_id, td::Timestamp t
 void FullNodeShardImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
                                          td::Timestamp timeout, td::Promise<std::string> promise) {
   auto &b = choose_neighbour();
+  LOG(INFO) << "[archive-sync] stage=public.choose_neighbour seqno=" << masterchain_seqno
+            << " shard=" << shard_prefix.to_str() << " local_shard=" << shard_.to_str()
+            << " peer=" << b.adnl_id << " neighbours=" << neighbours_.size()
+            << " roundtrip=" << b.roundtrip << " unreliability=" << b.unreliability
+            << " version=" << b.version_major << "." << b.version_minor
+            << " result=" << (b.adnl_id.is_zero() ? "no_peer" : "ok");
   td::actor::create_actor<DownloadArchiveSlice>(
       "archive", masterchain_seqno, shard_prefix, std::move(tmp_dir), adnl_id_, overlay_id_, b.adnl_id, timeout,
       validator_manager_, rldp2_, overlays_, adnl_, client_, create_neighbour_promise(b, std::move(promise)))
