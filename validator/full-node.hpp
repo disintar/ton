@@ -141,6 +141,8 @@ class FullNodeImpl : public FullNode {
   td::actor::ActorId<FullNodeShard> get_shard(ShardIdFull shard, bool historical = false);
   void download_block_from_public_overlay(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                           td::Promise<ReceivedBlock> promise);
+  void download_next_block_from_public_overlay(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
+                                               td::Promise<ReceivedBlock> promise);
   void download_block_proof_from_public_overlay(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
                                                 td::Promise<td::BufferSlice> promise);
   void download_block_proof_link_from_public_overlay(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,

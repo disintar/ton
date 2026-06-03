@@ -186,6 +186,12 @@ path must be equally explicit. Sending a custom download with a zero
 `download_from` lets `DownloadBlockNew` pick one random overlay peer and fail
 the whole attempt if that peer has no data or is slow.
 
+There is a second restart/catch-up failure mode: `send_get_block_request()` has
+a short overall timeout. If the first custom peer is slow or unreachable, it can
+consume the whole deadline and delay the public fallback. A single missing shard
+block can then keep `shard_client_masterchain_seqno` pinned while live
+masterchain broadcasts keep arriving.
+
 Observed symptom:
 
 - `ton_custom_overlay_block_broadcasts_received_total` grows quickly.
@@ -202,7 +208,11 @@ Use custom overlay membership for explicit block catch-up downloads:
 - Fall back to all custom overlay `nodes_`.
 - Exclude the local ADNL and zero ids.
 - Try peers in order for `downloadBlockFull` and `downloadNextBlockFull`.
+- Give each custom peer a small per-peer deadline while keeping the original
+  overall request deadline.
 - Keep the public overlay fallback if custom peers cannot serve the block.
+- Keep public fallback for `downloadNextBlockFull` as well, so private overlay
+  failures never make startup sync worse than the original public path.
 
 Also use the custom overlay first from `FullNodeShardImpl::try_get_next_block()`
 so startup `downloadNextBlockFull` can use private overlay data before falling
@@ -215,8 +225,8 @@ The downloaded block still goes through the existing proof and hash checks in
 out does not advance state and falls back to the next peer or to the public
 overlay.
 
-This is bounded by the configured custom overlay peer list. It does not create an
-unbounded queue or cache.
+This is bounded by the configured custom overlay peer list and per-peer timeout.
+It does not create an unbounded queue or cache.
 
 ### Test Plan
 

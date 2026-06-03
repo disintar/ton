@@ -184,6 +184,8 @@ class FullNodeShardImpl : public FullNodeShard {
 
   void download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                       td::Promise<ReceivedBlock> promise) override;
+  void download_next_block(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
+                           td::Promise<ReceivedBlock> promise) override;
   void download_zero_state(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                            td::Promise<td::BufferSlice> promise) override;
   void download_persistent_state(BlockIdExt id, BlockIdExt masterchain_block_id, PersistentStateType type,

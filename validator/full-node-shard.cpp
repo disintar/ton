@@ -1056,6 +1056,15 @@ void FullNodeShardImpl::download_block(BlockIdExt id, td::uint32 priority, td::T
       .release();
 }
 
+void FullNodeShardImpl::download_next_block(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
+                                            td::Promise<ReceivedBlock> promise) {
+  auto &b = choose_neighbour();
+  td::actor::create_actor<DownloadBlockNew>("downloadnextreq", adnl_id_, overlay_id_, prev_id, b.adnl_id, priority,
+                                            timeout, validator_manager_, rldp2_, overlays_, adnl_, client_,
+                                            create_neighbour_promise(b, std::move(promise)))
+      .release();
+}
+
 void FullNodeShardImpl::download_zero_state(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                             td::Promise<td::BufferSlice> promise) {
   td::actor::create_actor<DownloadState>(PSTRING() << "downloadstatereq" << id.id.to_str(), id, BlockIdExt{},

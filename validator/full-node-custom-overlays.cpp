@@ -564,6 +564,11 @@ std::vector<adnl::AdnlNodeIdShort> FullNodeCustomOverlay::custom_download_peers(
   return peers;
 }
 
+td::Timestamp custom_overlay_peer_download_timeout(td::Timestamp timeout) {
+  auto peer_timeout = td::Timestamp::in(2.0);
+  return timeout < peer_timeout ? timeout : peer_timeout;
+}
+
 void FullNodeCustomOverlay::download_block_from_custom_peers(BlockIdExt id, td::uint32 priority,
                                                              td::Timestamp timeout,
                                                              std::vector<adnl::AdnlNodeIdShort> peers, size_t offset,
@@ -589,8 +594,9 @@ void FullNodeCustomOverlay::download_block_from_custom_peers(BlockIdExt id, td::
     td::actor::send_closure(SelfId, &FullNodeCustomOverlay::download_block_from_custom_peers, id, priority, timeout,
                             std::move(peers), offset + 1, std::move(promise));
   });
+  auto peer_timeout = custom_overlay_peer_download_timeout(timeout);
   td::actor::create_actor<DownloadBlockNew>(
-      "customdownloadreq", id, local_id_, overlay_id_, peer, priority, timeout, validator_manager_,
+      "customdownloadreq", id, local_id_, overlay_id_, peer, priority, peer_timeout, validator_manager_,
       td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_}, overlays_, adnl_,
       td::actor::ActorId<adnl::AdnlExtClient>{}, std::move(P))
       .release();
@@ -622,8 +628,9 @@ void FullNodeCustomOverlay::download_next_block_from_custom_peers(BlockIdExt pre
     td::actor::send_closure(SelfId, &FullNodeCustomOverlay::download_next_block_from_custom_peers, prev_id, priority,
                             timeout, std::move(peers), offset + 1, std::move(promise));
   });
+  auto peer_timeout = custom_overlay_peer_download_timeout(timeout);
   td::actor::create_actor<DownloadBlockNew>(
-      "customdownloadnext", local_id_, overlay_id_, prev_id, peer, priority, timeout, validator_manager_,
+      "customdownloadnext", local_id_, overlay_id_, prev_id, peer, priority, peer_timeout, validator_manager_,
       td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_}, overlays_, adnl_,
       td::actor::ActorId<adnl::AdnlExtClient>{}, std::move(P))
       .release();

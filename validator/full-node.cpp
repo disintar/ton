@@ -436,21 +436,24 @@ void FullNodeImpl::download_next_block(BlockIdExt prev_id, td::uint32 priority, 
     }
     for (auto &[local_id, actor] : custom_overlay.actors_) {
       auto P = td::PromiseCreator::lambda(
-          [promise = std::move(promise), prev_id, name](td::Result<ReceivedBlock> R) mutable {
+          [SelfId = actor_id(this), promise = std::move(promise), prev_id, priority, timeout,
+           name](td::Result<ReceivedBlock> R) mutable {
             if (R.is_ok()) {
               promise.set_value(R.move_as_ok());
               return;
             }
             VLOG(FULL_NODE_DEBUG) << "failed to download next block after " << prev_id.to_str()
-                                  << " from custom overlay \"" << name << "\": " << R.move_as_error();
-            promise.set_error(R.move_as_error());
+                                  << " from custom overlay \"" << name << "\": " << R.move_as_error()
+                                  << "; falling back to public overlay";
+            td::actor::send_closure(SelfId, &FullNodeImpl::download_next_block_from_public_overlay, prev_id, priority,
+                                    timeout, std::move(promise));
           });
       td::actor::send_closure(actor, &FullNodeCustomOverlay::download_next_block, prev_id, priority, timeout,
                               std::move(P));
       return;
     }
   }
-  promise.set_error(td::Status::Error(ErrorCode::notready, "no custom overlay for shard"));
+  download_next_block_from_public_overlay(prev_id, priority, timeout, std::move(promise));
 }
 
 void FullNodeImpl::download_block_from_public_overlay(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
@@ -462,6 +465,18 @@ void FullNodeImpl::download_block_from_public_overlay(BlockIdExt id, td::uint32 
     return;
   }
   td::actor::send_closure(shard, &FullNodeShard::download_block, id, priority, timeout, std::move(promise));
+}
+
+void FullNodeImpl::download_next_block_from_public_overlay(BlockIdExt prev_id, td::uint32 priority,
+                                                           td::Timestamp timeout,
+                                                           td::Promise<ReceivedBlock> promise) {
+  auto shard = get_shard(prev_id.shard_full());
+  if (shard.empty()) {
+    VLOG(FULL_NODE_WARNING) << "dropping download next block query to unknown shard";
+    promise.set_error(td::Status::Error(ErrorCode::notready, "shard not ready"));
+    return;
+  }
+  td::actor::send_closure(shard, &FullNodeShard::download_next_block, prev_id, priority, timeout, std::move(promise));
 }
 
 void FullNodeImpl::download_zero_state(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
