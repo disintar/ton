@@ -21,6 +21,7 @@
 
 #include "auto/tl/lite_api.h"
 #include "auto/tl/ton_api_json.h"
+#include "block-propagation-trace.h"
 #include "common/delay.h"
 #include "common/stats.h"
 #include "db/fileref.hpp"
@@ -221,11 +222,16 @@ void ValidatorManagerImpl::validate_block(ReceivedBlock block, td::Promise<Block
 
 void ValidatorManagerImpl::new_block_broadcast(BlockBroadcast broadcast, bool signatures_checked,
                                                td::Promise<td::Unit> promise, bool from_custom_overlay) {
+  const char *source = from_custom_overlay ? "custom" : "public";
   if (!started_) {
+    log_block_propagation_stage(broadcast, "manager.validate_create", source, "drop", "node_not_started",
+                                broadcast.trace.custom_deserialized_at);
     promise.set_error(td::Status::Error(ErrorCode::notready, "node not started"));
     return;
   }
   if (!need_monitor(broadcast.block_id.shard_full())) {
+    log_block_propagation_stage(broadcast, "manager.validate_create", source, "drop", "not_monitoring_shard",
+                                broadcast.trace.custom_deserialized_at);
     promise.set_error(td::Status::Error("not monitoring shard"));
     return;
   }
@@ -238,6 +244,8 @@ void ValidatorManagerImpl::new_block_broadcast(BlockBroadcast broadcast, bool si
     promise.set_result(std::move(R));
   };
   BlockIdExt block_id = broadcast.block_id;
+  log_block_propagation_stage(broadcast, "manager.validate_create", source, "ok", {},
+                              broadcast.trace.custom_deserialized_at);
   td::actor::create_actor<ValidateBroadcast>(PSTRING() << "broadcast" << block_id.id.to_str(), std::move(broadcast),
                                              last_masterchain_block_handle_, last_masterchain_state_,
                                              last_known_key_block_handle_, publisher_.get(), actor_id(this), td::Timestamp::in(20.0),
@@ -3261,7 +3269,6 @@ void ValidatorManagerImpl::prepare_stats(td::Promise<std::vector<std::pair<std::
 
         std::vector<std::pair<std::string, std::string>> vec;
         for (auto shard : answer){
-          LOG(ERROR) << "Got shard: " << shard;
           auto shard_id = shard.id.shard;
           auto shard_seqno = shard.id.seqno;
 

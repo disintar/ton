@@ -15,6 +15,8 @@
     along with TON Blockchain Library.  If not, see <http://www.gnu.org/licenses/>.
 */
 #pragma once
+#include <string>
+
 #include "block/signature-set.h"
 #include "ton/ton-types.h"
 
@@ -29,14 +31,23 @@ struct ReceivedBlock {
   }
 };
 
+struct BlockPropagationTrace {
+  bool enabled = false;
+  double custom_received_at = 0.0;
+  double custom_deserialized_at = 0.0;
+  std::string overlay_name;
+  std::string src_adnl;
+};
+
 struct BlockBroadcast {
   BlockIdExt block_id;
   td::Ref<block::BlockSignatureSet> sig_set;
   td::BufferSlice data;
   td::BufferSlice proof;
+  BlockPropagationTrace trace;
 
   BlockBroadcast clone() const {
-    return {block_id, sig_set, data.clone(), proof.clone()};
+    return BlockBroadcast{block_id, sig_set, data.clone(), proof.clone(), trace};
   }
 };
 

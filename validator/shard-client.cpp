@@ -18,6 +18,7 @@
 */
 #include "td/actor/MultiPromise.h"
 #include "ton/ton-io.hpp"
+#include "validator/block-propagation-trace.h"
 #include "validator/downloaders/download-state.hpp"
 #include "validator/fabric.h"
 
@@ -107,6 +108,8 @@ void ShardClient::download_shard_states(BlockIdExt masterchain_block_id, std::ve
 }
 
 void ShardClient::applied_all_shards() {
+  log_block_propagation_stage(masterchain_block_handle_->id(), BlockPropagationTrace{}, "shardclient.applied_all_shards",
+                              "shardclient", false, false, "ok", {}, 0.0, true);
   LOG(DEBUG) << "shardclient: " << masterchain_block_handle_->id() << " finished";
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) {
     R.ensure();
@@ -118,6 +121,8 @@ void ShardClient::applied_all_shards() {
 
 void ShardClient::saved_to_db() {
   CHECK(masterchain_block_handle_);
+  log_block_propagation_stage(masterchain_block_handle_->id(), BlockPropagationTrace{}, "shardclient.saved_to_db",
+                              "shardclient", false, false, "ok", {}, 0.0, true);
   td::actor::send_closure(manager_, &ValidatorManager::update_shard_client_block_handle, masterchain_block_handle_,
                           std::move(masterchain_state_), [](td::Result<>) {});
   masterchain_state_.clear();
@@ -173,6 +178,8 @@ void ShardClient::got_masterchain_block_state(td::Ref<MasterchainState> state) {
 }
 
 void ShardClient::apply_all_shards() {
+  log_block_propagation_stage(masterchain_block_handle_->id(), BlockPropagationTrace{},
+                              "shardclient.apply_all_shards.start", "shardclient", false, false, "ok", {}, 0.0, true);
   LOG(DEBUG) << "shardclient: " << masterchain_block_handle_->id() << " started";
 
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) {
@@ -199,31 +206,50 @@ void ShardClient::apply_all_shards() {
   for (auto &shard : vec) {
     workchains.insert(shard->shard().workchain);
     if (opts_->need_monitor(shard->shard(), masterchain_state_)) {
+      auto block_id = shard->top_block_id();
+      auto wait_started_at = block_propagation_trace_now();
+      log_block_propagation_stage(block_id, BlockPropagationTrace{}, "shardclient.wait_state.start", "shardclient",
+                                  false, false, "ok", {}, 0.0, true);
       auto Q = td::PromiseCreator::lambda([SelfId = actor_id(this), promise = ig.get_promise(),
-                                           shard = shard->shard()](td::Result<td::Ref<ShardState>> R) mutable {
+                                           shard = shard->shard(), block_id, wait_started_at](
+                                              td::Result<td::Ref<ShardState>> R) mutable {
         if (R.is_error()) {
-          promise.set_error(R.move_as_error_prefix(PSTRING() << "shard " << shard << ": "));
+          auto error = R.move_as_error_prefix(PSTRING() << "shard " << shard << ": ");
+          log_block_propagation_stage(block_id, BlockPropagationTrace{}, "shardclient.wait_state.done", "shardclient",
+                                      false, false, "error", error.to_string(), wait_started_at, true);
+          promise.set_error(std::move(error));
         } else {
+          log_block_propagation_stage(block_id, BlockPropagationTrace{}, "shardclient.wait_state.done", "shardclient",
+                                      false, false, "ok", {}, wait_started_at, true);
           td::actor::send_closure(SelfId, &ShardClient::downloaded_shard_state, R.move_as_ok(), std::move(promise));
         }
       });
-      td::actor::send_closure(manager_, &ValidatorManager::wait_block_state_short, shard->top_block_id(),
+      td::actor::send_closure(manager_, &ValidatorManager::wait_block_state_short, block_id,
                               shard_client_priority(), td::Timestamp::in(1500), true, std::move(Q));
     }
   }
   for (const auto &[wc, desc] : masterchain_state_->get_workchain_list()) {
     if (!workchains.count(wc) && desc->active && opts_->need_monitor(ShardIdFull{wc, shardIdAll}, masterchain_state_)) {
+      auto block_id = BlockIdExt{wc, shardIdAll, 0, desc->zerostate_root_hash, desc->zerostate_file_hash};
+      auto wait_started_at = block_propagation_trace_now();
+      log_block_propagation_stage(block_id, BlockPropagationTrace{}, "shardclient.wait_state.start", "shardclient",
+                                  false, false, "ok", {}, 0.0, true);
       auto Q = td::PromiseCreator::lambda([SelfId = actor_id(this), promise = ig.get_promise(),
-                                           workchain = wc](td::Result<td::Ref<ShardState>> R) mutable {
+                                           workchain = wc, block_id, wait_started_at](
+                                              td::Result<td::Ref<ShardState>> R) mutable {
         if (R.is_error()) {
-          promise.set_error(R.move_as_error_prefix(PSTRING() << "workchain " << workchain << ": "));
+          auto error = R.move_as_error_prefix(PSTRING() << "workchain " << workchain << ": ");
+          log_block_propagation_stage(block_id, BlockPropagationTrace{}, "shardclient.wait_state.done", "shardclient",
+                                      false, false, "error", error.to_string(), wait_started_at, true);
+          promise.set_error(std::move(error));
         } else {
+          log_block_propagation_stage(block_id, BlockPropagationTrace{}, "shardclient.wait_state.done", "shardclient",
+                                      false, false, "ok", {}, wait_started_at, true);
           td::actor::send_closure(SelfId, &ShardClient::downloaded_shard_state, R.move_as_ok(), std::move(promise));
         }
       });
       td::actor::send_closure(manager_, &ValidatorManager::wait_block_state_short,
-                              BlockIdExt{wc, shardIdAll, 0, desc->zerostate_root_hash, desc->zerostate_file_hash},
-                              shard_client_priority(), td::Timestamp::in(1500), true, std::move(Q));
+                              block_id, shard_client_priority(), td::Timestamp::in(1500), true, std::move(Q));
     }
   }
 }
@@ -245,6 +271,8 @@ void ShardClient::downloaded_shard_state(td::Ref<ShardState> state, td::Promise<
 }
 
 void ShardClient::new_masterchain_block_notification(BlockHandle handle, td::Ref<MasterchainState> state) {
+  log_block_propagation_stage(handle->id(), BlockPropagationTrace{}, "shardclient.mc_notification", "shardclient",
+                              false, false, "ok", {}, 0.0, true);
   if (!waiting_) {
     return;
   }

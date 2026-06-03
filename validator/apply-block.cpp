@@ -23,13 +23,22 @@
 #include "validator/invariants.hpp"
 
 #include "apply-block.hpp"
+#include "block-propagation-trace.h"
 #include "custom-overlay-metrics.h"
 
 namespace ton {
 
 namespace validator {
 
+void ApplyBlock::trace_stage(const char *stage, const char *result, std::string reason) {
+  log_block_propagation_stage(id_, trace_, stage, from_custom_overlay_ ? "custom" : "public", false, false, result,
+                              std::move(reason), trace_stage_started_at_);
+  trace_stage_started_at_ = block_propagation_trace_now();
+}
+
 void ApplyBlock::abort_query(td::Status reason) {
+  auto reason_str = reason.to_string();
+  trace_stage("apply.abort", "error", reason_str);
   if (promise_) {
     VLOG(VALIDATOR_WARNING) << "aborting apply block query for " << id_.to_str() << ": " << reason;
     promise_.set_error(std::move(reason));
@@ -53,6 +62,8 @@ void ApplyBlock::alarm() {
 }
 
 void ApplyBlock::start_up() {
+  trace_stage_started_at_ = trace_.custom_deserialized_at;
+  trace_stage("apply.start");
   VLOG(VALIDATOR_DEBUG) << "running apply_block for " << id_.to_str() << ", mc_seqno=" << masterchain_block_id_.seqno();
 
   if (id_.is_masterchain()) {
@@ -186,6 +197,7 @@ void ApplyBlock::written_block_data() {
 }
 
 void ApplyBlock::got_cur_state(td::Ref<ShardState> state) {
+  trace_stage("apply.prev_state");
   VLOG(VALIDATOR_DEBUG) << "got_cur_state";
   state_ = std::move(state);
   CHECK(handle_->received_state());
@@ -193,6 +205,7 @@ void ApplyBlock::got_cur_state(td::Ref<ShardState> state) {
 }
 
 void ApplyBlock::written_state() {
+  trace_stage("apply.state_written");
   VLOG(VALIDATOR_DEBUG) << "written_state";
   if (handle_->is_applied() && handle_->processed()) {
     finish_query();
@@ -274,6 +287,7 @@ void ApplyBlock::applied_prev() {
 }
 
 void ApplyBlock::applied_set() {
+  trace_stage("apply.applied_set");
   VLOG(VALIDATOR_DEBUG) << "applied_set";
   handle_->set_applied();
   if (from_custom_overlay_) {

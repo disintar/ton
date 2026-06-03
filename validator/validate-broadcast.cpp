@@ -20,6 +20,7 @@
 #include "ton/ton-io.hpp"
 
 #include "apply-block.hpp"
+#include "block-propagation-trace.h"
 #include "fabric.h"
 #include "validate-broadcast.hpp"
 
@@ -27,7 +28,15 @@ namespace ton {
 
 namespace validator {
 
+void ValidateBroadcast::trace_stage(const char *stage, const char *result, std::string reason) {
+  log_block_propagation_stage(broadcast_, stage, from_custom_overlay_ ? "custom" : "public", result, std::move(reason),
+                              trace_stage_started_at_);
+  trace_stage_started_at_ = block_propagation_trace_now();
+}
+
 void ValidateBroadcast::abort_query(td::Status reason) {
+  auto reason_str = reason.to_string();
+  trace_stage("validate.abort", "error", reason_str);
   if (promise_) {
     VLOG(VALIDATOR_WARNING) << "aborting validate broadcast query for " << broadcast_.block_id.to_str() << ": "
                             << reason;
@@ -50,6 +59,8 @@ void ValidateBroadcast::alarm() {
 }
 
 void ValidateBroadcast::start_up() {
+  trace_stage_started_at_ = broadcast_.trace.custom_deserialized_at;
+  trace_stage("validate.start");
   VLOG(VALIDATOR_DEBUG) << "received broadcast for " << broadcast_.block_id.to_str()
                         << " : last_mc_seqno=" << last_masterchain_state_->get_seqno()
                         << " last_key_block_seqno=" << last_known_masterchain_block_handle_->id().seqno();
@@ -244,6 +255,7 @@ void ValidateBroadcast::check_signatures_common(td::Ref<ConfigHolder> conf) {
 }
 
 void ValidateBroadcast::checked_signatures() {
+  trace_stage("validate.signatures");
   VLOG(VALIDATOR_DEBUG) << "checked_signatures";
   if (signatures_only_) {
     finish_query();
@@ -290,6 +302,7 @@ void ValidateBroadcast::got_block_handle(BlockHandle handle) {
 }
 
 void ValidateBroadcast::written_block_data() {
+  trace_stage("validate.block_data_written");
   VLOG(VALIDATOR_DEBUG) << "written_block_data";
   if (handle_->id().is_masterchain()) {
     if (handle_->inited_proof()) {
@@ -332,6 +345,7 @@ void ValidateBroadcast::written_block_data() {
 }
 
 void ValidateBroadcast::checked_proof() {
+  trace_stage("validate.proof_checked");
   VLOG(VALIDATOR_DEBUG) << "checked_proof";
   if (handle_->inited_proof() && handle_->is_key_block()) {
     td::actor::send_closure(manager_, &ValidatorManager::update_last_known_key_block, handle_, false);
@@ -346,8 +360,10 @@ void ValidateBroadcast::checked_proof() {
     });
 
     VLOG(VALIDATOR_DEBUG) << "apply block";
+    trace_stage("validate.apply_create");
     td::actor::create_actor<ApplyBlock>(PSTRING() << "apply" << handle_->id().id.to_str(), handle_->id(), data_,
-                                        handle_->id(), manager_, timeout_, std::move(P), from_custom_overlay_)
+                                        handle_->id(), manager_, timeout_, std::move(P), from_custom_overlay_,
+                                        broadcast_.trace)
         .release();
   } else {
     finish_query();

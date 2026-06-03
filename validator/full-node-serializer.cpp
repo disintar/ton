@@ -96,7 +96,8 @@ static td::Result<BlockBroadcast> deserialize_block_broadcast(ton_api::tonNode_b
 
   td::Ref<block::BlockSignatureSet> sig_set =
       block::BlockSignatureSet::fetch(f.signatures_, f.catchain_seqno_, f.validator_set_hash_);
-  auto result = BlockBroadcast{block_id, std::move(sig_set), std::move(f.data_), std::move(f.proof_)};
+  auto result = BlockBroadcast{block_id, std::move(sig_set), std::move(f.data_), std::move(f.proof_),
+                               BlockPropagationTrace{}};
   VLOG(FULL_NODE_BENCHMARK) << "Broadcast_benchmark deserialize_block_broadcast block_id=" << block_id.to_str()
                             << " called_from=" << called_from
                             << " time_sec=" << (td::Time::now() - t_decompression_start) << " compression=" << "none"
@@ -127,7 +128,7 @@ static td::Result<BlockBroadcast> deserialize_block_broadcast(ton_api::tonNode_b
   TRY_RESULT(data, vm::std_boc_serialize(roots[1], 31));
   VLOG(FULL_NODE_DEBUG) << "Decompressing block broadcast: " << f.compressed_.size() << " -> "
                         << data.size() + proof.size() + f2->signatures_.size() * 96;
-  return BlockBroadcast{block_id, std::move(sig_set), std::move(data), std::move(proof)};
+  return BlockBroadcast{block_id, std::move(sig_set), std::move(data), std::move(proof), BlockPropagationTrace{}};
 }
 
 td::Result<std::vector<BlockIdExt>> extract_prev_blocks_from_proof(td::Slice proof, const BlockIdExt& block_id) {
@@ -178,7 +179,8 @@ td::Result<bool> need_state_for_decompression(ton_api::tonNode_DataFull& data_fu
 
 BlockBroadcast get_block_broadcast_without_data(const ton_api::tonNode_blockBroadcastCompressedV2& f) {
   td::Ref<block::BlockSignatureSet> sig_set = block::BlockSignatureSet::fetch(f.signature_set_);
-  return BlockBroadcast{create_block_id(f.id_), sig_set, td::BufferSlice(), f.proof_.clone()};
+  return BlockBroadcast{create_block_id(f.id_), sig_set, td::BufferSlice(), f.proof_.clone(),
+                        BlockPropagationTrace{}};
 }
 
 static td::Result<BlockBroadcast> deserialize_block_broadcast(ton_api::tonNode_blockBroadcastCompressedV2& f,
@@ -200,7 +202,8 @@ static td::Result<BlockBroadcast> deserialize_block_broadcast(ton_api::tonNode_b
                             << " compression=" << "compressedV2_" << algorithm_name << " compressed_size="
                             << f.data_compressed_.size() + f.proof_.size() + total_signatures_size;
   TRY_RESULT(data, vm::std_boc_serialize(roots[0], 31));
-  return BlockBroadcast{create_block_id(f.id_), sig_set, std::move(data), std::move(f.proof_)};
+  return BlockBroadcast{create_block_id(f.id_), sig_set, std::move(data), std::move(f.proof_),
+                        BlockPropagationTrace{}};
 }
 
 td::Result<BlockBroadcast> deserialize_block_broadcast(ton_api::tonNode_Broadcast& obj, int max_decompressed_data_size,

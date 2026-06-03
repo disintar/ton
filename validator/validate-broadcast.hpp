@@ -52,6 +52,9 @@ class ValidateBroadcast : public td::actor::Actor {
   bool signatures_only_;
   bool signatures_checked_;
   bool from_custom_overlay_;
+  double trace_stage_started_at_ = 0.0;
+
+  void trace_stage(const char *stage, const char *result = "ok", std::string reason = {});
 
  public:
   ValidateBroadcast(BlockBroadcast broadcast, BlockHandle last_masterchain_block_handle,

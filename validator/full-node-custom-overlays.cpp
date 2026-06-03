@@ -21,6 +21,7 @@
 #include "tl/tl_json.h"
 #include "ton/ton-tl.hpp"
 
+#include "block-propagation-trace.h"
 #include "full-node-custom-overlays.hpp"
 #include "full-node-serializer.hpp"
 
@@ -29,6 +30,20 @@ namespace ton::validator::fullnode {
 namespace {
 
 constexpr const char *k_called_from_custom = "custom";
+
+td::Result<BlockIdExt> get_block_broadcast_id(ton_api::tonNode_Broadcast &query) {
+  td::Result<BlockIdExt> result;
+  ton_api::downcast_call(query, td::overloaded(
+                                    [&](ton_api::tonNode_blockBroadcast &f) { result = create_block_id(f.id_); },
+                                    [&](ton_api::tonNode_blockBroadcastCompressed &f) {
+                                      result = create_block_id(f.id_);
+                                    },
+                                    [&](ton_api::tonNode_blockBroadcastCompressedV2 &f) {
+                                      result = create_block_id(f.id_);
+                                    },
+                                    [&](auto &) { result = td::Status::Error("unknown broadcast type"); }));
+  return result;
+}
 
 }  // namespace
 
@@ -41,70 +56,116 @@ void FullNodeCustomOverlay::process_broadcast(PublicKeyHash src, ton_api::tonNod
 }
 
 void FullNodeCustomOverlay::process_broadcast(PublicKeyHash src, ton_api::tonNode_blockBroadcastCompressedV2 &query) {
+  auto received_at = block_propagation_trace_now();
+  auto trace = make_block_propagation_trace(name_, src.bits256_value().to_hex(), received_at);
   if (!block_senders_.count(adnl::AdnlNodeIdShort(src))) {
     VLOG(FULL_NODE_DEBUG) << "Dropping block broadcast in private overlay \"" << name_ << "\" from unauthorized sender "
                           << src;
+    if (trace.enabled) {
+      log_block_propagation_stage(create_block_id(query.id_), trace, "custom.recv", "custom", false, false, "drop",
+                                  "unauthorized_sender", received_at);
+    }
     return;
   }
 
   auto R_requires_state = need_state_for_decompression(query);
   if (R_requires_state.is_error()) {
     LOG(DEBUG) << "Failed to check if state is required for broadcast: " << R_requires_state.move_as_error();
+    if (trace.enabled) {
+      log_block_propagation_stage(create_block_id(query.id_), trace, "custom.recv", "custom", false, false, "error",
+                                  "need_state_check_failed", received_at);
+    }
     return;
   }
 
   if (R_requires_state.move_as_ok()) {
     auto block_wo_data = get_block_broadcast_without_data(query);
+    block_wo_data.trace = trace;
+    log_block_propagation_stage(block_wo_data, "custom.recv", "custom", "ok", {}, received_at);
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), src,
-                                         query = std::move(query)](td::Result<td::Unit> R) mutable {
+                                         query = std::move(query), trace = std::move(trace)](td::Result<td::Unit> R) mutable {
       if (R.is_error()) {
         LOG(DEBUG) << "Dropped V2 broadcast because of signatures validation error: " << R.move_as_error();
+        log_block_propagation_stage(create_block_id(query.id_), trace, "custom.deserialize", "custom", false, false,
+                                    "drop", "signatures_validation_error", trace.custom_received_at);
         return;
       }
 
-      td::actor::send_closure(SelfId, &FullNodeCustomOverlay::obtain_state_for_decompression, src, std::move(query));
+      td::actor::send_closure(SelfId, &FullNodeCustomOverlay::obtain_state_for_decompression, src, std::move(query),
+                              std::move(trace));
     });
     td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::validate_block_broadcast_signatures,
                             std::move(block_wo_data), std::move(P));
     return;
   }
 
-  process_block_broadcast(src, query);
+  process_block_broadcast(src, query, received_at);
 }
 
-void FullNodeCustomOverlay::process_block_broadcast(PublicKeyHash src, ton_api::tonNode_Broadcast &query) {
+void FullNodeCustomOverlay::process_block_broadcast(PublicKeyHash src, ton_api::tonNode_Broadcast &query,
+                                                    double received_at) {
+  if (received_at <= 0.0) {
+    received_at = block_propagation_trace_now();
+  }
+  auto trace = make_block_propagation_trace(name_, src.bits256_value().to_hex(), received_at);
+  auto R_id = get_block_broadcast_id(query);
   if (!block_senders_.count(adnl::AdnlNodeIdShort(src))) {
     VLOG(FULL_NODE_DEBUG) << "Dropping block broadcast in private overlay \"" << name_ << "\" from unauthorized sender "
                           << src;
+    if (R_id.is_ok()) {
+      log_block_propagation_stage(R_id.ok(), trace, "custom.recv", "custom", false, false, "drop",
+                                  "unauthorized_sender", received_at);
+    }
     return;
   }
+  if (R_id.is_ok()) {
+    log_block_propagation_stage(R_id.ok(), trace, "custom.recv", "custom", false, false, "ok", {}, received_at);
+  }
+  auto deserialize_started_at = block_propagation_trace_now();
   auto B = deserialize_block_broadcast(query, overlay::Overlays::max_fec_broadcast_size(), k_called_from_custom);
   if (B.is_error()) {
-    LOG(DEBUG) << "dropped broadcast: " << B.move_as_error();
+    auto error = B.move_as_error();
+    if (R_id.is_ok()) {
+      log_block_propagation_stage(R_id.ok(), trace, "custom.deserialize", "custom", false, false, "error",
+                                  error.to_string(), deserialize_started_at);
+    }
+    LOG(DEBUG) << "dropped broadcast: " << error;
     return;
   }
-  VLOG(FULL_NODE_DEBUG) << "Received block broadcast " << (B.ok().sig_set->is_final() ? "" : "(approve signatures) ")
-                        << "in custom overlay \"" << name_ << "\" from " << src << ": " << B.ok().block_id.to_str();
-  td::actor::send_closure(full_node_, &FullNode::process_block_broadcast, B.move_as_ok(), false, true);
+  auto broadcast = B.move_as_ok();
+  trace.custom_deserialized_at = block_propagation_trace_now();
+  broadcast.trace = trace;
+  log_block_propagation_stage(broadcast, "custom.deserialize", "custom", "ok", {}, deserialize_started_at);
+  VLOG(FULL_NODE_DEBUG) << "Received block broadcast " << (broadcast.sig_set->is_final() ? "" : "(approve signatures) ")
+                        << "in custom overlay \"" << name_ << "\" from " << src << ": " << broadcast.block_id.to_str();
+  td::actor::send_closure(full_node_, &FullNode::process_block_broadcast, std::move(broadcast), false, true);
 }
 
 void FullNodeCustomOverlay::obtain_state_for_decompression(PublicKeyHash src,
-                                                           ton_api::tonNode_blockBroadcastCompressedV2 query) {
+                                                           ton_api::tonNode_blockBroadcastCompressedV2 query,
+                                                           BlockPropagationTrace trace) {
   auto id = create_block_id(query.id_);
   auto R_prev = extract_prev_blocks_from_proof(query.proof_.as_slice(), id);
   if (R_prev.is_error()) {
-    LOG(DEBUG) << "Failed to extract prev blocks for V2 broadcast: " << R_prev.move_as_error();
+    auto error = R_prev.move_as_error();
+    log_block_propagation_stage(id, trace, "custom.deserialize", "custom", false, false, "error", error.to_string(),
+                                trace.custom_received_at);
+    LOG(DEBUG) << "Failed to extract prev blocks for V2 broadcast: " << error;
     return;
   }
   auto prev_blocks = R_prev.move_as_ok();
   auto P_state = td::PromiseCreator::lambda(
-      [SelfId = actor_id(this), src, query = std::move(query)](td::Result<td::Ref<ShardState>> R_state) mutable {
+      [SelfId = actor_id(this), src, query = std::move(query), trace = std::move(trace)](
+          td::Result<td::Ref<ShardState>> R_state) mutable {
         if (R_state.is_error()) {
-          LOG(DEBUG) << "Failed to get state for V2 broadcast: " << R_state.move_as_error();
+          auto error = R_state.move_as_error();
+          log_block_propagation_stage(create_block_id(query.id_), trace, "custom.deserialize", "custom", false, false,
+                                      "error", error.to_string(), trace.custom_received_at);
+          LOG(DEBUG) << "Failed to get state for V2 broadcast: " << error;
           return;
         }
         td::actor::send_closure(SelfId, &FullNodeCustomOverlay::process_block_broadcast_with_state, src,
-                                std::move(query), R_state.move_as_ok());
+                                std::move(query), R_state.move_as_ok(), std::move(trace));
       });
   td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::wait_state_by_prev_blocks, id,
                           std::move(prev_blocks), std::move(P_state));
@@ -112,17 +173,26 @@ void FullNodeCustomOverlay::obtain_state_for_decompression(PublicKeyHash src,
 
 void FullNodeCustomOverlay::process_block_broadcast_with_state(PublicKeyHash src,
                                                                ton_api::tonNode_blockBroadcastCompressedV2 query,
-                                                               td::Ref<ShardState> state) {
+                                                               td::Ref<ShardState> state,
+                                                               BlockPropagationTrace trace) {
   td::Ref<vm::Cell> state_root = state->root_cell();
+  auto deserialize_started_at = block_propagation_trace_now();
   auto B =
       deserialize_block_broadcast(query, overlay::Overlays::max_fec_broadcast_size(), k_called_from_custom, state_root);
   if (B.is_error()) {
-    LOG(DEBUG) << "Failed to deserialize block broadcast: " << B.move_as_error();
+    auto error = B.move_as_error();
+    log_block_propagation_stage(create_block_id(query.id_), trace, "custom.deserialize", "custom", false, false,
+                                "error", error.to_string(), deserialize_started_at);
+    LOG(DEBUG) << "Failed to deserialize block broadcast: " << error;
     return;
   }
+  auto broadcast = B.move_as_ok();
+  trace.custom_deserialized_at = block_propagation_trace_now();
+  broadcast.trace = trace;
+  log_block_propagation_stage(broadcast, "custom.deserialize", "custom", "ok", {}, deserialize_started_at);
   VLOG(FULL_NODE_DEBUG) << "Received block broadcast in custom overlay \"" << name_ << "\" from " << src << ": "
-                        << B.ok().block_id.to_str();
-  td::actor::send_closure(full_node_, &FullNode::process_block_broadcast, B.move_as_ok(), true, true);
+                        << broadcast.block_id.to_str();
+  td::actor::send_closure(full_node_, &FullNode::process_block_broadcast, std::move(broadcast), true, true);
 }
 
 void FullNodeCustomOverlay::process_broadcast(PublicKeyHash src, ton_api::tonNode_externalMessageBroadcast &query) {

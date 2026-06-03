@@ -25,6 +25,7 @@
 #include "ton/ton-io.hpp"
 #include "ton/ton-tl.hpp"
 
+#include "block-propagation-trace.h"
 #include "custom-overlay-metrics.h"
 #include "full-node.h"
 #include "full-node.hpp"
@@ -608,17 +609,29 @@ void FullNodeImpl::new_key_block(BlockHandle handle) {
 }
 
 void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast, bool signatures_checked, bool from_custom_overlay) {
+  const auto block_id = broadcast.block_id;
+  const auto trace = broadcast.trace;
+  const bool final_known = !broadcast.sig_set.is_null();
+  const bool final = final_known && broadcast.sig_set->is_final();
+  const char *source = from_custom_overlay ? "custom" : "public";
+  if (from_custom_overlay) {
+    log_block_propagation_stage(broadcast, "fullnode.process", source, "ok", {}, trace.custom_deserialized_at);
+  }
   if (from_custom_overlay) {
     record_custom_overlay_block_broadcast_received();
   }
   send_block_broadcast_to_custom_overlays(broadcast);
   td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_block_broadcast, std::move(broadcast),
-                          signatures_checked, [](td::Result<td::Unit> R) {
+                          signatures_checked, [block_id, trace, final_known, final, source](td::Result<td::Unit> R) {
                             if (R.is_error()) {
-                              if (R.error().code() == ErrorCode::notready) {
-                                LOG(DEBUG) << "dropped broadcast: " << R.move_as_error();
+                              auto error = R.move_as_error();
+                              log_block_propagation_stage(block_id, trace, "fullnode.process", source, final_known, final,
+                                                          error.code() == ErrorCode::notready ? "drop" : "error",
+                                                          error.to_string(), trace.custom_deserialized_at);
+                              if (error.code() == ErrorCode::notready) {
+                                LOG(DEBUG) << "dropped broadcast: " << error;
                               } else {
-                                LOG(INFO) << "dropped broadcast: " << R.move_as_error();
+                                LOG(INFO) << "dropped broadcast: " << error;
                               }
                             }
                           },
@@ -809,6 +822,17 @@ void FullNodeImpl::send_block_broadcast_to_custom_overlays(const BlockBroadcast 
     if (private_overlay.params_.send_shard(broadcast.block_id.shard_full())) {
       for (auto &[local_id, actor] : private_overlay.actors_) {
         if (private_overlay.params_.block_senders_.find(local_id) != private_overlay.params_.block_senders_.end()) {
+          auto trace = broadcast.trace;
+          if (trace.overlay_name.empty()) {
+            trace.overlay_name = private_overlay.params_.name_;
+          }
+          if (trace.src_adnl.empty()) {
+            trace.src_adnl = local_id.bits256_value().to_hex();
+          }
+          log_block_propagation_stage(broadcast.block_id, trace, "fullnode.send_custom",
+                                      broadcast.trace.enabled ? "custom" : "public", !broadcast.sig_set.is_null(),
+                                      !broadcast.sig_set.is_null() && broadcast.sig_set->is_final(), "ok", {}, 0.0,
+                                      true);
           td::actor::send_closure(actor, &FullNodeCustomOverlay::send_broadcast, broadcast.clone());
         }
       }
