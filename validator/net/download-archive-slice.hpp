@@ -88,6 +88,8 @@ class DownloadArchiveSlice : public td::actor::Actor {
 
   adnl::AdnlNodeIdShort download_from_ = adnl::AdnlNodeIdShort::zero();
   std::vector<adnl::AdnlNodeIdShort> download_from_list_;
+  int current_peer_index_ = 0;
+  int current_peer_count_ = 0;
 
   td::Timestamp timeout_;
   td::actor::ActorId<ValidatorManagerInterface> validator_manager_;
