@@ -16,6 +16,8 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
+#include <algorithm>
+
 #include "adnl/utils.hpp"
 #include "auto/tl/ton_api.h"
 #include "auto/tl/ton_api_json.h"
@@ -1113,16 +1115,39 @@ void FullNodeShardImpl::get_next_key_blocks(BlockIdExt block_id, td::Timestamp t
 
 void FullNodeShardImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
                                          td::Timestamp timeout, td::Promise<std::string> promise) {
-  auto &b = choose_neighbour();
-  LOG(INFO) << "[archive-sync] stage=public.choose_neighbour seqno=" << masterchain_seqno
-            << " shard=" << shard_prefix.to_str() << " local_shard=" << shard_.to_str()
-            << " peer=" << b.adnl_id << " neighbours=" << neighbours_.size()
-            << " roundtrip=" << b.roundtrip << " unreliability=" << b.unreliability
-            << " version=" << b.version_major << "." << b.version_minor
-            << " result=" << (b.adnl_id.is_zero() ? "no_peer" : "ok");
+  std::vector<const Neighbour *> candidates;
+  candidates.reserve(neighbours_.size());
+  for (const auto &[_, neighbour] : neighbours_) {
+    candidates.push_back(&neighbour);
+  }
+  std::sort(candidates.begin(), candidates.end(), [](const Neighbour *left, const Neighbour *right) {
+    if (left->unreliability != right->unreliability) {
+      return left->unreliability < right->unreliability;
+    }
+    return left->roundtrip < right->roundtrip;
+  });
+
+  std::vector<adnl::AdnlNodeIdShort> archive_peers;
+  archive_peers.reserve(std::min<std::size_t>(candidates.size(), 5));
+  for (const auto *candidate : candidates) {
+    if (archive_peers.size() == 5) {
+      break;
+    }
+    archive_peers.push_back(candidate->adnl_id);
+  }
+
+  auto first_peer = archive_peers.empty() ? adnl::AdnlNodeIdShort::zero() : archive_peers.front();
+  auto first = archive_peers.empty() ? &Neighbour::zero : candidates.front();
+  LOG(WARNING) << "[archive-sync] stage=public.choose_neighbour seqno=" << masterchain_seqno
+               << " shard=" << shard_prefix.to_str() << " local_shard=" << shard_.to_str()
+               << " peer=" << first_peer << " peer_count=" << archive_peers.size()
+               << " neighbours=" << neighbours_.size()
+               << " roundtrip=" << first->roundtrip << " unreliability=" << first->unreliability
+               << " version=" << first->version_major << "." << first->version_minor
+               << " result=" << (archive_peers.empty() ? "random_peers" : "ok");
   td::actor::create_actor<DownloadArchiveSlice>(
-      "archive", masterchain_seqno, shard_prefix, std::move(tmp_dir), adnl_id_, overlay_id_, b.adnl_id, timeout,
-      validator_manager_, rldp2_, overlays_, adnl_, client_, create_neighbour_promise(b, std::move(promise)))
+      "archive", masterchain_seqno, shard_prefix, std::move(tmp_dir), adnl_id_, overlay_id_, first_peer, timeout,
+      validator_manager_, rldp2_, overlays_, adnl_, client_, std::move(promise), std::move(archive_peers))
       .release();
 }
 
