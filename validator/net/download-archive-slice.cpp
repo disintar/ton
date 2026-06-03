@@ -122,11 +122,11 @@ void DownloadArchiveSlice::abort_query(td::Status reason) {
                                           block_propagation_trace_now());
       archive_sync_metric_finished_ = true;
     }
-    LOG(INFO) << "[archive-sync] stage=archive.done source=" << archive_source()
-              << " transport=" << archive_slice_transport() << " seqno=" << masterchain_seqno_
-              << " shard=" << shard_prefix_.to_str() << " peer=" << download_from_
-              << " offset=" << offset_ << " ms=" << archive_elapsed_ms(archive_sync_started_at_)
-              << " result=error reason=" << reason_text;
+    LOG(WARNING) << "[archive-sync] stage=archive.done source=" << archive_source()
+                 << " transport=" << archive_slice_transport() << " seqno=" << masterchain_seqno_
+                 << " shard=" << shard_prefix_.to_str() << " peer=" << download_from_
+                 << " offset=" << offset_ << " ms=" << archive_elapsed_ms(archive_sync_started_at_)
+                 << " result=error reason=" << reason_text;
     promise_.set_error(std::move(reason));
     if (!fd_.empty()) {
       td::unlink(tmp_name_).ensure();
@@ -148,11 +148,11 @@ void DownloadArchiveSlice::finish_query() {
                                           block_propagation_trace_now());
       archive_sync_metric_finished_ = true;
     }
-    LOG(INFO) << "[archive-sync] stage=archive.done source=" << archive_source()
-              << " transport=" << archive_slice_transport() << " seqno=" << masterchain_seqno_
-              << " shard=" << shard_prefix_.to_str() << " peer=" << download_from_
-              << " offset=" << offset_ << " ms=" << archive_elapsed_ms(archive_sync_started_at_)
-              << " result=ok reason=downloaded";
+    LOG(WARNING) << "[archive-sync] stage=archive.done source=" << archive_source()
+                 << " transport=" << archive_slice_transport() << " seqno=" << masterchain_seqno_
+                 << " shard=" << shard_prefix_.to_str() << " peer=" << download_from_
+                 << " offset=" << offset_ << " ms=" << archive_elapsed_ms(archive_sync_started_at_)
+                 << " result=ok reason=downloaded";
     promise_.set_value(std::move(tmp_name_));
     fd_.close();
   }
@@ -166,10 +166,10 @@ void DownloadArchiveSlice::start_up() {
     record_custom_overlay_sync_download(CustomOverlaySyncKind::Archive, archive_sync_sender_,
                                         CustomOverlaySyncResult::Attempt);
   }
-  LOG(INFO) << "[archive-sync] stage=archive.start source=" << archive_source()
-            << " transport=" << archive_slice_transport() << " seqno=" << masterchain_seqno_
-            << " shard=" << shard_prefix_.to_str() << " peer=" << download_from_
-            << " listed_peers=" << download_from_list_.size() << " result=start";
+  LOG(WARNING) << "[archive-sync] stage=archive.start source=" << archive_source()
+               << " transport=" << archive_slice_transport() << " seqno=" << masterchain_seqno_
+               << " shard=" << shard_prefix_.to_str() << " peer=" << download_from_
+               << " listed_peers=" << download_from_list_.size() << " result=start";
 
   auto R = td::mkstemp(tmp_dir_);
   if (R.is_error()) {
@@ -185,9 +185,14 @@ void DownloadArchiveSlice::start_up() {
   } else if (download_from_.is_zero() && client_.empty()) {
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::vector<adnl::AdnlNodeIdShort>> R) {
       if (R.is_error()) {
-        td::actor::send_closure(SelfId, &DownloadArchiveSlice::abort_query, R.move_as_error());
+        auto error = R.move_as_error();
+        LOG(WARNING) << "[archive-sync] stage=random_peers.done source=public transport=overlay"
+                     << " result=error reason=" << archive_status_reason(error.clone());
+        td::actor::send_closure(SelfId, &DownloadArchiveSlice::abort_query, std::move(error));
       } else {
         auto vec = R.move_as_ok();
+        LOG(WARNING) << "[archive-sync] stage=random_peers.done source=public transport=overlay"
+                     << " peers=" << vec.size() << " result=" << (vec.empty() ? "empty" : "ok");
         if (vec.size() == 0) {
           td::actor::send_closure(SelfId, &DownloadArchiveSlice::abort_query,
                                   td::Status::Error(ErrorCode::notready, "no nodes"));
@@ -197,6 +202,9 @@ void DownloadArchiveSlice::start_up() {
       }
     });
 
+    LOG(WARNING) << "[archive-sync] stage=random_peers.start source=public transport=overlay"
+                 << " seqno=" << masterchain_seqno_ << " shard=" << shard_prefix_.to_str()
+                 << " requested=" << kPublicArchivePeerCount << " result=start";
     td::actor::send_closure(overlays_, &overlay::Overlays::get_overlay_random_peers, local_id_, overlay_id_,
                             kPublicArchivePeerCount, std::move(P));
   } else {
@@ -212,10 +220,10 @@ void DownloadArchiveSlice::got_node_to_download(std::vector<adnl::AdnlNodeIdShor
     return;
   }
   download_from_list_ = std::move(download_from);
-  LOG(INFO) << "[archive-sync] stage=peers source=" << archive_source()
-            << " transport=" << archive_prepare_transport() << " seqno=" << masterchain_seqno_
-            << " shard=" << shard_prefix_.to_str() << " peers=" << download_from_list_.size()
-            << " first_peer=" << download_from_list_.front() << " result=ok";
+  LOG(WARNING) << "[archive-sync] stage=peers source=" << archive_source()
+               << " transport=" << archive_prepare_transport() << " seqno=" << masterchain_seqno_
+               << " shard=" << shard_prefix_.to_str() << " peers=" << download_from_list_.size()
+               << " first_peer=" << download_from_list_.front() << " result=ok";
   if (resolve_peers_before_download_ && client_.empty()) {
     resolve_download_peers();
     return;
@@ -252,7 +260,6 @@ void DownloadArchiveSlice::resolve_download_peers() {
         });
   }
 }
-
 void DownloadArchiveSlice::got_resolved_download_peer(td::uint64 query_id, adnl::AdnlNodeIdShort peer,
                                                       td::Result<adnl::AdnlNode> result) {
   if (query_id != resolve_query_id_ || resolving_peers_ == 0) {
@@ -328,11 +335,11 @@ void DownloadArchiveSlice::try_download(int index){
     record_custom_overlay_sync_peer_download(CustomOverlaySyncKind::Archive, archive_sync_sender_,
                                              CustomOverlaySyncResult::Attempt);
   }
-  LOG(INFO) << "[archive-sync] stage=archive_info.start source=" << archive_source()
-            << " transport=" << archive_prepare_transport() << " seqno=" << masterchain_seqno_
-            << " shard=" << shard_prefix_.to_str()
-            << " peer=" << download_from_ << " peer_index=" << index << " peers=" << download_from_list_.size()
-            << " result=start";
+  LOG(WARNING) << "[archive-sync] stage=archive_info.start source=" << archive_source()
+               << " transport=" << archive_prepare_transport() << " seqno=" << masterchain_seqno_
+               << " shard=" << shard_prefix_.to_str()
+               << " peer=" << download_from_ << " peer_index=" << index << " peers=" << download_from_list_.size()
+               << " result=start";
 
   auto query_id = ++archive_info_query_id_;
   archive_info_started_at_ = block_propagation_trace_now();
@@ -402,11 +409,11 @@ void DownloadArchiveSlice::got_archive_info_result(td::uint64 query_id, int inde
                                              CustomOverlaySyncResult::Ok, archive_info_started_at_,
                                              block_propagation_trace_now());
   }
-  LOG(INFO) << "[archive-sync] stage=archive_info.done source=" << archive_source()
-            << " transport=" << archive_prepare_transport() << " seqno=" << masterchain_seqno_
-            << " shard=" << shard_prefix_.to_str()
-            << " peer=" << download_from_ << " peer_index=" << index << " peers=" << total_nodes
-            << " ms=" << archive_elapsed_ms(archive_info_started_at_) << " result=ok";
+  LOG(WARNING) << "[archive-sync] stage=archive_info.done source=" << archive_source()
+               << " transport=" << archive_prepare_transport() << " seqno=" << masterchain_seqno_
+               << " shard=" << shard_prefix_.to_str()
+               << " peer=" << download_from_ << " peer_index=" << index << " peers=" << total_nodes
+               << " ms=" << archive_elapsed_ms(archive_info_started_at_) << " result=ok";
   ++archive_info_query_id_;
   got_archive_info(result.move_as_ok());
 }
@@ -483,21 +490,21 @@ void DownloadArchiveSlice::got_archive_info(td::BufferSlice data) {
   }
 
   prev_logged_timer_ = td::Timer();
-  LOG(INFO) << "[archive-sync] stage=slice.start source=" << archive_source()
-            << " transport=" << archive_slice_transport() << " seqno=" << masterchain_seqno_
-            << " shard=" << shard_prefix_.to_str()
-            << " peer=" << download_from_ << " archive_id=" << archive_id_ << " result=start";
+  LOG(WARNING) << "[archive-sync] stage=slice.start source=" << archive_source()
+               << " transport=" << archive_slice_transport() << " seqno=" << masterchain_seqno_
+               << " shard=" << shard_prefix_.to_str()
+               << " peer=" << download_from_ << " archive_id=" << archive_id_ << " result=start";
   get_archive_slice();
 }
 
 void DownloadArchiveSlice::get_archive_slice() {
   auto query_id = ++archive_slice_query_id_;
   archive_slice_started_at_ = block_propagation_trace_now();
-  LOG(INFO) << "[archive-sync] stage=slice.chunk.start source=" << archive_source()
-            << " transport=" << archive_slice_transport() << " seqno=" << masterchain_seqno_
-            << " shard=" << shard_prefix_.to_str()
-            << " peer=" << download_from_ << " archive_id=" << archive_id_ << " offset=" << offset_
-            << " bytes=" << slice_size() << " result=start";
+  LOG(WARNING) << "[archive-sync] stage=slice.chunk.start source=" << archive_source()
+               << " transport=" << archive_slice_transport() << " seqno=" << masterchain_seqno_
+               << " shard=" << shard_prefix_.to_str()
+               << " peer=" << download_from_ << " archive_id=" << archive_id_ << " offset=" << offset_
+               << " bytes=" << slice_size() << " result=start";
   delay_action(
       [SelfId = actor_id(this), query_id]() {
         td::actor::send_closure(SelfId, &DownloadArchiveSlice::archive_slice_timeout, query_id);
@@ -581,12 +588,12 @@ void DownloadArchiveSlice::got_archive_slice(td::BufferSlice data) {
   }
 
   offset_ += data.size();
-  LOG(INFO) << "[archive-sync] stage=slice.chunk.done source=" << archive_source()
-            << " transport=" << archive_slice_transport() << " seqno=" << masterchain_seqno_
-            << " shard=" << shard_prefix_.to_str()
-            << " peer=" << download_from_ << " archive_id=" << archive_id_ << " offset=" << chunk_offset
-            << " bytes=" << chunk_size << " next_offset=" << offset_
-            << " ms=" << archive_elapsed_ms(archive_slice_started_at_) << " result=ok";
+  LOG(WARNING) << "[archive-sync] stage=slice.chunk.done source=" << archive_source()
+               << " transport=" << archive_slice_transport() << " seqno=" << masterchain_seqno_
+               << " shard=" << shard_prefix_.to_str()
+               << " peer=" << download_from_ << " archive_id=" << archive_id_ << " offset=" << chunk_offset
+               << " bytes=" << chunk_size << " next_offset=" << offset_
+               << " ms=" << archive_elapsed_ms(archive_slice_started_at_) << " result=ok";
 
   double elapsed = prev_logged_timer_.elapsed();
   if (elapsed > 10.0) {
