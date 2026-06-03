@@ -58,6 +58,12 @@ Use custom overlays as a best-effort first path in `FullNodeImpl::download_archi
   fallback to it. Otherwise a private overlay can receive live broadcasts while
   startup archive import is still blocked on the configured sender's peer lookup
   (for example `QuicSender` returning `get_peer_node: timeout`).
+- Before starting custom archive download, resolve custom overlay peers through
+  the normal ADNL/DHT path by calling `Adnl::get_peer_node(local_id, peer_id)`.
+  The custom overlay config only needs short ADNL ids; the public DHT address
+  record supplies the full public key and `adnl_addressList`. If no custom peer
+  resolves, report the custom attempt as not ready and let the public overlay
+  fallback handle the sync.
 - If the custom path is not ready, has no peers, has no archive slice, or times
   out, fall back to the existing public shard overlay path.
 - Keep the existing public behavior unchanged for nodes without custom overlays
@@ -81,10 +87,12 @@ payloads continue to use the existing `DownloadArchiveSlice` chunking and
 - Integration:
   - Run two archive nodes in the same custom overlay with the patch.
   - Restart one node while it is behind enough to trigger prestart archive import.
-  - Verify logs contain `Trying custom overlay "<name>" archive slice #...`.
-  - Verify the target peer logs custom overlay `getShardArchiveInfo` and
-    `getArchiveSlice`.
-  - Verify prestart sync completes and manager starts accepting custom overlay
+- Verify logs contain `Trying custom overlay "<name>" archive slice #...`.
+- Verify logs contain `Resolving ... archive download peers via DHT` followed by
+  at least one `Resolved archive download peer ...`.
+- Verify the target peer logs custom overlay `getShardArchiveInfo` and
+  `getArchiveSlice`.
+- Verify prestart sync completes and manager starts accepting custom overlay
     block broadcasts.
   - Stop or remove the archive slice from custom peers and verify fallback to
     the public overlay still works.
