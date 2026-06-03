@@ -49,15 +49,10 @@ Use custom overlays as a best-effort first path in `FullNodeImpl::download_archi
 
 - If the node has a matching custom overlay for the requested shard, try the
   custom overlay peers first.
-- Send the small `getArchiveInfo` / `getShardArchiveInfo` prepare query through
-  the overlay ADNL path before downloading large chunks through the configured
-  sender. This lets the ADNL peer table learn/refresh the custom peer before
-  QUIC/RLDP chunk requests are sent.
-- For custom overlay archive downloads, send large `getArchiveSlice` chunk
-  queries through the overlay ADNL path as well, or provide an immediate
-  fallback to it. Otherwise a private overlay can receive live broadcasts while
-  startup archive import is still blocked on the configured sender's peer lookup
-  (for example `QuicSender` returning `get_peer_node: timeout`).
+- Send both the small `getArchiveInfo` / `getShardArchiveInfo` prepare query and
+  the large `getArchiveSlice` chunk queries through the custom overlay's
+  configured sender. With QUIC-enabled custom overlays this keeps archive
+  catch-up on the same transport path as private block propagation.
 - Before starting custom archive download, resolve custom overlay peers through
   the normal ADNL/DHT path by calling `Adnl::get_peer_node(local_id, peer_id)`.
   The custom overlay config only needs short ADNL ids; the public DHT address
