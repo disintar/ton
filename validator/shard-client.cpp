@@ -28,6 +28,10 @@ namespace ton {
 
 namespace validator {
 
+namespace {
+constexpr double SHARD_CLIENT_WAIT_STATE_TIMEOUT = 30.0;
+}
+
 void ShardClient::start_up() {
   if (init_mode_) {
     start_up_init_mode();
@@ -229,8 +233,8 @@ void ShardClient::apply_all_shards() {
           td::actor::send_closure(SelfId, &ShardClient::downloaded_shard_state, R.move_as_ok(), std::move(promise));
         }
       });
-      td::actor::send_closure(manager_, &ValidatorManager::wait_block_state_short, block_id,
-                              shard_client_priority(), td::Timestamp::in(1500), true, std::move(Q));
+      td::actor::send_closure(manager_, &ValidatorManager::wait_block_state_short, block_id, shard_client_priority(),
+                              td::Timestamp::in(SHARD_CLIENT_WAIT_STATE_TIMEOUT), true, std::move(Q));
     }
   }
   for (const auto &[wc, desc] : masterchain_state_->get_workchain_list()) {
@@ -253,8 +257,8 @@ void ShardClient::apply_all_shards() {
           td::actor::send_closure(SelfId, &ShardClient::downloaded_shard_state, R.move_as_ok(), std::move(promise));
         }
       });
-      td::actor::send_closure(manager_, &ValidatorManager::wait_block_state_short,
-                              block_id, shard_client_priority(), td::Timestamp::in(1500), true, std::move(Q));
+      td::actor::send_closure(manager_, &ValidatorManager::wait_block_state_short, block_id, shard_client_priority(),
+                              td::Timestamp::in(SHARD_CLIENT_WAIT_STATE_TIMEOUT), true, std::move(Q));
     }
   }
 }
