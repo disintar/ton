@@ -324,15 +324,45 @@ void ShardClient::downloaded_shard_state(td::Ref<ShardState> state, td::Promise<
 void ShardClient::new_masterchain_block_notification(BlockHandle handle, td::Ref<MasterchainState> state) {
   log_block_propagation_stage(handle->id(), BlockPropagationTrace{}, "shardclient.mc_notification", "shardclient",
                               false, false, "ok", {}, 0.0, true);
+  auto current_id = masterchain_block_handle_ ? masterchain_block_handle_->id() : BlockIdExt{};
   LOG(WARNING) << "[shardclient-sync] stage=mc_notification mc=" << handle->id().to_str()
-               << " current=" << (masterchain_block_handle_ ? masterchain_block_handle_->id().to_str() : "none")
+               << " current=" << (masterchain_block_handle_ ? current_id.to_str() : "none")
                << " waiting=" << (waiting_ ? 1 : 0)
                << " pending=" << pending_masterchain_notifications_.size() << " result=ok";
   if (!masterchain_block_handle_ || handle->id().id.seqno <= masterchain_block_handle_->id().id.seqno) {
     return;
   }
+  auto next_id = handle->id();
+  if (next_id.is_masterchain() && current_id.is_masterchain() && next_id.id.seqno == current_id.id.seqno + 1 &&
+      !masterchain_block_handle_->inited_next_left()) {
+    auto prev = handle->prev();
+    if (prev.size() == 1 && prev[0] == current_id) {
+      masterchain_block_handle_->set_next(next_id);
+      LOG(WARNING) << "[shardclient-sync] stage=link_next_from_notification current=" << current_id.to_str()
+                   << " next=" << next_id.to_str() << " result=ok";
+      td::actor::send_closure(manager_, &ValidatorManager::set_next_block, current_id, next_id,
+                              [current_id, next_id](td::Result<td::Unit> R) {
+                                if (R.is_error()) {
+                                  auto error = R.move_as_error();
+                                  LOG(WARNING) << "[shardclient-sync] stage=link_next_from_notification.flush"
+                                               << " current=" << current_id.to_str()
+                                               << " next=" << next_id.to_str()
+                                               << " result=error reason=" << error.to_string();
+                                } else {
+                                  LOG(WARNING) << "[shardclient-sync] stage=link_next_from_notification.flush"
+                                               << " current=" << current_id.to_str()
+                                               << " next=" << next_id.to_str() << " result=ok";
+                                }
+                              });
+    } else {
+      LOG(WARNING) << "[shardclient-sync] stage=link_next_from_notification current=" << current_id.to_str()
+                   << " next=" << next_id.to_str() << " prev_count=" << prev.size() << " result=skip";
+    }
+  }
   pending_masterchain_notifications_[handle->id().id.seqno] = std::make_pair(std::move(handle), std::move(state));
   prune_pending_masterchain_notifications();
+  LOG(WARNING) << "[shardclient-sync] stage=mc_notification_buffered mc=" << next_id.to_str()
+               << " pending=" << pending_masterchain_notifications_.size() << " result=ok";
   if (waiting_) {
     if (!try_apply_pending_masterchain_block()) {
       try_apply_next_masterchain_block_from_db();
