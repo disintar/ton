@@ -149,7 +149,8 @@ class FullNodeImpl : public FullNode {
                                                      td::Promise<td::BufferSlice> promise);
   void download_archive_from_public_overlay(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix,
                                             std::string tmp_dir, td::Timestamp timeout,
-                                            td::Promise<std::string> promise);
+                                            td::Promise<std::string> promise,
+                                            std::vector<adnl::AdnlNodeIdShort> hint_peers = {});
   std::map<ShardIdFull, ShardInfo> shards_;
   int wc_monitor_min_split_ = 0;
 

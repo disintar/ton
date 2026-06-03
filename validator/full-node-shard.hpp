@@ -199,7 +199,8 @@ class FullNodeShardImpl : public FullNodeShard {
   void get_next_key_blocks(BlockIdExt block_id, td::Timestamp timeout,
                            td::Promise<std::vector<BlockIdExt>> promise) override;
   void download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
-                        td::Timestamp timeout, td::Promise<std::string> promise) override;
+                        td::Timestamp timeout, td::Promise<std::string> promise,
+                        std::vector<adnl::AdnlNodeIdShort> hint_peers = {}) override;
   void download_out_msg_queue_proof(ShardIdFull dst_shard, std::vector<BlockIdExt> blocks,
                                     block::ImportedMsgQueueLimits limits, td::Timestamp timeout,
                                     td::Promise<std::vector<td::Ref<OutMsgQueueProof>>> promise) override;
