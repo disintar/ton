@@ -25,6 +25,8 @@
 #include "ton/ton-io.hpp"
 #include "ton/ton-tl.hpp"
 
+#include <mutex>
+
 #include "block-propagation-trace.h"
 #include "custom-overlay-metrics.h"
 #include "full-node.h"
@@ -60,6 +62,68 @@ void log_fullnode_overlay_sync_stage(CustomOverlaySyncKind kind, const BlockIdEx
                << " ms=-1"
                << " result=" << result
                << " reason=" << block_propagation_trace_sanitize(std::move(reason));
+}
+
+struct PublicFallbackRaceState {
+  PublicFallbackRaceState(CustomOverlaySyncKind kind, BlockIdExt block_id, td::Promise<ReceivedBlock> promise)
+      : kind(kind), block_id(block_id), promise(std::move(promise)) {
+  }
+
+  CustomOverlaySyncKind kind;
+  BlockIdExt block_id;
+  td::Promise<ReceivedBlock> promise;
+  std::mutex mutex;
+  std::size_t pending{2};
+  bool done{false};
+  std::string last_error;
+};
+
+void finish_public_fallback_race(std::shared_ptr<PublicFallbackRaceState> state, const char *source,
+                                 td::Result<ReceivedBlock> R) {
+  if (R.is_ok()) {
+    auto value = R.move_as_ok();
+    td::Promise<ReceivedBlock> promise;
+    bool should_finish = false;
+    {
+      std::lock_guard<std::mutex> lock(state->mutex);
+      if (!state->done) {
+        state->done = true;
+        promise = std::move(state->promise);
+        should_finish = true;
+      }
+    }
+    if (should_finish) {
+      log_fullnode_overlay_sync_stage(state->kind, state->block_id, "fullnode.race_done", source, "ok", {});
+      promise.set_value(std::move(value));
+    }
+    return;
+  }
+
+  auto error = R.move_as_error();
+  td::Promise<ReceivedBlock> promise;
+  bool should_finish = false;
+  auto error_string = error.to_string();
+  {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    if (state->done) {
+      return;
+    }
+    state->last_error = PSTRING() << source << ": " << error_string;
+    CHECK(state->pending > 0);
+    state->pending--;
+    if (state->pending == 0) {
+      state->done = true;
+      promise = std::move(state->promise);
+      should_finish = true;
+      error_string = state->last_error;
+    }
+  }
+  if (should_finish) {
+    log_fullnode_overlay_sync_stage(state->kind, state->block_id, "fullnode.race_done", source, "error",
+                                    error_string);
+    promise.set_error(td::Status::Error(ErrorCode::notready, PSTRING() << "custom and public overlay failed: "
+                                                                       << error_string));
+  }
 }
 
 void FullNodeImpl::add_permanent_key(PublicKeyHash key, td::Promise<td::Unit> promise) {
@@ -438,25 +502,29 @@ void FullNodeImpl::download_block(BlockIdExt id, td::uint32 priority, td::Timest
     for (auto &[local_id, actor] : custom_overlay.actors_) {
       log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::Block, id, "fullnode.custom_select", "custom", "attempt",
                                       {}, name, PSTRING() << local_id);
+      auto state = std::make_shared<PublicFallbackRaceState>(CustomOverlaySyncKind::Block, id, std::move(promise));
       auto P = td::PromiseCreator::lambda(
-          [SelfId = actor_id(this), id, priority, timeout, promise = std::move(promise),
-           name](td::Result<ReceivedBlock> R) mutable {
-            if (R.is_ok()) {
-              promise.set_value(R.move_as_ok());
-              return;
+          [state, name](td::Result<ReceivedBlock> R) mutable {
+            if (R.is_error()) {
+              auto error = R.error().to_string();
+              VLOG(FULL_NODE_DEBUG) << "failed to download block " << state->block_id.to_str()
+                                    << " from custom overlay \"" << name << "\": " << error
+                                    << "; public overlay fallback is already racing";
+              record_custom_overlay_sync_fallback(CustomOverlaySyncKind::Block,
+                                                  CustomOverlaySyncFallbackReason::CustomError);
+              log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::Block, state->block_id, "fullnode.custom_done",
+                                              "custom", "error", error, name);
             }
-            auto error = R.move_as_error();
-            VLOG(FULL_NODE_DEBUG) << "failed to download block " << id.to_str() << " from custom overlay \""
-                                  << name << "\": " << error << "; falling back to public overlay";
-            record_custom_overlay_sync_fallback(CustomOverlaySyncKind::Block,
-                                                CustomOverlaySyncFallbackReason::CustomError);
-            record_public_overlay_sync_download(CustomOverlaySyncKind::Block, PublicOverlaySyncReason::Fallback);
-            log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::Block, id, "fullnode.public", "public",
-                                            "fallback", error.to_string(), name);
-            td::actor::send_closure(SelfId, &FullNodeImpl::download_block_from_public_overlay, id, priority, timeout,
-                                    std::move(promise));
+            finish_public_fallback_race(std::move(state), "custom", std::move(R));
           });
+      auto PublicP = td::PromiseCreator::lambda([state](td::Result<ReceivedBlock> R) mutable {
+        finish_public_fallback_race(std::move(state), "public", std::move(R));
+      });
+      record_public_overlay_sync_download(CustomOverlaySyncKind::Block, PublicOverlaySyncReason::Fallback);
+      log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::Block, id, "fullnode.public", "public", "fallback",
+                                      "race_custom_overlay", name);
       td::actor::send_closure(actor, &FullNodeCustomOverlay::download_block, id, priority, timeout, std::move(P));
+      download_block_from_public_overlay(id, priority, timeout, std::move(PublicP));
       return;
     }
   }
@@ -485,27 +553,31 @@ void FullNodeImpl::download_next_block(BlockIdExt prev_id, td::uint32 priority, 
     for (auto &[local_id, actor] : custom_overlay.actors_) {
       log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, prev_id, "fullnode.custom_select", "custom",
                                       "attempt", {}, name, PSTRING() << local_id);
+      auto state =
+          std::make_shared<PublicFallbackRaceState>(CustomOverlaySyncKind::NextBlock, prev_id, std::move(promise));
       auto P = td::PromiseCreator::lambda(
-          [SelfId = actor_id(this), promise = std::move(promise), prev_id, priority, timeout,
-           name](td::Result<ReceivedBlock> R) mutable {
-            if (R.is_ok()) {
-              promise.set_value(R.move_as_ok());
-              return;
+          [state, name](td::Result<ReceivedBlock> R) mutable {
+            if (R.is_error()) {
+              auto error = R.error().to_string();
+              VLOG(FULL_NODE_DEBUG) << "failed to download next block after " << state->block_id.to_str()
+                                    << " from custom overlay \"" << name << "\": " << error
+                                    << "; public overlay fallback is already racing";
+              record_custom_overlay_sync_fallback(CustomOverlaySyncKind::NextBlock,
+                                                  CustomOverlaySyncFallbackReason::CustomError);
+              log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, state->block_id,
+                                              "fullnode.custom_done", "custom", "error", error, name);
             }
-            auto error = R.move_as_error();
-            VLOG(FULL_NODE_DEBUG) << "failed to download next block after " << prev_id.to_str()
-                                  << " from custom overlay \"" << name << "\": " << error
-                                  << "; falling back to public overlay";
-            record_custom_overlay_sync_fallback(CustomOverlaySyncKind::NextBlock,
-                                                CustomOverlaySyncFallbackReason::CustomError);
-            record_public_overlay_sync_download(CustomOverlaySyncKind::NextBlock, PublicOverlaySyncReason::Fallback);
-            log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, prev_id, "fullnode.public", "public",
-                                            "fallback", error.to_string(), name);
-            td::actor::send_closure(SelfId, &FullNodeImpl::download_next_block_from_public_overlay, prev_id, priority,
-                                    timeout, std::move(promise));
+            finish_public_fallback_race(std::move(state), "custom", std::move(R));
           });
+      auto PublicP = td::PromiseCreator::lambda([state](td::Result<ReceivedBlock> R) mutable {
+        finish_public_fallback_race(std::move(state), "public", std::move(R));
+      });
+      record_public_overlay_sync_download(CustomOverlaySyncKind::NextBlock, PublicOverlaySyncReason::Fallback);
+      log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, prev_id, "fullnode.public", "public",
+                                      "fallback", "race_custom_overlay", name);
       td::actor::send_closure(actor, &FullNodeCustomOverlay::download_next_block, prev_id, priority, timeout,
                               std::move(P));
+      download_next_block_from_public_overlay(prev_id, priority, timeout, std::move(PublicP));
       return;
     }
   }
