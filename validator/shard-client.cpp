@@ -284,7 +284,9 @@ void ShardClient::new_masterchain_block_notification(BlockHandle handle, td::Ref
   pending_masterchain_notifications_[handle->id().id.seqno] = std::make_pair(std::move(handle), std::move(state));
   prune_pending_masterchain_notifications();
   if (waiting_) {
-    try_apply_pending_masterchain_block();
+    if (!try_apply_pending_masterchain_block()) {
+      try_apply_next_masterchain_block_from_db();
+    }
   }
 }
 
@@ -309,6 +311,18 @@ bool ShardClient::try_apply_pending_masterchain_block() {
   pending_masterchain_notifications_.erase(it);
   waiting_ = false;
   apply_all_shards();
+  return true;
+}
+
+bool ShardClient::try_apply_next_masterchain_block_from_db() {
+  if (!waiting_ || !masterchain_block_handle_ || !masterchain_block_handle_->inited_next_left()) {
+    return false;
+  }
+  auto next_id = masterchain_block_handle_->one_next(true);
+  LOG(DEBUG) << "shardclient: applying next masterchain block from db " << next_id.to_str()
+             << " after notification gap";
+  waiting_ = false;
+  new_masterchain_block_id(next_id);
   return true;
 }
 

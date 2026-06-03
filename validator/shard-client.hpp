@@ -93,6 +93,7 @@ class ShardClient : public td::actor::Actor {
 
   void new_masterchain_block_notification(BlockHandle handle, td::Ref<MasterchainState> state);
   bool try_apply_pending_masterchain_block();
+  bool try_apply_next_masterchain_block_from_db();
   void prune_pending_masterchain_notifications();
 
   void get_processed_masterchain_block(td::Promise<BlockSeqno> promise);
