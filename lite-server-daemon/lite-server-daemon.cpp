@@ -174,7 +174,8 @@ private:
       }
 
       void download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
-                            td::Timestamp timeout, td::Promise<std::string> promise) override {
+                            td::Timestamp timeout, bool allow_custom_overlay,
+                            td::Promise<std::string> promise) override {
       }
 
       void download_out_msg_queue_proof(

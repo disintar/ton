@@ -2075,7 +2075,8 @@ class Indexer : public td::actor::Actor {
         //        td::actor::send_closure(id_, &FullNodeImpl::get_next_key_blocks, block_id, timeout, std::move(promise));
       }
       void download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
-                            td::Timestamp timeout, td::Promise<std::string> promise) override {
+                            td::Timestamp timeout, bool allow_custom_overlay,
+                            td::Promise<std::string> promise) override {
         LOG(DEBUG) << "download_archive";
         //        td::actor::send_closure(id_, &FullNodeImpl::download_archive, masterchain_seqno, std::move(tmp_dir), timeout,
         //                                std::move(promise));
@@ -2365,7 +2366,8 @@ class IndexerSimple : public td::actor::Actor {
         //        td::actor::send_closure(id_, &FullNodeImpl::get_next_key_blocks, block_id, timeout, std::move(promise));
       }
       void download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
-                            td::Timestamp timeout, td::Promise<std::string> promise) override {
+                            td::Timestamp timeout, bool allow_custom_overlay,
+                            td::Promise<std::string> promise) override {
         LOG(DEBUG) << "download_archive";
         //        td::actor::send_closure(id_, &FullNodeImpl::download_archive, masterchain_seqno, std::move(tmp_dir), timeout,
         //                                std::move(promise));
