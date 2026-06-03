@@ -35,7 +35,8 @@ DownloadArchiveSlice::DownloadArchiveSlice(
     td::actor::ActorId<ValidatorManagerInterface> validator_manager, td::actor::ActorId<adnl::AdnlSenderInterface> rldp,
     td::actor::ActorId<overlay::Overlays> overlays, td::actor::ActorId<adnl::Adnl> adnl,
     td::actor::ActorId<adnl::AdnlExtClient> client, td::Promise<std::string> promise,
-    std::vector<adnl::AdnlNodeIdShort> download_from_list, bool use_sender_for_prepare_query)
+    std::vector<adnl::AdnlNodeIdShort> download_from_list, bool use_sender_for_prepare_query,
+    bool use_sender_for_slice_query)
     : masterchain_seqno_(masterchain_seqno)
     , shard_prefix_(shard_prefix)
     , tmp_dir_(std::move(tmp_dir))
@@ -49,7 +50,8 @@ DownloadArchiveSlice::DownloadArchiveSlice(
     , adnl_(adnl)
     , client_(client)
     , promise_(std::move(promise))
-    , use_sender_for_prepare_query_(use_sender_for_prepare_query) {
+    , use_sender_for_prepare_query_(use_sender_for_prepare_query)
+    , use_sender_for_slice_query_(use_sender_for_slice_query) {
   if (!download_from.is_zero() || !download_from_list.empty()) {
     original_zero_download_ = false;
   }
@@ -222,9 +224,14 @@ void DownloadArchiveSlice::get_archive_slice() {
 
   auto q = create_serialize_tl_object<ton_api::tonNode_getArchiveSlice>(archive_id_, offset_, slice_size());
   if (client_.empty()) {
-    td::actor::send_closure(overlays_, &overlay::Overlays::send_query_via, download_from_, local_id_, overlay_id_,
-                            "get_archive_slice", std::move(P), td::Timestamp::in(15.0), std::move(q),
-                            slice_size() + 1024, rldp_);
+    if (use_sender_for_slice_query_) {
+      td::actor::send_closure(overlays_, &overlay::Overlays::send_query_via, download_from_, local_id_, overlay_id_,
+                              "get_archive_slice", std::move(P), td::Timestamp::in(15.0), std::move(q),
+                              slice_size() + 1024, rldp_);
+    } else {
+      td::actor::send_closure(overlays_, &overlay::Overlays::send_query, download_from_, local_id_, overlay_id_,
+                              "get_archive_slice", std::move(P), td::Timestamp::in(15.0), std::move(q));
+    }
   } else {
     td::actor::send_closure(client_, &adnl::AdnlExtClient::send_query, "get_archive_slice",
                             create_serialize_tl_object_suffix<ton_api::tonNode_query>(std::move(q)),

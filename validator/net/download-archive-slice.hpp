@@ -42,7 +42,7 @@ class DownloadArchiveSlice : public td::actor::Actor {
                        td::actor::ActorId<overlay::Overlays> overlays, td::actor::ActorId<adnl::Adnl> adnl,
                        td::actor::ActorId<adnl::AdnlExtClient> client, td::Promise<std::string> promise,
                        std::vector<adnl::AdnlNodeIdShort> download_from_list = {},
-                       bool use_sender_for_prepare_query = false);
+                       bool use_sender_for_prepare_query = false, bool use_sender_for_slice_query = true);
 
   void abort_query(td::Status reason);
   void alarm() override;
@@ -82,6 +82,7 @@ class DownloadArchiveSlice : public td::actor::Actor {
   td::actor::ActorId<adnl::AdnlExtClient> client_;
   td::Promise<std::string> promise_;
   bool use_sender_for_prepare_query_ = false;
+  bool use_sender_for_slice_query_ = true;
 
   td::uint64 prev_logged_sum_ = 0;
   td::Timer prev_logged_timer_;
