@@ -1,6 +1,6 @@
 # Upstream PR Notes
 
-This document describes two independent improvements that should be prepared as
+This document describes several independent improvements that should be prepared as
 clean pull requests against `ton-blockchain/ton`.
 
 ## 1. Use Custom Overlays For Archive Slice Sync
@@ -160,9 +160,92 @@ The upstream `ShardClient::new_masterchain_block_notification()` still contains
 
 ## Suggested PR Split
 
-Submit as two separate PRs:
+## 3. Use Custom Overlay Peers For Block Catch-Up Downloads
+
+### Problem
+
+Custom overlays deliver live block broadcasts quickly, but a restarting node can
+still be behind by hundreds or thousands of masterchain blocks. The sequential
+catch-up path asks for block data through `DownloadBlockNew`.
+
+The public shard path creates `DownloadBlockNew("downloadnext", ...)` with an
+explicit public overlay peer chosen by `choose_neighbour()`. The custom overlay
+path must be equally explicit. Sending a custom download with a zero
+`download_from` lets `DownloadBlockNew` pick one random overlay peer and fail
+the whole attempt if that peer has no data or is slow.
+
+Observed symptom:
+
+- `ton_custom_overlay_block_broadcasts_received_total` grows quickly.
+- `ton_custom_overlay_block_broadcasts_applied_total` stays at zero while
+  `ValidatorManager` is not started.
+- `last_masterchain_block_ago` and `shard_client_ago` keep large lag despite
+  live custom broadcasts arriving in milliseconds.
+
+### Proposed Change
+
+Use custom overlay membership for explicit block catch-up downloads:
+
+- Prefer `block_senders_` as download peers.
+- Fall back to all custom overlay `nodes_`.
+- Exclude the local ADNL and zero ids.
+- Try peers in order for `downloadBlockFull` and `downloadNextBlockFull`.
+- Keep the public overlay fallback if custom peers cannot serve the block.
+
+Also use the custom overlay first from `FullNodeShardImpl::try_get_next_block()`
+so startup `downloadNextBlockFull` can use private overlay data before falling
+back to the public shard overlay.
+
+### Safety
+
+The downloaded block still goes through the existing proof and hash checks in
+`DownloadBlockNew`. A custom peer that returns empty data, invalid data, or times
+out does not advance state and falls back to the next peer or to the public
+overlay.
+
+This is bounded by the configured custom overlay peer list. It does not create an
+unbounded queue or cache.
+
+### Test Plan
+
+- Build `validator-engine`.
+- Restart one private-overlay full node while it is behind.
+- Verify custom `downloadNextBlockFull` requests reach explicit custom peers.
+- Verify `last_masterchain_block_ago` catches up faster than the public-only
+  path.
+- Verify live broadcasts switch from `node_not_started` drops to normal
+  validation/application after catch-up.
+
+## 4. Make Initial Sync Delay Configurable For Fast Private Nodes
+
+### Problem
+
+`FullNodeOptions::initial_sync_delay_` defaults to 60 seconds. Even when block
+catch-up is already complete, this adds an artificial restart delay before
+`initial_read_complete()` lets `ValidatorManager` accept broadcasts and
+liteserver queries.
+
+### Proposed Change
+
+For private-overlay deployments that are expected to restart and catch up
+quickly, set `--initial-sync-delay 0` or make the deployment entrypoint expose an
+environment variable for this flag.
+
+The local test image changes the binary default to `0.0` so the current k8s
+entrypoint, which does not pass the flag, can validate the behavior.
+
+### Safety
+
+This is an operational startup delay, not a consensus rule. Operators that still
+want the old grace period can explicitly set `--initial-sync-delay 60`.
+
+## Suggested PR Split
+
+Submit as separate PRs:
 
 1. `full-node: allow archive slice sync over custom overlays`
 2. `validator: buffer shard-client masterchain notifications while busy`
+3. `full-node: use custom overlay peers for block catch-up downloads`
+4. `validator-engine: expose fast initial sync delay for private deployments`
 
 They solve different bottlenecks and can be reviewed independently.
