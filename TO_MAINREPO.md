@@ -61,8 +61,16 @@ Use custom overlays as a best-effort first path in `FullNodeImpl::download_archi
   fallback handle the sync.
 - If the custom path is not ready, has no peers, has no archive slice, or times
   out, fall back to the existing public shard overlay path.
+- Do not rely only on sender-level request timeouts for startup archive sync.
+  Add explicit bounded watchdogs around custom peer DHT resolution,
+  `getArchiveInfo` / `getShardArchiveInfo`, and each `getArchiveSlice` chunk.
+  This prevents a half-reachable custom QUIC peer from holding
+  `prestart_sync()` for the full archive-import timeout.
 - Keep the existing public behavior unchanged for nodes without custom overlays
   and for external-client mode.
+- Export custom sync metrics with `kind="archive"` and add grep-friendly
+  `[custom-overlay-archive]` logs for resolve, archive-info, slice chunk, and
+  final result stages. These logs are emitted only for the custom path.
 
 ### Safety
 
@@ -76,21 +84,29 @@ The responder is scoped to private overlay members and rate limited. Large
 payloads continue to use the existing `DownloadArchiveSlice` chunking and
 `getArchiveSlice` size guard.
 
+The downloader watchdogs do not skip validation or import checks. They only
+bound how long a private peer can hold a startup archive request before the
+unchanged public fallback is used.
+
 ### Test Plan
 
 - Unit/build: build `validator` target.
 - Integration:
   - Run two archive nodes in the same custom overlay with the patch.
   - Restart one node while it is behind enough to trigger prestart archive import.
-- Verify logs contain `Trying custom overlay "<name>" archive slice #...`.
-- Verify logs contain `Resolving ... archive download peers via DHT` followed by
-  at least one `Resolved archive download peer ...`.
+- Verify logs contain `[custom-overlay-archive] stage=resolve.start`.
+- Verify logs contain either `[custom-overlay-archive] stage=archive_info.done
+  result=ok` followed by `stage=slice.start`, or a bounded
+  `result=timeout|error` followed by public fallback.
 - Verify the target peer logs custom overlay `getShardArchiveInfo` and
   `getArchiveSlice`.
 - Verify prestart sync completes and manager starts accepting custom overlay
     block broadcasts.
   - Stop or remove the archive slice from custom peers and verify fallback to
     the public overlay still works.
+- Verify Prometheus exposes archive counters:
+  `ton_custom_overlay_sync_downloads_total{kind="archive",sender="quic",...}`
+  and `ton_public_overlay_sync_downloads_total{kind="archive",reason="fallback"}`.
 
 ### Upstream Status
 

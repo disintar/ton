@@ -32,7 +32,7 @@ namespace fullnode {
 inline std::atomic<std::uint64_t> custom_overlay_block_broadcasts_received_total{0};
 inline std::atomic<std::uint64_t> custom_overlay_block_broadcasts_applied_total{0};
 
-enum class CustomOverlaySyncKind : std::size_t { Block = 0, NextBlock = 1, Count = 2 };
+enum class CustomOverlaySyncKind : std::size_t { Block = 0, NextBlock = 1, Archive = 2, Count = 3 };
 enum class CustomOverlaySyncSender : std::size_t { Rldp2 = 0, Quic = 1, Count = 2 };
 enum class CustomOverlaySyncResult : std::size_t {
   Attempt = 0,
@@ -80,7 +80,8 @@ inline constexpr std::size_t public_overlay_sync_reason_count() {
 }
 
 inline const char *custom_overlay_sync_kind_label(std::size_t value) {
-  static constexpr std::array<const char *, custom_overlay_sync_kind_count()> labels = {"block", "next_block"};
+  static constexpr std::array<const char *, custom_overlay_sync_kind_count()> labels = {"block", "next_block",
+                                                                                         "archive"};
   return labels[value];
 }
 

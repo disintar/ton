@@ -25,6 +25,7 @@
 #include "overlay/overlays.h"
 #include "td/utils/port/FileFd.h"
 #include "ton/ton-types.h"
+#include "validator/custom-overlay-metrics.h"
 #include "validator/validator.h"
 
 namespace ton {
@@ -44,7 +45,8 @@ class DownloadArchiveSlice : public td::actor::Actor {
                        td::actor::ActorId<adnl::AdnlExtClient> client, td::Promise<std::string> promise,
                        std::vector<adnl::AdnlNodeIdShort> download_from_list = {},
                        bool use_sender_for_prepare_query = false, bool use_sender_for_slice_query = true,
-                       bool resolve_peers_before_download = false);
+                       bool resolve_peers_before_download = false, bool record_archive_sync_metrics = false,
+                       CustomOverlaySyncSender archive_sync_sender = CustomOverlaySyncSender::Rldp2);
 
   void abort_query(td::Status reason);
   void alarm() override;
@@ -53,11 +55,17 @@ class DownloadArchiveSlice : public td::actor::Actor {
   void start_up() override;
   void got_node_to_download(std::vector<adnl::AdnlNodeIdShort> node);
   void got_archive_info(td::BufferSlice data);
+  void got_archive_info_result(td::uint64 query_id, int index, int total_nodes, td::Result<td::BufferSlice> result);
+  void archive_info_timeout(td::uint64 query_id, int index, int total_nodes);
   void get_archive_slice();
+  void got_archive_slice_result(td::uint64 query_id, td::Result<td::BufferSlice> result);
+  void archive_slice_timeout(td::uint64 query_id);
   void got_archive_slice(td::BufferSlice data);
   void try_download(int index);
   void resolve_download_peers();
-  void got_resolved_download_peer(adnl::AdnlNodeIdShort peer, td::Result<adnl::AdnlNode> result);
+  void got_resolved_download_peer(td::uint64 query_id, adnl::AdnlNodeIdShort peer,
+                                  td::Result<adnl::AdnlNode> result);
+  void resolve_download_peers_timeout(td::uint64 query_id);
 
   static constexpr td::uint32 slice_size() {
     return 1 << 21;
@@ -89,7 +97,15 @@ class DownloadArchiveSlice : public td::actor::Actor {
   bool use_sender_for_slice_query_ = true;
   bool resolve_peers_before_download_ = false;
   size_t resolving_peers_ = 0;
+  td::uint64 resolve_query_id_ = 0;
+  td::uint64 archive_info_query_id_ = 0;
+  td::uint64 archive_slice_query_id_ = 0;
+  double archive_info_started_at_ = 0.0;
   std::vector<adnl::AdnlNodeIdShort> resolved_download_from_list_;
+  bool record_archive_sync_metrics_ = false;
+  CustomOverlaySyncSender archive_sync_sender_ = CustomOverlaySyncSender::Rldp2;
+  double archive_sync_started_at_ = 0.0;
+  bool archive_sync_metric_finished_ = false;
 
   td::uint64 prev_logged_sum_ = 0;
   td::Timer prev_logged_timer_;

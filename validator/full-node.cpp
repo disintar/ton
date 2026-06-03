@@ -665,10 +665,13 @@ void FullNodeImpl::get_next_key_blocks(BlockIdExt block_id, td::Timestamp timeou
 void FullNodeImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
                                     td::Timestamp timeout, td::Promise<std::string> promise) {
   if (client_.empty()) {
+    bool has_custom_overlay = !custom_overlays_.empty();
+    bool shard_served_by_custom_overlay = false;
     for (auto &[name, custom_overlay] : custom_overlays_) {
       if (!custom_overlay.params_.send_shard(shard_prefix)) {
         continue;
       }
+      shard_served_by_custom_overlay = true;
       for (auto &[local_id, actor] : custom_overlay.actors_) {
         auto P = td::PromiseCreator::lambda(
             [SelfId = actor_id(this), masterchain_seqno, shard_prefix, tmp_dir = tmp_dir, timeout,
@@ -677,6 +680,8 @@ void FullNodeImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFull sh
                 promise.set_value(R.move_as_ok());
                 return;
               }
+              record_custom_overlay_sync_fallback(CustomOverlaySyncKind::Archive, CustomOverlaySyncFallbackReason::CustomError);
+              record_public_overlay_sync_download(CustomOverlaySyncKind::Archive, PublicOverlaySyncReason::Fallback);
               LOG(INFO) << "failed to download archive slice #" << masterchain_seqno << " " << shard_prefix.to_str()
                         << " from custom overlay \"" << name << "\": " << R.move_as_error()
                         << "; falling back to public overlay";
@@ -689,7 +694,14 @@ void FullNodeImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFull sh
         return;
       }
     }
+    record_custom_overlay_sync_fallback(
+        CustomOverlaySyncKind::Archive,
+        shard_served_by_custom_overlay
+            ? CustomOverlaySyncFallbackReason::NoLocalActor
+            : (has_custom_overlay ? CustomOverlaySyncFallbackReason::ShardNotServed
+                                  : CustomOverlaySyncFallbackReason::NoCustomOverlay));
   }
+  record_public_overlay_sync_download(CustomOverlaySyncKind::Archive, PublicOverlaySyncReason::Direct);
   download_archive_from_public_overlay(masterchain_seqno, shard_prefix, std::move(tmp_dir), timeout, std::move(promise));
 }
 
