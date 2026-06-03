@@ -156,10 +156,10 @@ void finish_public_archive_fallback_race(std::shared_ptr<PublicArchiveFallbackRa
       }
     }
     if (should_finish) {
-      LOG(INFO) << "[archive-sync] stage=race_done source=" << source
-                << " seqno=" << state->masterchain_seqno
-                << " shard=" << state->shard_prefix.to_str()
-                << " result=ok";
+      LOG(WARNING) << "[archive-sync] stage=race_done source=" << source
+                   << " seqno=" << state->masterchain_seqno
+                   << " shard=" << state->shard_prefix.to_str()
+                   << " result=ok";
       promise.set_value(std::move(value));
     }
     return;
@@ -185,10 +185,10 @@ void finish_public_archive_fallback_race(std::shared_ptr<PublicArchiveFallbackRa
     }
   }
   if (should_finish) {
-    LOG(INFO) << "[archive-sync] stage=race_done source=" << source
-              << " seqno=" << state->masterchain_seqno
-              << " shard=" << state->shard_prefix.to_str()
-              << " result=error reason=" << error_string;
+    LOG(WARNING) << "[archive-sync] stage=race_done source=" << source
+                 << " seqno=" << state->masterchain_seqno
+                 << " shard=" << state->shard_prefix.to_str()
+                 << " result=error reason=" << error_string;
     promise.set_error(td::Status::Error(ErrorCode::notready, PSTRING() << "custom and public archive overlay failed: "
                                                                        << error_string));
   }
@@ -841,11 +841,11 @@ void FullNodeImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFull sh
           finish_public_archive_fallback_race(std::move(state), "public", std::move(R));
         });
         record_public_overlay_sync_download(CustomOverlaySyncKind::Archive, PublicOverlaySyncReason::Fallback);
-        LOG(INFO) << "[archive-sync] stage=race_start seqno=" << masterchain_seqno
-                  << " shard=" << shard_prefix.to_str()
-                  << " overlay=" << name
-                  << " local=" << local_id
-                  << " result=ok";
+        LOG(WARNING) << "[archive-sync] stage=race_start seqno=" << masterchain_seqno
+                     << " shard=" << shard_prefix.to_str()
+                     << " overlay=" << name
+                     << " local=" << local_id
+                     << " result=ok";
         td::actor::send_closure(actor, &FullNodeCustomOverlay::download_archive, masterchain_seqno, shard_prefix,
                                 tmp_dir, timeout, std::move(P));
         download_archive_from_public_overlay(masterchain_seqno, shard_prefix, std::move(tmp_dir), timeout,
