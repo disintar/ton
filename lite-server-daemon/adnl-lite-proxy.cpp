@@ -1406,7 +1406,9 @@ namespace ton::liteserver {
           usage_batch_.push_back(std::move(event));
         }
 
-        void complete_usage_request(adnl::AdnlNodeIdShort dst, const td::BufferSlice &data, double elapsed_seconds) {
+        void complete_usage_request(adnl::AdnlNodeIdShort dst, const td::BufferSlice &data, double elapsed_seconds,
+                                    bool success = true, bool ratelimited = false,
+                                    const std::string &error_message = "") {
           if (!usage_push_enabled_ || usage_batch_.empty()) {
             return;
           }
@@ -1428,6 +1430,12 @@ namespace ton::liteserver {
 
             event["duration_ms"] = duration_ms;
             event["elapsed"] = elapsed_seconds;
+            event["success"] = success;
+            event["ratelimited"] = ratelimited;
+            event["status"] = ratelimited ? "ratelimited" : (success ? "success" : "unsuccess");
+            if (!error_message.empty()) {
+              event["error"] = error_message;
+            }
             return;
           }
         }
@@ -1438,9 +1446,10 @@ namespace ton::liteserver {
           return td::PromiseCreator::lambda(
                   [P = std::move(promise), SelfId = self_id, dst, data = data.clone(), elapsed = td::Timer()](
                           td::Result<td::BufferSlice> R) mutable {
+                      auto success = R.is_ok();
                       td::actor::send_closure(SelfId, &LiteProxy::complete_usage_request, dst, data.clone(),
-                                              elapsed.elapsed());
-                      if (R.is_ok()) {
+                                              elapsed.elapsed(), success, false, std::string());
+                      if (success) {
                         P.set_value(R.move_as_ok());
                       } else {
                         P.set_error(R.move_as_error());
@@ -1492,9 +1501,18 @@ namespace ton::liteserver {
           auto it = cache_similar.find(data_hash);
 
           if (it != cache_similar.end()) {
+            auto cache_success = true;
+            std::string cache_error_message;
+            auto lite_error = ton::fetch_tl_object<ton::lite_api::liteServer_error>(result.clone(), true);
+            if (lite_error.is_ok()) {
+              cache_success = false;
+              cache_error_message = lite_error.move_as_ok()->message_;
+            }
+
             for (auto &promise: it->second) {
               LOG(INFO) << "Found cache for request: " << data_hash << " query: " << compiled_query;
-              complete_usage_request(std::get<1>(promise), data, elapsed.elapsed());
+              complete_usage_request(std::get<1>(promise), data, elapsed.elapsed(), cache_success, false,
+                                     cache_error_message);
               td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, std::get<1>(promise), data.clone(),
                                       std::get<0>(promise),
                                       elapsed, true);
@@ -1523,7 +1541,7 @@ namespace ton::liteserver {
                     LOG(ERROR) << "Too deep refire";
                     auto elapsed_seconds = elapsed.elapsed();
                     query_statuses_.push_back({false, elapsed_seconds, compiled_query});
-                    complete_usage_request(dst, data, elapsed_seconds);
+                    complete_usage_request(dst, data, elapsed_seconds, false, false, error->message_);
 
                     td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, data.clone(), started_at,
                                             elapsed, false);
@@ -1548,7 +1566,7 @@ namespace ton::liteserver {
                 LOG(ERROR) << "Too deep refire";
                 auto elapsed_seconds = elapsed.elapsed();
                 query_statuses_.push_back({false, elapsed_seconds, compiled_query});
-                complete_usage_request(dst, data, elapsed_seconds);
+                complete_usage_request(dst, data, elapsed_seconds, false, false, error->message_);
 
                 td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, data.clone(), started_at,
                                         elapsed, false);
@@ -1570,7 +1588,7 @@ namespace ton::liteserver {
               << "Query to: " << server_adnl << " success, Query: " << compiled_query << " Elapsed: " << elapsed;
               auto elapsed_seconds = elapsed.elapsed();
               query_statuses_.push_back({true, elapsed_seconds, compiled_query});
-              complete_usage_request(dst, data, elapsed_seconds);
+              complete_usage_request(dst, data, elapsed_seconds, true, false);
               td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, data.clone(), started_at,
                                       elapsed, false);
               process_cache(std::move(data), res.clone(), compiled_query, elapsed);
@@ -1588,7 +1606,7 @@ namespace ton::liteserver {
               LOG(ERROR) << "Too deep refire";
               auto elapsed_seconds = elapsed.elapsed();
               query_statuses_.push_back({false, elapsed_seconds, compiled_query});
-              complete_usage_request(dst, data, elapsed_seconds);
+              complete_usage_request(dst, data, elapsed_seconds, false, false, error.message().str());
               auto res = create_serialize_tl_object<lite_api::liteServer_error>(231, error.message().str());
               td::actor::send_closure(actor_id(this), &LiteProxy::publish_call, dst, data.clone(), started_at,
                                       elapsed, false);
@@ -1749,11 +1767,15 @@ namespace ton::liteserver {
                   LOG(INFO)
                   << "Drop to: " << dst.bits256_value().to_hex() << " because of ratelimit, usage: " << usage[dst]
                   << " limit: " << std::get<1>(k);
+                  record_usage_request(dst, data, "Query rejected: Ratelimit", refire, std::get<1>(k));
+                  complete_usage_request(dst, data, 0.0, false, true, "Ratelimit");
                   promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Ratelimit"));
                   return;
                 }
 
                 if (std::time(nullptr) > std::get<0>(k)) {
+                  record_usage_request(dst, data, "Query rejected: Key expired", refire, std::get<1>(k));
+                  complete_usage_request(dst, data, 0.0, false, false, "Key expired");
                   promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(229, "Key expired"));
                   LOG(INFO) << "Drop to: " << dst.bits256_value().to_hex() << " because of expired";
                   return;
@@ -2159,6 +2181,8 @@ namespace ton::liteserver {
             record_usage_request(dst, data, query_compiled, refire, limit);
             process_ext_query(src, dst, std::move(data), std::move(promise), refire, std::move(query_compiled));
           } else {
+            record_usage_request(dst, data, "Query rejected: Server not ready", refire, 0);
+            complete_usage_request(dst, data, 0.0, false, false, "Server not ready");
             promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(230, "Server not ready"));
           }
         }
