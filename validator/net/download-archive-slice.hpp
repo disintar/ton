@@ -18,6 +18,8 @@
 */
 #pragma once
 
+#include <vector>
+
 #include "adnl/adnl-ext-client.h"
 #include "overlay/overlays.h"
 #include "td/utils/port/FileFd.h"
@@ -38,7 +40,9 @@ class DownloadArchiveSlice : public td::actor::Actor {
                        td::actor::ActorId<ValidatorManagerInterface> validator_manager,
                        td::actor::ActorId<adnl::AdnlSenderInterface> rldp,
                        td::actor::ActorId<overlay::Overlays> overlays, td::actor::ActorId<adnl::Adnl> adnl,
-                       td::actor::ActorId<adnl::AdnlExtClient> client, td::Promise<std::string> promise);
+                       td::actor::ActorId<adnl::AdnlExtClient> client, td::Promise<std::string> promise,
+                       std::vector<adnl::AdnlNodeIdShort> download_from_list = {},
+                       bool use_sender_for_prepare_query = false);
 
   void abort_query(td::Status reason);
   void alarm() override;
@@ -77,6 +81,7 @@ class DownloadArchiveSlice : public td::actor::Actor {
   td::actor::ActorId<adnl::Adnl> adnl_;
   td::actor::ActorId<adnl::AdnlExtClient> client_;
   td::Promise<std::string> promise_;
+  bool use_sender_for_prepare_query_ = false;
 
   td::uint64 prev_logged_sum_ = 0;
   td::Timer prev_logged_timer_;
