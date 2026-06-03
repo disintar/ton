@@ -1840,8 +1840,10 @@ void ValidatorManagerImpl::send_get_out_msg_queue_proof_request(
 
 void ValidatorManagerImpl::send_download_archive_request(BlockSeqno mc_seqno, ShardIdFull shard_prefix,
                                                          std::string tmp_dir, td::Timestamp timeout,
+                                                         bool allow_custom_overlay,
                                                          td::Promise<std::string> promise) {
-  callback_->download_archive(mc_seqno, shard_prefix, std::move(tmp_dir), timeout, std::move(promise));
+  callback_->download_archive(mc_seqno, shard_prefix, std::move(tmp_dir), timeout, allow_custom_overlay,
+                              std::move(promise));
 }
 
 void ValidatorManagerImpl::get_block_proof_link_from_import(BlockIdExt block_id, BlockIdExt masterchain_block_id,
@@ -2159,6 +2161,10 @@ void ValidatorManagerImpl::prestart_sync() {
   download_next_archive();
 }
 
+void ValidatorManagerImpl::set_next_archive_import_force_public() {
+  next_archive_import_force_public_ = true;
+}
+
 void ValidatorManagerImpl::download_next_archive() {
   if (!out_of_sync()) {
     finish_prestart_sync();
@@ -2173,9 +2179,16 @@ void ValidatorManagerImpl::download_next_archive() {
     to_import_files = std::move(it->second);
     it->second.clear();
   }
-  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::pair<BlockSeqno, BlockSeqno>> R) {
+  bool allow_custom_overlay = !next_archive_import_force_public_;
+  next_archive_import_force_public_ = false;
+  auto P = td::PromiseCreator::lambda(
+      [SelfId = actor_id(this), allow_custom_overlay](td::Result<std::pair<BlockSeqno, BlockSeqno>> R) {
     if (R.is_error()) {
       LOG(INFO) << "failed to download and import archive slice: " << R.error();
+      if (allow_custom_overlay) {
+        LOG(INFO) << "retrying archive import via public overlay after custom archive import failure";
+        td::actor::send_closure(SelfId, &ValidatorManagerImpl::set_next_archive_import_force_public);
+      }
       delay_action([SelfId]() { td::actor::send_closure(SelfId, &ValidatorManagerImpl::download_next_archive); },
                    td::Timestamp::in(2.0));
     } else {
@@ -2184,7 +2197,8 @@ void ValidatorManagerImpl::download_next_archive() {
   });
   if (to_import_files.empty()) {
     td::actor::create_actor<ArchiveImporter>(PSTRING() << "archiveimport." << seqno, db_root_, last_masterchain_state_,
-                                             seqno, opts_, actor_id(this), std::move(to_import_files), std::move(P))
+                                             seqno, opts_, actor_id(this), std::move(to_import_files),
+                                             allow_custom_overlay, std::move(P))
         .release();
   } else {
     td::actor::create_actor<ArchiveImporterLocal>(PSTRING() << "archiveimport." << seqno, db_root_,

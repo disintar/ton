@@ -663,7 +663,18 @@ void FullNodeImpl::get_next_key_blocks(BlockIdExt block_id, td::Timestamp timeou
 }
 
 void FullNodeImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
-                                    td::Timestamp timeout, td::Promise<std::string> promise) {
+                                    td::Timestamp timeout, bool allow_custom_overlay,
+                                    td::Promise<std::string> promise) {
+  if (!allow_custom_overlay) {
+    record_custom_overlay_sync_fallback(CustomOverlaySyncKind::Archive,
+                                        CustomOverlaySyncFallbackReason::BadArchiveImport);
+    record_public_overlay_sync_download(CustomOverlaySyncKind::Archive, PublicOverlaySyncReason::Fallback);
+    LOG(INFO) << "forcing public overlay archive slice #" << masterchain_seqno << " " << shard_prefix.to_str()
+              << " after custom archive import failure";
+    download_archive_from_public_overlay(masterchain_seqno, shard_prefix, std::move(tmp_dir), timeout,
+                                         std::move(promise));
+    return;
+  }
   if (client_.empty()) {
     bool has_custom_overlay = !custom_overlays_.empty();
     bool shard_served_by_custom_overlay = false;
@@ -984,9 +995,10 @@ void FullNodeImpl::start_up() {
       td::actor::send_closure(id_, &FullNodeImpl::get_next_key_blocks, block_id, timeout, std::move(promise));
     }
     void download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
-                          td::Timestamp timeout, td::Promise<std::string> promise) override {
+                          td::Timestamp timeout, bool allow_custom_overlay,
+                          td::Promise<std::string> promise) override {
       td::actor::send_closure(id_, &FullNodeImpl::download_archive, masterchain_seqno, shard_prefix, std::move(tmp_dir),
-                              timeout, std::move(promise));
+                              timeout, allow_custom_overlay, std::move(promise));
     }
     void download_out_msg_queue_proof(ShardIdFull dst_shard, std::vector<BlockIdExt> blocks,
                                       block::ImportedMsgQueueLimits limits, td::Timestamp timeout,

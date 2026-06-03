@@ -305,7 +305,8 @@ class ValidatorManagerImpl : public ValidatorManager {
     UNREACHABLE();
   }
   void send_download_archive_request(BlockSeqno mc_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
-                                     td::Timestamp timeout, td::Promise<std::string> promise) override {
+                                     td::Timestamp timeout, bool allow_custom_overlay,
+                                     td::Promise<std::string> promise) override {
     UNREACHABLE();
   }
 

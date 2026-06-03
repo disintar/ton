@@ -287,7 +287,8 @@ class ValidatorManagerInterface : public td::actor::Actor {
                                      td::Promise<std::vector<BlockIdExt>> promise) {
     }
     virtual void download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
-                                  td::Timestamp timeout, td::Promise<std::string> promise) {
+                                  td::Timestamp timeout, bool allow_custom_overlay,
+                                  td::Promise<std::string> promise) {
     }
     virtual void download_out_msg_queue_proof(ShardIdFull dst_shard, std::vector<BlockIdExt> blocks,
                                               block::ImportedMsgQueueLimits limits, td::Timestamp timeout,

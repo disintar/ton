@@ -50,7 +50,8 @@ enum class CustomOverlaySyncFallbackReason : std::size_t {
   NoCustomOverlay = 1,
   ShardNotServed = 2,
   NoLocalActor = 3,
-  Count = 4
+  BadArchiveImport = 4,
+  Count = 5
 };
 enum class PublicOverlaySyncReason : std::size_t { Direct = 0, Fallback = 1, Count = 2 };
 
@@ -98,7 +99,7 @@ inline const char *custom_overlay_sync_result_label(std::size_t value) {
 
 inline const char *custom_overlay_sync_fallback_reason_label(std::size_t value) {
   static constexpr std::array<const char *, custom_overlay_sync_fallback_reason_count()> labels = {
-      "custom_error", "no_custom_overlay", "shard_not_served", "no_local_actor"};
+      "custom_error", "no_custom_overlay", "shard_not_served", "no_local_actor", "bad_archive_import"};
   return labels[value];
 }
 

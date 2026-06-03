@@ -371,7 +371,8 @@ class ValidatorManager : public ValidatorManagerInterface {
                                                     block::ImportedMsgQueueLimits limits,
                                                     td::Promise<std::vector<td::Ref<OutMsgQueueProof>>> promise) = 0;
   virtual void send_download_archive_request(BlockSeqno mc_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
-                                             td::Timestamp timeout, td::Promise<std::string> promise) = 0;
+                                             td::Timestamp timeout, bool allow_custom_overlay,
+                                             td::Promise<std::string> promise) = 0;
 
   virtual void get_block_proof_link_from_import(BlockIdExt block_id, BlockIdExt masterchain_block_id,
                                                 td::Promise<td::BufferSlice> promise) {

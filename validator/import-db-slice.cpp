@@ -36,6 +36,7 @@ namespace validator {
 ArchiveImporter::ArchiveImporter(std::string db_root, td::Ref<MasterchainState> state, BlockSeqno shard_client_seqno,
                                  td::Ref<ValidatorManagerOptions> opts, td::actor::ActorId<ValidatorManager> manager,
                                  std::vector<std::string> to_import_files,
+                                 bool allow_custom_overlay,
                                  td::Promise<std::pair<BlockSeqno, BlockSeqno>> promise)
     : db_root_(std::move(db_root))
     , last_masterchain_state_(std::move(state))
@@ -45,6 +46,7 @@ ArchiveImporter::ArchiveImporter(std::string db_root, td::Ref<MasterchainState> 
     , manager_(manager)
     , to_import_files_(std::move(to_import_files))
     , use_imported_files_(!to_import_files_.empty())
+    , allow_custom_overlay_(allow_custom_overlay)
     , promise_(std::move(promise))
     , perf_timer_("import-slice", 10.0, [manager](double duration) {
       send_closure(manager, &ValidatorManager::add_perf_timer_stat, "import-slice", duration);
@@ -68,7 +70,7 @@ void ArchiveImporter::start_up() {
   LOG(INFO) << "Importing archive for masterchain seqno #" << start_import_seqno_ << " from net";
   td::actor::send_closure(manager_, &ValidatorManager::send_download_archive_request, start_import_seqno_,
                           ShardIdFull{masterchainId}, db_root_ + "/tmp/", td::Timestamp::in(3600.0),
-                          [SelfId = actor_id(this)](td::Result<std::string> R) {
+                          allow_custom_overlay_, [SelfId = actor_id(this)](td::Result<std::string> R) {
                             if (R.is_error()) {
                               td::actor::send_closure(SelfId, &ArchiveImporter::abort_query, R.move_as_error());
                             } else {
@@ -347,7 +349,7 @@ void ArchiveImporter::download_shard_archives(td::Ref<MasterchainState> start_st
 void ArchiveImporter::download_shard_archive(ShardIdFull shard_prefix) {
   td::actor::send_closure(
       manager_, &ValidatorManager::send_download_archive_request, start_import_seqno_, shard_prefix, db_root_ + "/tmp/",
-      td::Timestamp::in(3600.0),
+      td::Timestamp::in(3600.0), allow_custom_overlay_,
       [SelfId = actor_id(this), seqno = start_import_seqno_, shard_prefix](td::Result<std::string> R) {
         if (R.is_error()) {
           LOG(WARNING) << "Failed to download archive slice #" << seqno << " for shard " << shard_prefix.to_str() << " error: " << R.move_as_error().to_string();

@@ -31,7 +31,8 @@ class ArchiveImporter : public td::actor::Actor {
  public:
   ArchiveImporter(std::string db_root, td::Ref<MasterchainState> state, BlockSeqno shard_client_seqno,
                   td::Ref<ValidatorManagerOptions> opts, td::actor::ActorId<ValidatorManager> manager,
-                  std::vector<std::string> to_import_files, td::Promise<std::pair<BlockSeqno, BlockSeqno>> promise);
+                  std::vector<std::string> to_import_files, bool allow_custom_overlay,
+                  td::Promise<std::pair<BlockSeqno, BlockSeqno>> promise);
   void start_up() override;
 
   void abort_query(td::Status error);
@@ -72,6 +73,7 @@ class ArchiveImporter : public td::actor::Actor {
 
   std::vector<std::string> to_import_files_;
   bool use_imported_files_;
+  bool allow_custom_overlay_;
   td::Promise<std::pair<BlockSeqno, BlockSeqno>> promise_;
 
   std::map<BlockSeqno, BlockIdExt> masterchain_blocks_;

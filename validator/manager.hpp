@@ -282,6 +282,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   void applied_hardfork();
   void prestart_sync();
   void download_next_archive();
+  void set_next_archive_import_force_public();
   void checked_archive_slice(BlockSeqno new_last_mc_seqno, BlockSeqno new_shard_client_seqno);
   void finish_prestart_sync();
   void completed_prestart_sync();
@@ -481,7 +482,8 @@ class ValidatorManagerImpl : public ValidatorManager {
                                             block::ImportedMsgQueueLimits limits,
                                             td::Promise<std::vector<td::Ref<OutMsgQueueProof>>> promise) override;
   void send_download_archive_request(BlockSeqno mc_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
-                                     td::Timestamp timeout, td::Promise<std::string> promise) override;
+                                     td::Timestamp timeout, bool allow_custom_overlay,
+                                     td::Promise<std::string> promise) override;
 
   void get_block_proof_link_from_import(BlockIdExt block_id, BlockIdExt masterchain_block_id,
                                         td::Promise<td::BufferSlice> promise) override;
@@ -699,6 +701,7 @@ class ValidatorManagerImpl : public ValidatorManager {
 
   std::map<BlockSeqno, std::vector<std::string>> to_import_;
   std::map<BlockSeqno, std::vector<std::string>> to_import_all_;
+  bool next_archive_import_force_public_ = false;
 
  private:
   std::unique_ptr<Callback> callback_;
