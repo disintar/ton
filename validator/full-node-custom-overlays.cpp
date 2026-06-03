@@ -725,7 +725,7 @@ void FullNodeCustomOverlay::download_archive(BlockSeqno masterchain_seqno, Shard
       local_id_, overlay_id_, adnl::AdnlNodeIdShort::zero(), timeout, validator_manager_,
       td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_}, overlays_, adnl_,
       td::actor::ActorId<adnl::AdnlExtClient>{}, std::move(promise), std::move(peers),
-      true /* use_sender_for_prepare_query */)
+      false /* use_sender_for_prepare_query */)
       .release();
 }
 

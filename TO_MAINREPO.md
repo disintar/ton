@@ -49,6 +49,10 @@ Use custom overlays as a best-effort first path in `FullNodeImpl::download_archi
 
 - If the node has a matching custom overlay for the requested shard, try the
   custom overlay peers first.
+- Send the small `getArchiveInfo` / `getShardArchiveInfo` prepare query through
+  the overlay ADNL path before downloading large chunks through the configured
+  sender. This lets the ADNL peer table learn/refresh the custom peer before
+  QUIC/RLDP chunk requests are sent.
 - If the custom path is not ready, has no peers, has no archive slice, or times
   out, fall back to the existing public shard overlay path.
 - Keep the existing public behavior unchanged for nodes without custom overlays
