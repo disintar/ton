@@ -38,6 +38,30 @@ namespace fullnode {
 
 static const double INACTIVE_SHARD_TTL = (double)overlay::Overlays::overlay_peer_ttl() + 60.0;
 
+void log_fullnode_overlay_sync_stage(CustomOverlaySyncKind kind, const BlockIdExt &id, const char *stage,
+                                     const char *source, const char *result, std::string reason,
+                                     std::string overlay = "-", std::string local = "-") {
+  if (!block_propagation_trace_enabled()) {
+    return;
+  }
+  LOG(WARNING) << "[custom-overlay-sync]"
+               << " stage=" << stage
+               << " kind=" << custom_overlay_sync_kind_label(metric_index(kind))
+               << " source=" << source
+               << " sender=-"
+               << " overlay=" << block_propagation_trace_sanitize(std::move(overlay))
+               << " local=" << block_propagation_trace_sanitize(std::move(local))
+               << " peer=-"
+               << " block=" << id.to_str()
+               << " wc=" << id.id.workchain
+               << " shard=" << id.id.shard
+               << " seqno=" << id.id.seqno
+               << " peers=0"
+               << " ms=-1"
+               << " result=" << result
+               << " reason=" << block_propagation_trace_sanitize(std::move(reason));
+}
+
 void FullNodeImpl::add_permanent_key(PublicKeyHash key, td::Promise<td::Unit> promise) {
   if (local_keys_.count(key)) {
     promise.set_value(td::Unit());
@@ -404,11 +428,16 @@ void FullNodeImpl::send_broadcast(BlockBroadcast broadcast, int mode) {
 
 void FullNodeImpl::download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                   td::Promise<ReceivedBlock> promise) {
+  bool has_custom_overlay = !custom_overlays_.empty();
+  bool shard_served_by_custom_overlay = false;
   for (auto &[name, custom_overlay] : custom_overlays_) {
     if (!custom_overlay.params_.send_shard(id.shard_full())) {
       continue;
     }
+    shard_served_by_custom_overlay = true;
     for (auto &[local_id, actor] : custom_overlay.actors_) {
+      log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::Block, id, "fullnode.custom_select", "custom", "attempt",
+                                      {}, name, PSTRING() << local_id);
       auto P = td::PromiseCreator::lambda(
           [SelfId = actor_id(this), id, priority, timeout, promise = std::move(promise),
            name](td::Result<ReceivedBlock> R) mutable {
@@ -416,8 +445,14 @@ void FullNodeImpl::download_block(BlockIdExt id, td::uint32 priority, td::Timest
               promise.set_value(R.move_as_ok());
               return;
             }
+            auto error = R.move_as_error();
             VLOG(FULL_NODE_DEBUG) << "failed to download block " << id.to_str() << " from custom overlay \""
-                                  << name << "\": " << R.move_as_error() << "; falling back to public overlay";
+                                  << name << "\": " << error << "; falling back to public overlay";
+            record_custom_overlay_sync_fallback(CustomOverlaySyncKind::Block,
+                                                CustomOverlaySyncFallbackReason::CustomError);
+            record_public_overlay_sync_download(CustomOverlaySyncKind::Block, PublicOverlaySyncReason::Fallback);
+            log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::Block, id, "fullnode.public", "public",
+                                            "fallback", error.to_string(), name);
             td::actor::send_closure(SelfId, &FullNodeImpl::download_block_from_public_overlay, id, priority, timeout,
                                     std::move(promise));
           });
@@ -425,16 +460,31 @@ void FullNodeImpl::download_block(BlockIdExt id, td::uint32 priority, td::Timest
       return;
     }
   }
+  record_custom_overlay_sync_fallback(
+      CustomOverlaySyncKind::Block,
+      shard_served_by_custom_overlay
+          ? CustomOverlaySyncFallbackReason::NoLocalActor
+          : (has_custom_overlay ? CustomOverlaySyncFallbackReason::ShardNotServed
+                                : CustomOverlaySyncFallbackReason::NoCustomOverlay));
+  record_public_overlay_sync_download(CustomOverlaySyncKind::Block, PublicOverlaySyncReason::Direct);
+  log_fullnode_overlay_sync_stage(
+      CustomOverlaySyncKind::Block, id, "fullnode.public", "public", "direct",
+      shard_served_by_custom_overlay ? "no_local_actor" : (has_custom_overlay ? "shard_not_served" : "no_custom_overlay"));
   download_block_from_public_overlay(id, priority, timeout, std::move(promise));
 }
 
 void FullNodeImpl::download_next_block(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
                                        td::Promise<ReceivedBlock> promise) {
+  bool has_custom_overlay = !custom_overlays_.empty();
+  bool shard_served_by_custom_overlay = false;
   for (auto &[name, custom_overlay] : custom_overlays_) {
     if (!custom_overlay.params_.send_shard(prev_id.shard_full())) {
       continue;
     }
+    shard_served_by_custom_overlay = true;
     for (auto &[local_id, actor] : custom_overlay.actors_) {
+      log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, prev_id, "fullnode.custom_select", "custom",
+                                      "attempt", {}, name, PSTRING() << local_id);
       auto P = td::PromiseCreator::lambda(
           [SelfId = actor_id(this), promise = std::move(promise), prev_id, priority, timeout,
            name](td::Result<ReceivedBlock> R) mutable {
@@ -442,9 +492,15 @@ void FullNodeImpl::download_next_block(BlockIdExt prev_id, td::uint32 priority, 
               promise.set_value(R.move_as_ok());
               return;
             }
+            auto error = R.move_as_error();
             VLOG(FULL_NODE_DEBUG) << "failed to download next block after " << prev_id.to_str()
-                                  << " from custom overlay \"" << name << "\": " << R.move_as_error()
+                                  << " from custom overlay \"" << name << "\": " << error
                                   << "; falling back to public overlay";
+            record_custom_overlay_sync_fallback(CustomOverlaySyncKind::NextBlock,
+                                                CustomOverlaySyncFallbackReason::CustomError);
+            record_public_overlay_sync_download(CustomOverlaySyncKind::NextBlock, PublicOverlaySyncReason::Fallback);
+            log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, prev_id, "fullnode.public", "public",
+                                            "fallback", error.to_string(), name);
             td::actor::send_closure(SelfId, &FullNodeImpl::download_next_block_from_public_overlay, prev_id, priority,
                                     timeout, std::move(promise));
           });
@@ -453,6 +509,17 @@ void FullNodeImpl::download_next_block(BlockIdExt prev_id, td::uint32 priority, 
       return;
     }
   }
+  record_custom_overlay_sync_fallback(
+      CustomOverlaySyncKind::NextBlock,
+      shard_served_by_custom_overlay
+          ? CustomOverlaySyncFallbackReason::NoLocalActor
+          : (has_custom_overlay ? CustomOverlaySyncFallbackReason::ShardNotServed
+                                : CustomOverlaySyncFallbackReason::NoCustomOverlay));
+  record_public_overlay_sync_download(CustomOverlaySyncKind::NextBlock, PublicOverlaySyncReason::Direct);
+  log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, prev_id, "fullnode.public", "public", "direct",
+                                  shard_served_by_custom_overlay
+                                      ? "no_local_actor"
+                                      : (has_custom_overlay ? "shard_not_served" : "no_custom_overlay"));
   download_next_block_from_public_overlay(prev_id, priority, timeout, std::move(promise));
 }
 

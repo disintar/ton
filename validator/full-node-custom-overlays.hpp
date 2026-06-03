@@ -110,6 +110,7 @@ class FullNodeCustomOverlay : public td::actor::Actor {
       , msg_senders_(std::move(params.msg_senders_))
       , block_senders_(std::move(params.block_senders_))
       , sender_shards_(std::move(params.sender_shards_))
+      , use_quic_(params.use_quic_)
       , zero_state_file_hash_(zero_state_file_hash)
       , opts_(opts)
       , keyring_(keyring)
@@ -128,6 +129,7 @@ class FullNodeCustomOverlay : public td::actor::Actor {
   std::map<adnl::AdnlNodeIdShort, int> msg_senders_;
   std::set<adnl::AdnlNodeIdShort> block_senders_;
   std::vector<ShardIdFull> sender_shards_;
+  bool use_quic_ = false;
   FileHash zero_state_file_hash_;
   FullNodeOptions opts_;
 
@@ -146,10 +148,10 @@ class FullNodeCustomOverlay : public td::actor::Actor {
   std::vector<adnl::AdnlNodeIdShort> custom_download_peers() const;
   void prewarm_archive_peers();
   void download_block_from_custom_peers(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
-                                        std::vector<adnl::AdnlNodeIdShort> peers, size_t offset,
+                                        std::vector<adnl::AdnlNodeIdShort> peers, double started_at,
                                         td::Promise<ReceivedBlock> promise);
   void download_next_block_from_custom_peers(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
-                                             std::vector<adnl::AdnlNodeIdShort> peers, size_t offset,
+                                             std::vector<adnl::AdnlNodeIdShort> peers, double started_at,
                                              td::Promise<ReceivedBlock> promise);
 
   void try_init();

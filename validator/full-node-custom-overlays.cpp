@@ -15,6 +15,7 @@
     along with TON Blockchain Library.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include <algorithm>
+#include <mutex>
 
 #include "auto/tl/ton_api_json.h"
 #include "common/checksum.h"
@@ -28,6 +29,7 @@
 #include "ton/ton-tl.hpp"
 
 #include "block-propagation-trace.h"
+#include "custom-overlay-metrics.h"
 #include "full-node-custom-overlays.hpp"
 #include "full-node-shard-queries.hpp"
 #include "full-node-serializer.hpp"
@@ -67,6 +69,144 @@ bool custom_overlay_serves_shard(const std::vector<ShardIdFull> &sender_shards, 
   return sender_shards.empty() ||
          std::any_of(sender_shards.begin(), sender_shards.end(),
                      [&](const ShardIdFull &our_shard) { return shard_intersects(shard, our_shard); });
+}
+
+struct CustomOverlaySyncLogTarget {
+  std::string block;
+  td::int32 wc = 0;
+  td::uint64 shard = 0;
+  td::uint32 seqno = 0;
+};
+
+CustomOverlaySyncLogTarget custom_overlay_sync_log_target(const BlockIdExt &id) {
+  return {id.to_str(), id.id.workchain, id.id.shard, id.id.seqno};
+}
+
+std::string custom_overlay_sync_adnl_to_string(adnl::AdnlNodeIdShort id) {
+  return PSTRING() << id;
+}
+
+CustomOverlaySyncSender custom_overlay_sync_sender(bool use_quic) {
+  return use_quic ? CustomOverlaySyncSender::Quic : CustomOverlaySyncSender::Rldp2;
+}
+
+CustomOverlaySyncResult custom_overlay_sync_result_from_status(const td::Status &error) {
+  return error.code() == ErrorCode::timeout ? CustomOverlaySyncResult::Timeout : CustomOverlaySyncResult::Error;
+}
+
+void log_custom_overlay_sync_stage(CustomOverlaySyncKind kind, CustomOverlaySyncSender sender,
+                                   const std::string &overlay, const std::string &local,
+                                   const std::string &peer, const CustomOverlaySyncLogTarget &target,
+                                   const char *stage, const char *result, std::string reason, std::size_t peers,
+                                   double started_at) {
+  if (!block_propagation_trace_enabled()) {
+    return;
+  }
+  auto now = block_propagation_trace_now();
+  LOG(WARNING) << "[custom-overlay-sync]"
+               << " stage=" << stage
+               << " kind=" << custom_overlay_sync_kind_label(metric_index(kind))
+               << " source=custom"
+               << " sender=" << custom_overlay_sync_sender_label(metric_index(sender))
+               << " overlay=" << block_propagation_trace_sanitize(overlay)
+               << " local=" << block_propagation_trace_sanitize(local)
+               << " peer=" << block_propagation_trace_sanitize(peer)
+               << " block=" << target.block
+               << " wc=" << target.wc
+               << " shard=" << target.shard
+               << " seqno=" << target.seqno
+               << " peers=" << peers
+               << " ms=" << block_propagation_trace_ms(started_at, now)
+               << " result=" << result
+               << " reason=" << block_propagation_trace_sanitize(std::move(reason));
+}
+
+struct CustomOverlaySyncDownloadState {
+  CustomOverlaySyncDownloadState(CustomOverlaySyncKind kind, CustomOverlaySyncSender sender, double started_at,
+                                 std::size_t pending, std::string overlay_name, std::string local_id,
+                                 CustomOverlaySyncLogTarget target, td::Promise<ReceivedBlock> promise)
+      : kind(kind)
+      , sender(sender)
+      , started_at(started_at)
+      , pending(pending)
+      , peers_total(pending)
+      , overlay_name(std::move(overlay_name))
+      , local_id(std::move(local_id))
+      , target(std::move(target))
+      , promise(std::move(promise)) {
+  }
+
+  CustomOverlaySyncKind kind;
+  CustomOverlaySyncSender sender;
+  double started_at = 0.0;
+  std::size_t pending = 0;
+  std::size_t peers_total = 0;
+  std::string overlay_name;
+  std::string local_id;
+  CustomOverlaySyncLogTarget target;
+  td::Promise<ReceivedBlock> promise;
+  std::mutex mutex;
+  bool done = false;
+  std::string last_error;
+};
+
+void finish_custom_overlay_sync_download(std::shared_ptr<CustomOverlaySyncDownloadState> state,
+                                         td::Result<ReceivedBlock> R, double peer_started_at) {
+  auto now = block_propagation_trace_now();
+  if (R.is_ok()) {
+    record_custom_overlay_sync_peer_download(state->kind, state->sender, CustomOverlaySyncResult::Ok, peer_started_at,
+                                             now);
+    auto value = R.move_as_ok();
+    td::Promise<ReceivedBlock> promise;
+    bool should_finish = false;
+    {
+      std::lock_guard<std::mutex> lock(state->mutex);
+      if (!state->done) {
+        state->done = true;
+        promise = std::move(state->promise);
+        should_finish = true;
+      }
+    }
+    if (should_finish) {
+      record_custom_overlay_sync_download(state->kind, state->sender, CustomOverlaySyncResult::Ok, state->started_at,
+                                          now);
+      log_custom_overlay_sync_stage(state->kind, state->sender, state->overlay_name, state->local_id, "-",
+                                    state->target, "custom.done", "ok", {}, state->peers_total, state->started_at);
+      promise.set_value(std::move(value));
+    }
+    return;
+  }
+
+  auto error = R.move_as_error();
+  auto peer_result = custom_overlay_sync_result_from_status(error);
+  record_custom_overlay_sync_peer_download(state->kind, state->sender, peer_result, peer_started_at, now);
+
+  td::Promise<ReceivedBlock> promise;
+  bool should_finish = false;
+  std::string last_error = error.to_string();
+  {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    if (state->done) {
+      return;
+    }
+    state->last_error = last_error;
+    CHECK(state->pending > 0);
+    state->pending--;
+    if (state->pending == 0) {
+      state->done = true;
+      promise = std::move(state->promise);
+      should_finish = true;
+      last_error = state->last_error;
+    }
+  }
+  if (should_finish) {
+    record_custom_overlay_sync_download(state->kind, state->sender, CustomOverlaySyncResult::Exhausted,
+                                        state->started_at, now);
+    log_custom_overlay_sync_stage(state->kind, state->sender, state->overlay_name, state->local_id, "-", state->target,
+                                  "custom.done", "exhausted", last_error, state->peers_total, state->started_at);
+    promise.set_error(td::Status::Error(ErrorCode::notready,
+                                        PSTRING() << "no custom overlay peer returned block: " << last_error));
+  }
 }
 
 td::Result<BlockIdExt> get_block_broadcast_id(ton_api::tonNode_Broadcast &query) {
@@ -571,101 +711,185 @@ td::Timestamp custom_overlay_peer_download_timeout(td::Timestamp timeout) {
 
 void FullNodeCustomOverlay::download_block_from_custom_peers(BlockIdExt id, td::uint32 priority,
                                                              td::Timestamp timeout,
-                                                             std::vector<adnl::AdnlNodeIdShort> peers, size_t offset,
+                                                             std::vector<adnl::AdnlNodeIdShort> peers,
+                                                             double started_at,
                                                              td::Promise<ReceivedBlock> promise) {
-  if (offset >= peers.size()) {
+  auto sender = custom_overlay_sync_sender(use_quic_);
+  auto target = custom_overlay_sync_log_target(id);
+  auto local = custom_overlay_sync_adnl_to_string(local_id_);
+  if (peers.empty()) {
+    record_custom_overlay_sync_download(CustomOverlaySyncKind::Block, sender, CustomOverlaySyncResult::NoPeer,
+                                        started_at, block_propagation_trace_now());
+    log_custom_overlay_sync_stage(CustomOverlaySyncKind::Block, sender, name_, local, "-", target, "custom.done",
+                                  "no_peer", {}, 0, started_at);
     promise.set_error(td::Status::Error(ErrorCode::notready, "no custom overlay peer has this block"));
     return;
   }
   if (timeout.is_in_past()) {
+    record_custom_overlay_sync_download(CustomOverlaySyncKind::Block, sender, CustomOverlaySyncResult::Timeout,
+                                        started_at, block_propagation_trace_now());
+    log_custom_overlay_sync_stage(CustomOverlaySyncKind::Block, sender, name_, local, "-", target, "custom.done",
+                                  "timeout", {}, peers.size(), started_at);
     promise.set_error(td::Status::Error(ErrorCode::timeout, "custom overlay block download timeout"));
     return;
   }
-  auto peer = peers[offset];
-  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), id, priority, timeout, peers = std::move(peers),
-                                       offset, promise = std::move(promise),
-                                       peer](td::Result<ReceivedBlock> R) mutable {
-    if (R.is_ok()) {
-      promise.set_value(R.move_as_ok());
-      return;
-    }
-    VLOG(FULL_NODE_DEBUG) << "failed to download block " << id.to_str() << " from custom overlay peer " << peer
-                          << ": " << R.move_as_error();
-    td::actor::send_closure(SelfId, &FullNodeCustomOverlay::download_block_from_custom_peers, id, priority, timeout,
-                            std::move(peers), offset + 1, std::move(promise));
-  });
   auto peer_timeout = custom_overlay_peer_download_timeout(timeout);
-  td::actor::create_actor<DownloadBlockNew>(
-      "customdownloadreq", id, local_id_, overlay_id_, peer, priority, peer_timeout, validator_manager_,
-      td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_}, overlays_, adnl_,
-      td::actor::ActorId<adnl::AdnlExtClient>{}, std::move(P))
-      .release();
+  log_custom_overlay_sync_stage(CustomOverlaySyncKind::Block, sender, name_, local, "-", target, "custom.race_start",
+                                "attempt", {}, peers.size(), started_at);
+  auto state = std::make_shared<CustomOverlaySyncDownloadState>(CustomOverlaySyncKind::Block, sender, started_at,
+                                                                peers.size(), name_, local, target,
+                                                                std::move(promise));
+  for (auto peer : peers) {
+    auto peer_started_at = block_propagation_trace_now();
+    auto peer_string = custom_overlay_sync_adnl_to_string(peer);
+    record_custom_overlay_sync_peer_download(CustomOverlaySyncKind::Block, sender, CustomOverlaySyncResult::Attempt);
+    log_custom_overlay_sync_stage(CustomOverlaySyncKind::Block, sender, name_, local, peer_string, target,
+                                  "peer.attempt", "attempt", {}, peers.size(), peer_started_at);
+    auto P = td::PromiseCreator::lambda([state, peer, id, peer_string, peer_started_at](td::Result<ReceivedBlock> R) mutable {
+      if (R.is_error()) {
+        VLOG(FULL_NODE_DEBUG) << "failed to download block " << id.to_str() << " from custom overlay peer " << peer
+                              << ": " << R.error();
+        auto reason = R.error().to_string();
+        auto result = custom_overlay_sync_result_from_status(R.error());
+        log_custom_overlay_sync_stage(state->kind, state->sender, state->overlay_name, state->local_id, peer_string,
+                                      state->target, "peer.done",
+                                      custom_overlay_sync_result_label(metric_index(result)), reason,
+                                      state->peers_total, peer_started_at);
+      } else {
+        log_custom_overlay_sync_stage(state->kind, state->sender, state->overlay_name, state->local_id, peer_string,
+                                      state->target, "peer.done", "ok", {}, state->peers_total, peer_started_at);
+      }
+      finish_custom_overlay_sync_download(std::move(state), std::move(R), peer_started_at);
+    });
+    td::actor::create_actor<DownloadBlockNew>(
+        "customdownloadreq", id, local_id_, overlay_id_, peer, priority, peer_timeout, validator_manager_,
+        td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_}, overlays_, adnl_,
+        td::actor::ActorId<adnl::AdnlExtClient>{}, std::move(P))
+        .release();
+  }
 }
 
 void FullNodeCustomOverlay::download_next_block_from_custom_peers(BlockIdExt prev_id, td::uint32 priority,
                                                                   td::Timestamp timeout,
                                                                   std::vector<adnl::AdnlNodeIdShort> peers,
-                                                                  size_t offset,
+                                                                  double started_at,
                                                                   td::Promise<ReceivedBlock> promise) {
-  if (offset >= peers.size()) {
+  auto sender = custom_overlay_sync_sender(use_quic_);
+  auto target = custom_overlay_sync_log_target(prev_id);
+  auto local = custom_overlay_sync_adnl_to_string(local_id_);
+  if (peers.empty()) {
+    record_custom_overlay_sync_download(CustomOverlaySyncKind::NextBlock, sender, CustomOverlaySyncResult::NoPeer,
+                                        started_at, block_propagation_trace_now());
+    log_custom_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, sender, name_, local, "-", target, "custom.done",
+                                  "no_peer", {}, 0, started_at);
     promise.set_error(td::Status::Error(ErrorCode::notready, "no custom overlay peer has next block"));
     return;
   }
   if (timeout.is_in_past()) {
+    record_custom_overlay_sync_download(CustomOverlaySyncKind::NextBlock, sender, CustomOverlaySyncResult::Timeout,
+                                        started_at, block_propagation_trace_now());
+    log_custom_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, sender, name_, local, "-", target, "custom.done",
+                                  "timeout", {}, peers.size(), started_at);
     promise.set_error(td::Status::Error(ErrorCode::timeout, "custom overlay next block download timeout"));
     return;
   }
-  auto peer = peers[offset];
-  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), prev_id, priority, timeout, peers = std::move(peers),
-                                       offset, promise = std::move(promise),
-                                       peer](td::Result<ReceivedBlock> R) mutable {
-    if (R.is_ok()) {
-      promise.set_value(R.move_as_ok());
-      return;
-    }
-    VLOG(FULL_NODE_DEBUG) << "failed to download next block after " << prev_id.to_str()
-                          << " from custom overlay peer " << peer << ": " << R.move_as_error();
-    td::actor::send_closure(SelfId, &FullNodeCustomOverlay::download_next_block_from_custom_peers, prev_id, priority,
-                            timeout, std::move(peers), offset + 1, std::move(promise));
-  });
   auto peer_timeout = custom_overlay_peer_download_timeout(timeout);
-  td::actor::create_actor<DownloadBlockNew>(
-      "customdownloadnext", local_id_, overlay_id_, prev_id, peer, priority, peer_timeout, validator_manager_,
-      td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_}, overlays_, adnl_,
-      td::actor::ActorId<adnl::AdnlExtClient>{}, std::move(P))
-      .release();
+  log_custom_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, sender, name_, local, "-", target,
+                                "custom.race_start", "attempt", {}, peers.size(), started_at);
+  auto state = std::make_shared<CustomOverlaySyncDownloadState>(CustomOverlaySyncKind::NextBlock, sender, started_at,
+                                                                peers.size(), name_, local, target,
+                                                                std::move(promise));
+  for (auto peer : peers) {
+    auto peer_started_at = block_propagation_trace_now();
+    auto peer_string = custom_overlay_sync_adnl_to_string(peer);
+    record_custom_overlay_sync_peer_download(CustomOverlaySyncKind::NextBlock, sender, CustomOverlaySyncResult::Attempt);
+    log_custom_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, sender, name_, local, peer_string, target,
+                                  "peer.attempt", "attempt", {}, peers.size(), peer_started_at);
+    auto P = td::PromiseCreator::lambda([state, peer, prev_id, peer_string, peer_started_at](td::Result<ReceivedBlock> R) mutable {
+      if (R.is_error()) {
+        VLOG(FULL_NODE_DEBUG) << "failed to download next block after " << prev_id.to_str()
+                              << " from custom overlay peer " << peer << ": " << R.error();
+        auto reason = R.error().to_string();
+        auto result = custom_overlay_sync_result_from_status(R.error());
+        log_custom_overlay_sync_stage(state->kind, state->sender, state->overlay_name, state->local_id, peer_string,
+                                      state->target, "peer.done",
+                                      custom_overlay_sync_result_label(metric_index(result)), reason,
+                                      state->peers_total, peer_started_at);
+      } else {
+        log_custom_overlay_sync_stage(state->kind, state->sender, state->overlay_name, state->local_id, peer_string,
+                                      state->target, "peer.done", "ok", {}, state->peers_total, peer_started_at);
+      }
+      finish_custom_overlay_sync_download(std::move(state), std::move(R), peer_started_at);
+    });
+    td::actor::create_actor<DownloadBlockNew>(
+        "customdownloadnext", local_id_, overlay_id_, prev_id, peer, priority, peer_timeout, validator_manager_,
+        td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_}, overlays_, adnl_,
+        td::actor::ActorId<adnl::AdnlExtClient>{}, std::move(P))
+        .release();
+  }
 }
 
 void FullNodeCustomOverlay::download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                            td::Promise<ReceivedBlock> promise) {
+  auto started_at = block_propagation_trace_now();
+  auto sender = custom_overlay_sync_sender(use_quic_);
+  auto target = custom_overlay_sync_log_target(id);
+  auto local = custom_overlay_sync_adnl_to_string(local_id_);
+  record_custom_overlay_sync_download(CustomOverlaySyncKind::Block, sender, CustomOverlaySyncResult::Attempt);
+  log_custom_overlay_sync_stage(CustomOverlaySyncKind::Block, sender, name_, local, "-", target, "custom.start",
+                                "attempt", {}, 0, started_at);
   if (!inited_) {
+    record_custom_overlay_sync_download(CustomOverlaySyncKind::Block, sender, CustomOverlaySyncResult::NotReady,
+                                        started_at, block_propagation_trace_now());
+    log_custom_overlay_sync_stage(CustomOverlaySyncKind::Block, sender, name_, local, "-", target, "custom.done",
+                                  "not_ready", {}, 0, started_at);
     promise.set_error(td::Status::Error(ErrorCode::notready, "custom overlay is not ready"));
     return;
   }
   if (!custom_overlay_serves_shard(sender_shards_, id.shard_full())) {
+    record_custom_overlay_sync_download(CustomOverlaySyncKind::Block, sender, CustomOverlaySyncResult::ShardNotServed,
+                                        started_at, block_propagation_trace_now());
+    log_custom_overlay_sync_stage(CustomOverlaySyncKind::Block, sender, name_, local, "-", target, "custom.done",
+                                  "shard_not_served", {}, 0, started_at);
     promise.set_error(td::Status::Error(ErrorCode::notready, "custom overlay does not serve shard"));
     return;
   }
   auto peers = custom_download_peers();
   VLOG(FULL_NODE_DEBUG) << "Trying custom overlay \"" << name_ << "\" block " << id.to_str() << " from "
                         << peers.size() << " peers";
-  download_block_from_custom_peers(id, priority, timeout, std::move(peers), 0, std::move(promise));
+  download_block_from_custom_peers(id, priority, timeout, std::move(peers), started_at, std::move(promise));
 }
 
 void FullNodeCustomOverlay::download_next_block(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
                                                 td::Promise<ReceivedBlock> promise) {
+  auto started_at = block_propagation_trace_now();
+  auto sender = custom_overlay_sync_sender(use_quic_);
+  auto target = custom_overlay_sync_log_target(prev_id);
+  auto local = custom_overlay_sync_adnl_to_string(local_id_);
+  record_custom_overlay_sync_download(CustomOverlaySyncKind::NextBlock, sender, CustomOverlaySyncResult::Attempt);
+  log_custom_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, sender, name_, local, "-", target, "custom.start",
+                                "attempt", {}, 0, started_at);
   if (!inited_) {
+    record_custom_overlay_sync_download(CustomOverlaySyncKind::NextBlock, sender, CustomOverlaySyncResult::NotReady,
+                                        started_at, block_propagation_trace_now());
+    log_custom_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, sender, name_, local, "-", target, "custom.done",
+                                  "not_ready", {}, 0, started_at);
     promise.set_error(td::Status::Error(ErrorCode::notready, "custom overlay is not ready"));
     return;
   }
   if (!custom_overlay_serves_shard(sender_shards_, prev_id.shard_full())) {
+    record_custom_overlay_sync_download(CustomOverlaySyncKind::NextBlock, sender,
+                                        CustomOverlaySyncResult::ShardNotServed, started_at,
+                                        block_propagation_trace_now());
+    log_custom_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, sender, name_, local, "-", target, "custom.done",
+                                  "shard_not_served", {}, 0, started_at);
     promise.set_error(td::Status::Error(ErrorCode::notready, "custom overlay does not serve shard"));
     return;
   }
   auto peers = custom_download_peers();
   VLOG(FULL_NODE_DEBUG) << "Trying custom overlay \"" << name_ << "\" next block after " << prev_id.to_str()
                         << " from " << peers.size() << " peers";
-  download_next_block_from_custom_peers(prev_id, priority, timeout, std::move(peers), 0, std::move(promise));
+  download_next_block_from_custom_peers(prev_id, priority, timeout, std::move(peers), started_at, std::move(promise));
 }
 
 void FullNodeCustomOverlay::download_block_proof(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,

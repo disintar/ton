@@ -207,12 +207,18 @@ Use custom overlay membership for explicit block catch-up downloads:
 - Prefer `block_senders_` as download peers.
 - Fall back to all custom overlay `nodes_`.
 - Exclude the local ADNL and zero ids.
-- Try peers in order for `downloadBlockFull` and `downloadNextBlockFull`.
+- Race bounded custom peers for `downloadBlockFull` and
+  `downloadNextBlockFull`, and use the first successful response.
 - Give each custom peer a small per-peer deadline while keeping the original
-  overall request deadline.
+  overall request deadline for the whole private attempt.
 - Keep the public overlay fallback if custom peers cannot serve the block.
 - Keep public fallback for `downloadNextBlockFull` as well, so private overlay
   failures never make startup sync worse than the original public path.
+- Export Prometheus counters and latency summaries for custom sync attempts,
+  per-peer results, and public fallbacks.
+- Add gated `[custom-overlay-sync]` logs under `DTON_TRACE_BLOCK_PROPAGATION=1`
+  with `kind`, `sender`, `overlay`, `peer`, `block`, `result`, `reason`, and
+  latency.
 
 Also use the custom overlay first from `FullNodeShardImpl::try_get_next_block()`
 so startup `downloadNextBlockFull` can use private overlay data before falling
@@ -226,13 +232,19 @@ out does not advance state and falls back to the next peer or to the public
 overlay.
 
 This is bounded by the configured custom overlay peer list and per-peer timeout.
-It does not create an unbounded queue or cache.
+It does not create an unbounded queue or cache. The private race increases
+catch-up fanout only to the configured custom overlay peers, which is expected
+to be a small trusted set.
 
 ### Test Plan
 
 - Build `validator-engine`.
 - Restart one private-overlay full node while it is behind.
 - Verify custom `downloadNextBlockFull` requests reach explicit custom peers.
+- Verify `ton_custom_overlay_sync_downloads_total{sender="quic",result="ok"}`
+  grows and `ton_custom_overlay_sync_fallbacks_total` stays low.
+- Verify `[custom-overlay-sync]` logs show `peer.done result=ok` before public
+  fallback.
 - Verify `last_masterchain_block_ago` catches up faster than the public-only
   path.
 - Verify live broadcasts switch from `node_not_started` drops to normal

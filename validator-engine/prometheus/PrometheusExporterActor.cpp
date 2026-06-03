@@ -59,6 +59,89 @@ namespace ton {
       ss << "# TYPE ton_custom_overlay_block_broadcasts_applied_total counter\n";
       ss << "ton_custom_overlay_block_broadcasts_applied_total "
          << validator::fullnode::get_custom_overlay_block_broadcasts_applied_total() << "\n";
+      ss << "# HELP ton_custom_overlay_sync_downloads_total Custom overlay sync download attempts by result\n";
+      ss << "# TYPE ton_custom_overlay_sync_downloads_total counter\n";
+      for (std::size_t kind = 0; kind < validator::fullnode::custom_overlay_sync_kind_count(); kind++) {
+        for (std::size_t sender = 0; sender < validator::fullnode::custom_overlay_sync_sender_count(); sender++) {
+          for (std::size_t result = 0; result < validator::fullnode::custom_overlay_sync_result_count(); result++) {
+            ss << "ton_custom_overlay_sync_downloads_total{kind=\""
+               << validator::fullnode::custom_overlay_sync_kind_label(kind) << "\",sender=\""
+               << validator::fullnode::custom_overlay_sync_sender_label(sender) << "\",result=\""
+               << validator::fullnode::custom_overlay_sync_result_label(result) << "\"} "
+               << validator::fullnode::get_custom_overlay_sync_downloads_total(kind, sender, result) << "\n";
+          }
+        }
+      }
+      ss << "# HELP ton_custom_overlay_sync_download_latency_ms Custom overlay sync download latency in milliseconds\n";
+      ss << "# TYPE ton_custom_overlay_sync_download_latency_ms summary\n";
+      for (std::size_t kind = 0; kind < validator::fullnode::custom_overlay_sync_kind_count(); kind++) {
+        for (std::size_t sender = 0; sender < validator::fullnode::custom_overlay_sync_sender_count(); sender++) {
+          for (std::size_t result = 0; result < validator::fullnode::custom_overlay_sync_result_count(); result++) {
+            ss << "ton_custom_overlay_sync_download_latency_ms_sum{kind=\""
+               << validator::fullnode::custom_overlay_sync_kind_label(kind) << "\",sender=\""
+               << validator::fullnode::custom_overlay_sync_sender_label(sender) << "\",result=\""
+               << validator::fullnode::custom_overlay_sync_result_label(result) << "\"} "
+               << validator::fullnode::get_custom_overlay_sync_download_latency_ms_sum(kind, sender, result) << "\n";
+            ss << "ton_custom_overlay_sync_download_latency_ms_count{kind=\""
+               << validator::fullnode::custom_overlay_sync_kind_label(kind) << "\",sender=\""
+               << validator::fullnode::custom_overlay_sync_sender_label(sender) << "\",result=\""
+               << validator::fullnode::custom_overlay_sync_result_label(result) << "\"} "
+               << validator::fullnode::get_custom_overlay_sync_download_latency_ms_count(kind, sender, result) << "\n";
+          }
+        }
+      }
+      ss << "# HELP ton_custom_overlay_sync_peer_downloads_total Custom overlay per-peer sync download attempts by result\n";
+      ss << "# TYPE ton_custom_overlay_sync_peer_downloads_total counter\n";
+      for (std::size_t kind = 0; kind < validator::fullnode::custom_overlay_sync_kind_count(); kind++) {
+        for (std::size_t sender = 0; sender < validator::fullnode::custom_overlay_sync_sender_count(); sender++) {
+          for (std::size_t result = 0; result < validator::fullnode::custom_overlay_sync_result_count(); result++) {
+            ss << "ton_custom_overlay_sync_peer_downloads_total{kind=\""
+               << validator::fullnode::custom_overlay_sync_kind_label(kind) << "\",sender=\""
+               << validator::fullnode::custom_overlay_sync_sender_label(sender) << "\",result=\""
+               << validator::fullnode::custom_overlay_sync_result_label(result) << "\"} "
+               << validator::fullnode::get_custom_overlay_sync_peer_downloads_total(kind, sender, result) << "\n";
+          }
+        }
+      }
+      ss << "# HELP ton_custom_overlay_sync_peer_latency_ms Custom overlay per-peer sync download latency in milliseconds\n";
+      ss << "# TYPE ton_custom_overlay_sync_peer_latency_ms summary\n";
+      for (std::size_t kind = 0; kind < validator::fullnode::custom_overlay_sync_kind_count(); kind++) {
+        for (std::size_t sender = 0; sender < validator::fullnode::custom_overlay_sync_sender_count(); sender++) {
+          for (std::size_t result = 0; result < validator::fullnode::custom_overlay_sync_result_count(); result++) {
+            ss << "ton_custom_overlay_sync_peer_latency_ms_sum{kind=\""
+               << validator::fullnode::custom_overlay_sync_kind_label(kind) << "\",sender=\""
+               << validator::fullnode::custom_overlay_sync_sender_label(sender) << "\",result=\""
+               << validator::fullnode::custom_overlay_sync_result_label(result) << "\"} "
+               << validator::fullnode::get_custom_overlay_sync_peer_latency_ms_sum(kind, sender, result) << "\n";
+            ss << "ton_custom_overlay_sync_peer_latency_ms_count{kind=\""
+               << validator::fullnode::custom_overlay_sync_kind_label(kind) << "\",sender=\""
+               << validator::fullnode::custom_overlay_sync_sender_label(sender) << "\",result=\""
+               << validator::fullnode::custom_overlay_sync_result_label(result) << "\"} "
+               << validator::fullnode::get_custom_overlay_sync_peer_latency_ms_count(kind, sender, result) << "\n";
+          }
+        }
+      }
+      ss << "# HELP ton_custom_overlay_sync_fallbacks_total Sync downloads that fell back from custom overlay to public overlay\n";
+      ss << "# TYPE ton_custom_overlay_sync_fallbacks_total counter\n";
+      for (std::size_t kind = 0; kind < validator::fullnode::custom_overlay_sync_kind_count(); kind++) {
+        for (std::size_t reason = 0; reason < validator::fullnode::custom_overlay_sync_fallback_reason_count();
+             reason++) {
+          ss << "ton_custom_overlay_sync_fallbacks_total{kind=\""
+             << validator::fullnode::custom_overlay_sync_kind_label(kind) << "\",reason=\""
+             << validator::fullnode::custom_overlay_sync_fallback_reason_label(reason) << "\"} "
+             << validator::fullnode::get_custom_overlay_sync_fallbacks_total(kind, reason) << "\n";
+        }
+      }
+      ss << "# HELP ton_public_overlay_sync_downloads_total Public overlay sync downloads by reason\n";
+      ss << "# TYPE ton_public_overlay_sync_downloads_total counter\n";
+      for (std::size_t kind = 0; kind < validator::fullnode::custom_overlay_sync_kind_count(); kind++) {
+        for (std::size_t reason = 0; reason < validator::fullnode::public_overlay_sync_reason_count(); reason++) {
+          ss << "ton_public_overlay_sync_downloads_total{kind=\""
+             << validator::fullnode::custom_overlay_sync_kind_label(kind) << "\",reason=\""
+             << validator::fullnode::public_overlay_sync_reason_label(reason) << "\"} "
+             << validator::fullnode::get_public_overlay_sync_downloads_total(kind, reason) << "\n";
+        }
+      }
 
       return ss.str();
     }
