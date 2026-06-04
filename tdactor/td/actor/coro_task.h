@@ -426,7 +426,14 @@ struct [[nodiscard]] StartedTask {
     [](auto self, std::string description) -> Task<Unit> {
       co_await become_lightweight();
       auto r = co_await std::move(self).wrap();
-      LOG_IF(ERROR, r.is_error()) << "Detached task <" << description << "> failed: " << r.error();
+      if (r.is_error()) {
+        auto error = r.move_as_error();
+        if (error.message() == "too many custom overlay archive requests") {
+          LOG(DEBUG) << "Detached task <" << description << "> throttled: " << error;
+        } else {
+          LOG(ERROR) << "Detached task <" << description << "> failed: " << error;
+        }
+      }
       co_return td::Unit{};
     }(std::move(*this), std::move(description))
                                                   .start_immediate()

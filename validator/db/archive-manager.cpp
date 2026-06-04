@@ -960,7 +960,7 @@ void ArchiveManager::start_up() {
   // todo: add to readonly update
   td::WalkPath::run(db_root_ + "/archive/states/", [&](td::CSlice fname, td::WalkPath::Type t) -> void {
     if (t == td::WalkPath::Type::RegularFile) {
-      LOG(ERROR) << "checking file " << fname;
+      LOG(DEBUG) << "checking file " << fname;
       auto pos = fname.rfind(TD_DIR_SLASH);
       if (pos != td::Slice::npos) {
         fname.remove_prefix(pos + 1);
