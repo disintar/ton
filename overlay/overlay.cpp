@@ -298,7 +298,8 @@ void OverlayImpl::receive_message(adnl::AdnlNodeIdShort src, tl_object_ptr<ton_a
       auto id = obj->get_id();
       auto status = (co_await self->process_broadcast(src, std::move(obj)).wrap()).move_as_status();
       if (status.is_error() && status.code() != ErrorCode::notready) {
-        if (status.message() == "broadcast is forbidden" || status.message() == "peer is temporary banned") {
+        if (status.message() == "broadcast is forbidden" || status.message() == "peer is temporary banned" ||
+            status.message() == "Non solvable") {
           LOG(INFO) << "Failed to process broadcast (type=" << id << ") from " << src << ": " << status;
         } else {
           LOG(WARNING) << "Failed to process broadcast (type=" << id << ") from " << src << ": " << status;
