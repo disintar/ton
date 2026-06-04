@@ -183,6 +183,61 @@ BlockBroadcast get_block_broadcast_without_data(const ton_api::tonNode_blockBroa
                         BlockPropagationTrace{}};
 }
 
+td::Result<BlockIdExt> get_block_broadcast_id(ton_api::tonNode_Broadcast& obj) {
+  td::Result<BlockIdExt> result;
+  ton_api::downcast_call(obj, td::overloaded(
+                                  [&](ton_api::tonNode_blockBroadcast& f) { result = create_block_id(f.id_); },
+                                  [&](ton_api::tonNode_blockBroadcastCompressed& f) {
+                                    result = create_block_id(f.id_);
+                                  },
+                                  [&](ton_api::tonNode_blockBroadcastCompressedV2& f) {
+                                    result = create_block_id(f.id_);
+                                  },
+                                  [&](auto&) { result = td::Status::Error("unknown broadcast type"); }));
+  return result;
+}
+
+td::Result<BlockIdExt> get_block_candidate_broadcast_id(ton_api::tonNode_Broadcast& obj) {
+  td::Result<BlockIdExt> result;
+  ton_api::downcast_call(obj, td::overloaded(
+                                  [&](ton_api::tonNode_newBlockCandidateBroadcast& f) {
+                                    result = create_block_id(f.id_);
+                                  },
+                                  [&](ton_api::tonNode_newBlockCandidateBroadcastCompressed& f) {
+                                    result = create_block_id(f.id_);
+                                  },
+                                  [&](ton_api::tonNode_newBlockCandidateBroadcastCompressedV2& f) {
+                                    result = create_block_id(f.id_);
+                                  },
+                                  [&](auto&) { result = td::Status::Error("unknown candidate broadcast type"); }));
+  return result;
+}
+
+bool block_broadcast_has_final_signature_set(ton_api::tonNode_Broadcast& obj) {
+  bool result = false;
+  ton_api::downcast_call(obj, td::overloaded(
+                                  [&](ton_api::tonNode_blockBroadcast& f) {
+                                    auto sig_set =
+                                        block::BlockSignatureSet::fetch(f.signatures_, f.catchain_seqno_,
+                                                                        f.validator_set_hash_);
+                                    result = !sig_set.is_null() && sig_set->is_final();
+                                  },
+                                  [&](ton_api::tonNode_blockBroadcastCompressedV2& f) {
+                                    auto sig_set = block::BlockSignatureSet::fetch(f.signature_set_);
+                                    result = !sig_set.is_null() && sig_set->is_final();
+                                  },
+                                  [&](auto&) {}));
+  return result;
+}
+
+bool block_broadcast_signature_set_visible(ton_api::tonNode_Broadcast& obj) {
+  bool result = false;
+  ton_api::downcast_call(obj, td::overloaded([&](ton_api::tonNode_blockBroadcast&) { result = true; },
+                                             [&](ton_api::tonNode_blockBroadcastCompressedV2&) { result = true; },
+                                             [&](auto&) {}));
+  return result;
+}
+
 static td::Result<BlockBroadcast> deserialize_block_broadcast(ton_api::tonNode_blockBroadcastCompressedV2& f,
                                                               int max_decompressed_size, std::string called_from,
                                                               td::Ref<vm::Cell> state) {

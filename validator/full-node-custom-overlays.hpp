@@ -22,6 +22,7 @@
 #include "common/errorcode.h"
 #include "full-node.h"
 #include "rate-limiter.h"
+#include "td/utils/LRUCache.h"
 #include "validator-telemetry.hpp"
 
 namespace ton::validator::fullnode {
@@ -144,8 +145,12 @@ class FullNodeCustomOverlay : public td::actor::Actor {
   bool inited_ = false;
   overlay::OverlayIdFull overlay_id_full_;
   overlay::OverlayIdShort overlay_id_;
+  td::LRUCache<BlockIdExt, td::uint32> received_block_broadcasts_{512};
+  td::LRUCache<BlockIdExt, td::Unit> received_block_candidates_{512};
 
   std::vector<adnl::AdnlNodeIdShort> custom_download_peers() const;
+  bool mark_block_broadcast_received(BlockIdExt block_id, bool final);
+  bool mark_block_candidate_received(BlockIdExt block_id);
   void prewarm_archive_peers();
   void download_block_from_custom_peers(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                         std::vector<adnl::AdnlNodeIdShort> peers, double started_at,

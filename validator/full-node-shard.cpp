@@ -39,6 +39,7 @@
 #include "ton/ton-tl.hpp"
 
 #include "checksum.h"
+#include "custom-overlay-metrics.h"
 #include "full-node-serializer.hpp"
 #include "full-node-shard-queries.hpp"
 #include "full-node-shard.hpp"
@@ -79,6 +80,28 @@ size_t request_cost_for_limiter(ton_api::Function &function) {
 }
 
 }  // namespace
+
+bool FullNodeShardImpl::mark_block_broadcast_received(BlockIdExt block_id, bool final) {
+  constexpr td::uint32 received_non_final_broadcast = 1;
+  constexpr td::uint32 received_final_broadcast = 2;
+  auto received_flag = final ? received_final_broadcast : received_non_final_broadcast;
+  auto *received_flags = received_block_broadcasts_.get_if_exists(block_id);
+  if (received_flags && (*received_flags & received_flag)) {
+    record_public_overlay_duplicate_block_broadcast_dropped();
+    return false;
+  }
+  received_block_broadcasts_.put(block_id, (received_flags ? *received_flags : 0) | received_flag);
+  return true;
+}
+
+bool FullNodeShardImpl::mark_block_candidate_received(BlockIdExt block_id) {
+  if (received_block_candidates_.contains(block_id)) {
+    record_public_overlay_duplicate_block_candidate_dropped();
+    return false;
+  }
+  received_block_candidates_.put(block_id, {});
+  return true;
+}
 
 Neighbour Neighbour::zero = Neighbour{adnl::AdnlNodeIdShort::zero()};
 
@@ -821,6 +844,10 @@ void FullNodeShardImpl::process_broadcast(PublicKeyHash src,
 }
 
 void FullNodeShardImpl::process_block_candidate_broadcast(PublicKeyHash src, ton_api::tonNode_Broadcast &query) {
+  auto R_id = get_block_candidate_broadcast_id(query);
+  if (R_id.is_ok() && !mark_block_candidate_received(R_id.ok())) {
+    return;
+  }
   BlockIdExt block_id;
   CatchainSeqno cc_seqno;
   td::uint32 validator_set_hash;
@@ -853,6 +880,7 @@ void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_bl
 }
 
 void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_blockBroadcastCompressedV2 &query) {
+  auto block_id = create_block_id(query.id_);
   auto R_requires_state = need_state_for_decompression(query);
   if (R_requires_state.is_error()) {
     LOG(DEBUG) << "Failed to check if state is required for broadcast: " << R_requires_state.move_as_error();
@@ -860,6 +888,10 @@ void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_bl
   }
 
   if (R_requires_state.move_as_ok()) {
+    if (block_broadcast_signature_set_visible(query) &&
+        !mark_block_broadcast_received(block_id, block_broadcast_has_final_signature_set(query))) {
+      return;
+    }
     auto block_wo_data = get_block_broadcast_without_data(query);
     auto P = td::PromiseCreator::lambda(
         [SelfId = actor_id(this), src, query = std::move(query)](td::Result<td::Unit> R) mutable {
@@ -879,6 +911,11 @@ void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_bl
 }
 
 void FullNodeShardImpl::process_block_broadcast(PublicKeyHash src, ton_api::tonNode_Broadcast &query) {
+  auto R_id = get_block_broadcast_id(query);
+  if (R_id.is_ok() && block_broadcast_signature_set_visible(query) &&
+      !mark_block_broadcast_received(R_id.ok(), block_broadcast_has_final_signature_set(query))) {
+    return;
+  }
   auto B = deserialize_block_broadcast(query, overlay::Overlays::max_fec_broadcast_size(), k_called_from_public);
   if (B.is_error()) {
     LOG(DEBUG) << "Failed to deserialize block broadcast: " << B.move_as_error();

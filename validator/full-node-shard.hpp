@@ -22,6 +22,7 @@
 
 #include "auto/tl/ton_api.h"
 #include "td/actor/PromiseFuture.h"
+#include "td/utils/LRUCache.h"
 #include "td/utils/port/Poll.h"
 
 #include "full-node-shard.h"
@@ -167,6 +168,8 @@ class FullNodeShardImpl : public FullNodeShard {
   void process_broadcast(PublicKeyHash src, ton_api::tonNode_newBlockCandidateBroadcastCompressed &query);
   void process_broadcast(PublicKeyHash src, ton_api::tonNode_newBlockCandidateBroadcastCompressedV2 &query);
   void process_block_candidate_broadcast(PublicKeyHash src, ton_api::tonNode_Broadcast &query);
+  bool mark_block_broadcast_received(BlockIdExt block_id, bool final);
+  bool mark_block_candidate_received(BlockIdExt block_id);
 
   void receive_broadcast(PublicKeyHash src, td::BufferSlice query);
   void check_broadcast(PublicKeyHash src, td::BufferSlice query, td::Promise<td::Unit> promise);
@@ -281,6 +284,8 @@ class FullNodeShardImpl : public FullNodeShard {
 
   overlay::OverlayIdFull overlay_id_full_;
   overlay::OverlayIdShort overlay_id_;
+  td::LRUCache<BlockIdExt, td::uint32> received_block_broadcasts_{512};
+  td::LRUCache<BlockIdExt, td::Unit> received_block_candidates_{512};
   PublicKeyHash sign_cert_by_ = PublicKeyHash::zero();
   td::Timestamp update_certificate_at_;
   td::Timestamp sync_completed_at_;

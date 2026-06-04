@@ -202,6 +202,21 @@ void finish_custom_overlay_sync_download(std::shared_ptr<CustomOverlaySyncDownlo
   if (should_finish) {
     record_custom_overlay_sync_download(state->kind, state->sender, CustomOverlaySyncResult::Exhausted,
                                         state->started_at, now);
+    LOG(WARNING) << "[custom-overlay-sync]"
+                 << " stage=custom.done"
+                 << " kind=" << custom_overlay_sync_kind_label(metric_index(state->kind))
+                 << " source=custom"
+                 << " sender=" << custom_overlay_sync_sender_label(metric_index(state->sender))
+                 << " overlay=" << block_propagation_trace_sanitize(state->overlay_name)
+                 << " local=" << block_propagation_trace_sanitize(state->local_id)
+                 << " block=" << state->target.block
+                 << " wc=" << state->target.wc
+                 << " shard=" << state->target.shard
+                 << " seqno=" << state->target.seqno
+                 << " peers=" << state->peers_total
+                 << " ms=" << block_propagation_trace_ms(state->started_at, now)
+                 << " result=exhausted"
+                 << " reason=" << block_propagation_trace_sanitize(last_error);
     log_custom_overlay_sync_stage(state->kind, state->sender, state->overlay_name, state->local_id, "-", state->target,
                                   "custom.done", "exhausted", last_error, state->peers_total, state->started_at);
     promise.set_error(td::Status::Error(ErrorCode::notready,
@@ -209,21 +224,29 @@ void finish_custom_overlay_sync_download(std::shared_ptr<CustomOverlaySyncDownlo
   }
 }
 
-td::Result<BlockIdExt> get_block_broadcast_id(ton_api::tonNode_Broadcast &query) {
-  td::Result<BlockIdExt> result;
-  ton_api::downcast_call(query, td::overloaded(
-                                    [&](ton_api::tonNode_blockBroadcast &f) { result = create_block_id(f.id_); },
-                                    [&](ton_api::tonNode_blockBroadcastCompressed &f) {
-                                      result = create_block_id(f.id_);
-                                    },
-                                    [&](ton_api::tonNode_blockBroadcastCompressedV2 &f) {
-                                      result = create_block_id(f.id_);
-                                    },
-                                    [&](auto &) { result = td::Status::Error("unknown broadcast type"); }));
-  return result;
+}  // namespace
+
+bool FullNodeCustomOverlay::mark_block_broadcast_received(BlockIdExt block_id, bool final) {
+  constexpr td::uint32 received_non_final_broadcast = 1;
+  constexpr td::uint32 received_final_broadcast = 2;
+  auto received_flag = final ? received_final_broadcast : received_non_final_broadcast;
+  auto *received_flags = received_block_broadcasts_.get_if_exists(block_id);
+  if (received_flags && (*received_flags & received_flag)) {
+    record_custom_overlay_duplicate_block_broadcast_dropped();
+    return false;
+  }
+  received_block_broadcasts_.put(block_id, (received_flags ? *received_flags : 0) | received_flag);
+  return true;
 }
 
-}  // namespace
+bool FullNodeCustomOverlay::mark_block_candidate_received(BlockIdExt block_id) {
+  if (received_block_candidates_.contains(block_id)) {
+    record_custom_overlay_duplicate_block_candidate_dropped();
+    return false;
+  }
+  received_block_candidates_.put(block_id, {});
+  return true;
+}
 
 void FullNodeCustomOverlay::process_broadcast(PublicKeyHash src, ton_api::tonNode_blockBroadcast &query) {
   process_block_broadcast(src, query);
@@ -245,18 +268,25 @@ void FullNodeCustomOverlay::process_broadcast(PublicKeyHash src, ton_api::tonNod
     }
     return;
   }
+  auto block_id = create_block_id(query.id_);
 
   auto R_requires_state = need_state_for_decompression(query);
   if (R_requires_state.is_error()) {
     LOG(DEBUG) << "Failed to check if state is required for broadcast: " << R_requires_state.move_as_error();
     if (trace.enabled) {
-      log_block_propagation_stage(create_block_id(query.id_), trace, "custom.recv", "custom", false, false, "error",
+      log_block_propagation_stage(block_id, trace, "custom.recv", "custom", false, false, "error",
                                   "need_state_check_failed", received_at);
     }
     return;
   }
 
   if (R_requires_state.move_as_ok()) {
+    if (block_broadcast_signature_set_visible(query) &&
+        !mark_block_broadcast_received(block_id, block_broadcast_has_final_signature_set(query))) {
+      log_block_propagation_stage(block_id, trace, "custom.recv", "custom", false, false, "drop", "duplicate_broadcast",
+                                  received_at);
+      return;
+    }
     auto block_wo_data = get_block_broadcast_without_data(query);
     block_wo_data.trace = trace;
     log_block_propagation_stage(block_wo_data, "custom.recv", "custom", "ok", {}, received_at);
@@ -297,6 +327,12 @@ void FullNodeCustomOverlay::process_block_broadcast(PublicKeyHash src, ton_api::
     return;
   }
   if (R_id.is_ok()) {
+    if (block_broadcast_signature_set_visible(query) &&
+        !mark_block_broadcast_received(R_id.ok(), block_broadcast_has_final_signature_set(query))) {
+      log_block_propagation_stage(R_id.ok(), trace, "custom.recv", "custom", false, false, "drop",
+                                  "duplicate_broadcast", received_at);
+      return;
+    }
     log_block_propagation_stage(R_id.ok(), trace, "custom.recv", "custom", false, false, "ok", {}, received_at);
   }
   auto deserialize_started_at = block_propagation_trace_now();
@@ -405,6 +441,10 @@ void FullNodeCustomOverlay::process_block_candidate_broadcast(PublicKeyHash src,
   if (!block_senders_.count(adnl::AdnlNodeIdShort(src))) {
     VLOG(FULL_NODE_DEBUG) << "Dropping block candidate broadcast in private overlay \"" << name_
                           << "\" from unauthorized sender " << src;
+    return;
+  }
+  auto R_id = get_block_candidate_broadcast_id(query);
+  if (R_id.is_ok() && !mark_block_candidate_received(R_id.ok())) {
     return;
   }
   BlockIdExt block_id;

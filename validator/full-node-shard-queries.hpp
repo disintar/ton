@@ -18,6 +18,7 @@
 */
 #pragma once
 
+#include "common/delay.h"
 #include "ton/ton-tl.hpp"
 #include "validator/validator.h"
 
@@ -58,9 +59,16 @@ class BlockFullSender : public td::actor::Actor {
   void got_block_handle(BlockHandle handle) {
     if (next_) {
       if (!handle->inited_next_left()) {
+        if (next_retry_count_ < 10) {
+          next_retry_count_++;
+          delay_action([SelfId = actor_id(this)]() { td::actor::send_closure(SelfId, &BlockFullSender::start_up); },
+                       td::Timestamp::in(0.05));
+          return;
+        }
         return abort_query(td::Status::Error(ErrorCode::notready, "next not known"));
       }
       next_ = false;
+      next_retry_count_ = 0;
       block_id_ = handle->one_next(true);
       start_up();
       return;
@@ -119,6 +127,7 @@ class BlockFullSender : public td::actor::Actor {
  private:
   BlockIdExt block_id_;
   bool next_;
+  td::uint32 next_retry_count_ = 0;
   BlockHandle handle_;
   bool is_proof_link_;
   td::BufferSlice proof_;

@@ -59,6 +59,22 @@ namespace ton {
       ss << "# TYPE ton_custom_overlay_block_broadcasts_applied_total counter\n";
       ss << "ton_custom_overlay_block_broadcasts_applied_total "
          << validator::fullnode::get_custom_overlay_block_broadcasts_applied_total() << "\n";
+      ss << "# HELP ton_custom_overlay_duplicate_block_broadcasts_dropped_total Duplicate custom overlay block broadcasts dropped before deserialization\n";
+      ss << "# TYPE ton_custom_overlay_duplicate_block_broadcasts_dropped_total counter\n";
+      ss << "ton_custom_overlay_duplicate_block_broadcasts_dropped_total "
+         << validator::fullnode::get_custom_overlay_duplicate_block_broadcasts_dropped_total() << "\n";
+      ss << "# HELP ton_custom_overlay_duplicate_block_candidates_dropped_total Duplicate custom overlay block candidates dropped before deserialization\n";
+      ss << "# TYPE ton_custom_overlay_duplicate_block_candidates_dropped_total counter\n";
+      ss << "ton_custom_overlay_duplicate_block_candidates_dropped_total "
+         << validator::fullnode::get_custom_overlay_duplicate_block_candidates_dropped_total() << "\n";
+      ss << "# HELP ton_public_overlay_duplicate_block_broadcasts_dropped_total Duplicate public overlay block broadcasts dropped before deserialization\n";
+      ss << "# TYPE ton_public_overlay_duplicate_block_broadcasts_dropped_total counter\n";
+      ss << "ton_public_overlay_duplicate_block_broadcasts_dropped_total "
+         << validator::fullnode::get_public_overlay_duplicate_block_broadcasts_dropped_total() << "\n";
+      ss << "# HELP ton_public_overlay_duplicate_block_candidates_dropped_total Duplicate public overlay block candidates dropped before deserialization\n";
+      ss << "# TYPE ton_public_overlay_duplicate_block_candidates_dropped_total counter\n";
+      ss << "ton_public_overlay_duplicate_block_candidates_dropped_total "
+         << validator::fullnode::get_public_overlay_duplicate_block_candidates_dropped_total() << "\n";
       ss << "# HELP ton_custom_overlay_sync_downloads_total Custom overlay sync download attempts by result\n";
       ss << "# TYPE ton_custom_overlay_sync_downloads_total counter\n";
       for (std::size_t kind = 0; kind < validator::fullnode::custom_overlay_sync_kind_count(); kind++) {

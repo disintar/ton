@@ -31,6 +31,10 @@ namespace fullnode {
 
 inline std::atomic<std::uint64_t> custom_overlay_block_broadcasts_received_total{0};
 inline std::atomic<std::uint64_t> custom_overlay_block_broadcasts_applied_total{0};
+inline std::atomic<std::uint64_t> custom_overlay_duplicate_block_broadcasts_dropped_total{0};
+inline std::atomic<std::uint64_t> custom_overlay_duplicate_block_candidates_dropped_total{0};
+inline std::atomic<std::uint64_t> public_overlay_duplicate_block_broadcasts_dropped_total{0};
+inline std::atomic<std::uint64_t> public_overlay_duplicate_block_candidates_dropped_total{0};
 
 enum class CustomOverlaySyncKind : std::size_t { Block = 0, NextBlock = 1, Archive = 2, Count = 3 };
 enum class CustomOverlaySyncSender : std::size_t { Rldp2 = 0, Quic = 1, Count = 2 };
@@ -138,12 +142,44 @@ inline void record_custom_overlay_block_broadcast_applied() {
   custom_overlay_block_broadcasts_applied_total.fetch_add(1, std::memory_order_relaxed);
 }
 
+inline void record_custom_overlay_duplicate_block_broadcast_dropped() {
+  custom_overlay_duplicate_block_broadcasts_dropped_total.fetch_add(1, std::memory_order_relaxed);
+}
+
+inline void record_custom_overlay_duplicate_block_candidate_dropped() {
+  custom_overlay_duplicate_block_candidates_dropped_total.fetch_add(1, std::memory_order_relaxed);
+}
+
+inline void record_public_overlay_duplicate_block_broadcast_dropped() {
+  public_overlay_duplicate_block_broadcasts_dropped_total.fetch_add(1, std::memory_order_relaxed);
+}
+
+inline void record_public_overlay_duplicate_block_candidate_dropped() {
+  public_overlay_duplicate_block_candidates_dropped_total.fetch_add(1, std::memory_order_relaxed);
+}
+
 inline std::uint64_t get_custom_overlay_block_broadcasts_received_total() {
   return custom_overlay_block_broadcasts_received_total.load(std::memory_order_relaxed);
 }
 
 inline std::uint64_t get_custom_overlay_block_broadcasts_applied_total() {
   return custom_overlay_block_broadcasts_applied_total.load(std::memory_order_relaxed);
+}
+
+inline std::uint64_t get_custom_overlay_duplicate_block_broadcasts_dropped_total() {
+  return custom_overlay_duplicate_block_broadcasts_dropped_total.load(std::memory_order_relaxed);
+}
+
+inline std::uint64_t get_custom_overlay_duplicate_block_candidates_dropped_total() {
+  return custom_overlay_duplicate_block_candidates_dropped_total.load(std::memory_order_relaxed);
+}
+
+inline std::uint64_t get_public_overlay_duplicate_block_broadcasts_dropped_total() {
+  return public_overlay_duplicate_block_broadcasts_dropped_total.load(std::memory_order_relaxed);
+}
+
+inline std::uint64_t get_public_overlay_duplicate_block_candidates_dropped_total() {
+  return public_overlay_duplicate_block_candidates_dropped_total.load(std::memory_order_relaxed);
 }
 
 inline std::uint64_t elapsed_ms(double started_at, double finished_at) {

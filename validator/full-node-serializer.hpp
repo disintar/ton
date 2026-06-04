@@ -30,6 +30,10 @@ td::Result<BlockBroadcast> deserialize_block_broadcast(ton_api::tonNode_Broadcas
                                                        std::string called_from,
                                                        td::Ref<vm::Cell> state = td::Ref<vm::Cell>());
 BlockBroadcast get_block_broadcast_without_data(const ton_api::tonNode_blockBroadcastCompressedV2& obj);
+td::Result<BlockIdExt> get_block_broadcast_id(ton_api::tonNode_Broadcast& obj);
+td::Result<BlockIdExt> get_block_candidate_broadcast_id(ton_api::tonNode_Broadcast& obj);
+bool block_broadcast_signature_set_visible(ton_api::tonNode_Broadcast& obj);
+bool block_broadcast_has_final_signature_set(ton_api::tonNode_Broadcast& obj);
 
 td::Result<std::vector<BlockIdExt>> extract_prev_blocks_from_proof(td::Slice proof, const BlockIdExt& block_id);
 
