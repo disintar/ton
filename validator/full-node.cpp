@@ -43,6 +43,7 @@ namespace fullnode {
 
 static const double INACTIVE_SHARD_TTL = (double)overlay::Overlays::overlay_peer_ttl() + 60.0;
 constexpr long long CUSTOM_OVERLAY_SYNC_SLOW_LOG_MS = 800;
+constexpr double CUSTOM_OVERLAY_NEXT_BLOCK_GRACE_SEC = 0.20;
 
 bool log_value_is(const char *value, const char *expected) {
   return std::strcmp(value, expected) == 0;
@@ -642,6 +643,38 @@ void FullNodeImpl::download_block(BlockIdExt id, td::uint32 priority, td::Timest
 
 void FullNodeImpl::download_next_block(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
                                        td::Promise<ReceivedBlock> promise) {
+  bool shard_served_by_custom_overlay = false;
+  for (auto &[name, custom_overlay] : custom_overlays_) {
+    if (!custom_overlay.params_.send_shard(prev_id.shard_full())) {
+      continue;
+    }
+    shard_served_by_custom_overlay = !custom_overlay.actors_.empty();
+    if (shard_served_by_custom_overlay) {
+      break;
+    }
+  }
+  if (shard_served_by_custom_overlay) {
+    LOG(WARNING) << "[overlay-gap] event=download_next_defer"
+                 << " prev=" << prev_id.to_str()
+                 << " wc=" << prev_id.id.workchain
+                 << " shard=" << prev_id.id.shard
+                 << " prev_seqno=" << prev_id.id.seqno
+                 << " expected_seqno=" << prev_id.id.seqno + 1
+                 << " delay_ms=" << static_cast<long long>(CUSTOM_OVERLAY_NEXT_BLOCK_GRACE_SEC * 1000)
+                 << " reason=custom_overlay_grace";
+    delay_action(
+        [SelfId = actor_id(this), prev_id, priority, timeout, promise = std::move(promise)]() mutable {
+          td::actor::send_closure(SelfId, &FullNodeImpl::download_next_block_now, prev_id, priority, timeout,
+                                  std::move(promise));
+        },
+        td::Timestamp::in(CUSTOM_OVERLAY_NEXT_BLOCK_GRACE_SEC));
+    return;
+  }
+  download_next_block_now(prev_id, priority, timeout, std::move(promise));
+}
+
+void FullNodeImpl::download_next_block_now(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
+                                           td::Promise<ReceivedBlock> promise) {
   bool has_custom_overlay = !custom_overlays_.empty();
   bool shard_served_by_custom_overlay = false;
   for (auto &[name, custom_overlay] : custom_overlays_) {

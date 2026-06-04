@@ -132,6 +132,8 @@ class FullNodeImpl : public FullNode {
   };
 
   void update_shard_actor(ShardIdFull shard, bool active);
+  void download_next_block_now(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
+                               td::Promise<ReceivedBlock> promise);
 
   PublicKeyHash local_id_;
   adnl::AdnlNodeIdShort adnl_id_;
