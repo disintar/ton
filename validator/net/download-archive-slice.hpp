@@ -69,6 +69,7 @@ class DownloadArchiveSlice : public td::actor::Actor {
   const char *archive_source() const;
   const char *archive_prepare_transport() const;
   const char *archive_slice_transport() const;
+  double archive_info_timeout_seconds() const;
 
   static constexpr td::uint32 slice_size() {
     return 1 << 21;

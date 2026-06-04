@@ -36,6 +36,7 @@ namespace {
 
 constexpr double kArchivePeerResolveTimeout = 2.0;
 constexpr double kArchiveInfoTimeout = 3.0;
+constexpr double kPublicArchiveInfoTimeout = 1.25;
 constexpr double kArchiveSliceChunkTimeout = 15.0;
 constexpr td::uint32 kPublicArchivePeerCount = 5;
 
@@ -111,6 +112,13 @@ const char *DownloadArchiveSlice::archive_slice_transport() const {
     return "client";
   }
   return use_sender_for_slice_query_ ? archive_sender_label(archive_sync_sender_) : "overlay";
+}
+
+double DownloadArchiveSlice::archive_info_timeout_seconds() const {
+  if (client_.empty() && !record_archive_sync_metrics_) {
+    return kPublicArchiveInfoTimeout;
+  }
+  return kArchiveInfoTimeout;
 }
 
 void DownloadArchiveSlice::abort_query(td::Status reason) {
@@ -347,7 +355,7 @@ void DownloadArchiveSlice::try_download(int index){
       [SelfId = actor_id(this), query_id, index, total_nodes = static_cast<int>(download_from_list_.size())]() {
         td::actor::send_closure(SelfId, &DownloadArchiveSlice::archive_info_timeout, query_id, index, total_nodes);
       },
-      td::Timestamp::in(kArchiveInfoTimeout));
+      td::Timestamp::in(archive_info_timeout_seconds()));
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this),
                                        query_id,
                                        index,
