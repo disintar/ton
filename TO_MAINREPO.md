@@ -1,301 +1,222 @@
 # Upstream PR Notes
 
-This document describes several independent improvements that should be prepared as
-clean pull requests against `ton-blockchain/ton`.
+This document summarizes the current state of the private-overlay sync work and
+the pieces that should be split into clean pull requests for
+`ton-blockchain/ton`.
 
-## 1. Use Custom Overlays For Archive Slice Sync
+## Current Status
 
-### Problem
+The production test image `mainnet-v4-dev` now contains the final tested state
+from commit `f7275ed4a1e650e9e6a79a19327157c11dc1c02b`.
 
-During validator startup, `ValidatorManagerImpl::prestart_sync()` imports archive
-slices when the local node is out of sync. The current path is:
+It was rolled out only to `worm` during validation. After restart, `worm`
+transitioned from archive catch-up into live sync without the previous shard
+client bounce:
 
-`ValidatorManagerImpl::download_next_archive()` ->
-`ArchiveImporter::download_shard_archive()` ->
-`ValidatorManagerInterface::send_download_archive_request()` ->
-`FullNodeImpl::download_archive()` ->
-`FullNodeShard::download_archive()` ->
-`DownloadArchiveSlice`.
+- `shard_client_ago` dropped from roughly `82s` to `22s`, then to about `1s`.
+- `last_masterchain_block_seqno` and `shard_client_masterchain_seqno` stayed
+  equal during the follow-up monitor window.
+- Live shard-client logs showed the expected chain:
+  `use_pending -> wait_state.done(ms=0..18) -> applied_all_shards`.
+- `Non solvable` broadcast noise during archive recovery was quieted; real
+  errors such as bad signatures still remain warnings.
 
-This asks the public full-node shard overlay for `tonNode_getArchiveInfo`,
-`tonNode_getShardArchiveInfo`, and `tonNode_getArchiveSlice`.
+No other nodes were restarted for this validation pass.
 
-`FullNodeCustomOverlay` currently only forwards broadcasts. Its overlay callback
-has an empty `receive_query()` implementation, so custom/private overlay peers
-cannot answer archive queries. A restarting node can therefore receive fresh
-blocks through the custom overlay while still being unable to backfill the
-archive slice required by prestart sync.
+## What Was Wrong
 
-Observed symptom:
+### 1. Custom Overlay Was Broadcast-Only For Archive Recovery
 
-`Failed to download archive slice #<seqno> for shard <shard> error: [Error : 651 : no nodes]`
+Private/custom overlays could deliver live block broadcasts, but
+`FullNodeCustomOverlay::Callback::receive_query()` did not answer archive
+queries. A node that restarted behind the network could see fresh private
+overlay broadcasts while still being forced to recover missing history through
+the public overlay.
 
-At the same time, custom overlay block broadcasts are received quickly, but
-`ValidatorManager` remains not started and drops them.
+This produced startup failures and slow recovery such as:
 
-### Proposed Change
+`failed to download and import archive slice: [Error : 651 : no nodes]`
 
-Add archive query support to `FullNodeCustomOverlay`:
+The node was not started yet, so fresh broadcasts were normal to receive but not
+usable until archive recovery completed.
 
-- Handle `tonNode_getArchiveInfo`.
-- Handle `tonNode_getShardArchiveInfo`.
-- Handle `tonNode_getArchiveSlice`.
-- Reuse the existing validator manager archive APIs:
-  `get_archive_id()` and `get_archive_slice()`.
-- Reuse the full-node rate limiter for heavy `getArchiveSlice` replies.
-- Reject queries from ADNL ids that are not members of the custom overlay.
+### 2. Private Overlay Catch-Up Did Not Have Public Fallback Everywhere
 
-Use custom overlays as a best-effort first path in `FullNodeImpl::download_archive()`:
+Some private-overlay catch-up attempts could spend too long on an unreachable or
+slow custom peer. When custom sync did not answer quickly, fallback to the
+public overlay needed to happen in every recovery path, not only in selected
+archive paths.
 
-- If the node has a matching custom overlay for the requested shard, try the
-  custom overlay peers first.
-- Send both the small `getArchiveInfo` / `getShardArchiveInfo` prepare query and
-  the large `getArchiveSlice` chunk queries through the custom overlay's
-  configured sender. With QUIC-enabled custom overlays this keeps archive
-  catch-up on the same transport path as private block propagation.
-- Before starting custom archive download, resolve custom overlay peers through
-  the normal ADNL/DHT path by calling `Adnl::get_peer_node(local_id, peer_id)`.
-  The custom overlay config only needs short ADNL ids; the public DHT address
-  record supplies the full public key and `adnl_addressList`. If no custom peer
-  resolves, report the custom attempt as not ready and let the public overlay
-  fallback handle the sync.
-- If the custom path is not ready, has no peers, has no archive slice, or times
-  out, fall back to the existing public shard overlay path.
-- Do not rely only on sender-level request timeouts for startup archive sync.
-  Add explicit bounded watchdogs around custom peer DHT resolution,
-  `getArchiveInfo` / `getShardArchiveInfo`, and each `getArchiveSlice` chunk.
-  This prevents a half-reachable custom QUIC peer from holding
-  `prestart_sync()` for the full archive-import timeout.
-- Keep the existing public behavior unchanged for nodes without custom overlays
-  and for external-client mode.
-- Export custom sync metrics with `kind="archive"` and add grep-friendly
-  `[custom-overlay-archive]` logs for resolve, archive-info, slice chunk, and
-  final result stages. These logs are emitted only for the custom path.
+The desired behavior is:
 
-### Safety
+- Try private overlay peers first.
+- Keep all waits bounded.
+- If private peers cannot serve the data, immediately fall back to the public
+  full-node overlay.
+- Never make public sync worse than upstream behavior.
 
-The change is a fallback optimization, not a consensus change.
+### 3. Archive Recovery Stopped Too Far From Live
 
-It does not trust custom peers blindly: downloaded archive slices still go
-through the existing archive import/check path before advancing shard-client
-state. A bad or missing custom reply falls back to the public path.
+The archive recovery handoff used a large freshness window. That allowed the
+archive path to stop while the node was still tens of seconds behind live.
+After that, shard-client had to bridge a live gap through ordinary live
+notifications and block-state waits, which made the graph show a visible
+archive-to-live bounce.
 
-The responder is scoped to private overlay members and rate limited. Large
-payloads continue to use the existing `DownloadArchiveSlice` chunking and
-`getArchiveSlice` size guard.
+### 4. ShardClient Dropped Masterchain Notifications While Busy
 
-The downloader watchdogs do not skip validation or import checks. They only
-bound how long a private peer can hold a startup archive request before the
-unchanged public fallback is used.
+`ShardClient::new_masterchain_block_notification()` used the upstream pattern of
+ignoring notifications when the shard client was not waiting. During archive
+catch-up and save-to-db work, fresh masterchain notifications could arrive and
+be dropped. After `saved_to_db()`, shard-client then had to rediscover the next
+state through the slower database/state-wait path.
 
-### Test Plan
+This was the direct cause of the persistent post-archive bounce: masterchain
+could be live while shard-client stayed behind or repeatedly retried the same
+transition.
 
-- Unit/build: build `validator` target.
-- Integration:
-  - Run two archive nodes in the same custom overlay with the patch.
-  - Restart one node while it is behind enough to trigger prestart archive import.
-- Verify logs contain `[custom-overlay-archive] stage=resolve.start`.
-- Verify logs contain either `[custom-overlay-archive] stage=archive_info.done
-  result=ok` followed by `stage=slice.start`, or a bounded
-  `result=timeout|error` followed by public fallback.
-- Verify the target peer logs custom overlay `getShardArchiveInfo` and
-  `getArchiveSlice`.
-- Verify prestart sync completes and manager starts accepting custom overlay
-    block broadcasts.
-  - Stop or remove the archive slice from custom peers and verify fallback to
-    the public overlay still works.
-- Verify Prometheus exposes archive counters:
-  `ton_custom_overlay_sync_downloads_total{kind="archive",sender="quic",...}`
-  and `ton_public_overlay_sync_downloads_total{kind="archive",reason="fallback"}`.
+### 5. Recovery Logs Were Noisy
 
-### Upstream Status
+While a node is still in archive recovery, it can legitimately fail to process
+some broadcasts because the required context is not yet available. Logging
+`broadcast is forbidden`, temporary bans, and `Non solvable` as warnings made it
+hard to see real transport or state-sync failures.
 
-Checked with:
+## What Changed
 
-`gh api repos/ton-blockchain/ton/contents/validator/full-node-custom-overlays.cpp --jq '.content' | base64 -d`
+### Custom Overlay Archive Sync
 
-The upstream `FullNodeCustomOverlay::Callback::receive_query()` body is empty.
+Custom overlays can now participate in archive recovery:
 
-## 2. Buffer ShardClient Masterchain Notifications While Busy
+- Answer archive info and archive slice requests from private overlay members.
+- Resolve custom overlay peers through ADNL/DHT when only the short ADNL is
+  present in the overlay config.
+- Use the configured overlay sender path for custom archive queries.
+- Add bounded waits around DHT resolve, archive-info, and archive-slice chunks.
+- Fall back to public archive sync on no peers, timeout, bad data, or import
+  failure.
+- Export custom/public sync metrics and add grep-friendly trace logs for custom
+  archive attempts.
 
-### Problem
+Safety: downloaded archive data still goes through the existing archive import
+and validation path. A bad private peer cannot advance state.
 
-`ShardClient::new_masterchain_block_notification()` drops incoming masterchain
-notifications when `waiting_ == false`.
+### Custom Overlay Block Catch-Up
 
-That means if shard-client is applying/saving the previous masterchain block,
-the next masterchain state can arrive and be discarded. After `saved_to_db()`,
-the client then has to re-enter the slower path:
+Block catch-up now tries explicit private overlay peers before public fallback:
 
-`get_block_handle()` -> `wait_block_state()` -> `new_masterchain_block_notification()`
+- Prefer custom overlay senders and members as download peers.
+- Race bounded private peers instead of relying on one random peer.
+- Use custom overlay path for block and next-block catch-up where applicable.
+- Keep public overlay fallback for private timeout, no data, invalid data, or
+  unavailable peers.
+- Add metrics/logging for custom sync attempts and fallback decisions.
 
-This can create catch-up bursts where different nodes have the same network
-propagation but different local `shard_client_masterchain_seqno`, which shows up
-as shard seqno spread.
+Safety: downloaded blocks still pass the existing proof, hash, and validation
+checks. The private path only changes peer selection and fallback timing.
 
-### Proposed Change
+### Faster Public Fallback
 
-Keep a bounded pending notification map:
+Public archive recovery was also hardened:
+
+- Retry archive slices across public neighbours.
+- Race public fallback paths where a single selected peer can stall.
+- Add transport logs for public archive peer choice and result.
+- Keep public fallback available after failed custom import.
+
+This preserves upstream behavior as the fallback floor while making recovery
+less dependent on one unlucky public peer.
+
+### Near-Live Archive Handoff
+
+`ValidatorManagerImpl::out_of_sync()` now keeps archive recovery running closer
+to live before switching to live processing. The tested value reduces the
+handoff window from roughly 80 seconds to roughly 8 seconds.
+
+This makes the archive-to-live transition small enough that live shard-client
+notifications can bridge it immediately.
+
+### ShardClient Pending Masterchain Notifications
+
+Shard-client now keeps a bounded pending map of masterchain notifications:
 
 `seqno -> (BlockHandle, MasterchainState)`
 
 When a notification arrives while shard-client is busy:
 
-- Ignore old/current seqnos.
-- Store future seqnos in the pending map.
-- Prune old entries.
-- Cap the map at `MAX_PENDING_MASTERCHAIN_NOTIFICATIONS` entries.
+- Old/current seqnos are ignored.
+- Future seqnos are buffered.
+- The buffer is capped and pruned.
 
 After `saved_to_db()`:
 
-- Try to apply the exact next masterchain block from the pending map.
-- Require both seqno and full block id/hash to match `one_next(true)`.
-- If no exact next notification is buffered, fall back to the existing
+- Shard-client first tries the exact next pending masterchain notification.
+- The exact next block id/hash must match.
+- If no exact pending notification exists, it falls back to the original
   `get_block_handle()` / `wait_block_state()` path.
 
-### Safety
+This fixed the observed live handoff. On `worm`, pending live notifications were
+applied immediately after archive catch-up and shard-client stayed in lockstep
+with masterchain.
 
-This is memory bounded. The current patch caps the pending map at 16
-masterchain notifications. If shard-client is stuck for a long time, the map
-does not grow without bound; far-future entries are dropped and the old fallback
-path remains available.
+Safety: the buffer is bounded, does not skip masterchain blocks, and does not
+change validation rules.
 
-The code does not skip masterchain blocks. It applies only the exact next block
-expected by `masterchain_block_handle_->one_next(true)` and drops hash
-mismatches.
+### Recovery Log Levels
 
-The change is local scheduling/caching. It does not affect validation rules,
-block data, signatures, or consensus.
+Expected recovery-time broadcast failures were reduced from warning to info:
 
-### Test Plan
+- `broadcast is forbidden`
+- `peer is temporary banned`
+- `Non solvable`
 
-- Unit/build: build `validator` target.
-- Integration:
-  - Enable propagation/shard-client trace on two nodes.
-  - Compare `shardclient.mc_notification -> saved_to_db` before/after.
-  - Monitor `shard_client_masterchain_seqno` spread and shard seqno spread.
-  - Confirm no unbounded memory growth during high block rate or a stuck
-    shard-client.
+Real failures, for example bad signatures, remain warnings.
 
-### Upstream Status
+## Upstream PR Split
 
-Checked with:
-
-`gh api repos/ton-blockchain/ton/contents/validator/shard-client.cpp --jq '.content' | base64 -d`
-
-The upstream `ShardClient::new_masterchain_block_notification()` still contains
-`if (!waiting_) { return; }`.
-
-## Suggested PR Split
-
-## 3. Use Custom Overlay Peers For Block Catch-Up Downloads
-
-### Problem
-
-Custom overlays deliver live block broadcasts quickly, but a restarting node can
-still be behind by hundreds or thousands of masterchain blocks. The sequential
-catch-up path asks for block data through `DownloadBlockNew`.
-
-The public shard path creates `DownloadBlockNew("downloadnext", ...)` with an
-explicit public overlay peer chosen by `choose_neighbour()`. The custom overlay
-path must be equally explicit. Sending a custom download with a zero
-`download_from` lets `DownloadBlockNew` pick one random overlay peer and fail
-the whole attempt if that peer has no data or is slow.
-
-There is a second restart/catch-up failure mode: `send_get_block_request()` has
-a short overall timeout. If the first custom peer is slow or unreachable, it can
-consume the whole deadline and delay the public fallback. A single missing shard
-block can then keep `shard_client_masterchain_seqno` pinned while live
-masterchain broadcasts keep arriving.
-
-Observed symptom:
-
-- `ton_custom_overlay_block_broadcasts_received_total` grows quickly.
-- `ton_custom_overlay_block_broadcasts_applied_total` stays at zero while
-  `ValidatorManager` is not started.
-- `last_masterchain_block_ago` and `shard_client_ago` keep large lag despite
-  live custom broadcasts arriving in milliseconds.
-
-### Proposed Change
-
-Use custom overlay membership for explicit block catch-up downloads:
-
-- Prefer `block_senders_` as download peers.
-- Fall back to all custom overlay `nodes_`.
-- Exclude the local ADNL and zero ids.
-- Race bounded custom peers for `downloadBlockFull` and
-  `downloadNextBlockFull`, and use the first successful response.
-- Give each custom peer a small per-peer deadline while keeping the original
-  overall request deadline for the whole private attempt.
-- Keep the public overlay fallback if custom peers cannot serve the block.
-- Keep public fallback for `downloadNextBlockFull` as well, so private overlay
-  failures never make startup sync worse than the original public path.
-- Export Prometheus counters and latency summaries for custom sync attempts,
-  per-peer results, and public fallbacks.
-- Add gated `[custom-overlay-sync]` logs under `DTON_TRACE_BLOCK_PROPAGATION=1`
-  with `kind`, `sender`, `overlay`, `peer`, `block`, `result`, `reason`, and
-  latency.
-
-Also use the custom overlay first from `FullNodeShardImpl::try_get_next_block()`
-so startup `downloadNextBlockFull` can use private overlay data before falling
-back to the public shard overlay.
-
-### Safety
-
-The downloaded block still goes through the existing proof and hash checks in
-`DownloadBlockNew`. A custom peer that returns empty data, invalid data, or times
-out does not advance state and falls back to the next peer or to the public
-overlay.
-
-This is bounded by the configured custom overlay peer list and per-peer timeout.
-It does not create an unbounded queue or cache. The private race increases
-catch-up fanout only to the configured custom overlay peers, which is expected
-to be a small trusted set.
-
-### Test Plan
-
-- Build `validator-engine`.
-- Restart one private-overlay full node while it is behind.
-- Verify custom `downloadNextBlockFull` requests reach explicit custom peers.
-- Verify `ton_custom_overlay_sync_downloads_total{sender="quic",result="ok"}`
-  grows and `ton_custom_overlay_sync_fallbacks_total` stays low.
-- Verify `[custom-overlay-sync]` logs show `peer.done result=ok` before public
-  fallback.
-- Verify `last_masterchain_block_ago` catches up faster than the public-only
-  path.
-- Verify live broadcasts switch from `node_not_started` drops to normal
-  validation/application after catch-up.
-
-## 4. Make Initial Sync Delay Configurable For Fast Private Nodes
-
-### Problem
-
-`FullNodeOptions::initial_sync_delay_` defaults to 60 seconds. Even when block
-catch-up is already complete, this adds an artificial restart delay before
-`initial_read_complete()` lets `ValidatorManager` accept broadcasts and
-liteserver queries.
-
-### Proposed Change
-
-For private-overlay deployments that are expected to restart and catch up
-quickly, set `--initial-sync-delay 0` or make the deployment entrypoint expose an
-environment variable for this flag.
-
-The local test image changes the binary default to `0.0` so the current k8s
-entrypoint, which does not pass the flag, can validate the behavior.
-
-### Safety
-
-This is an operational startup delay, not a consensus rule. Operators that still
-want the old grace period can explicitly set `--initial-sync-delay 60`.
-
-## Suggested PR Split
-
-Submit as separate PRs:
+These should be prepared as separate upstream PRs:
 
 1. `full-node: allow archive slice sync over custom overlays`
-2. `validator: buffer shard-client masterchain notifications while busy`
-3. `full-node: use custom overlay peers for block catch-up downloads`
-4. `validator-engine: expose fast initial sync delay for private deployments`
+2. `full-node: use custom overlay peers for block catch-up downloads`
+3. `full-node: keep public fallback fast for archive and block sync`
+4. `validator: keep archive recovery close to live before handoff`
+5. `validator: buffer shard-client masterchain notifications while busy`
+6. `overlay: reduce expected recovery broadcast log noise`
 
-They solve different bottlenecks and can be reviewed independently.
+The first three are transport and peer-selection improvements. The shard-client
+pending-notification change is independent and should be reviewed separately.
+The log-level change is also independent and can be a small PR.
+
+## Test Plan For Upstream
+
+- Build `validator-engine` and `validator`.
+- Run at least two archive nodes in the same private/custom overlay.
+- Restart one node while it is behind enough to trigger archive import.
+- Verify private overlay archive attempts are visible in logs/metrics.
+- Verify public fallback still completes sync when private peers are disabled or
+  unreachable.
+- Verify `shard_client_masterchain_seqno` catches up without a post-archive
+  bounce.
+- Verify `wait_state.done` after live handoff is normally in milliseconds.
+- Verify the pending notification buffer does not grow without bound during a
+  deliberately stalled shard-client.
+- Verify recovery-time `Non solvable` broadcast logs are not warnings, while
+  bad signatures and real errors remain warnings.
+
+## Files Touched By This Work
+
+- `validator/full-node-custom-overlays.*`
+- `validator/full-node.*`
+- `validator/full-node-shard.*`
+- `validator/net/download-archive-slice.*`
+- `validator/custom-overlay-metrics.h`
+- `validator/shard-client.*`
+- `validator/manager.*`
+- `validator/import-db-slice.*`
+- `validator/interfaces/validator-manager.h`
+- `overlay/overlay.cpp`
+- `validator-engine/prometheus/PrometheusExporterActor.cpp`
+
+There are also local product changes in `lite-server-daemon/adnl-lite-proxy.cpp`
+for LiteServer usage reporting and balancer behavior. Those should not be mixed
+into the TON upstream sync PRs.
