@@ -320,24 +320,30 @@ void FullNodeShardImpl::download_next_block_after_local_lookup(BlockIdExt block_
   try_get_next_block(td::Timestamp::in(2.0), std::move(P));
 }
 
-void FullNodeShardImpl::retry_get_next_block_after_local_grace(BlockIdExt block_id, td::uint32 attempt) {
+void FullNodeShardImpl::retry_get_next_block_after_local_grace(BlockIdExt block_id, td::uint32 attempt,
+                                                              td::uint32 local_retry) {
+  static constexpr td::uint32 MAX_LOCAL_NEXT_RETRIES = 3;
+  static constexpr double LOCAL_NEXT_RETRY_DELAY_SEC = 0.2;
+
   if (handle_->id() != block_id) {
     LOG(WARNING) << "[fullnode-next] stage=local_grace"
                  << " prev=" << block_id.to_str()
                  << " current=" << handle_->id().to_str()
+                 << " local_retry=" << local_retry
                  << " result=skip"
                  << " reason=handle_already_advanced";
     get_next_block();
     return;
   }
   auto P = td::PromiseCreator::lambda(
-      [block_id, attempt, SelfId = actor_id(this)](td::Result<BlockHandle> R) mutable {
+      [block_id, attempt, local_retry, SelfId = actor_id(this)](td::Result<BlockHandle> R) mutable {
         if (R.is_ok()) {
           auto next = R.move_as_ok();
           if (next->received()) {
             LOG(WARNING) << "[fullnode-next] stage=local_grace"
                          << " prev=" << block_id.to_str()
                          << " next=" << next->id().to_str()
+                         << " local_retry=" << local_retry
                          << " result=ok";
             td::actor::send_closure(SelfId, &FullNodeShardImpl::got_next_block, std::move(next));
             return;
@@ -345,14 +351,25 @@ void FullNodeShardImpl::retry_get_next_block_after_local_grace(BlockIdExt block_
           LOG(WARNING) << "[fullnode-next] stage=local_grace"
                        << " prev=" << block_id.to_str()
                        << " next=" << next->id().to_str()
+                       << " local_retry=" << local_retry
                        << " result=fallback"
                        << " reason=next_not_received";
         } else {
           auto S = R.move_as_error();
           LOG(WARNING) << "[fullnode-next] stage=local_grace"
                        << " prev=" << block_id.to_str()
+                       << " local_retry=" << local_retry
                        << " result=fallback"
                        << " reason=" << S;
+        }
+        if (local_retry < MAX_LOCAL_NEXT_RETRIES) {
+          delay_action(
+              [SelfId, block_id, attempt, local_retry]() mutable {
+                td::actor::send_closure(SelfId, &FullNodeShardImpl::retry_get_next_block_after_local_grace, block_id,
+                                        attempt, local_retry + 1);
+              },
+              td::Timestamp::in(LOCAL_NEXT_RETRY_DELAY_SEC));
+          return;
         }
         td::actor::send_closure(SelfId, &FullNodeShardImpl::download_next_block_after_local_lookup, block_id, attempt);
       });
@@ -397,7 +414,7 @@ void FullNodeShardImpl::get_next_block() {
         delay_action(
             [SelfId, block_id, attempt]() mutable {
               td::actor::send_closure(SelfId, &FullNodeShardImpl::retry_get_next_block_after_local_grace, block_id,
-                                      attempt);
+                                      attempt, 0);
             },
             td::Timestamp::in(0.5));
       });
