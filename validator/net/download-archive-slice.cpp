@@ -335,6 +335,11 @@ void DownloadArchiveSlice::resolve_download_peers_timeout(td::uint64 query_id) {
 }
 
 void DownloadArchiveSlice::try_download(int index){
+  if (record_archive_sync_metrics_ && use_sender_for_prepare_query_ && index == 0 && download_from_list_.size() > 1) {
+    try_download_parallel();
+    return;
+  }
+
   download_from_ = download_from_list_[index];
   current_peer_index_ = index;
   current_peer_count_ = static_cast<int>(download_from_list_.size());
@@ -387,9 +392,98 @@ void DownloadArchiveSlice::try_download(int index){
   }
 }
 
+void DownloadArchiveSlice::try_download_parallel() {
+  current_peer_count_ = static_cast<int>(download_from_list_.size());
+  archive_info_parallel_ = true;
+  archive_info_pending_ = current_peer_count_;
+  archive_info_finished_by_peer_.assign(download_from_list_.size(), false);
+  archive_info_started_at_by_peer_.assign(download_from_list_.size(), 0.0);
+
+  auto query_id = ++archive_info_query_id_;
+  auto timeout = td::Timestamp::in(archive_info_timeout_seconds());
+  for (std::size_t i = 0; i < download_from_list_.size(); i++) {
+    auto index = static_cast<int>(i);
+    auto peer = download_from_list_[i];
+    archive_info_started_at_by_peer_[i] = block_propagation_trace_now();
+    record_custom_overlay_sync_peer_download(CustomOverlaySyncKind::Archive, archive_sync_sender_,
+                                             CustomOverlaySyncResult::Attempt);
+    LOG(WARNING) << "[archive-sync] stage=archive_info.start source=" << archive_source()
+                 << " transport=" << archive_prepare_transport() << " seqno=" << masterchain_seqno_
+                 << " shard=" << shard_prefix_.to_str()
+                 << " peer=" << peer << " peer_index=" << index << " peers=" << download_from_list_.size()
+                 << " mode=parallel result=start";
+
+    delay_action(
+        [SelfId = actor_id(this), query_id, index, total_nodes = current_peer_count_]() {
+          td::actor::send_closure(SelfId, &DownloadArchiveSlice::archive_info_timeout, query_id, index, total_nodes);
+        },
+        timeout);
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), query_id, index,
+                                         total_nodes = current_peer_count_](td::Result<td::BufferSlice> R) {
+      td::actor::send_closure(SelfId, &DownloadArchiveSlice::got_archive_info_result, query_id, index, total_nodes,
+                              std::move(R));
+    });
+
+    td::BufferSlice q;
+    if (shard_prefix_.is_masterchain()) {
+      q = create_serialize_tl_object<ton_api::tonNode_getArchiveInfo>(masterchain_seqno_);
+    } else {
+      q = create_serialize_tl_object<ton_api::tonNode_getShardArchiveInfo>(masterchain_seqno_,
+                                                                           create_tl_shard_id(shard_prefix_));
+    }
+    td::actor::send_closure(overlays_, &overlay::Overlays::send_query_via, peer, local_id_, overlay_id_,
+                            "get_archive_info", std::move(P), td::Timestamp::in(5.0), std::move(q),
+                            adnl::Adnl::huge_packet_max_size(), rldp_);
+  }
+}
+
 void DownloadArchiveSlice::got_archive_info_result(td::uint64 query_id, int index, int total_nodes,
                                                    td::Result<td::BufferSlice> result) {
   if (query_id != archive_info_query_id_) {
+    return;
+  }
+  if (archive_info_parallel_) {
+    if (index < 0 || index >= static_cast<int>(download_from_list_.size()) || archive_info_finished_by_peer_[index]) {
+      return;
+    }
+    auto peer = download_from_list_[index];
+    auto started_at = archive_info_started_at_by_peer_[index];
+    archive_info_finished_by_peer_[index] = true;
+    CHECK(archive_info_pending_ > 0);
+    archive_info_pending_--;
+    if (result.is_error()) {
+      auto error = result.move_as_error();
+      auto reason = archive_status_reason(error.clone());
+      record_custom_overlay_sync_peer_download(CustomOverlaySyncKind::Archive, archive_sync_sender_,
+                                               archive_sync_result_from_status(error), started_at,
+                                               block_propagation_trace_now());
+      LOG(WARNING) << "[archive-sync] stage=archive_info.done source=" << archive_source()
+                   << " transport=" << archive_prepare_transport() << " seqno=" << masterchain_seqno_
+                   << " shard=" << shard_prefix_.to_str()
+                   << " peer=" << peer << " peer_index=" << index << " peers=" << total_nodes
+                   << " mode=parallel ms=" << archive_elapsed_ms(started_at)
+                   << " result=error reason=" << reason;
+      if (archive_info_pending_ == 0) {
+        ++archive_info_query_id_;
+        archive_info_parallel_ = false;
+        abort_query(std::move(error));
+      }
+      return;
+    }
+    record_custom_overlay_sync_peer_download(CustomOverlaySyncKind::Archive, archive_sync_sender_,
+                                             CustomOverlaySyncResult::Ok, started_at,
+                                             block_propagation_trace_now());
+    LOG(WARNING) << "[archive-sync] stage=archive_info.done source=" << archive_source()
+                 << " transport=" << archive_prepare_transport() << " seqno=" << masterchain_seqno_
+                 << " shard=" << shard_prefix_.to_str()
+                 << " peer=" << peer << " peer_index=" << index << " peers=" << total_nodes
+                 << " mode=parallel ms=" << archive_elapsed_ms(started_at) << " result=ok";
+    download_from_ = peer;
+    current_peer_index_ = index;
+    current_peer_count_ = total_nodes;
+    ++archive_info_query_id_;
+    archive_info_parallel_ = false;
+    got_archive_info(result.move_as_ok());
     return;
   }
   if (result.is_error()) {
@@ -428,6 +522,31 @@ void DownloadArchiveSlice::got_archive_info_result(td::uint64 query_id, int inde
 
 void DownloadArchiveSlice::archive_info_timeout(td::uint64 query_id, int index, int total_nodes) {
   if (query_id != archive_info_query_id_) {
+    return;
+  }
+  if (archive_info_parallel_) {
+    if (index < 0 || index >= static_cast<int>(download_from_list_.size()) || archive_info_finished_by_peer_[index]) {
+      return;
+    }
+    auto peer = download_from_list_[index];
+    auto started_at = archive_info_started_at_by_peer_[index];
+    archive_info_finished_by_peer_[index] = true;
+    CHECK(archive_info_pending_ > 0);
+    archive_info_pending_--;
+    record_custom_overlay_sync_peer_download(CustomOverlaySyncKind::Archive, archive_sync_sender_,
+                                             CustomOverlaySyncResult::Timeout, started_at,
+                                             block_propagation_trace_now());
+    LOG(WARNING) << "[archive-sync] stage=archive_info.done source=" << archive_source()
+                 << " transport=" << archive_prepare_transport() << " seqno=" << masterchain_seqno_
+                 << " shard=" << shard_prefix_.to_str()
+                 << " peer=" << peer << " peer_index=" << index << " peers=" << total_nodes
+                 << " mode=parallel ms=" << archive_elapsed_ms(started_at)
+                 << " result=timeout reason=archive_info_timeout";
+    if (archive_info_pending_ == 0) {
+      ++archive_info_query_id_;
+      archive_info_parallel_ = false;
+      abort_query(td::Status::Error(ErrorCode::timeout, PSTRING() << archive_source() << " archive info timeout"));
+    }
     return;
   }
   if (record_archive_sync_metrics_) {
