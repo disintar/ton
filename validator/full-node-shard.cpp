@@ -285,10 +285,17 @@ void FullNodeShardImpl::got_next_block(td::Result<BlockHandle> R) {
   get_next_block();
 }
 
-void FullNodeShardImpl::get_next_block() {
-  attempt_++;
-  auto P = td::PromiseCreator::lambda([validator_manager = validator_manager_, attempt = attempt_,
-                                       block_id = handle_->id(), SelfId = actor_id(this)](td::Result<ReceivedBlock> R) {
+void FullNodeShardImpl::download_next_block_after_local_lookup(BlockIdExt block_id, td::uint32 attempt) {
+  if (handle_->id() != block_id) {
+    VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=download_skip"
+                          << " prev=" << block_id.to_str()
+                          << " current=" << handle_->id().to_str()
+                          << " reason=handle_already_advanced";
+    get_next_block();
+    return;
+  }
+  auto P = td::PromiseCreator::lambda([validator_manager = validator_manager_, attempt, block_id,
+                                       SelfId = actor_id(this)](td::Result<ReceivedBlock> R) {
     if (R.is_ok()) {
       auto P = td::PromiseCreator::lambda([SelfId](td::Result<BlockHandle> R) {
         td::actor::send_closure(SelfId, &FullNodeShardImpl::got_next_block, std::move(R));
@@ -311,6 +318,46 @@ void FullNodeShardImpl::get_next_block() {
     }
   });
   try_get_next_block(td::Timestamp::in(2.0), std::move(P));
+}
+
+void FullNodeShardImpl::get_next_block() {
+  attempt_++;
+  auto block_id = handle_->id();
+  auto attempt = attempt_;
+  auto P = td::PromiseCreator::lambda(
+      [block_id, attempt, SelfId = actor_id(this)](td::Result<BlockHandle> R) mutable {
+        if (R.is_ok()) {
+          auto next = R.move_as_ok();
+          if (next->received()) {
+            VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=local_next"
+                                  << " prev=" << block_id.to_str()
+                                  << " next=" << next->id().to_str()
+                                  << " result=ok";
+            td::actor::send_closure(SelfId, &FullNodeShardImpl::got_next_block, std::move(next));
+            return;
+          }
+          VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=local_next"
+                                << " prev=" << block_id.to_str()
+                                << " next=" << next->id().to_str()
+                                << " result=fallback"
+                                << " reason=next_not_received";
+        } else {
+          auto S = R.move_as_error();
+          if (S.code() != ErrorCode::notready && S.code() != ErrorCode::timeout) {
+            VLOG(FULL_NODE_WARNING) << "[fullnode-next] stage=local_next"
+                                    << " prev=" << block_id.to_str()
+                                    << " result=error"
+                                    << " reason=" << S;
+          } else {
+            VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=local_next"
+                                  << " prev=" << block_id.to_str()
+                                  << " result=fallback"
+                                  << " reason=" << S;
+          }
+        }
+        td::actor::send_closure(SelfId, &FullNodeShardImpl::download_next_block_after_local_lookup, block_id, attempt);
+      });
+  td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_next_block, block_id, std::move(P));
 }
 
 void FullNodeShardImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_getNextBlockDescription &query,
