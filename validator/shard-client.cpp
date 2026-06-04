@@ -381,12 +381,38 @@ void ShardClient::new_masterchain_block_notification(BlockHandle handle, td::Ref
   LOG(WARNING) << "[shardclient-sync] stage=mc_notification mc=" << handle->id().to_str()
                << " current=" << (masterchain_block_handle_ ? masterchain_block_handle_->id().to_str() : "none")
                << " waiting=" << (waiting_ ? 1 : 0)
-               << " pending=" << pending_masterchain_notifications_.size() << " result=ok";
+               << " pending=" << pending_masterchain_notifications_.size()
+               << " started=" << (started_ ? 1 : 0)
+               << " apply_active=" << (apply_active_ ? 1 : 0) << " result=ok";
   if (!masterchain_block_handle_ || handle->id().id.seqno <= masterchain_block_handle_->id().id.seqno) {
+    LOG(WARNING) << "[shardclient-sync] stage=mc_notification.drop mc=" << handle->id().to_str()
+                 << " current=" << (masterchain_block_handle_ ? masterchain_block_handle_->id().to_str() : "none")
+                 << " result=drop reason="
+                 << (!masterchain_block_handle_ ? "no_current_masterchain" : "old_masterchain");
+    return;
+  }
+  if (started_ && waiting_) {
+    LOG(WARNING) << "[shardclient-sync] stage=use_live_notification mc=" << handle->id().to_str()
+                 << " current=" << masterchain_block_handle_->id().to_str()
+                 << " pending=" << pending_masterchain_notifications_.size()
+                 << " apply_active=" << (apply_active_ ? 1 : 0)
+                 << " result=ok reason=live_handoff";
+    masterchain_block_handle_ = std::move(handle);
+    masterchain_state_ = std::move(state);
+    pending_masterchain_notifications_.clear();
+    waiting_ = false;
+    apply_active_ = false;
+    apply_all_shards();
     return;
   }
   pending_masterchain_notifications_[handle->id().id.seqno] = std::make_pair(std::move(handle), std::move(state));
   prune_pending_masterchain_notifications();
+  if (pending_masterchain_notifications_.empty()) {
+    LOG(WARNING) << "[shardclient-sync] stage=buffer_pending mc=none current="
+                 << masterchain_block_handle_->id().to_str()
+                 << " pending=0 result=drop reason=pruned";
+    return;
+  }
   LOG(WARNING) << "[shardclient-sync] stage=buffer_pending mc="
                << pending_masterchain_notifications_.rbegin()->second.first->id().to_str()
                << " current=" << masterchain_block_handle_->id().to_str()
