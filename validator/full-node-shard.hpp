@@ -19,6 +19,7 @@
 #pragma once
 
 #include <set>
+#include <string>
 
 #include "auto/tl/ton_api.h"
 #include "td/actor/PromiseFuture.h"
@@ -237,9 +238,33 @@ class FullNodeShardImpl : public FullNodeShard {
   const Neighbour &choose_neighbour(td::uint32 required_version_major = 0, td::uint32 required_version_minor = 0) const;
 
   template <typename T>
-  td::Promise<T> create_neighbour_promise(const Neighbour &x, td::Promise<T> p, bool require_state = false) {
+  td::Promise<T> create_neighbour_promise(const Neighbour &x, td::Promise<T> p, bool require_state = false,
+                                          const char *sync_stage = nullptr, std::string sync_target = {}) {
     return td::PromiseCreator::lambda([id = x.adnl_id, SelfId = actor_id(this), p = std::move(p),
-                                       ts = td::Time::now()](td::Result<T> R) mutable {
+                                       ts = td::Time::now(), sync_stage,
+                                       sync_target = std::move(sync_target)](td::Result<T> R) mutable {
+      auto elapsed_ms = static_cast<long long>((td::Time::now() - ts) * 1000.0);
+      if (sync_stage) {
+        if (R.is_error()) {
+          LOG(WARNING) << "[public-overlay-sync] stage=" << sync_stage << ".done"
+                       << " target=" << sync_target
+                       << " peer=" << id
+                       << " ms=" << elapsed_ms
+                       << " result=error reason=" << R.error().to_string();
+        } else if (elapsed_ms >= 800) {
+          LOG(WARNING) << "[public-overlay-sync] stage=" << sync_stage << ".done"
+                       << " target=" << sync_target
+                       << " peer=" << id
+                       << " ms=" << elapsed_ms
+                       << " result=slow_ok";
+        } else {
+          LOG(DEBUG) << "[public-overlay-sync] stage=" << sync_stage << ".done"
+                     << " target=" << sync_target
+                     << " peer=" << id
+                     << " ms=" << elapsed_ms
+                     << " result=ok";
+        }
+      }
       if (R.is_error() && R.error().code() != ErrorCode::notready && R.error().code() != ErrorCode::cancelled) {
         td::actor::send_closure(SelfId, &FullNodeShardImpl::update_neighbour_stats, id, td::Time::now() - ts, false);
       } else {

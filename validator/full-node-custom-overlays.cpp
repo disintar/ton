@@ -15,6 +15,7 @@
     along with TON Blockchain Library.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include <algorithm>
+#include <cstring>
 #include <mutex>
 
 #include "auto/tl/ton_api_json.h"
@@ -40,6 +41,7 @@ namespace {
 
 constexpr const char *k_called_from_custom = "custom";
 constexpr td::uint32 k_heavy_request_cost_unit = 1 << 21;
+constexpr long long CUSTOM_OVERLAY_SYNC_SLOW_LOG_MS = 800;
 
 size_t heavy_request_cost(td::uint64 requested_max_size) {
   size_t cost = static_cast<size_t>((requested_max_size + k_heavy_request_cost_unit - 1) / k_heavy_request_cost_unit);
@@ -94,15 +96,34 @@ CustomOverlaySyncResult custom_overlay_sync_result_from_status(const td::Status 
   return error.code() == ErrorCode::timeout ? CustomOverlaySyncResult::Timeout : CustomOverlaySyncResult::Error;
 }
 
+bool custom_sync_log_value_is(const char *value, const char *expected) {
+  return std::strcmp(value, expected) == 0;
+}
+
+bool should_log_custom_overlay_sync_stage(CustomOverlaySyncKind kind, const char *stage, const char *result,
+                                          long long ms) {
+  if (block_propagation_trace_enabled()) {
+    return true;
+  }
+  if (!custom_sync_log_value_is(stage, "custom.done")) {
+    return false;
+  }
+  if (!custom_sync_log_value_is(result, "ok")) {
+    return true;
+  }
+  return kind == CustomOverlaySyncKind::Archive || ms >= CUSTOM_OVERLAY_SYNC_SLOW_LOG_MS;
+}
+
 void log_custom_overlay_sync_stage(CustomOverlaySyncKind kind, CustomOverlaySyncSender sender,
                                    const std::string &overlay, const std::string &local,
                                    const std::string &peer, const CustomOverlaySyncLogTarget &target,
                                    const char *stage, const char *result, std::string reason, std::size_t peers,
                                    double started_at) {
-  if (!block_propagation_trace_enabled()) {
+  auto now = block_propagation_trace_now();
+  auto ms = block_propagation_trace_ms(started_at, now);
+  if (!should_log_custom_overlay_sync_stage(kind, stage, result, ms)) {
     return;
   }
-  auto now = block_propagation_trace_now();
   LOG(WARNING) << "[custom-overlay-sync]"
                << " stage=" << stage
                << " kind=" << custom_overlay_sync_kind_label(metric_index(kind))
@@ -116,7 +137,7 @@ void log_custom_overlay_sync_stage(CustomOverlaySyncKind kind, CustomOverlaySync
                << " shard=" << target.shard
                << " seqno=" << target.seqno
                << " peers=" << peers
-               << " ms=" << block_propagation_trace_ms(started_at, now)
+               << " ms=" << ms
                << " result=" << result
                << " reason=" << block_propagation_trace_sanitize(std::move(reason));
 }
@@ -202,21 +223,6 @@ void finish_custom_overlay_sync_download(std::shared_ptr<CustomOverlaySyncDownlo
   if (should_finish) {
     record_custom_overlay_sync_download(state->kind, state->sender, CustomOverlaySyncResult::Exhausted,
                                         state->started_at, now);
-    LOG(WARNING) << "[custom-overlay-sync]"
-                 << " stage=custom.done"
-                 << " kind=" << custom_overlay_sync_kind_label(metric_index(state->kind))
-                 << " source=custom"
-                 << " sender=" << custom_overlay_sync_sender_label(metric_index(state->sender))
-                 << " overlay=" << block_propagation_trace_sanitize(state->overlay_name)
-                 << " local=" << block_propagation_trace_sanitize(state->local_id)
-                 << " block=" << state->target.block
-                 << " wc=" << state->target.wc
-                 << " shard=" << state->target.shard
-                 << " seqno=" << state->target.seqno
-                 << " peers=" << state->peers_total
-                 << " ms=" << block_propagation_trace_ms(state->started_at, now)
-                 << " result=exhausted"
-                 << " reason=" << block_propagation_trace_sanitize(last_error);
     log_custom_overlay_sync_stage(state->kind, state->sender, state->overlay_name, state->local_id, "-", state->target,
                                   "custom.done", "exhausted", last_error, state->peers_total, state->started_at);
     promise.set_error(td::Status::Error(ErrorCode::notready,

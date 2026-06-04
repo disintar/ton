@@ -1089,18 +1089,56 @@ void FullNodeShardImpl::send_broadcast(BlockBroadcast broadcast) {
 void FullNodeShardImpl::download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                        td::Promise<ReceivedBlock> promise) {
   auto &b = choose_neighbour();
+  if (b.adnl_id == adnl::AdnlNodeIdShort::zero()) {
+    LOG(WARNING) << "[public-overlay-sync] stage=download_block.start"
+                 << " target=" << id.to_str()
+                 << " shard=" << shard_.to_str()
+                 << " peer=" << b.adnl_id
+                 << " neighbours=" << neighbours_.size()
+                 << " result=no_peer";
+  } else {
+    LOG(DEBUG) << "[public-overlay-sync] stage=download_block.start"
+               << " target=" << id.to_str()
+               << " shard=" << shard_.to_str()
+               << " peer=" << b.adnl_id
+               << " neighbours=" << neighbours_.size()
+               << " roundtrip=" << b.roundtrip
+               << " unreliability=" << b.unreliability
+               << " version=" << b.version_major << "." << b.version_minor
+               << " result=ok";
+  }
   td::actor::create_actor<DownloadBlockNew>("downloadreq", id, adnl_id_, overlay_id_, b.adnl_id, priority, timeout,
                                             validator_manager_, rldp2_, overlays_, adnl_, client_,
-                                            create_neighbour_promise(b, std::move(promise)))
+                                            create_neighbour_promise(b, std::move(promise), false,
+                                                                     "download_block", id.to_str()))
       .release();
 }
 
 void FullNodeShardImpl::download_next_block(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
                                             td::Promise<ReceivedBlock> promise) {
   auto &b = choose_neighbour();
+  if (b.adnl_id == adnl::AdnlNodeIdShort::zero()) {
+    LOG(WARNING) << "[public-overlay-sync] stage=download_next.start"
+                 << " target=" << prev_id.to_str()
+                 << " shard=" << shard_.to_str()
+                 << " peer=" << b.adnl_id
+                 << " neighbours=" << neighbours_.size()
+                 << " result=no_peer";
+  } else {
+    LOG(DEBUG) << "[public-overlay-sync] stage=download_next.start"
+               << " target=" << prev_id.to_str()
+               << " shard=" << shard_.to_str()
+               << " peer=" << b.adnl_id
+               << " neighbours=" << neighbours_.size()
+               << " roundtrip=" << b.roundtrip
+               << " unreliability=" << b.unreliability
+               << " version=" << b.version_major << "." << b.version_minor
+               << " result=ok";
+  }
   td::actor::create_actor<DownloadBlockNew>("downloadnextreq", adnl_id_, overlay_id_, prev_id, b.adnl_id, priority,
                                             timeout, validator_manager_, rldp2_, overlays_, adnl_, client_,
-                                            create_neighbour_promise(b, std::move(promise)))
+                                            create_neighbour_promise(b, std::move(promise), false,
+                                                                     "download_next", prev_id.to_str()))
       .release();
 }
 

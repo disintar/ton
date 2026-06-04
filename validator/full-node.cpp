@@ -26,6 +26,7 @@
 #include "ton/ton-tl.hpp"
 
 #include <algorithm>
+#include <cstring>
 #include <mutex>
 
 #include "block-propagation-trace.h"
@@ -40,11 +41,37 @@ namespace validator {
 namespace fullnode {
 
 static const double INACTIVE_SHARD_TTL = (double)overlay::Overlays::overlay_peer_ttl() + 60.0;
+constexpr long long CUSTOM_OVERLAY_SYNC_SLOW_LOG_MS = 800;
+
+bool log_value_is(const char *value, const char *expected) {
+  return std::strcmp(value, expected) == 0;
+}
+
+bool should_log_fullnode_overlay_sync_stage(const char *stage, const char *source, const char *result, long long ms) {
+  if (block_propagation_trace_enabled()) {
+    return true;
+  }
+  if (log_value_is(result, "error") || log_value_is(result, "timeout")) {
+    return true;
+  }
+  if (log_value_is(stage, "fullnode.custom_done")) {
+    return true;
+  }
+  if (log_value_is(stage, "fullnode.race_done")) {
+    return log_value_is(source, "public") || ms >= CUSTOM_OVERLAY_SYNC_SLOW_LOG_MS;
+  }
+  if (log_value_is(stage, "fullnode.public") && log_value_is(result, "direct")) {
+    return true;
+  }
+  return ms >= CUSTOM_OVERLAY_SYNC_SLOW_LOG_MS;
+}
 
 void log_fullnode_overlay_sync_stage(CustomOverlaySyncKind kind, const BlockIdExt &id, const char *stage,
                                      const char *source, const char *result, std::string reason,
-                                     std::string overlay = "-", std::string local = "-") {
-  if (!block_propagation_trace_enabled()) {
+                                     std::string overlay = "-", std::string local = "-", double started_at = 0.0) {
+  auto now = block_propagation_trace_now();
+  auto ms = started_at > 0.0 ? block_propagation_trace_ms(started_at, now) : -1;
+  if (!should_log_fullnode_overlay_sync_stage(stage, source, result, ms)) {
     return;
   }
   LOG(WARNING) << "[custom-overlay-sync]"
@@ -60,7 +87,7 @@ void log_fullnode_overlay_sync_stage(CustomOverlaySyncKind kind, const BlockIdEx
                << " shard=" << id.id.shard
                << " seqno=" << id.id.seqno
                << " peers=0"
-               << " ms=-1"
+               << " ms=" << ms
                << " result=" << result
                << " reason=" << block_propagation_trace_sanitize(std::move(reason));
 }
@@ -77,6 +104,7 @@ struct PublicFallbackRaceState {
   std::size_t pending{2};
   bool done{false};
   std::string last_error;
+  double started_at{block_propagation_trace_now()};
 };
 
 struct PublicArchiveFallbackRaceState {
@@ -109,7 +137,8 @@ void finish_public_fallback_race(std::shared_ptr<PublicFallbackRaceState> state,
       }
     }
     if (should_finish) {
-      log_fullnode_overlay_sync_stage(state->kind, state->block_id, "fullnode.race_done", source, "ok", {});
+      log_fullnode_overlay_sync_stage(state->kind, state->block_id, "fullnode.race_done", source, "ok", {}, "-", "-",
+                                      state->started_at);
       promise.set_value(std::move(value));
     }
     return;
@@ -136,7 +165,7 @@ void finish_public_fallback_race(std::shared_ptr<PublicFallbackRaceState> state,
   }
   if (should_finish) {
     log_fullnode_overlay_sync_stage(state->kind, state->block_id, "fullnode.race_done", source, "error",
-                                    error_string);
+                                    error_string, "-", "-", state->started_at);
     promise.set_error(td::Status::Error(ErrorCode::notready, PSTRING() << "custom and public overlay failed: "
                                                                        << error_string));
   }

@@ -32,6 +32,8 @@ namespace validator {
 namespace {
 constexpr double SHARD_CLIENT_WAIT_STATE_TIMEOUT = 30.0;
 constexpr double SHARD_CLIENT_APPLY_HANDOFF_TIMEOUT = 12.0;
+constexpr long long SHARD_CLIENT_SLOW_WAIT_STATE_MS = 250;
+constexpr long long SHARD_CLIENT_SLOW_APPLY_MS = 250;
 }
 
 void ShardClient::start_up() {
@@ -117,8 +119,8 @@ void ShardClient::applied_all_shards() {
   apply_active_ = false;
   log_block_propagation_stage(masterchain_block_handle_->id(), BlockPropagationTrace{}, "shardclient.applied_all_shards",
                               "shardclient", false, false, "ok", {}, 0.0, true);
-  LOG(WARNING) << "[shardclient-sync] stage=applied_all_shards mc=" << masterchain_block_handle_->id().to_str()
-               << " result=ok";
+  LOG(DEBUG) << "[shardclient-sync] stage=applied_all_shards mc=" << masterchain_block_handle_->id().to_str()
+             << " result=ok";
   LOG(DEBUG) << "shardclient: " << masterchain_block_handle_->id() << " finished";
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) {
     R.ensure();
@@ -132,9 +134,9 @@ void ShardClient::saved_to_db() {
   CHECK(masterchain_block_handle_);
   log_block_propagation_stage(masterchain_block_handle_->id(), BlockPropagationTrace{}, "shardclient.saved_to_db",
                               "shardclient", false, false, "ok", {}, 0.0, true);
-  LOG(WARNING) << "[shardclient-sync] stage=saved_to_db mc=" << masterchain_block_handle_->id().to_str()
-               << " pending=" << pending_masterchain_notifications_.size()
-               << " started=" << (started_ ? 1 : 0) << " result=ok";
+  LOG(DEBUG) << "[shardclient-sync] stage=saved_to_db mc=" << masterchain_block_handle_->id().to_str()
+             << " pending=" << pending_masterchain_notifications_.size()
+             << " started=" << (started_ ? 1 : 0) << " result=ok";
   td::actor::send_closure(manager_, &ValidatorManager::update_shard_client_block_handle, masterchain_block_handle_,
                           std::move(masterchain_state_), [](td::Result<>) {});
   masterchain_state_.clear();
@@ -164,7 +166,7 @@ void ShardClient::saved_to_db() {
 }
 
 void ShardClient::new_masterchain_block_id(BlockIdExt block_id) {
-  LOG(WARNING) << "[shardclient-sync] stage=next_from_db mc=" << block_id.to_str() << " result=start";
+  LOG(DEBUG) << "[shardclient-sync] stage=next_from_db mc=" << block_id.to_str() << " result=start";
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<BlockHandle> R) {
     R.ensure();
     td::actor::send_closure(SelfId, &ShardClient::got_masterchain_block_handle, R.move_as_ok());
@@ -173,22 +175,31 @@ void ShardClient::new_masterchain_block_id(BlockIdExt block_id) {
 }
 
 void ShardClient::got_masterchain_block_handle(BlockHandle handle) {
-  LOG(WARNING) << "[shardclient-sync] stage=got_mc_handle mc=" << handle->id().to_str() << " result=ok";
+  LOG(DEBUG) << "[shardclient-sync] stage=got_mc_handle mc=" << handle->id().to_str() << " result=ok";
   masterchain_block_handle_ = std::move(handle);
   download_masterchain_state();
 }
 
 void ShardClient::download_masterchain_state() {
   auto mc = masterchain_block_handle_->id();
-  LOG(WARNING) << "[shardclient-sync] stage=wait_mc_state.start mc=" << mc.to_str() << " result=start";
-  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), mc](td::Result<td::Ref<ShardState>> R) {
+  auto wait_started_at = block_propagation_trace_now();
+  LOG(DEBUG) << "[shardclient-sync] stage=wait_mc_state.start mc=" << mc.to_str() << " result=start";
+  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), mc, wait_started_at](td::Result<td::Ref<ShardState>> R) {
     if (R.is_error()) {
       auto error = R.move_as_error();
       LOG(WARNING) << "[shardclient-sync] stage=wait_mc_state.done mc=" << mc.to_str()
+                   << " ms=" << block_propagation_trace_ms(wait_started_at, block_propagation_trace_now())
                    << " result=error reason=" << error.to_string();
       td::actor::send_closure(SelfId, &ShardClient::download_masterchain_state);
     } else {
-      LOG(WARNING) << "[shardclient-sync] stage=wait_mc_state.done mc=" << mc.to_str() << " result=ok";
+      auto elapsed_ms = block_propagation_trace_ms(wait_started_at, block_propagation_trace_now());
+      if (elapsed_ms >= SHARD_CLIENT_SLOW_WAIT_STATE_MS) {
+        LOG(WARNING) << "[shardclient-sync] stage=wait_mc_state.done mc=" << mc.to_str()
+                     << " ms=" << elapsed_ms << " result=slow_ok";
+      } else {
+        LOG(DEBUG) << "[shardclient-sync] stage=wait_mc_state.done mc=" << mc.to_str()
+                   << " ms=" << elapsed_ms << " result=ok";
+      }
       td::actor::send_closure(SelfId, &ShardClient::got_masterchain_block_state,
                               td::Ref<MasterchainState>{R.move_as_ok()});
     }
@@ -211,11 +222,11 @@ void ShardClient::apply_all_shards() {
   applying_masterchain_block_id_ = masterchain_block_handle_->id();
   log_block_propagation_stage(masterchain_block_handle_->id(), BlockPropagationTrace{},
                               "shardclient.apply_all_shards.start", "shardclient", false, false, "ok", {}, 0.0, true);
-  LOG(WARNING) << "[shardclient-sync] stage=apply_all_shards.start mc=" << masterchain_block_handle_->id().to_str()
-               << " shards=" << masterchain_state_->get_shards().size()
-               << " generation=" << generation
-               << " handoff_timeout_ms=" << static_cast<int>(SHARD_CLIENT_APPLY_HANDOFF_TIMEOUT * 1000)
-               << " result=start";
+  LOG(DEBUG) << "[shardclient-sync] stage=apply_all_shards.start mc=" << masterchain_block_handle_->id().to_str()
+             << " shards=" << masterchain_state_->get_shards().size()
+             << " generation=" << generation
+             << " handoff_timeout_ms=" << static_cast<int>(SHARD_CLIENT_APPLY_HANDOFF_TIMEOUT * 1000)
+             << " result=start";
   LOG(DEBUG) << "shardclient: " << masterchain_block_handle_->id() << " started";
 
   auto mc = masterchain_block_handle_->id();
@@ -250,9 +261,9 @@ void ShardClient::apply_all_shards() {
       auto wait_started_at = block_propagation_trace_now();
       log_block_propagation_stage(block_id, BlockPropagationTrace{}, "shardclient.wait_state.start", "shardclient",
                                   false, false, "ok", {}, 0.0, true);
-      LOG(WARNING) << "[shardclient-sync] stage=wait_state.start mc=" << masterchain_block_handle_->id().to_str()
-                   << " shard=" << shard->shard().to_str() << " block=" << block_id.to_str()
-                   << " timeout_ms=" << static_cast<int>(SHARD_CLIENT_WAIT_STATE_TIMEOUT * 1000) << " result=start";
+      LOG(DEBUG) << "[shardclient-sync] stage=wait_state.start mc=" << masterchain_block_handle_->id().to_str()
+                 << " shard=" << shard->shard().to_str() << " block=" << block_id.to_str()
+                 << " timeout_ms=" << static_cast<int>(SHARD_CLIENT_WAIT_STATE_TIMEOUT * 1000) << " result=start";
       auto Q = td::PromiseCreator::lambda([SelfId = actor_id(this), promise = ig.get_promise(),
                                            mc = masterchain_block_handle_->id(),
                                            shard = shard->shard(), block_id, wait_started_at, generation](
@@ -270,11 +281,20 @@ void ShardClient::apply_all_shards() {
         } else {
           log_block_propagation_stage(block_id, BlockPropagationTrace{}, "shardclient.wait_state.done", "shardclient",
                                       false, false, "ok", {}, wait_started_at, true);
-          LOG(WARNING) << "[shardclient-sync] stage=wait_state.done mc=" << mc.to_str()
+          auto elapsed_ms = block_propagation_trace_ms(wait_started_at, block_propagation_trace_now());
+          if (elapsed_ms >= SHARD_CLIENT_SLOW_WAIT_STATE_MS) {
+            LOG(WARNING) << "[shardclient-sync] stage=wait_state.done mc=" << mc.to_str()
+                         << " shard=" << shard.to_str() << " block=" << block_id.to_str()
+                         << " generation=" << generation
+                         << " ms=" << elapsed_ms
+                         << " result=slow_ok";
+          } else {
+            LOG(DEBUG) << "[shardclient-sync] stage=wait_state.done mc=" << mc.to_str()
                        << " shard=" << shard.to_str() << " block=" << block_id.to_str()
                        << " generation=" << generation
-                       << " ms=" << block_propagation_trace_ms(wait_started_at, block_propagation_trace_now())
+                       << " ms=" << elapsed_ms
                        << " result=ok";
+          }
           td::actor::send_closure(SelfId, &ShardClient::downloaded_shard_state_for_masterchain, R.move_as_ok(), mc,
                                   generation, std::move(promise));
         }
@@ -289,9 +309,9 @@ void ShardClient::apply_all_shards() {
       auto wait_started_at = block_propagation_trace_now();
       log_block_propagation_stage(block_id, BlockPropagationTrace{}, "shardclient.wait_state.start", "shardclient",
                                   false, false, "ok", {}, 0.0, true);
-      LOG(WARNING) << "[shardclient-sync] stage=wait_state.start mc=" << masterchain_block_handle_->id().to_str()
-                   << " workchain=" << wc << " block=" << block_id.to_str()
-                   << " timeout_ms=" << static_cast<int>(SHARD_CLIENT_WAIT_STATE_TIMEOUT * 1000) << " result=start";
+      LOG(DEBUG) << "[shardclient-sync] stage=wait_state.start mc=" << masterchain_block_handle_->id().to_str()
+                 << " workchain=" << wc << " block=" << block_id.to_str()
+                 << " timeout_ms=" << static_cast<int>(SHARD_CLIENT_WAIT_STATE_TIMEOUT * 1000) << " result=start";
       auto Q = td::PromiseCreator::lambda([SelfId = actor_id(this), promise = ig.get_promise(),
                                            mc = masterchain_block_handle_->id(),
                                            workchain = wc, block_id, wait_started_at, generation](
@@ -309,11 +329,20 @@ void ShardClient::apply_all_shards() {
         } else {
           log_block_propagation_stage(block_id, BlockPropagationTrace{}, "shardclient.wait_state.done", "shardclient",
                                       false, false, "ok", {}, wait_started_at, true);
-          LOG(WARNING) << "[shardclient-sync] stage=wait_state.done mc=" << mc.to_str()
+          auto elapsed_ms = block_propagation_trace_ms(wait_started_at, block_propagation_trace_now());
+          if (elapsed_ms >= SHARD_CLIENT_SLOW_WAIT_STATE_MS) {
+            LOG(WARNING) << "[shardclient-sync] stage=wait_state.done mc=" << mc.to_str()
+                         << " workchain=" << workchain << " block=" << block_id.to_str()
+                         << " generation=" << generation
+                         << " ms=" << elapsed_ms
+                         << " result=slow_ok";
+          } else {
+            LOG(DEBUG) << "[shardclient-sync] stage=wait_state.done mc=" << mc.to_str()
                        << " workchain=" << workchain << " block=" << block_id.to_str()
                        << " generation=" << generation
-                       << " ms=" << block_propagation_trace_ms(wait_started_at, block_propagation_trace_now())
+                       << " ms=" << elapsed_ms
                        << " result=ok";
+          }
           td::actor::send_closure(SelfId, &ShardClient::downloaded_shard_state_for_masterchain, R.move_as_ok(), mc,
                                   generation, std::move(promise));
         }
@@ -339,8 +368,14 @@ void ShardClient::finish_apply_all_shards(BlockIdExt masterchain_block_id, std::
                  << " generation=" << generation << " result=error reason=" << reason;
     apply_all_shards();
   } else {
-    LOG(WARNING) << "[shardclient-sync] stage=apply_all_shards.done mc=" << masterchain_block_id.to_str()
-                 << " generation=" << generation << " result=ok";
+    auto elapsed_ms = block_propagation_trace_ms(apply_started_at_, block_propagation_trace_now());
+    if (elapsed_ms >= SHARD_CLIENT_SLOW_APPLY_MS) {
+      LOG(WARNING) << "[shardclient-sync] stage=apply_all_shards.done mc=" << masterchain_block_id.to_str()
+                   << " generation=" << generation << " ms=" << elapsed_ms << " result=slow_ok";
+    } else {
+      LOG(DEBUG) << "[shardclient-sync] stage=apply_all_shards.done mc=" << masterchain_block_id.to_str()
+                 << " generation=" << generation << " ms=" << elapsed_ms << " result=ok";
+    }
     applied_all_shards();
   }
 }
@@ -383,14 +418,14 @@ void ShardClient::new_masterchain_block_notification(BlockHandle handle, td::Ref
 
   log_block_propagation_stage(incoming_id, BlockPropagationTrace{}, "shardclient.mc_notification", "shardclient",
                               false, false, "ok", {}, 0.0, true);
-  LOG(WARNING) << "[shardclient-sync] stage=mc_notification mc=" << incoming_id.to_str()
-               << " current=" << (masterchain_block_handle_ ? current_id.to_str() : "none")
-               << " waiting=" << (waiting_ ? 1 : 0)
-               << " pending=" << pending_masterchain_notifications_.size()
-               << " started=" << (started_ ? 1 : 0)
-               << " apply_active=" << (apply_active_ ? 1 : 0)
-               << " incoming_seqno=" << incoming_seqno
-               << " current_seqno=" << current_seqno << " result=ok";
+  LOG(DEBUG) << "[shardclient-sync] stage=mc_notification mc=" << incoming_id.to_str()
+             << " current=" << (masterchain_block_handle_ ? current_id.to_str() : "none")
+             << " waiting=" << (waiting_ ? 1 : 0)
+             << " pending=" << pending_masterchain_notifications_.size()
+             << " started=" << (started_ ? 1 : 0)
+             << " apply_active=" << (apply_active_ ? 1 : 0)
+             << " incoming_seqno=" << incoming_seqno
+             << " current_seqno=" << current_seqno << " result=ok";
   if (!masterchain_block_handle_ || incoming_seqno <= current_seqno) {
     LOG(WARNING) << "[shardclient-sync] stage=mc_notification.drop mc=" << incoming_id.to_str()
                  << " current=" << (masterchain_block_handle_ ? current_id.to_str() : "none")
@@ -408,10 +443,10 @@ void ShardClient::new_masterchain_block_notification(BlockHandle handle, td::Ref
                  << " pending=0 result=drop reason=pruned";
     return;
   }
-  LOG(WARNING) << "[shardclient-sync] stage=buffer_pending mc="
-               << pending_masterchain_notifications_.rbegin()->second.first->id().to_str()
-               << " current=" << masterchain_block_handle_->id().to_str()
-               << " pending=" << pending_masterchain_notifications_.size() << " result=ok";
+  LOG(DEBUG) << "[shardclient-sync] stage=buffer_pending mc="
+             << pending_masterchain_notifications_.rbegin()->second.first->id().to_str()
+             << " current=" << masterchain_block_handle_->id().to_str()
+             << " pending=" << pending_masterchain_notifications_.size() << " result=ok";
   if (waiting_) {
     if (!try_apply_pending_masterchain_block()) {
       if (!apply_active_ && try_apply_latest_pending_masterchain_block("idle_notification")) {
@@ -437,8 +472,8 @@ bool ShardClient::try_apply_pending_masterchain_block() {
     pending_masterchain_notifications_.erase(it);
     return false;
   }
-  LOG(WARNING) << "[shardclient-sync] stage=use_pending mc=" << next_id.to_str()
-               << " pending=" << pending_masterchain_notifications_.size() << " result=ok";
+  LOG(DEBUG) << "[shardclient-sync] stage=use_pending mc=" << next_id.to_str()
+             << " pending=" << pending_masterchain_notifications_.size() << " result=ok";
   masterchain_block_handle_ = std::move(it->second.first);
   masterchain_state_ = std::move(it->second.second);
   pending_masterchain_notifications_.erase(it);
