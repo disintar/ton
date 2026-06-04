@@ -183,7 +183,8 @@ class FullNodeImpl : public FullNode {
     std::map<adnl::AdnlNodeIdShort, td::actor::ActorOwn<FullNodeCustomOverlay>> actors_;  // our local id -> actor
   };
   std::map<std::string, CustomOverlayInfo> custom_overlays_;
-  td::LRUCache<BlockIdExt, td::Unit> custom_overlays_sent_broadcasts_{256};
+  td::LRUCache<BlockIdExt, td::uint32> custom_overlays_sent_broadcasts_{256};
+  td::LRUCache<BlockIdExt, td::Unit> custom_overlays_sent_block_candidates_{256};
   td::LRUCache<BlockIdExt, td::Unit> custom_overlays_sent_shard_block_desc_{256};
 
   void update_private_overlays();

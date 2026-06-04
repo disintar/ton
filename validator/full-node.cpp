@@ -1227,10 +1227,15 @@ void FullNodeImpl::update_custom_overlay(CustomOverlayInfo &overlay) {
 }
 
 void FullNodeImpl::send_block_broadcast_to_custom_overlays(const BlockBroadcast &broadcast) {
-  if (custom_overlays_sent_broadcasts_.contains(broadcast.block_id)) {
+  constexpr td::uint32 sent_non_final_broadcast = 1;
+  constexpr td::uint32 sent_final_broadcast = 2;
+  auto sent_flag = !broadcast.sig_set.is_null() && broadcast.sig_set->is_final() ? sent_final_broadcast
+                                                                                 : sent_non_final_broadcast;
+  auto *sent_flags = custom_overlays_sent_broadcasts_.get_if_exists(broadcast.block_id);
+  if (sent_flags && (*sent_flags & sent_flag)) {
     return;
   }
-  custom_overlays_sent_broadcasts_.put(broadcast.block_id, {});
+  custom_overlays_sent_broadcasts_.put(broadcast.block_id, (sent_flags ? *sent_flags : 0) | sent_flag);
   for (auto &[_, private_overlay] : custom_overlays_) {
     if (private_overlay.params_.send_shard(broadcast.block_id.shard_full())) {
       for (auto &[local_id, actor] : private_overlay.actors_) {
@@ -1256,11 +1261,10 @@ void FullNodeImpl::send_block_broadcast_to_custom_overlays(const BlockBroadcast 
 void FullNodeImpl::send_block_candidate_broadcast_to_custom_overlays(const BlockIdExt &block_id, CatchainSeqno cc_seqno,
                                                                      td::uint32 validator_set_hash,
                                                                      const td::BufferSlice &data) {
-  // Same cache of sent broadcasts as in send_block_broadcast_to_custom_overlays
-  if (custom_overlays_sent_broadcasts_.contains(block_id)) {
+  if (custom_overlays_sent_block_candidates_.contains(block_id)) {
     return;
   }
-  custom_overlays_sent_broadcasts_.put(block_id, {});
+  custom_overlays_sent_block_candidates_.put(block_id, {});
   for (auto &[_, private_overlay] : custom_overlays_) {
     if (private_overlay.params_.send_shard(block_id.shard_full())) {
       for (auto &[local_id, actor] : private_overlay.actors_) {
