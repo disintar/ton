@@ -298,8 +298,11 @@ void OverlayImpl::receive_message(adnl::AdnlNodeIdShort src, tl_object_ptr<ton_a
       auto id = obj->get_id();
       auto status = (co_await self->process_broadcast(src, std::move(obj)).wrap()).move_as_status();
       if (status.is_error() && status.code() != ErrorCode::notready) {
-        auto log_level = status.message() == "broadcast is forbidden" ? VERBOSITY_NAME(INFO) : VERBOSITY_NAME(WARNING);
-        LOG(log_level) << "Failed to process broadcast (type=" << id << ") from " << src << ": " << status;
+        if (status.message() == "broadcast is forbidden") {
+          LOG(INFO) << "Failed to process broadcast (type=" << id << ") from " << src << ": " << status;
+        } else {
+          LOG(WARNING) << "Failed to process broadcast (type=" << id << ") from " << src << ": " << status;
+        }
       }
       co_return {};
     }(self, src, move_tl_object_as<std::remove_reference_t<decltype(object)>>(Q))
