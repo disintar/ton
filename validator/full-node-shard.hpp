@@ -97,6 +97,7 @@ class FullNodeShardImpl : public FullNodeShard {
   void try_get_next_block(td::Timestamp timestamp, td::Promise<ReceivedBlock> promise);
   void try_get_next_block_from_public_overlay(td::Timestamp timestamp, td::Promise<ReceivedBlock> promise);
   void got_next_block(td::Result<BlockHandle> block);
+  void try_get_next_block_from_overlay_hint(BlockIdExt block_id, td::uint32 attempt);
   void download_next_block_after_local_lookup(BlockIdExt block_id, td::uint32 attempt);
   void retry_get_next_block_after_local_grace(BlockIdExt block_id, td::uint32 attempt, td::uint32 local_retry = 0);
   void get_next_block();

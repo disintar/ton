@@ -43,6 +43,7 @@
 #include "full-node-serializer.hpp"
 #include "full-node-shard-queries.hpp"
 #include "full-node-shard.hpp"
+#include "overlay-gap-diagnostics.h"
 #include "overlays.h"
 
 namespace ton {
@@ -285,6 +286,86 @@ void FullNodeShardImpl::got_next_block(td::Result<BlockHandle> R) {
   get_next_block();
 }
 
+void FullNodeShardImpl::try_get_next_block_from_overlay_hint(BlockIdExt block_id, td::uint32 attempt) {
+  if (handle_->id() != block_id) {
+    VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=overlay_hint"
+                          << " prev=" << block_id.to_str()
+                          << " current=" << handle_->id().to_str()
+                          << " result=skip"
+                          << " reason=handle_already_advanced";
+    get_next_block();
+    return;
+  }
+
+  overlay_gap::Record hint;
+  if (!overlay_gap::find_next_hint(block_id, hint)) {
+    VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=overlay_hint"
+                          << " prev=" << block_id.to_str()
+                          << " result=fallback"
+                          << " reason=no_hint";
+    download_next_block_after_local_lookup(block_id, attempt);
+    return;
+  }
+
+  auto next_id = hint.block_id;
+  auto P = td::PromiseCreator::lambda([validator_manager = validator_manager_, block_id, next_id, attempt,
+                                       SelfId = actor_id(this)](td::Result<BlockHandle> R) mutable {
+    if (R.is_error()) {
+      VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=overlay_hint"
+                            << " prev=" << block_id.to_str()
+                            << " next=" << next_id.to_str()
+                            << " result=fallback"
+                            << " reason=" << R.move_as_error();
+      td::actor::send_closure(SelfId, &FullNodeShardImpl::download_next_block_after_local_lookup, block_id, attempt);
+      return;
+    }
+    auto handle = R.move_as_ok();
+    if (!handle->received()) {
+      VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=overlay_hint"
+                            << " prev=" << block_id.to_str()
+                            << " next=" << next_id.to_str()
+                            << " result=fallback"
+                            << " reason=hint_not_received";
+      td::actor::send_closure(SelfId, &FullNodeShardImpl::download_next_block_after_local_lookup, block_id, attempt);
+      return;
+    }
+
+    auto P_data = td::PromiseCreator::lambda([validator_manager, block_id, next_id, attempt,
+                                              SelfId](td::Result<td::BufferSlice> R) mutable {
+      if (R.is_error()) {
+        VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=overlay_hint"
+                              << " prev=" << block_id.to_str()
+                              << " next=" << next_id.to_str()
+                              << " result=fallback"
+                              << " reason=" << R.move_as_error();
+        td::actor::send_closure(SelfId, &FullNodeShardImpl::download_next_block_after_local_lookup, block_id, attempt);
+        return;
+      }
+      auto P_validate = td::PromiseCreator::lambda([block_id, next_id, SelfId](td::Result<BlockHandle> R) mutable {
+        if (R.is_error()) {
+          VLOG(FULL_NODE_WARNING) << "[fullnode-next] stage=overlay_hint"
+                                  << " prev=" << block_id.to_str()
+                                  << " next=" << next_id.to_str()
+                                  << " result=fallback"
+                                  << " reason=" << R.move_as_error();
+          td::actor::send_closure(SelfId, &FullNodeShardImpl::download_next_block_after_local_lookup, block_id, 0);
+          return;
+        }
+        VLOG(FULL_NODE_WARNING) << "[fullnode-next] stage=overlay_hint"
+                                << " prev=" << block_id.to_str()
+                                << " next=" << next_id.to_str()
+                                << " result=ok";
+        td::actor::send_closure(SelfId, &FullNodeShardImpl::got_next_block, std::move(R));
+      });
+      td::actor::send_closure(validator_manager, &ValidatorManagerInterface::validate_block,
+                              ReceivedBlock{next_id, R.move_as_ok()}, std::move(P_validate));
+    });
+    td::actor::send_closure(validator_manager, &ValidatorManagerInterface::get_block_data, handle, std::move(P_data));
+  });
+  td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_handle, next_id, false,
+                          std::move(P));
+}
+
 void FullNodeShardImpl::download_next_block_after_local_lookup(BlockIdExt block_id, td::uint32 attempt) {
   if (handle_->id() != block_id) {
     VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=download_skip"
@@ -371,7 +452,7 @@ void FullNodeShardImpl::retry_get_next_block_after_local_grace(BlockIdExt block_
               td::Timestamp::in(LOCAL_NEXT_RETRY_DELAY_SEC));
           return;
         }
-        td::actor::send_closure(SelfId, &FullNodeShardImpl::download_next_block_after_local_lookup, block_id, attempt);
+        td::actor::send_closure(SelfId, &FullNodeShardImpl::try_get_next_block_from_overlay_hint, block_id, attempt);
       });
   td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_next_block, block_id, std::move(P));
 }
