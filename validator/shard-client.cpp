@@ -391,20 +391,6 @@ void ShardClient::new_masterchain_block_notification(BlockHandle handle, td::Ref
                  << (!masterchain_block_handle_ ? "no_current_masterchain" : "old_masterchain");
     return;
   }
-  if (started_ && waiting_) {
-    LOG(WARNING) << "[shardclient-sync] stage=use_live_notification mc=" << handle->id().to_str()
-                 << " current=" << masterchain_block_handle_->id().to_str()
-                 << " pending=" << pending_masterchain_notifications_.size()
-                 << " apply_active=" << (apply_active_ ? 1 : 0)
-                 << " result=ok reason=live_handoff";
-    masterchain_block_handle_ = std::move(handle);
-    masterchain_state_ = std::move(state);
-    pending_masterchain_notifications_.clear();
-    waiting_ = false;
-    apply_active_ = false;
-    apply_all_shards();
-    return;
-  }
   pending_masterchain_notifications_[handle->id().id.seqno] = std::make_pair(std::move(handle), std::move(state));
   prune_pending_masterchain_notifications();
   if (pending_masterchain_notifications_.empty()) {
