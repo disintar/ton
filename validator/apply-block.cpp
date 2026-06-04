@@ -25,6 +25,7 @@
 #include "apply-block.hpp"
 #include "block-propagation-trace.h"
 #include "custom-overlay-metrics.h"
+#include "overlay-gap-diagnostics.h"
 
 namespace ton {
 
@@ -39,6 +40,9 @@ void ApplyBlock::trace_stage(const char *stage, const char *result, std::string 
 void ApplyBlock::abort_query(td::Status reason) {
   auto reason_str = reason.to_string();
   trace_stage("apply.abort", "error", reason_str);
+  if (from_custom_overlay_) {
+    overlay_gap::remember(id_, "apply.abort", trace_.overlay_name, trace_.src_adnl, reason_str);
+  }
   if (promise_) {
     VLOG(VALIDATOR_WARNING) << "aborting apply block query for " << id_.to_str() << ": " << reason;
     promise_.set_error(std::move(reason));
@@ -291,6 +295,7 @@ void ApplyBlock::applied_set() {
   VLOG(VALIDATOR_DEBUG) << "applied_set";
   handle_->set_applied();
   if (from_custom_overlay_) {
+    overlay_gap::remember(handle_->id(), "apply.applied_set", trace_.overlay_name, trace_.src_adnl);
     fullnode::record_custom_overlay_block_broadcast_applied();
   }
   auto publisher_ = manager_.get_actor_unsafe().get_block_publisher();

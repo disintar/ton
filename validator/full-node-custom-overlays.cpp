@@ -32,6 +32,7 @@
 #include "block-propagation-trace.h"
 #include "custom-overlay-metrics.h"
 #include "full-node-custom-overlays.hpp"
+#include "overlay-gap-diagnostics.h"
 #include "full-node-shard-queries.hpp"
 #include "full-node-serializer.hpp"
 
@@ -335,10 +336,14 @@ void FullNodeCustomOverlay::process_block_broadcast(PublicKeyHash src, ton_api::
   if (R_id.is_ok()) {
     if (block_broadcast_signature_set_visible(query) &&
         !mark_block_broadcast_received(R_id.ok(), block_broadcast_has_final_signature_set(query))) {
+      overlay_gap::remember(R_id.ok(), "custom.recv", name_, src.bits256_value().to_hex(), "duplicate_broadcast",
+                            block_broadcast_has_final_signature_set(query));
       log_block_propagation_stage(R_id.ok(), trace, "custom.recv", "custom", false, false, "drop",
                                   "duplicate_broadcast", received_at);
       return;
     }
+    overlay_gap::remember(R_id.ok(), "custom.recv", name_, src.bits256_value().to_hex(), {},
+                          block_broadcast_has_final_signature_set(query));
     log_block_propagation_stage(R_id.ok(), trace, "custom.recv", "custom", false, false, "ok", {}, received_at);
   }
   auto deserialize_started_at = block_propagation_trace_now();
@@ -355,6 +360,8 @@ void FullNodeCustomOverlay::process_block_broadcast(PublicKeyHash src, ton_api::
   auto broadcast = B.move_as_ok();
   trace.custom_deserialized_at = block_propagation_trace_now();
   broadcast.trace = trace;
+  overlay_gap::remember(broadcast.block_id, "custom.deserialize", name_, src.bits256_value().to_hex(), {},
+                        !broadcast.sig_set.is_null() && broadcast.sig_set->is_final());
   log_block_propagation_stage(broadcast, "custom.deserialize", "custom", "ok", {}, deserialize_started_at);
   VLOG(FULL_NODE_DEBUG) << "Received block broadcast " << (broadcast.sig_set->is_final() ? "" : "(approve signatures) ")
                         << "in custom overlay \"" << name_ << "\" from " << src << ": " << broadcast.block_id.to_str();
@@ -409,6 +416,8 @@ void FullNodeCustomOverlay::process_block_broadcast_with_state(PublicKeyHash src
   auto broadcast = B.move_as_ok();
   trace.custom_deserialized_at = block_propagation_trace_now();
   broadcast.trace = trace;
+  overlay_gap::remember(broadcast.block_id, "custom.deserialize", name_, src.bits256_value().to_hex(), {},
+                        !broadcast.sig_set.is_null() && broadcast.sig_set->is_final());
   log_block_propagation_stage(broadcast, "custom.deserialize", "custom", "ok", {}, deserialize_started_at);
   VLOG(FULL_NODE_DEBUG) << "Received block broadcast in custom overlay \"" << name_ << "\" from " << src << ": "
                         << broadcast.block_id.to_str();

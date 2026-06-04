@@ -22,6 +22,7 @@
 #include "apply-block.hpp"
 #include "block-propagation-trace.h"
 #include "fabric.h"
+#include "overlay-gap-diagnostics.h"
 #include "validate-broadcast.hpp"
 
 namespace ton {
@@ -37,6 +38,11 @@ void ValidateBroadcast::trace_stage(const char *stage, const char *result, std::
 void ValidateBroadcast::abort_query(td::Status reason) {
   auto reason_str = reason.to_string();
   trace_stage("validate.abort", "error", reason_str);
+  if (from_custom_overlay_) {
+    overlay_gap::remember(broadcast_.block_id, "validate.abort", broadcast_.trace.overlay_name,
+                          broadcast_.trace.src_adnl, reason_str,
+                          !broadcast_.sig_set.is_null() && broadcast_.sig_set->is_final());
+  }
   if (promise_) {
     VLOG(VALIDATOR_WARNING) << "aborting validate broadcast query for " << broadcast_.block_id.to_str() << ": "
                             << reason;

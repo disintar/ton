@@ -33,6 +33,7 @@
 #include "custom-overlay-metrics.h"
 #include "full-node.h"
 #include "full-node.hpp"
+#include "overlay-gap-diagnostics.h"
 
 namespace ton {
 
@@ -649,6 +650,7 @@ void FullNodeImpl::download_next_block(BlockIdExt prev_id, td::uint32 priority, 
     }
     shard_served_by_custom_overlay = true;
     for (auto &[local_id, actor] : custom_overlay.actors_) {
+      overlay_gap::log_download_next_decision(prev_id, "custom", name.c_str(), "race_public_fallback");
       log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, prev_id, "fullnode.custom_select", "custom",
                                       "attempt", {}, name, PSTRING() << local_id);
       auto state =
@@ -671,6 +673,7 @@ void FullNodeImpl::download_next_block(BlockIdExt prev_id, td::uint32 priority, 
         finish_public_fallback_race(std::move(state), "public", std::move(R));
       });
       record_public_overlay_sync_download(CustomOverlaySyncKind::NextBlock, PublicOverlaySyncReason::Fallback);
+      overlay_gap::log_download_next_decision(prev_id, "public", name.c_str(), "race_custom_overlay");
       log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, prev_id, "fullnode.public", "public",
                                       "fallback", "race_custom_overlay", name);
       td::actor::send_closure(actor, &FullNodeCustomOverlay::download_next_block, prev_id, priority, timeout,
@@ -683,9 +686,13 @@ void FullNodeImpl::download_next_block(BlockIdExt prev_id, td::uint32 priority, 
       CustomOverlaySyncKind::NextBlock,
       shard_served_by_custom_overlay
           ? CustomOverlaySyncFallbackReason::NoLocalActor
-          : (has_custom_overlay ? CustomOverlaySyncFallbackReason::ShardNotServed
-                                : CustomOverlaySyncFallbackReason::NoCustomOverlay));
+                                : (has_custom_overlay ? CustomOverlaySyncFallbackReason::ShardNotServed
+                                                      : CustomOverlaySyncFallbackReason::NoCustomOverlay));
   record_public_overlay_sync_download(CustomOverlaySyncKind::NextBlock, PublicOverlaySyncReason::Direct);
+  overlay_gap::log_download_next_decision(
+      prev_id, "public", "-", shard_served_by_custom_overlay
+                                ? "no_local_actor"
+                                : (has_custom_overlay ? "shard_not_served" : "no_custom_overlay"));
   log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, prev_id, "fullnode.public", "public", "direct",
                                   shard_served_by_custom_overlay
                                       ? "no_local_actor"
@@ -1056,6 +1063,7 @@ void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast, bool signat
   const bool final = final_known && broadcast.sig_set->is_final();
   const char *source = from_custom_overlay ? "custom" : "public";
   if (from_custom_overlay) {
+    overlay_gap::remember(block_id, "fullnode.process", trace.overlay_name, trace.src_adnl, {}, final_known && final);
     log_block_propagation_stage(broadcast, "fullnode.process", source, "ok", {}, trace.custom_deserialized_at);
   }
   if (from_custom_overlay) {
@@ -1066,6 +1074,10 @@ void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast, bool signat
                           signatures_checked, [block_id, trace, final_known, final, source](td::Result<td::Unit> R) {
                             if (R.is_error()) {
                               auto error = R.move_as_error();
+                              if (source == std::string{"custom"}) {
+                                overlay_gap::remember(block_id, "fullnode.process", trace.overlay_name, trace.src_adnl,
+                                                      error.to_string(), final_known && final);
+                              }
                               log_block_propagation_stage(block_id, trace, "fullnode.process", source, final_known, final,
                                                           error.code() == ErrorCode::notready ? "drop" : "error",
                                                           error.to_string(), trace.custom_deserialized_at);
