@@ -18,6 +18,7 @@
 */
 #pragma once
 
+#include <cstdint>
 #include <cstddef>
 #include <iterator>
 #include <map>
@@ -46,6 +47,10 @@ class ShardClient : public td::actor::Actor {
 
   std::vector<td::actor::ActorOwn<ShardClient>> children_;
 
+  std::uint64_t apply_generation_ = 0;
+  BlockIdExt applying_masterchain_block_id_;
+  double apply_started_at_ = 0.0;
+  bool apply_active_ = false;
   bool waiting_ = false;
   bool init_mode_ = false;
   bool started_ = false;
@@ -87,14 +92,19 @@ class ShardClient : public td::actor::Actor {
   void download_masterchain_state();
   void got_masterchain_block_state(td::Ref<MasterchainState> state);
   void apply_all_shards();
+  void finish_apply_all_shards(BlockIdExt masterchain_block_id, std::uint64_t generation, td::Status status);
   void downloaded_shard_state(td::Ref<ShardState> state, td::Promise<td::Unit> promise);
+  void downloaded_shard_state_for_masterchain(td::Ref<ShardState> state, BlockIdExt masterchain_block_id,
+                                              std::uint64_t generation, td::Promise<td::Unit> promise);
   void applied_all_shards();
   void saved_to_db();
 
   void new_masterchain_block_notification(BlockHandle handle, td::Ref<MasterchainState> state);
   bool try_apply_pending_masterchain_block();
+  bool try_apply_latest_pending_masterchain_block(const char *reason);
   bool try_apply_next_masterchain_block_from_db();
   void prune_pending_masterchain_notifications();
+  void apply_all_shards_timed_out(BlockIdExt masterchain_block_id, std::uint64_t generation);
 
   void get_processed_masterchain_block(td::Promise<BlockSeqno> promise);
   void get_processed_masterchain_block_id(td::Promise<BlockIdExt> promise);
