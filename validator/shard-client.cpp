@@ -371,7 +371,13 @@ void ShardClient::new_masterchain_block_notification(BlockHandle handle, td::Ref
 }
 
 bool ShardClient::try_apply_pending_masterchain_block() {
-  if (!waiting_ || !masterchain_block_handle_ || !masterchain_block_handle_->inited_next_left()) {
+  if (!waiting_ || !masterchain_block_handle_) {
+    return false;
+  }
+  if (!masterchain_block_handle_->inited_next_left() && !try_link_next_from_pending_masterchain_block()) {
+    return false;
+  }
+  if (!masterchain_block_handle_->inited_next_left()) {
     return false;
   }
   auto next_id = masterchain_block_handle_->one_next(true);
@@ -392,6 +398,45 @@ bool ShardClient::try_apply_pending_masterchain_block() {
   pending_masterchain_notifications_.erase(it);
   waiting_ = false;
   apply_all_shards();
+  return true;
+}
+
+bool ShardClient::try_link_next_from_pending_masterchain_block() {
+  if (!masterchain_block_handle_) {
+    return false;
+  }
+  auto current_id = masterchain_block_handle_->id();
+  auto it = pending_masterchain_notifications_.find(current_id.id.seqno + 1);
+  if (it == pending_masterchain_notifications_.end()) {
+    return false;
+  }
+  auto next_id = it->second.first->id();
+  if (!next_id.is_masterchain() || !current_id.is_masterchain() || next_id.id.seqno != current_id.id.seqno + 1) {
+    return false;
+  }
+  auto prev = it->second.first->prev();
+  if (prev.size() != 1 || prev[0] != current_id) {
+    LOG(WARNING) << "[shardclient-sync] stage=link_next_from_pending current=" << current_id.to_str()
+                 << " next=" << next_id.to_str() << " prev_count=" << prev.size() << " result=skip";
+    return false;
+  }
+  masterchain_block_handle_->set_next(next_id);
+  LOG(WARNING) << "[shardclient-sync] stage=link_next_from_pending current=" << current_id.to_str()
+               << " next=" << next_id.to_str() << " result=ok";
+  td::actor::send_closure(manager_, &ValidatorManager::set_next_block, current_id, next_id,
+                          [current_id, next_id](td::Result<td::Unit> R) {
+                            if (R.is_error()) {
+                              auto error = R.move_as_error();
+                              LOG(WARNING) << "[shardclient-sync] stage=link_next_from_pending.flush"
+                                           << " current=" << current_id.to_str()
+                                           << " next=" << next_id.to_str()
+                                           << " result=error reason=" << error.to_string();
+                            } else {
+                              LOG(WARNING) << "[shardclient-sync] stage=link_next_from_pending.flush"
+                                           << " current=" << current_id.to_str()
+                                           << " next=" << next_id.to_str() << " result=ok";
+                            }
+                          });
   return true;
 }
 
