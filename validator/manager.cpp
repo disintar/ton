@@ -2624,8 +2624,8 @@ void ValidatorManagerImpl::update_shards() {
       auto validator_id = get_validator(shard, val_set);
 
       auto consensus_config = last_masterchain_state_->get_new_consensus_config(shard.workchain);
-      bool want_observer = validator_id.is_zero() && consensus_config && consensus_config.value().enable_observers &&
-                           !observer_local_adnl_id.is_zero();
+      bool want_observer = validator_id.is_zero() && consensus_config &&
+                           consensus_config.value().enable_block_observers && !observer_local_adnl_id.is_zero();
 
       if (!validator_id.is_zero()) {
         ++(shard.is_masterchain() ? active_validator_groups_master_ : active_validator_groups_shard_);
@@ -2915,8 +2915,7 @@ td::actor::ActorOwn<IValidatorGroup> ValidatorManagerImpl::create_validator_grou
   return IValidatorGroup::create_bridge(
       PSTRING() << "valgroup" << shard, shard, validator_id, session_id, validator_set, key_seqno, config, keyring_,
       adnl_, config.use_quic ? td::actor::ActorId<adnl::AdnlSenderEx>{quic_} : rldp2_, overlays_, db_root_,
-      actor_id(this), get_collation_manager(adnl_id), init_session,
-      opts_->check_unsafe_resync_allowed(validator_set->get_catchain_seqno()), opts_,
+      actor_id(this), get_collation_manager(adnl_id), init_session, opts_,
       opts_->need_monitor(shard, last_masterchain_state_), is_validator, adnl_id, std::move(overlay_members));
 }
 

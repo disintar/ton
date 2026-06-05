@@ -234,27 +234,11 @@ Config::Config(const ton::ton_api::engine_validator_config &config) {
 
 ton::tl_object_ptr<ton::ton_api::engine_validator_config> Config::tl() const {
   std::vector<ton::tl_object_ptr<ton::ton_api::engine_Addr>> addrs_vec;
-<<<<<<< .merge_file_JNDMPG
-  for (auto &x: addrs) {
-    if (x.second.proxy) {
-      addrs_vec.push_back(ton::create_tl_object<ton::ton_api::engine_addrProxy>(
-              static_cast<td::int32>(x.second.in_addr.get_ipv4()), x.second.in_addr.get_port(),
-              static_cast<td::int32>(x.first.addr.get_ipv4()), x.first.addr.get_port(), x.second.proxy->tl(),
-              std::vector<td::int32>(x.second.cats.begin(), x.second.cats.end()),
-              std::vector<td::int32>(x.second.priority_cats.begin(), x.second.priority_cats.end())));
-    } else {
-      addrs_vec.push_back(ton::create_tl_object<ton::ton_api::engine_addr>(
-              static_cast<td::int32>(x.first.addr.get_ipv4()), x.first.addr.get_port(),
-              std::vector<td::int32>(x.second.cats.begin(), x.second.cats.end()),
-              std::vector<td::int32>(x.second.priority_cats.begin(), x.second.priority_cats.end())));
-    }
-=======
   for (auto &x : addrs) {
     addrs_vec.push_back(ton::create_tl_object<ton::ton_api::engine_addr>(
         static_cast<td::int32>(x.first.addr.get_ipv4()), x.first.addr.get_port(),
         std::vector<td::int32>(x.second.cats.begin(), x.second.cats.end()),
         std::vector<td::int32>(x.second.priority_cats.begin(), x.second.priority_cats.end())));
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.CT3IiF3mvp
   }
   for (auto &x : quic_addrs) {
     addrs_vec.push_back(ton::create_tl_object<ton::ton_api::engine_quicAddr>(
@@ -380,15 +364,7 @@ td::Result<bool> Config::config_add_network_addr(td::IPAddress in_ip, td::IPAddr
       it->second.in_addr = in_ip;
       mod = true;
     }
-<<<<<<< .merge_file_JNDMPG
-    if (it->second.proxy != proxy) {
-      it->second.proxy = std::move(proxy);
-      mod = true;
-    }
-    for (auto &c: cats) {
-=======
     for (auto &c : cats) {
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.CT3IiF3mvp
       if (it->second.cats.insert(c).second) {
         mod = true;
       }
@@ -402,12 +378,7 @@ td::Result<bool> Config::config_add_network_addr(td::IPAddress in_ip, td::IPAddr
   } else {
     it = addrs.emplace(std::move(addr), AddrCats{}).first;
     it->second.in_addr = in_ip;
-<<<<<<< .merge_file_JNDMPG
-    it->second.proxy = std::move(proxy);
-    for (auto &c: cats) {
-=======
     for (auto &c : cats) {
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.CT3IiF3mvp
       it->second.cats.insert(c);
     }
     for (auto &c: prio_cats) {
@@ -1732,10 +1703,7 @@ td::Status ValidatorEngine::load_global_config() {
   if (key_proof_ttl_ != 0) {
     validator_options_.write().set_key_proof_ttl(key_proof_ttl_);
   }
-  for (auto seq: unsafe_catchains_) {
-    validator_options_.write().add_unsafe_resync_catchain(seq);
-  }
-  for (auto rot: unsafe_catchain_rotations_) {
+  for (auto rot : unsafe_catchain_rotations_) {
     validator_options_.write().add_unsafe_catchain_rotate(rot.first, rot.second.first, rot.second.second);
   }
   if (truncate_seqno_ > 0) {
@@ -1764,12 +1732,6 @@ td::Status ValidatorEngine::load_global_config() {
   }
   validator_options_.write().set_celldb_direct_io(celldb_direct_io_);
   validator_options_.write().set_celldb_preload_all(celldb_preload_all_);
-  if (catchain_max_block_delay_) {
-    validator_options_.write().set_catchain_max_block_delay(catchain_max_block_delay_.value());
-  }
-  if (catchain_max_block_delay_slow_) {
-    validator_options_.write().set_catchain_max_block_delay_slow(catchain_max_block_delay_slow_.value());
-  }
   validator_options_.write().set_permanent_celldb(permanent_celldb_);
   validator_options_.write().set_initial_sync_disabled(skip_key_sync_);
 
@@ -1791,7 +1753,6 @@ td::Status ValidatorEngine::load_global_config() {
     h.push_back(b);
   }
   validator_options_.write().set_hardforks(std::move(h));
-  validator_options_.write().set_catchain_broadcast_speed_multiplier(broadcast_speed_multiplier_catchain_);
   validator_options_.write().set_parallel_validation(parallel_validation_);
   validator_options_.write().set_db_event_fifo_path(db_event_fifo_path_);
 
@@ -1971,17 +1932,9 @@ void ValidatorEngine::load_empty_local_config(td::Promise<> promise) {
   auto ig = mp.init_guard();
   ig.add_promise(std::move(ret_promise));
 
-<<<<<<< .merge_file_JNDMPG
-  for (auto &addr: addrs_) {
-    config_
-            .config_add_network_addr(addr, addr, nullptr, std::vector<AdnlCategory>{0, 1, 2, 3},
-                                     std::vector<AdnlCategory>{})
-            .ensure();
-=======
   for (auto &addr : addrs_) {
     config_.config_add_network_addr(addr, addr, std::vector<AdnlCategory>{0, 1, 2, 3}, std::vector<AdnlCategory>{})
         .ensure();
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.CT3IiF3mvp
   }
 
   {
@@ -2049,17 +2002,9 @@ void ValidatorEngine::load_local_config(td::Promise<> promise) {
   auto ig = mp.init_guard();
   ig.add_promise(std::move(ret_promise));
 
-<<<<<<< .merge_file_JNDMPG
-  for (auto &addr: addrs_) {
-    config_
-            .config_add_network_addr(addr, addr, nullptr, std::vector<AdnlCategory>{0, 1, 2, 3},
-                                     std::vector<AdnlCategory>{})
-            .ensure();
-=======
   for (auto &addr : addrs_) {
     config_.config_add_network_addr(addr, addr, std::vector<AdnlCategory>{0, 1, 2, 3}, std::vector<AdnlCategory>{})
         .ensure();
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.CT3IiF3mvp
   }
 
   for (auto &local_id: conf.local_ids_) {
@@ -2396,15 +2341,7 @@ void ValidatorEngine::start_rldp() {
   CHECK(!peer_table.empty());
   CHECK(!keyring_.empty());
   quic_ = td::actor::create_actor<ton::quic::QuicSender>("QuicSender", peer_table, keyring_.get());
-<<<<<<< .merge_file_JNDMPG
-//  td::actor::send_closure(exporter_.get(), &ton::PrometheusExporter::register_collector<ton::quic::QuicSender>,
-//                          quic_.get());
-  td::actor::send_closure(rldp_, &ton::rldp::Rldp::set_default_mtu, 2048);
-=======
   td::actor::send_closure(quic_.get(), &ton::quic::QuicSender::set_quic_options, quic_options_);
-  td::actor::send_closure(exporter_.get(), &ton::PrometheusExporter::register_collector<ton::quic::QuicSender>,
-                          quic_.get());
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.CT3IiF3mvp
   td::actor::send_closure(rldp2_, &ton::rldp2::Rldp::set_default_mtu, 2048);
   started_rldp();
 }
@@ -2617,10 +2554,6 @@ void ValidatorEngine::start_control_interface() {
 
 void ValidatorEngine::started_control_interface(td::actor::ActorOwn<ton::adnl::AdnlExtServer> control_ext_server) {
   control_ext_server_ = std::move(control_ext_server);
-<<<<<<< .merge_file_JNDMPG
-  for (auto &s: config_.controls) {
-    add_control_interface(s.second.key, static_cast<td::uint16>(s.first));
-=======
 
   td::MultiPromise mp;
   auto ig = mp.init_guard();
@@ -2634,7 +2567,6 @@ void ValidatorEngine::started_control_interface(td::actor::ActorOwn<ton::adnl::A
 
   for (auto &s : config_.controls) {
     add_control_interface(s.second.key, static_cast<td::uint16>(s.first), ig.get_promise());
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.CT3IiF3mvp
 
     for (auto &p: s.second.clients) {
       add_control_process(s.second.key, static_cast<td::uint16>(s.first), p.first, p.second);
@@ -2656,7 +2588,6 @@ void ValidatorEngine::start_full_node_masters() {
 }
 
 void ValidatorEngine::started_full_node_masters() {
-<<<<<<< .merge_file_JNDMPG
   if (prometheus_available_) {
     prometheus_exporter_ = td::actor::create_actor<ton::PrometheusExporterActor>("PrometheusExporterActor",
                                                                                  prometheus_port_);
@@ -2668,10 +2599,7 @@ void ValidatorEngine::started_full_node_masters() {
     }
   }
 
-  started();
-=======
   start_control_interface();
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.CT3IiF3mvp
 }
 
 void ValidatorEngine::started() {
@@ -4123,15 +4051,6 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addListen
   });
 
   std::vector<td::uint8> cats;
-<<<<<<< .merge_file_JNDMPG
-  for (auto cat: query.categories_) {
-    TRY_RESULT_PROMISE(promise, c, td::narrow_cast_safe<td::uint8>(cat));
-    cats.push_back(c);
-  }
-  std::vector<td::uint8> prio_cats;
-  for (auto cat: query.priority_categories_) {
-    TRY_RESULT_PROMISE(promise, c, td::narrow_cast_safe<td::uint8>(cat));
-=======
   for (auto cat : query.categories_) {
     TRY_RESULT_PROMISE(P, c, td::narrow_cast_safe<td::uint8>(cat));
     cats.push_back(c);
@@ -4139,7 +4058,6 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addListen
   std::vector<td::uint8> prio_cats;
   for (auto cat : query.priority_categories_) {
     TRY_RESULT_PROMISE(P, c, td::narrow_cast_safe<td::uint8>(cat));
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.CT3IiF3mvp
     prio_cats.push_back(c);
   }
   try_add_listening_port(query.ip_, query.port_, std::move(cats), std::move(prio_cats), std::move(P));
@@ -4166,15 +4084,6 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_delListen
   });
 
   std::vector<td::uint8> cats;
-<<<<<<< .merge_file_JNDMPG
-  for (auto cat: query.categories_) {
-    TRY_RESULT_PROMISE(promise, c, td::narrow_cast_safe<td::uint8>(cat));
-    cats.push_back(c);
-  }
-  std::vector<td::uint8> prio_cats;
-  for (auto cat: query.priority_categories_) {
-    TRY_RESULT_PROMISE(promise, c, td::narrow_cast_safe<td::uint8>(cat));
-=======
   for (auto cat : query.categories_) {
     TRY_RESULT_PROMISE(P, c, td::narrow_cast_safe<td::uint8>(cat));
     cats.push_back(c);
@@ -4182,89 +4091,11 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_delListen
   std::vector<td::uint8> prio_cats;
   for (auto cat : query.priority_categories_) {
     TRY_RESULT_PROMISE(P, c, td::narrow_cast_safe<td::uint8>(cat));
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.CT3IiF3mvp
     prio_cats.push_back(c);
   }
   try_del_listening_port(query.ip_, query.port_, std::move(cats), std::move(prio_cats), std::move(P));
 }
 
-<<<<<<< .merge_file_JNDMPG
-void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addProxy &query, td::BufferSlice data,
-                                        ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise) {
-  if (!(perm & ValidatorEnginePermissions::vep_modify)) {
-    promise.set_value(create_control_query_error(td::Status::Error(ton::ErrorCode::error, "not authorized")));
-    return;
-  }
-  if (!started_) {
-    promise.set_value(create_control_query_error(td::Status::Error(ton::ErrorCode::notready, "not started")));
-    return;
-  }
-
-  auto R = ton::adnl::AdnlProxy::create(*query.proxy_.get());
-  if (R.is_error()) {
-    promise.set_value(create_control_query_error(R.move_as_error_prefix("bad proxy type: ")));
-    return;
-  }
-
-  auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to add listening proxy: ")));
-    } else {
-      promise.set_value(
-          ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
-    }
-  });
-
-  std::vector<td::uint8> cats;
-  for (auto cat: query.categories_) {
-    TRY_RESULT_PROMISE(promise, c, td::narrow_cast_safe<td::uint8>(cat));
-    cats.push_back(c);
-  }
-  std::vector<td::uint8> prio_cats;
-  for (auto cat: query.priority_categories_) {
-    TRY_RESULT_PROMISE(promise, c, td::narrow_cast_safe<td::uint8>(cat));
-    prio_cats.push_back(c);
-  }
-  try_add_proxy(query.in_ip_, query.in_port_, query.out_ip_, query.out_port_, R.move_as_ok(), std::move(cats),
-                std::move(prio_cats), std::move(P));
-}
-
-void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_delProxy &query, td::BufferSlice data,
-                                        ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise) {
-  if (!(perm & ValidatorEnginePermissions::vep_modify)) {
-    promise.set_value(create_control_query_error(td::Status::Error(ton::ErrorCode::error, "not authorized")));
-    return;
-  }
-  if (!started_) {
-    promise.set_value(create_control_query_error(td::Status::Error(ton::ErrorCode::notready, "not started")));
-    return;
-  }
-
-  auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<> R) mutable {
-    if (R.is_error()) {
-      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to del listening proxy: ")));
-    } else {
-      promise.set_value(
-          ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
-    }
-  });
-
-  std::vector<td::uint8> cats;
-  for (auto cat: query.categories_) {
-    TRY_RESULT_PROMISE(promise, c, td::narrow_cast_safe<td::uint8>(cat));
-    cats.push_back(c);
-  }
-  std::vector<td::uint8> prio_cats;
-  for (auto cat: query.priority_categories_) {
-    TRY_RESULT_PROMISE(promise, c, td::narrow_cast_safe<td::uint8>(cat));
-    prio_cats.push_back(c);
-  }
-
-  try_del_proxy(query.out_ip_, query.out_port_, std::move(cats), std::move(prio_cats), std::move(P));
-}
-
-=======
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.CT3IiF3mvp
 void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addQuicAddr &query, td::BufferSlice data,
                                         ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise) {
   if (!(perm & ValidatorEnginePermissions::vep_modify)) {
@@ -6014,12 +5845,6 @@ int main(int argc, char *argv[]) {
   p.add_option('\0', "session-logs", "file for validator session stats (default: {logname}.session-stats)",
                [&](td::Slice fname) { session_logs_file = fname.str(); });
   acts.push_back([&]() { td::actor::send_closure(x, &ValidatorEngine::set_session_logs_file, session_logs_file); });
-  p.add_checked_option(
-          'U', "unsafe-catchain-restore", "use SLOW and DANGEROUS catchain recover method", [&](td::Slice id) {
-              TRY_RESULT(seq, td::to_integer_safe<ton::CatchainSeqno>(id));
-              acts.push_back([&x, seq]() { td::actor::send_closure(x, &ValidatorEngine::add_unsafe_catchain, seq); });
-              return td::Status::OK();
-          });
   p.add_checked_option('F', "unsafe-catchain-rotate", "use forceful and DANGEROUS catchain rotation",
                        [&](td::Slice params) {
                            auto pos1 = params.find(':');
@@ -6152,6 +5977,7 @@ int main(int argc, char *argv[]) {
   p.add_option('\0', "unsynced-liteserver", "allow liteserver queries before node is fully synced", [&]() {
     acts.push_back([&x]() { td::actor::send_closure(x, &ValidatorEngine::set_unsynced_liteserver, true); });
   });
+  p.add_option('\0', "fast-state-serializer", "deprecated option (enabled by default)", [&]() {});
   p.add_checked_option(
           '\0', "catchain-max-block-delay", "delay before creating a new catchain block, in seconds (default: 0.4)",
           [&](td::Slice s) -> td::Status {
@@ -6209,18 +6035,6 @@ int main(int argc, char *argv[]) {
       '\0', "disable-state-serializer",
       "disable persistent state serializer (similar to set-state-serializer-enabled 0 in validator console)", [&]() {
         acts.push_back([&x]() { td::actor::send_closure(x, &ValidatorEngine::set_state_serializer_disabled_flag); });
-      });
-  p.add_checked_option(
-      '\0', "broadcast-speed-catchain",
-      "multiplier for broadcast speed in catchain overlays (experimental, default is 3.33, which is ~1 MB/s)",
-      [&](td::Slice s) -> td::Status {
-        auto v = td::to_double(s);
-        if (v <= 0.0) {
-          return td::Status::Error("broadcast-speed-catchain should be positive");
-        }
-        acts.push_back(
-            [&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_broadcast_speed_multiplier_catchain, v); });
-        return td::Status::OK();
       });
   p.add_checked_option(
       '\0', "broadcast-speed-public",
