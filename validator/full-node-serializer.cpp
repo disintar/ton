@@ -27,6 +27,11 @@
 
 namespace ton::validator::fullnode {
 
+td::Result<td::BufferSlice> serialize_block_broadcast(const BlockBroadcast& broadcast, std::string called_from) {
+  (void)called_from;
+  return serialize_block_broadcast(broadcast, true);
+}
+
 td::Result<td::BufferSlice> serialize_block_broadcast(const BlockBroadcast& broadcast, bool compression_enabled) {
   std::vector<tl_object_ptr<ton_api::tonNode_blockSignature>> sigs;
   for (auto& sig : broadcast.signatures) {
@@ -112,6 +117,14 @@ static td::Result<BlockBroadcast> deserialize_block_broadcast(ton_api::tonNode_b
 }
 
 td::Result<BlockBroadcast> deserialize_block_broadcast(ton_api::tonNode_Broadcast& obj,
+                                                       int max_decompressed_data_size, std::string called_from,
+                                                       td::Ref<vm::Cell> state) {
+  (void)called_from;
+  (void)state;
+  return deserialize_block_broadcast(obj, max_decompressed_data_size);
+}
+
+td::Result<BlockBroadcast> deserialize_block_broadcast(ton_api::tonNode_Broadcast& obj,
                                                        int max_decompressed_data_size) {
   td::Result<BlockBroadcast> B;
   ton_api::downcast_call(obj,
@@ -180,6 +193,13 @@ static td::Status deserialize_block_full(ton_api::tonNode_dataFullCompressedV2& 
 }
 
 td::Status deserialize_block_full(ton_api::tonNode_DataFull& obj, BlockIdExt& id, td::BufferSlice& proof,
+                                  td::BufferSlice& data, bool& is_proof_link, int max_decompressed_data_size,
+                                  td::Ref<vm::Cell> state) {
+  (void)state;
+  return deserialize_block_full(obj, id, proof, data, is_proof_link, max_decompressed_data_size);
+}
+
+td::Status deserialize_block_full(ton_api::tonNode_DataFull& obj, BlockIdExt& id, td::BufferSlice& proof,
                                   td::BufferSlice& data, bool& is_proof_link, int max_decompressed_data_size) {
   td::Status S;
   ton_api::downcast_call(
@@ -193,6 +213,13 @@ td::Status deserialize_block_full(ton_api::tonNode_DataFull& obj, BlockIdExt& id
                },
                [&](auto&) { S = td::Status::Error("unknown data type"); }));
   return S;
+}
+
+td::Result<td::BufferSlice> serialize_block_candidate_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno,
+                                                                td::uint32 validator_set_hash, td::Slice data,
+                                                                bool compression_enabled, std::string called_from) {
+  (void)called_from;
+  return serialize_block_candidate_broadcast(block_id, cc_seqno, validator_set_hash, data, compression_enabled);
 }
 
 td::Result<td::BufferSlice> serialize_block_candidate_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno,
@@ -253,6 +280,15 @@ static td::Status deserialize_block_candidate_broadcast(ton_api::tonNode_newBloc
   VLOG(FULL_NODE_DEBUG) << "Decompressing block candidate broadcast V2: " << obj.compressed_.size() << " -> "
                         << data.size();
   return td::Status::OK();
+}
+
+td::Status deserialize_block_candidate_broadcast(ton_api::tonNode_Broadcast& obj, BlockIdExt& block_id,
+                                                 CatchainSeqno& cc_seqno, td::uint32& validator_set_hash,
+                                                 td::BufferSlice& data, int max_decompressed_data_size,
+                                                 std::string called_from) {
+  (void)called_from;
+  return deserialize_block_candidate_broadcast(obj, block_id, cc_seqno, validator_set_hash, data,
+                                               max_decompressed_data_size);
 }
 
 td::Status deserialize_block_candidate_broadcast(ton_api::tonNode_Broadcast& obj, BlockIdExt& block_id,

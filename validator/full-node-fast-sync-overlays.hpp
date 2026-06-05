@@ -65,6 +65,7 @@ class FullNodeFastSyncOverlay : public td::actor::Actor {
   void set_validators(std::vector<PublicKeyHash> root_public_keys,
                       std::vector<adnl::AdnlNodeIdShort> current_validators_adnl);
   void set_member_certificate(overlay::OverlayMemberCertificate member_certificate);
+  void set_receive_broadcasts(bool value);
   void set_params(bool receive_broadcasts, bool send_twostep_broadcasts,
                   td::actor::ActorId<adnl::AdnlSenderEx> adnl_sender);
 

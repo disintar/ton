@@ -24,6 +24,7 @@
 #include "tl/tl_json.h"
 #include "auto/tl/ton_api_json.h"
 #include "full-node-serializer.hpp"
+#include "validator-full-id.hpp"
 
 namespace ton::validator::fullnode {
 
@@ -377,6 +378,18 @@ void FullNodeFastSyncOverlay::set_receive_broadcasts(bool value) {
   }
 }
 
+void FullNodeFastSyncOverlay::set_params(bool receive_broadcasts, bool send_twostep_broadcasts,
+                                         td::actor::ActorId<adnl::AdnlSenderEx> adnl_sender) {
+  bool recreate = receive_broadcasts != receive_broadcasts_;
+  receive_broadcasts_ = receive_broadcasts;
+  send_twostep_broadcasts_ = send_twostep_broadcasts;
+  adnl_sender_ = adnl_sender;
+  if (recreate && inited_) {
+    td::actor::send_closure(overlays_, &ton::overlay::Overlays::delete_overlay, local_id_, overlay_id_);
+    init();
+  }
+}
+
 void FullNodeFastSyncOverlay::get_stats_extra(td::Promise<std::string> promise) {
   auto res = create_tl_object<ton_api::engine_validator_fastSyncOverlayStats>();
   res->shard_ = shard_.to_str();
@@ -429,8 +442,11 @@ void FullNodeFastSyncOverlays::update_overlays(td::Ref<MasterchainState> state,
                                                std::set<adnl::AdnlNodeIdShort> my_adnl_ids,
                                                std::set<ShardIdFull> monitoring_shards,
                                                const FileHash &zero_state_file_hash,
+                                               double broadcast_speed_multiplier,
                                                const td::actor::ActorId<keyring::Keyring> &keyring,
                                                const td::actor::ActorId<adnl::Adnl> &adnl,
+                                               const td::actor::ActorId<rldp2::Rldp> &rldp2,
+                                               const td::actor::ActorId<quic::QuicSender> &quic,
                                                const td::actor::ActorId<overlay::Overlays> &overlays,
                                                const td::actor::ActorId<ValidatorManagerInterface> &validator_manager,
                                                const td::actor::ActorId<FullNode> &full_node) {
@@ -555,8 +571,8 @@ void FullNodeFastSyncOverlays::update_overlays(td::Ref<MasterchainState> state,
       if (overlay.empty()) {
         overlay = td::actor::create_actor<FullNodeFastSyncOverlay>(
             PSTRING() << "FastSyncOv" << shard.to_str(), local_id, shard, zero_state_file_hash, root_public_keys_,
-            current_validators_adnl_, overlays_info.current_certificate_, receive_broadcasts, keyring, adnl, overlays,
-            validator_manager, full_node);
+            current_validators_adnl_, overlays_info.current_certificate_, receive_broadcasts, false,
+            broadcast_speed_multiplier, keyring, adnl, rldp2, quic, overlays, validator_manager, full_node);
       } else {
         td::actor::send_closure(overlay, &FullNodeFastSyncOverlay::set_receive_broadcasts, receive_broadcasts);
         if (changed_certificate) {
