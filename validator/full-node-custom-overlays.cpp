@@ -26,11 +26,8 @@
 #include "net/download-proof.hpp"
 #include "td/utils/JsonBuilder.h"
 #include "tl/tl_json.h"
-<<<<<<< .merge_file_tnNtiD
 #include "ton/ton-shard.h"
-=======
 #include "ton/ton-io.hpp"
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.M1LzTgtHzZ
 #include "ton/ton-tl.hpp"
 
 #include "block-propagation-trace.h"
@@ -361,7 +358,6 @@ void FullNodeCustomOverlay::process_block_broadcast(PublicKeyHash src, ton_api::
     LOG(DEBUG) << "dropped broadcast: " << error;
     return;
   }
-<<<<<<< .merge_file_tnNtiD
   auto broadcast = B.move_as_ok();
   trace.custom_deserialized_at = block_propagation_trace_now();
   broadcast.trace = trace;
@@ -371,11 +367,6 @@ void FullNodeCustomOverlay::process_block_broadcast(PublicKeyHash src, ton_api::
   VLOG(FULL_NODE_DEBUG) << "Received block broadcast " << (broadcast.sig_set->is_final() ? "" : "(approve signatures) ")
                         << "in custom overlay \"" << name_ << "\" from " << src << ": " << broadcast.block_id.to_str();
   td::actor::send_closure(full_node_, &FullNode::process_block_broadcast, std::move(broadcast), false, true);
-=======
-  VLOG(FULL_NODE_DEBUG) << "Received block broadcast " << (B.ok().sig_set->is_final() ? "" : "(approve signatures) ")
-                        << "in custom overlay \"" << name_ << "\" from " << src << ": " << B.ok().block_id;
-  td::actor::send_closure(full_node_, &FullNode::process_block_broadcast, B.move_as_ok(), false);
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.M1LzTgtHzZ
 }
 
 void FullNodeCustomOverlay::obtain_state_for_decompression(PublicKeyHash src,
@@ -430,13 +421,8 @@ void FullNodeCustomOverlay::process_block_broadcast_with_state(PublicKeyHash src
                         !broadcast.sig_set.is_null() && broadcast.sig_set->is_final());
   log_block_propagation_stage(broadcast, "custom.deserialize", "custom", "ok", {}, deserialize_started_at);
   VLOG(FULL_NODE_DEBUG) << "Received block broadcast in custom overlay \"" << name_ << "\" from " << src << ": "
-<<<<<<< .merge_file_tnNtiD
                         << broadcast.block_id.to_str();
   td::actor::send_closure(full_node_, &FullNode::process_block_broadcast, std::move(broadcast), true, true);
-=======
-                        << B.ok().block_id;
-  td::actor::send_closure(full_node_, &FullNode::process_block_broadcast, B.move_as_ok(), true);
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.M1LzTgtHzZ
 }
 
 void FullNodeCustomOverlay::process_broadcast(PublicKeyHash src, ton_api::tonNode_externalMessageBroadcast &query) {

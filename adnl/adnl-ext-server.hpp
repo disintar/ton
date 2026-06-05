@@ -18,22 +18,16 @@
 */
 #pragma once
 
-#include <map>
-#include <set>
-
-<<<<<<< .merge_file_V33HoF
 #include <unordered_map>
 #include "adnl-peer-table.h"
-=======
-#include "td/actor/MultiPromise.h"
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.ZUtm7DxSJj
 #include "td/net/TcpListener.h"
-#include "td/utils/BufferedFd.h"
 #include "td/utils/crypto.h"
-
+#include "td/utils/BufferedFd.h"
 #include "adnl-ext-connection.hpp"
 #include "adnl-ext-server.h"
-#include "adnl-peer-table.h"
+
+#include <map>
+#include <set>
 
 namespace ton {
 
@@ -81,7 +75,7 @@ class AdnlInboundConnection : public AdnlExtConnection {
 
 class AdnlExtServerImpl : public AdnlExtServer {
  public:
-  void add_tcp_port(td::uint16 port, td::Promise<td::Unit> promise) override;
+  void add_tcp_port(td::uint16 port) override;
   void add_local_id(AdnlNodeIdShort id) override;
   void accepted(td::SocketFd fd);
   void stop(std::string ip_addr);
@@ -91,39 +85,23 @@ class AdnlExtServerImpl : public AdnlExtServer {
   void decrypt_init_packet(AdnlNodeIdShort dst, td::BufferSlice data, td::Promise<td::BufferSlice> promise);
 
   void start_up() override {
-    td::MultiPromise mp;
-    auto ig = mp.init_guard();
-    ig.add_promise(td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) {
-      td::actor::send_closure(SelfId, &AdnlExtServerImpl::initial_ports_bound);
-    }));
     for (auto &port : ports_) {
-      add_tcp_port(port, ig.get_promise());
+      add_tcp_port(port);
     }
     ports_.clear();
     alarm_timestamp() = td::Timestamp::in(1);
   }
 
-<<<<<<< .merge_file_V33HoF
   void alarm() override;
-=======
-  void initial_ports_bound() {
-    promise_.set_value(td::actor::ActorOwn{actor_id(this)});
-  }
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.ZUtm7DxSJj
 
   void reopen_port() {
   }
 
   AdnlExtServerImpl(td::actor::ActorId<AdnlPeerTable> adnl, std::vector<AdnlNodeIdShort> ids,
-<<<<<<< .merge_file_V33HoF
                     std::vector<td::uint16> ports)
       : peer_table_(adnl) {
     alarm_timestamp() = td::Timestamp::in(10);
 
-=======
-                    std::vector<td::uint16> ports, td::Promise<td::actor::ActorOwn<AdnlExtServer>> promise)
-      : promise_(std::move(promise)), peer_table_(adnl) {
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.ZUtm7DxSJj
     for (auto &id : ids) {
       add_local_id(id);
     }
@@ -133,7 +111,6 @@ class AdnlExtServerImpl : public AdnlExtServer {
   }
 
  private:
-  td::Promise<td::actor::ActorOwn<AdnlExtServer>> promise_;
   td::actor::ActorId<AdnlPeerTable> peer_table_;
   std::shared_ptr<AdnlInboundConnectionCallback> connection_callback_;
   std::set<AdnlNodeIdShort> local_ids_;

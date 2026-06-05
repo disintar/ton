@@ -16,35 +16,20 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "adnl/utils.hpp"
-#include "td/actor/MultiPromise.h"
-#include "ton/ton-io.hpp"
-#include "validator/fabric.h"
-#include "validator/invariants.hpp"
-
 #include "apply-block.hpp"
-#include "block-propagation-trace.h"
-#include "custom-overlay-metrics.h"
-#include "overlay-gap-diagnostics.h"
+#include "adnl/utils.hpp"
+#include "ton/ton-io.hpp"
+#include "validator/invariants.hpp"
+#include "td/actor/MultiPromise.h"
+#include "validator/fabric.h"
 
 namespace ton {
 
 namespace validator {
 
-void ApplyBlock::trace_stage(const char *stage, const char *result, std::string reason) {
-  log_block_propagation_stage(id_, trace_, stage, from_custom_overlay_ ? "custom" : "public", false, false, result,
-                              std::move(reason), trace_stage_started_at_);
-  trace_stage_started_at_ = block_propagation_trace_now();
-}
-
 void ApplyBlock::abort_query(td::Status reason) {
-  auto reason_str = reason.to_string();
-  trace_stage("apply.abort", "error", reason_str);
-  if (from_custom_overlay_) {
-    overlay_gap::remember(id_, "apply.abort", trace_.overlay_name, trace_.src_adnl, reason_str);
-  }
   if (promise_) {
-    VLOG(VALIDATOR_WARNING) << "aborting apply block query for " << id_ << ": " << reason;
+    VLOG(VALIDATOR_WARNING) << "aborting apply block query for " << id_.to_str() << ": " << reason;
     promise_.set_error(std::move(reason));
   }
   stop();
@@ -66,13 +51,7 @@ void ApplyBlock::alarm() {
 }
 
 void ApplyBlock::start_up() {
-<<<<<<< .merge_file_0nSLWz
-  trace_stage_started_at_ = trace_.custom_deserialized_at;
-  trace_stage("apply.start");
   VLOG(VALIDATOR_DEBUG) << "running apply_block for " << id_.to_str() << ", mc_seqno=" << masterchain_block_id_.seqno();
-=======
-  VLOG(VALIDATOR_DEBUG) << "running apply_block for " << id_ << ", mc_seqno=" << masterchain_block_id_.seqno();
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.fZTZE6FbJx
 
   if (id_.is_masterchain()) {
     masterchain_block_id_ = id_;
@@ -147,11 +126,11 @@ void ApplyBlock::got_block_handle(BlockHandle handle) {
     td::actor::send_closure(manager_, &ValidatorManager::set_block_data, handle_, block_, std::move(P));
   } else {
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), handle = handle_](td::Result<td::Ref<BlockData>> R) {
+      CHECK(handle->received());
       if (R.is_error()) {
         td::actor::send_closure(SelfId, &ApplyBlock::abort_query, R.move_as_error());
       } else {
-        CHECK(handle->received());
-        td::actor::send_closure(SelfId, &ApplyBlock::got_block_data, R.move_as_ok());
+        td::actor::send_closure(SelfId, &ApplyBlock::written_block_data);
       }
     });
 
@@ -159,11 +138,6 @@ void ApplyBlock::got_block_handle(BlockHandle handle) {
     td::actor::send_closure(manager_, &ValidatorManager::wait_block_data, handle_, apply_block_priority(), timeout_,
                             std::move(P));
   }
-}
-
-void ApplyBlock::got_block_data(td::Ref<BlockData> block) {
-  block_ = std::move(block);
-  written_block_data();
 }
 
 void ApplyBlock::written_block_data() {
@@ -205,7 +179,6 @@ void ApplyBlock::written_block_data() {
 }
 
 void ApplyBlock::got_cur_state(td::Ref<ShardState> state) {
-  trace_stage("apply.prev_state");
   VLOG(VALIDATOR_DEBUG) << "got_cur_state";
   state_ = std::move(state);
   CHECK(handle_->received_state());
@@ -213,7 +186,6 @@ void ApplyBlock::got_cur_state(td::Ref<ShardState> state) {
 }
 
 void ApplyBlock::written_state() {
-  trace_stage("apply.state_written");
   VLOG(VALIDATOR_DEBUG) << "written_state";
   if (handle_->is_applied() && handle_->processed()) {
     finish_query();
@@ -292,24 +264,33 @@ void ApplyBlock::applied_prev() {
     }
   });
   td::actor::send_closure(manager_, &ValidatorManager::new_block, handle_, state_, std::move(P));
+
 }
 
 void ApplyBlock::applied_set() {
-  trace_stage("apply.applied_set");
   VLOG(VALIDATOR_DEBUG) << "applied_set";
   handle_->set_applied();
-  if (from_custom_overlay_) {
-    overlay_gap::remember(handle_->id(), "apply.applied_set", trace_.overlay_name, trace_.src_adnl);
-    fullnode::record_custom_overlay_block_broadcast_applied();
-  }
   auto publisher_ = manager_.get_actor_unsafe().get_block_publisher();
   if (publisher_) {
     const auto handle_id = handle_->id();
-    auto final_publish = td::PromiseCreator::lambda([handle_id](td::Result<std::tuple<std::string, std::string>> R) {
-      if (R.is_error()) {
-        LOG(ERROR) << "Failed to register applied block for publish " << handle_id.to_str() << ": " << R.error();
-      }
-    });
+    const auto shard = handle_id.id.shard;
+    const auto wc = handle_id.id.workchain;
+
+    auto final_publish = td::PromiseCreator::lambda(
+        [handle_id, publisher = publisher_, shard, wc](td::Result<std::tuple<std::string, std::string>> R) {
+          if (R.is_ok()) {
+            const auto answer = R.move_as_ok();
+
+            // skip
+            if (!std::get<0>(answer).empty()) {
+              LOG(DEBUG) << "Send parsed data&state: " << handle_id.to_str();
+              publisher->enqueuePublishBlockData(wc, shard, std::get<0>(answer));
+              publisher->enqueuePublishBlockState(wc, shard, std::get<1>(answer));
+            }
+          } else {
+            LOG(ERROR) << "Skip publish block!";
+          }
+        });
 
     publisher_->storeBlockApplied(handle_->id(), std::move(final_publish));
   }
@@ -323,23 +304,14 @@ void ApplyBlock::applied_set() {
       if (R.is_error()) {
         td::actor::send_closure(SelfId, &ApplyBlock::abort_query, R.move_as_error());
       } else {
-        td::actor::send_closure(SelfId, &ApplyBlock::cleanup_and_finish);
+        td::actor::send_closure(SelfId, &ApplyBlock::finish_query);
       }
     });
     VLOG(VALIDATOR_DEBUG) << "flush handle";
     handle_->flush(manager_, handle_, std::move(P));
   } else {
-    cleanup_and_finish();
+    finish_query();
   }
-}
-
-void ApplyBlock::schedule_external_messages_cleanup() {
-  td::actor::send_closure(manager_, &ValidatorManager::cleanup_applied_external_messages, handle_, block_);
-}
-
-void ApplyBlock::cleanup_and_finish() {
-  schedule_external_messages_cleanup();
-  finish_query();
 }
 
 }  // namespace validator

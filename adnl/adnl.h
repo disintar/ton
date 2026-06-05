@@ -18,14 +18,13 @@
 */
 #pragma once
 
-#include "auto/tl/ton_api.h"
-#include "common/errorcode.h"
-#include "keyring/keyring.h"
 #include "td/actor/actor.h"
+#include "auto/tl/ton_api.h"
 #include "td/utils/port/IPAddress.h"
-
 #include "adnl-node-id.hpp"
 #include "adnl-node.h"
+#include "common/errorcode.h"
+#include "keyring/keyring.h"
 
 namespace ton {
 
@@ -50,12 +49,8 @@ public:
 class AdnlExtServer : public td::actor::Actor {
  public:
   virtual void add_local_id(AdnlNodeIdShort id) = 0;
-<<<<<<< .merge_file_1C7DEL
   virtual void add_tcp_port(td::uint16 port) = 0;
   virtual void set_connection_callback(std::shared_ptr<adnl::AdnlInboundConnectionCallback> callback) = 0;
-=======
-  virtual void add_tcp_port(td::uint16 port, td::Promise<td::Unit> promise) = 0;
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.rEJ7QTxjf2
   virtual ~AdnlExtServer() = default;
 };
 
@@ -79,11 +74,9 @@ class Adnl : public AdnlSenderInterface {
  public:
   class Callback {
    public:
-    virtual void receive_message(AdnlNodeIdShort src, AdnlNodeIdShort dst, td::BufferSlice data) {
-    }
+    virtual void receive_message(AdnlNodeIdShort src, AdnlNodeIdShort dst, td::BufferSlice data) = 0;
     virtual void receive_query(AdnlNodeIdShort src, AdnlNodeIdShort dst, td::BufferSlice data,
-                               td::Promise<td::BufferSlice> promise) {
-    }
+                               td::Promise<td::BufferSlice> promise) = 0;
     virtual ~Callback() = default;
   };
 
@@ -132,8 +125,6 @@ class Adnl : public AdnlSenderInterface {
   virtual void get_addr_list(AdnlNodeIdShort id, td::Promise<AdnlAddressList> promise) = 0;
   virtual void get_self_node(AdnlNodeIdShort id, td::Promise<AdnlNode> promise) = 0;
 
-  virtual void get_peer_node(AdnlNodeIdShort local_id, AdnlNodeIdShort peer_id, td::Promise<AdnlNode> promise) = 0;
-
   virtual void create_ext_server(std::vector<AdnlNodeIdShort> ids, std::vector<td::uint16> ports,
                                  td::Promise<td::actor::ActorOwn<AdnlExtServer>> promise) = 0;
   virtual void create_tunnel(AdnlNodeIdShort dst, td::uint32 size,
@@ -144,34 +135,10 @@ class Adnl : public AdnlSenderInterface {
   static td::actor::ActorOwn<Adnl> create(std::string db, td::actor::ActorId<keyring::Keyring> keyring);
 
   static std::string int_to_bytestring(td::int32 id) {
-    return std::string(reinterpret_cast<char*>(&id), 4);
+    return std::string(reinterpret_cast<char *>(&id), 4);
   }
 
   static td::int32 adnl_start_time();
-
- protected:
-  virtual void add_protected_peers(AdnlNodeIdShort local_id, std::vector<AdnlNodeIdShort> peer_ids) = 0;
-  virtual void remove_protected_peers(AdnlNodeIdShort local_id, std::vector<AdnlNodeIdShort> peer_ids) = 0;
-
- public:
-  // Protected peers are peers that cannot be GCd
-  class ProtectedPeersGuard {
-   public:
-    ProtectedPeersGuard() = default;
-    ProtectedPeersGuard(td::actor::ActorId<Adnl> adnl, AdnlNodeIdShort local_id, std::vector<AdnlNodeIdShort> peer_ids);
-    ProtectedPeersGuard(const ProtectedPeersGuard&) = delete;
-    ProtectedPeersGuard(ProtectedPeersGuard&& other) noexcept;
-    ~ProtectedPeersGuard();
-    ProtectedPeersGuard& operator=(const ProtectedPeersGuard& other) = delete;
-    ProtectedPeersGuard& operator=(ProtectedPeersGuard&& other) noexcept;
-
-   private:
-    td::actor::ActorId<Adnl> adnl_;
-    AdnlNodeIdShort local_id_;
-    std::vector<AdnlNodeIdShort> peer_ids_;
-
-    void reset();
-  };
 };
 
 }  // namespace adnl

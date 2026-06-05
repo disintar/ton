@@ -16,18 +16,18 @@
 
     Copyright 2019-2020 Telegram Systems LLP
 */
-#include <delay.h>
+#include "import-db-slice.hpp"
 
-#include "common/checksum.h"
-#include "downloaders/download-state.hpp"
-#include "td/actor/MultiPromise.h"
+#include "validator/db/fileref.hpp"
 #include "td/utils/overloaded.h"
+#include "validator/fabric.h"
+#include "td/actor/MultiPromise.h"
+#include "common/checksum.h"
 #include "td/utils/port/path.h"
 #include "ton/ton-io.hpp"
-#include "validator/db/fileref.hpp"
-#include "validator/fabric.h"
+#include "downloaders/download-state.hpp"
 
-#include "import-db-slice.hpp"
+#include <delay.h>
 
 namespace ton {
 
@@ -36,7 +36,6 @@ namespace validator {
 ArchiveImporter::ArchiveImporter(std::string db_root, td::Ref<MasterchainState> state, BlockSeqno shard_client_seqno,
                                  td::Ref<ValidatorManagerOptions> opts, td::actor::ActorId<ValidatorManager> manager,
                                  std::vector<std::string> to_import_files,
-                                 bool allow_custom_overlay,
                                  td::Promise<std::pair<BlockSeqno, BlockSeqno>> promise)
     : db_root_(std::move(db_root))
     , last_masterchain_state_(std::move(state))
@@ -46,7 +45,6 @@ ArchiveImporter::ArchiveImporter(std::string db_root, td::Ref<MasterchainState> 
     , manager_(manager)
     , to_import_files_(std::move(to_import_files))
     , use_imported_files_(!to_import_files_.empty())
-    , allow_custom_overlay_(allow_custom_overlay)
     , promise_(std::move(promise))
     , perf_timer_("import-slice", 10.0, [manager](double duration) {
       send_closure(manager, &ValidatorManager::add_perf_timer_stat, "import-slice", duration);
@@ -70,7 +68,7 @@ void ArchiveImporter::start_up() {
   LOG(INFO) << "Importing archive for masterchain seqno #" << start_import_seqno_ << " from net";
   td::actor::send_closure(manager_, &ValidatorManager::send_download_archive_request, start_import_seqno_,
                           ShardIdFull{masterchainId}, db_root_ + "/tmp/", td::Timestamp::in(3600.0),
-                          allow_custom_overlay_, [SelfId = actor_id(this)](td::Result<std::string> R) {
+                          [SelfId = actor_id(this)](td::Result<std::string> R) {
                             if (R.is_error()) {
                               td::actor::send_closure(SelfId, &ArchiveImporter::abort_query, R.move_as_error());
                             } else {
@@ -113,7 +111,7 @@ td::Status ArchiveImporter::process_package(std::string path, bool with_masterch
   auto package = std::make_shared<Package>(std::move(p));
 
   td::Status S = td::Status::OK();
-  td::Status package_status = package->iterate([&](std::string filename, td::BufferSlice, td::uint64 offset) -> bool {
+  package->iterate([&](std::string filename, td::BufferSlice, td::uint64 offset) -> bool {
     auto F = FileReference::create(filename);
     if (F.is_error()) {
       S = F.move_as_error();
@@ -160,10 +158,6 @@ td::Status ArchiveImporter::process_package(std::string path, bool with_masterch
     }
     return true;
   });
-  if (package_status.is_error()) {
-    // Not a fatal error - even partial import is OK
-    LOG(WARNING) << "Error reading " << path << " : " << package_status;
-  }
   return S;
 }
 
@@ -296,7 +290,7 @@ void ArchiveImporter::checked_all_masterchain_blocks() {
     return;
   }
   BlockIdExt block_id;
-  CHECK(last_masterchain_state_->get_old_mc_block_id(start_import_seqno_ - 1, block_id));
+  CHECK(last_masterchain_state_->get_old_mc_block_id(start_import_seqno_, block_id));
   td::actor::send_closure(manager_, &ValidatorManager::get_shard_state_from_db_short, block_id,
                           [SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
                             R.ensure();
@@ -332,10 +326,10 @@ void ArchiveImporter::download_shard_archives(td::Ref<MasterchainState> start_st
       if (opts_->need_monitor(shard_prefix, start_state)) {
         if (have_new_shards(last_masterchain_state_, start_state_, shard_prefix)) {
           ++pending_shard_archives_;
-          LOG(INFO) << "Downloading shard archive #" << start_import_seqno_ << " " << shard_prefix;
+          LOG(INFO) << "Downloading shard archive #" << start_import_seqno_ << " " << shard_prefix.to_str();
           download_shard_archive(shard_prefix);
         } else {
-          LOG(INFO) << "Not downloading shard archive #" << start_import_seqno_ << " " << shard_prefix
+          LOG(INFO) << "Not downloading shard archive #" << start_import_seqno_ << " " << shard_prefix.to_str()
                     << " : no new shard blocks";
         }
       }
@@ -351,19 +345,15 @@ void ArchiveImporter::download_shard_archives(td::Ref<MasterchainState> start_st
 void ArchiveImporter::download_shard_archive(ShardIdFull shard_prefix) {
   td::actor::send_closure(
       manager_, &ValidatorManager::send_download_archive_request, start_import_seqno_, shard_prefix, db_root_ + "/tmp/",
-      td::Timestamp::in(3600.0), allow_custom_overlay_,
+      td::Timestamp::in(3600.0),
       [SelfId = actor_id(this), seqno = start_import_seqno_, shard_prefix](td::Result<std::string> R) {
         if (R.is_error()) {
-<<<<<<< .merge_file_qjGzEC
           LOG(WARNING) << "Failed to download archive slice #" << seqno << " for shard " << shard_prefix.to_str() << " error: " << R.move_as_error().to_string();
-=======
-          LOG(WARNING) << "Failed to download archive slice #" << seqno << " for shard " << shard_prefix;
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.AoajWIJ0cD
           delay_action(
               [=]() { td::actor::send_closure(SelfId, &ArchiveImporter::download_shard_archive, shard_prefix); },
               td::Timestamp::in(2.0));
         } else {
-          LOG(DEBUG) << "Downloaded shard archive #" << seqno << " " << shard_prefix;
+          LOG(DEBUG) << "Downloaded shard archive #" << seqno << " " << shard_prefix.to_str();
           td::actor::send_closure(SelfId, &ArchiveImporter::downloaded_shard_archive, R.move_as_ok());
         }
       });
@@ -430,7 +420,7 @@ void ArchiveImporter::checked_shard_client_seqno(BlockSeqno seqno) {
 
 void ArchiveImporter::apply_shard_block(BlockIdExt block_id, BlockIdExt masterchain_block_id,
                                         td::Promise<td::Unit> promise) {
-  LOG(DEBUG) << "Applying shard block " << block_id.id;
+  LOG(DEBUG) << "Applying shard block " << block_id.id.to_str();
   auto P = td::PromiseCreator::lambda(
       [SelfId = actor_id(this), masterchain_block_id, promise = std::move(promise)](td::Result<BlockHandle> R) mutable {
         R.ensure();
@@ -533,7 +523,7 @@ void ArchiveImporter::check_shard_block_applied(BlockIdExt block_id, td::Promise
           if (!handle->is_applied()) {
             promise.set_error(td::Status::Error(ErrorCode::notready, "not applied"));
           } else {
-            LOG(DEBUG) << "Applied shard block " << handle->id().id;
+            LOG(DEBUG) << "Applied shard block " << handle->id().id.to_str();
             promise.set_value(td::Unit());
           }
         }

@@ -16,14 +16,11 @@ along with TON Blockchain Library.  If not, see <http://www.gnu.org/licenses/>.
 
 Copyright 2017-2020 Telegram Systems LLP
 */
-#include <sodium.h>
-
+#include "vm/dispatch.h"
 #include "vm/continuation.h"
 #include "vm/dict.h"
-#include "vm/dispatch.h"
 #include "vm/log.h"
 #include "vm/vm.h"
-
 #include "cp0.h"
 #include "memo.h"
 
@@ -181,24 +178,7 @@ if (cont_data) {
     if (copy >= 0) {
       skip = pass_args - copy;
     } else {
-<<<<<<< .merge_file_GlAdE1
       copy = pass_args;
-=======
-      new_stk = std::move(stack);
-      stack.clear();
-    }
-    // create return continuation using the remainder of current stack
-    Ref<OrdCont> ret = Ref<OrdCont>{true, std::move(code), cp, std::move(stack), ret_args};
-    ret.unique_write().get_cdata()->save.set_c0(std::move(old_c0));
-    set_stack(std::move(new_stk));
-    cr.set_c0(std::move(ret));  // ??? if codepage of code in ord_cont is unknown, will end up with incorrect c0
-    return jump_to(std::move(cont));
-  } else {
-    // have no continuation data, situation is somewhat simpler
-    int depth = stack->depth();
-    if (pass_args > depth) {
-      throw VmError{Excno::stk_und, "stack underflow while calling a continuation: not enough arguments on stack"};
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.bkxl1F7qmD
     }
   }
   // copy=-1 : pass whole stack, else pass top `copy` elements, drop next `skip` elements.
@@ -440,13 +420,6 @@ gas_limit = _limit;
 change_base(_limit);
 }
 
-VmState::~VmState() {
-  // Remove parent states one-by-one to avoid recursive destructor calls
-  while (parent) {
-    parent = std::move(parent->state.parent);
-  }
-}
-
 bool VmState::set_gas_limits(long long _max, long long _limit, long long _credit) {
 gas.set_limits(_max, _limit, _credit);
 return true;
@@ -674,29 +647,17 @@ int run_vm_code(Ref<CellSlice> code, Stack& stack, int flags, Ref<Cell>* data_pt
 }
 
 // may throw a dictionary exception; returns nullptr if library is not found in context
-Ref<Cell> VmState::load_library(td::ConstBitPtr hash_ptr) {
-  td::Bits256 hash{hash_ptr};
-  if (max_library_loads) {
-    if (max_library_loads.value() == loaded_libraries.size()) {
-      if (!loaded_libraries.contains(CellHash{hash})) {
-        VM_LOG(this) << "Cannot load library " << hash.to_hex() << " : max library loads exceeded ("
-                     << max_library_loads.value() << ")";
-        return {};
-      }
-    } else {
-      loaded_libraries.emplace(hash);
-    }
-  }
+Ref<Cell> VmState::load_library(td::ConstBitPtr hash) {
   std::unique_ptr<VmStateInterface> tmp_ctx;
   // install temporary dummy vm state interface to prevent charging for cell load operations during library lookup
   VmStateInterface::Guard guard{global_version >= 4 ? tmp_ctx.get() : VmStateInterface::get()};
   for (const auto& lib_collection : libraries) {
-    auto lib = lookup_library_in(hash_ptr, lib_collection);
+    auto lib = lookup_library_in(hash, lib_collection);
     if (lib.not_null()) {
       return lib;
     }
   }
-  missing_library = hash;
+  missing_library = td::Bits256{hash};
   return {};
 }
 
@@ -741,19 +702,19 @@ return res;
 }
 
 Ref<vm::Cell> lookup_library_in(td::ConstBitPtr key, vm::Dictionary& dict) {
-  try {
-    auto val = dict.lookup(key, 256);
-    if (val.is_null() || !val->have_refs()) {
-      return {};
-    }
-    auto root = val->prefetch_ref();
-    if (root.not_null() && !root->get_hash().bits().compare(key, 256)) {
-      return root;
-    }
-    return {};
-  } catch (vm::VmError&) {
+try {
+  auto val = dict.lookup(key, 256);
+  if (val.is_null() || !val->have_refs()) {
     return {};
   }
+  auto root = val->prefetch_ref();
+  if (root.not_null() && !root->get_hash().bits().compare(key, 256)) {
+    return root;
+  }
+  return {};
+} catch (vm::VmError) {
+  return {};
+}
 }
 
 Ref<vm::Cell> lookup_library_in(td::ConstBitPtr key, Ref<vm::Cell> lib_root) {
@@ -770,8 +731,6 @@ void VmState::run_child_vm(VmState&& new_state, bool return_data, bool return_ac
     new_state.log = std::move(log);
     new_state.libraries = std::move(libraries);
   }
-  new_state.loaded_libraries = std::move(loaded_libraries);
-  new_state.max_library_loads = max_library_loads;
   new_state.stack_trace = stack_trace;
   new_state.max_data_depth = max_data_depth;
   if (!isolate_gas) {
@@ -812,7 +771,6 @@ void VmState::restore_parent_vm(int res) {
   *this = std::move(parent->state);
   log = std::move(child_state.log);
   libraries = std::move(child_state.libraries);
-  loaded_libraries = std::move(child_state.loaded_libraries);
   steps += child_state.steps;
   if (!parent->isolate_gas) {
     loaded_cells = std::move(child_state.loaded_cells);

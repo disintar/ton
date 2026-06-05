@@ -244,13 +244,9 @@ void ValidatorManagerImpl::new_block_broadcast(BlockBroadcast broadcast, bool si
     promise.set_result(std::move(R));
   };
   BlockIdExt block_id = broadcast.block_id;
-<<<<<<< .merge_file_4rgn0X
   log_block_propagation_stage(broadcast, "manager.validate_create", source, "ok", {},
                               broadcast.trace.custom_deserialized_at);
   td::actor::create_actor<ValidateBroadcast>(PSTRING() << "broadcast" << block_id.id.to_str(), std::move(broadcast),
-=======
-  td::actor::create_actor<ValidateBroadcast>(PSTRING() << "broadcast" << block_id.id, std::move(broadcast),
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.k6I4tMtYQX
                                              last_masterchain_block_handle_, last_masterchain_state_,
                                              last_known_key_block_handle_, publisher_.get(), actor_id(this), td::Timestamp::in(20.0),
                                              std::move(promise), false, signatures_checked, from_custom_overlay)
@@ -2186,11 +2182,7 @@ bool ValidatorManagerImpl::out_of_sync() {
   if (shard_client_handle_->id().seqno() + 16 < last_masterchain_seqno_) {
     return true;
   }
-<<<<<<< .merge_file_4rgn0X
   if (last_masterchain_block_handle_->unix_time() + 8 > td::Clocks::system()) {
-=======
-  if (last_masterchain_block_handle_->unix_time() + 80 > td::Clocks::system()) {
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.k6I4tMtYQX
     return false;
   }
 

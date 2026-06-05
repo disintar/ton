@@ -16,35 +16,20 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
+#include "validate-broadcast.hpp"
+#include "fabric.h"
 #include "adnl/utils.hpp"
 #include "ton/ton-io.hpp"
-
 #include "apply-block.hpp"
-#include "block-propagation-trace.h"
-#include "fabric.h"
-#include "overlay-gap-diagnostics.h"
-#include "validate-broadcast.hpp"
 
 namespace ton {
 
 namespace validator {
 
-void ValidateBroadcast::trace_stage(const char *stage, const char *result, std::string reason) {
-  log_block_propagation_stage(broadcast_, stage, from_custom_overlay_ ? "custom" : "public", result, std::move(reason),
-                              trace_stage_started_at_);
-  trace_stage_started_at_ = block_propagation_trace_now();
-}
-
 void ValidateBroadcast::abort_query(td::Status reason) {
-  auto reason_str = reason.to_string();
-  trace_stage("validate.abort", "error", reason_str);
-  if (from_custom_overlay_) {
-    overlay_gap::remember(broadcast_.block_id, "validate.abort", broadcast_.trace.overlay_name,
-                          broadcast_.trace.src_adnl, reason_str,
-                          !broadcast_.sig_set.is_null() && broadcast_.sig_set->is_final());
-  }
   if (promise_) {
-    VLOG(VALIDATOR_WARNING) << "aborting validate broadcast query for " << broadcast_.block_id << ": " << reason;
+    VLOG(VALIDATOR_WARNING) << "aborting validate broadcast query for " << broadcast_.block_id.to_str() << ": "
+                            << reason;
     promise_.set_error(std::move(reason));
   }
   stop();
@@ -52,8 +37,8 @@ void ValidateBroadcast::abort_query(td::Status reason) {
 
 void ValidateBroadcast::finish_query() {
   if (promise_) {
-    VLOG(VALIDATOR_DEBUG) << "validated broadcast for " << broadcast_.block_id << " in " << perf_timer_.elapsed()
-                          << " s";
+    VLOG(VALIDATOR_DEBUG) << "validated broadcast for " << broadcast_.block_id.to_str() << " in "
+                          << perf_timer_.elapsed() << " s";
     promise_.set_result(td::Unit());
   }
   stop();
@@ -64,46 +49,31 @@ void ValidateBroadcast::alarm() {
 }
 
 void ValidateBroadcast::start_up() {
-<<<<<<< .merge_file_F5dg1r
-  trace_stage_started_at_ = broadcast_.trace.custom_deserialized_at;
-  trace_stage("validate.start");
   VLOG(VALIDATOR_DEBUG) << "received broadcast for " << broadcast_.block_id.to_str()
-=======
-  VLOG(VALIDATOR_DEBUG) << "received broadcast for " << broadcast_.block_id
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.MEAM30Mqrt
                         << " : last_mc_seqno=" << last_masterchain_state_->get_seqno()
                         << " last_key_block_seqno=" << last_known_masterchain_block_handle_->id().seqno();
   alarm_timestamp() = timeout_;
 
-  if (!signatures_only_) {
-    auto hash = sha256_bits256(broadcast_.data.as_slice());
-    if (hash != broadcast_.block_id.file_hash) {
-      abort_query(td::Status::Error(ErrorCode::protoviolation, "filehash mismatch"));
-      return;
-    }
+  auto hash = sha256_bits256(broadcast_.data.as_slice());
+  if (hash != broadcast_.block_id.file_hash) {
+    abort_query(td::Status::Error(ErrorCode::protoviolation, "filehash mismatch"));
+    return;
   }
 
   if (broadcast_.block_id.is_masterchain()) {
     if (last_masterchain_block_handle_->id().id.seqno >= broadcast_.block_id.id.seqno) {
-      if (signatures_only_) {
-        abort_query(td::Status::Error(ErrorCode::cancelled, "block is too old"));
-        return;
-      }
       finish_query();
       return;
     }
   }
 
-  if (broadcast_.sig_set.is_null()) {
-    abort_query(td::Status::Error(ErrorCode::protoviolation, "no signature set"));
+  sig_set_ = create_signature_set(std::move(broadcast_.signatures));
+  if (sig_set_.is_null()) {
+    abort_query(td::Status::Error(ErrorCode::protoviolation, "bad signature set"));
     return;
   }
 
   if (broadcast_.block_id.is_masterchain()) {
-    if (!broadcast_.sig_set->is_final()) {
-      abort_query(td::Status::Error(ErrorCode::protoviolation, "not final signature set for masterchain block"));
-      return;
-    }
     auto R = create_proof(broadcast_.block_id, broadcast_.proof.clone());
     if (R.is_error()) {
       abort_query(R.move_as_error_prefix("bad proof: "));
@@ -161,7 +131,7 @@ void ValidateBroadcast::start_up() {
 }
 
 void ValidateBroadcast::got_key_block_id(BlockIdExt block_id) {
-  VLOG(VALIDATOR_DEBUG) << "got_key_block_id " << block_id.id;
+  VLOG(VALIDATOR_DEBUG) << "got_key_block_id " << block_id.id.to_str();
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<BlockHandle> R) {
     if (R.is_error()) {
       td::actor::send_closure(SelfId, &ValidateBroadcast::abort_query,
@@ -174,7 +144,7 @@ void ValidateBroadcast::got_key_block_id(BlockIdExt block_id) {
 }
 
 void ValidateBroadcast::got_key_block_handle(ConstBlockHandle handle) {
-  VLOG(VALIDATOR_DEBUG) << "got_key_block_handle " << handle->id().id;
+  VLOG(VALIDATOR_DEBUG) << "got_key_block_handle " << handle->id().id.to_str();
   if (handle->id().seqno() == 0) {
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
       if (R.is_error()) {
@@ -230,11 +200,7 @@ void ValidateBroadcast::got_zero_state(td::Ref<MasterchainState> state) {
 }
 
 void ValidateBroadcast::check_signatures_common(td::Ref<ConfigHolder> conf) {
-  VLOG(VALIDATOR_DEBUG) << "checking signatures (" << (broadcast_.sig_set->is_final() ? "final" : "approve") << ")";
-  if (signatures_checked_) {
-    checked_signatures();
-    return;
-  }
+  VLOG(VALIDATOR_DEBUG) << "checking signatures";
   auto val_set = conf->get_validator_set(broadcast_.block_id.shard_full(), header_info_.utime, header_info_.cc_seqno);
   if (val_set.is_null()) {
     abort_query(td::Status::Error(ErrorCode::notready, "failed to compute validator set"));
@@ -250,12 +216,7 @@ void ValidateBroadcast::check_signatures_common(td::Ref<ConfigHolder> conf) {
       return;
     }
   }
-  td::Result<td::uint64> S;
-  if (broadcast_.sig_set->is_final()) {
-    S = broadcast_.sig_set->check_signatures(val_set, broadcast_.block_id);
-  } else {
-    S = broadcast_.sig_set->check_approve_signatures(val_set, broadcast_.block_id);
-  }
+  auto S = val_set->check_signatures(broadcast_.block_id.root_hash, broadcast_.block_id.file_hash, sig_set_);
   if (S.is_ok()) {
     checked_signatures();
   } else {
@@ -264,13 +225,7 @@ void ValidateBroadcast::check_signatures_common(td::Ref<ConfigHolder> conf) {
 }
 
 void ValidateBroadcast::checked_signatures() {
-  trace_stage("validate.signatures");
   VLOG(VALIDATOR_DEBUG) << "checked_signatures";
-  if (signatures_only_) {
-    finish_query();
-    return;
-  }
-
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<BlockHandle> R) {
     if (R.is_error()) {
       td::actor::send_closure(SelfId, &ValidateBroadcast::abort_query, R.move_as_error_prefix("db error: "));
@@ -283,7 +238,7 @@ void ValidateBroadcast::checked_signatures() {
 }
 
 void ValidateBroadcast::got_block_handle(BlockHandle handle) {
-  VLOG(VALIDATOR_DEBUG) << "got_block_handle " << handle->id().id;
+  VLOG(VALIDATOR_DEBUG) << "got_block_handle " << handle->id().id.to_str();
   handle_ = std::move(handle);
 
   auto dataR = create_block(broadcast_.block_id, broadcast_.data.clone());
@@ -306,12 +261,11 @@ void ValidateBroadcast::got_block_handle(BlockHandle handle) {
     }
   });
 
-  VLOG(VALIDATOR_DEBUG) << "writing block data for " << handle_->id().id;
+  VLOG(VALIDATOR_DEBUG) << "writing block data for " << handle_->id().id.to_str();
   td::actor::send_closure(manager_, &ValidatorManager::set_block_data, handle_, data_, std::move(P));
 }
 
 void ValidateBroadcast::written_block_data() {
-  trace_stage("validate.block_data_written");
   VLOG(VALIDATOR_DEBUG) << "written_block_data";
   if (handle_->id().is_masterchain()) {
     if (handle_->inited_proof()) {
@@ -354,7 +308,6 @@ void ValidateBroadcast::written_block_data() {
 }
 
 void ValidateBroadcast::checked_proof() {
-  trace_stage("validate.proof_checked");
   VLOG(VALIDATOR_DEBUG) << "checked_proof";
   if (handle_->inited_proof() && handle_->is_key_block()) {
     td::actor::send_closure(manager_, &ValidatorManager::update_last_known_key_block, handle_, false);
@@ -369,15 +322,8 @@ void ValidateBroadcast::checked_proof() {
     });
 
     VLOG(VALIDATOR_DEBUG) << "apply block";
-<<<<<<< .merge_file_F5dg1r
-    trace_stage("validate.apply_create");
     td::actor::create_actor<ApplyBlock>(PSTRING() << "apply" << handle_->id().id.to_str(), handle_->id(), data_,
-                                        handle_->id(), manager_, timeout_, std::move(P), from_custom_overlay_,
-                                        broadcast_.trace)
-=======
-    td::actor::create_actor<ApplyBlock>(PSTRING() << "apply" << handle_->id().id, handle_->id(), data_, handle_->id(),
-                                        manager_, timeout_, std::move(P))
->>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.MEAM30Mqrt
+                                        handle_->id(), manager_, timeout_, std::move(P))
         .release();
   } else {
     finish_query();
