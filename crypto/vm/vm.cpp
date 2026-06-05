@@ -34,6 +34,8 @@ ensure_throw(init_cp(0));
 init_cregs();
 }
 
+VmState::~VmState() = default;
+
 VmState::VmState(Ref<CellSlice> _code, int global_version, Ref<Stack> _stack, const GasLimits& gas, int flags,
                  Ref<Cell> _data, VmLog log, std::vector<Ref<Cell>> _libraries, Ref<Tuple> init_c7)
     : code(std::move(_code))
