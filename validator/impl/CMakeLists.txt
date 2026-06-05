@@ -51,4 +51,4 @@ target_include_directories(ton_validator PUBLIC
 )
 
 target_link_libraries(ton_validator PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} tdutils tdactor adnl tl_api tl_lite_api tl-lite-utils dht tdfec
-  overlay catchain validatorsession ton_crypto ton_block)
+  overlay validatorsession ton_crypto ton_block)
