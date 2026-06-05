@@ -103,8 +103,12 @@ class WaitBlockState : public td::actor::Actor {
   td::Promise<td::Ref<ShardState>> promise_final_;
   td::Ref<PersistentStateDescription> persistent_state_desc_;
 
+<<<<<<< .merge_file_MNu1OW
   td::Ref<ShardState> prev_state_;
   td::Ref<ShardState> prev_state_2_;
+=======
+  td::Ref<ShardState> state_;
+>>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.FyB6ivmk88
   td::Ref<BlockData> block_;
 
   bool reading_from_db_ = false;

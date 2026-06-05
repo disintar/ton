@@ -22,6 +22,7 @@
 #include "common/delay.h"
 #include "td/utils/overloaded.h"
 #include "td/utils/port/path.h"
+#include "ton/ton-io.hpp"
 
 #include "validator/block-propagation-trace.h"
 #include "download-archive-slice.hpp"
@@ -617,10 +618,15 @@ void DownloadArchiveSlice::got_archive_info(td::BufferSlice data) {
   }
 
   prev_logged_timer_ = td::Timer();
+<<<<<<< .merge_file_ON78lN
   LOG(WARNING) << "[archive-sync] stage=slice.start source=" << archive_source()
                << " transport=" << archive_slice_transport() << " seqno=" << masterchain_seqno_
                << " shard=" << shard_prefix_.to_str()
                << " peer=" << download_from_ << " archive_id=" << archive_id_ << " result=start";
+=======
+  LOG(INFO) << "downloading archive slice #" << masterchain_seqno_ << " " << shard_prefix_ << " from "
+            << download_from_;
+>>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.EwKLjXh7O6
   get_archive_slice();
 }
 
@@ -725,14 +731,13 @@ void DownloadArchiveSlice::got_archive_slice(td::BufferSlice data) {
   double elapsed = prev_logged_timer_.elapsed();
   if (elapsed > 10.0) {
     prev_logged_timer_ = td::Timer();
-    LOG(INFO) << "downloading archive slice #" << masterchain_seqno_ << " " << shard_prefix_.to_str()
-              << ": total=" << offset_ << " ("
-              << td::format::as_size((td::uint64)(double(offset_ - prev_logged_sum_) / elapsed)) << "/s)";
+    LOG(INFO) << "downloading archive slice #" << masterchain_seqno_ << " " << shard_prefix_ << ": total=" << offset_
+              << " (" << td::format::as_size((td::uint64)(double(offset_ - prev_logged_sum_) / elapsed)) << "/s)";
     prev_logged_sum_ = offset_;
   }
 
   if (data.size() < slice_size()) {
-    LOG(INFO) << "finished downloading arcrive slice #" << masterchain_seqno_ << " " << shard_prefix_.to_str()
+    LOG(INFO) << "finished downloading arcrive slice #" << masterchain_seqno_ << " " << shard_prefix_
               << ": total=" << offset_;
     finish_query();
   } else {

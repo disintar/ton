@@ -44,7 +44,7 @@ void ApplyBlock::abort_query(td::Status reason) {
     overlay_gap::remember(id_, "apply.abort", trace_.overlay_name, trace_.src_adnl, reason_str);
   }
   if (promise_) {
-    VLOG(VALIDATOR_WARNING) << "aborting apply block query for " << id_.to_str() << ": " << reason;
+    VLOG(VALIDATOR_WARNING) << "aborting apply block query for " << id_ << ": " << reason;
     promise_.set_error(std::move(reason));
   }
   stop();
@@ -66,9 +66,13 @@ void ApplyBlock::alarm() {
 }
 
 void ApplyBlock::start_up() {
+<<<<<<< .merge_file_0nSLWz
   trace_stage_started_at_ = trace_.custom_deserialized_at;
   trace_stage("apply.start");
   VLOG(VALIDATOR_DEBUG) << "running apply_block for " << id_.to_str() << ", mc_seqno=" << masterchain_block_id_.seqno();
+=======
+  VLOG(VALIDATOR_DEBUG) << "running apply_block for " << id_ << ", mc_seqno=" << masterchain_block_id_.seqno();
+>>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.fZTZE6FbJx
 
   if (id_.is_masterchain()) {
     masterchain_block_id_ = id_;

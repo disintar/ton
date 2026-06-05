@@ -50,8 +50,12 @@ public:
 class AdnlExtServer : public td::actor::Actor {
  public:
   virtual void add_local_id(AdnlNodeIdShort id) = 0;
+<<<<<<< .merge_file_1C7DEL
   virtual void add_tcp_port(td::uint16 port) = 0;
   virtual void set_connection_callback(std::shared_ptr<adnl::AdnlInboundConnectionCallback> callback) = 0;
+=======
+  virtual void add_tcp_port(td::uint16 port, td::Promise<td::Unit> promise) = 0;
+>>>>>>> /var/folders/3k/91ytkdls3l93dl_snvs85g2r0000gn/T/tmp.rEJ7QTxjf2
   virtual ~AdnlExtServer() = default;
 };
 

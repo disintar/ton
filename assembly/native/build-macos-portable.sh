@@ -1,0 +1,116 @@
+#/bin/bash
+
+with_tests=false
+with_artifacts=false
+with_ccache=false
+
+OSX_TARGET=11.0
+
+MACOS_MAJOR=0
+if [ "$(uname)" = "Darwin" ]; then
+  MACOS_MAJOR=$(sw_vers -productVersion | cut -d. -f1)
+  export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+  echo "Using SDKROOT=$SDKROOT"
+fi
+
+while getopts 'taco:' flag; do
+  case "${flag}" in
+    t) with_tests=true ;;
+    a) with_artifacts=true ;;
+    o) OSX_TARGET=${OPTARG} ;;
+    c) with_ccache=true ;;
+    *) break
+       ;;
+  esac
+done
+
+if [ ! -d "build" ]; then
+  mkdir build
+  cd build
+else
+  cd build || exit
+  rm -rf .ninja* CMakeCache.txt
+fi
+
+export NONINTERACTIVE=1
+brew install ninja pkg-config automake libtool autoconf texinfo
+export PATH=/usr/local/opt/ccache/libexec:$PATH
+
+if [ "$(uname)" = "Darwin" ]; then
+  if [ "$MACOS_MAJOR" -ge 15 ]; then
+    echo "macOS $MACOS_MAJOR detected -> using AppleClang (Xcode toolchain), NOT llvm@21"
+    export CC="$(xcrun --find clang)"
+    export CXX="$(xcrun --find clang++)"
+  else
+    echo "macOS $MACOS_MAJOR detected -> using Homebrew llvm@21"
+    brew install llvm@21
+    export CC="$(brew --prefix llvm@21)"/bin/clang
+    export CXX="$(brew --prefix llvm@21)"/bin/clang++
+  fi
+fi
+
+if [ "$with_ccache" = true ]; then
+  brew install ccache
+  mkdir -p ~/.ccache
+  export CCACHE_DIR=~/.ccache
+  ccache -M 0
+  test $? -eq 0 || { echo "ccache not installed"; exit 1; }
+else
+  export CCACHE_DISABLE=1
+fi
+
+cmake -GNinja .. \
+-DPORTABLE=1 \
+-DCMAKE_OSX_DEPLOYMENT_TARGET:STRING=$OSX_TARGET \
+-DCMAKE_CXX_FLAGS="-nostdinc++ -isystem ${SDKROOT}/usr/include/c++/v1 -isystem ${SDKROOT}/usr/include" \
+-DCMAKE_SYSROOT="$(xcrun --show-sdk-path)" \
+-DCMAKE_BUILD_TYPE=Release
+
+test $? -eq 0 || { echo "Can't configure ton"; exit 1; }
+
+if [ "$with_tests" = true ]; then
+  ninja storage-daemon storage-daemon-cli blockchain-explorer   \
+  tonlib tonlibjson tonlib-cli validator-engine func tolk fift \
+  lite-client validator-engine-console generate-random-id json2tlo dht-server dht-ping-servers dht-resolve \
+  http-proxy rldp-http-proxy create-state create-hardfork tlbc emulator proxy-liteserver all-tests
+  test $? -eq 0 || { echo "Can't compile ton"; exit 1; }
+else
+  ninja storage-daemon storage-daemon-cli blockchain-explorer   \
+  tonlib tonlibjson tonlib-cli validator-engine func tolk fift \
+  lite-client validator-engine-console generate-random-id json2tlo dht-server dht-ping-servers dht-resolve \
+  http-proxy rldp-http-proxy create-state create-hardfork tlbc emulator proxy-liteserver
+  test $? -eq 0 || { echo "Can't compile ton"; exit 1; }
+fi
+
+cd ..
+
+if [ "$with_artifacts" = true ]; then
+  echo Creating artifacts...
+  rm -rf artifacts
+  mkdir artifacts
+  cp build/storage/storage-daemon/storage-daemon artifacts/
+  cp build/storage/storage-daemon/storage-daemon-cli artifacts/
+  cp build/blockchain-explorer/blockchain-explorer artifacts/
+  cp build/crypto/fift artifacts/
+  cp build/crypto/func artifacts/
+  cp build/tolk/tolk artifacts/
+  cp build/crypto/create-state artifacts/
+  cp build/crypto/tlbc artifacts/
+  cp build/validator-engine-console/validator-engine-console artifacts/
+  cp build/tonlib/tonlib-cli artifacts/
+  cp build/tonlib/libtonlibjson.0.5.dylib artifacts/libtonlibjson.dylib
+  cp build/http/http-proxy artifacts/
+  cp build/rldp-http-proxy/rldp-http-proxy artifacts/
+  cp build/dht-server/dht-server artifacts/
+  cp build/dht/dht-ping-servers artifacts/
+  cp build/dht/dht-resolve artifacts/
+  cp build/lite-client/lite-client artifacts/
+  cp build/validator-engine/validator-engine artifacts/
+  cp build/utils/generate-random-id artifacts/
+  cp build/utils/json2tlo artifacts/
+  cp build/utils/proxy-liteserver artifacts/
+  cp build/emulator/libemulator.dylib artifacts/
+  rsync -r crypto/smartcont artifacts/
+  rsync -r crypto/fift/lib artifacts/
+  chmod -R +x artifacts/*
+fi

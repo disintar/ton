@@ -31,6 +31,7 @@ IF %errorlevel% NEQ 0 (
 )
 SET "PATH=%PATH%;C:\Program Files\NASM"
 
+<<<<<<< HEAD
 REM Building dependencies from third-party submodules...
 set "third_party=%ROOT_DIR%\third-party"
 
@@ -41,6 +42,23 @@ if not exist build (
 cd build
 
 cmake -GNinja  -DCMAKE_BUILD_TYPE=Release ^
+=======
+where clang-cl
+IF %errorlevel% NEQ 0 (
+  echo clang-cl not found. Install LLVM toolset for Visual Studio 2022.
+  exit /b %errorlevel%
+)
+
+echo Current dir %cd%
+
+mkdir build
+cd build
+cmake -GNinja -DCMAKE_BUILD_TYPE=Release ^
+-DCMAKE_C_COMPILER=clang-cl ^
+-DCMAKE_CXX_COMPILER=clang-cl ^
+-DCMAKE_LINKER=lld-link ^
+-DCMAKE_CXX_COMPILER_LAUNCHER= ^
+>>>>>>> mainnet/testnet
 -DPORTABLE=1 ^
 -DTON_USE_PYTHON=1 ^
 -DCMAKE_CXX_FLAGS="/DTD_WINDOWS=1 /EHsc /bigobj" ..
@@ -50,16 +68,72 @@ IF %errorlevel% NEQ 0 (
   exit /b %errorlevel%
 )
 
+<<<<<<< HEAD
 ninja python_ton
 IF %errorlevel% NEQ 0 (
   echo Build TON failed
+=======
+IF "%1"=="-t" (
+ninja storage-daemon storage-daemon-cli blockchain-explorer fift func tolk tonlib tonlibjson  ^
+tonlib-cli validator-engine lite-client validator-engine-console generate-random-id ^
+json2tlo dht-server http-proxy rldp-http-proxy create-state create-hardfork emulator ^
+proxy-liteserver all-tests
+IF %errorlevel% NEQ 0 (
+  echo Can't compile TON
+  exit /b %errorlevel%
+)
+) else (
+ninja storage-daemon storage-daemon-cli blockchain-explorer fift func tolk tonlib tonlibjson  ^
+tonlib-cli validator-engine lite-client validator-engine-console generate-random-id ^
+json2tlo dht-server http-proxy rldp-http-proxy create-state create-hardfork emulator proxy-liteserver
+IF %errorlevel% NEQ 0 (
+  echo Can't compile TON
+  exit /b %errorlevel%
+)
+)
+
+copy validator-engine\validator-engine.exe test
+IF %errorlevel% NEQ 0 (
+  echo validator-engine.exe does not exist
+>>>>>>> mainnet/testnet
   exit /b %errorlevel%
 )
 
 echo Strip and copy artifacts
 cd ..
+<<<<<<< HEAD
 if not exist artifacts (
   mkdir artifacts
+=======
+echo where strip
+where strip
+mkdir artifacts
+mkdir artifacts\smartcont
+mkdir artifacts\lib
+
+for %%I in (build\storage\storage-daemon\storage-daemon.exe ^
+  build\storage\storage-daemon\storage-daemon-cli.exe ^
+  build\blockchain-explorer\blockchain-explorer.exe ^
+  build\crypto\fift.exe ^
+  build\crypto\tlbc.exe ^
+  build\crypto\func.exe ^
+  build\tolk\tolk.exe ^
+  build\crypto\create-state.exe ^
+  build\validator-engine-console\validator-engine-console.exe ^
+  build\tonlib\tonlib-cli.exe ^
+  build\tonlib\tonlibjson.dll ^
+  build\http\http-proxy.exe ^
+  build\rldp-http-proxy\rldp-http-proxy.exe ^
+  build\dht-server\dht-server.exe ^
+  build\lite-client\lite-client.exe ^
+  build\validator-engine\validator-engine.exe ^
+  build\utils\generate-random-id.exe ^
+  build\utils\json2tlo.exe ^
+  build\utils\proxy-liteserver.exe ^
+  build\emulator\emulator.dll) do (
+    echo strip -s %%I & copy %%I artifacts\
+    strip -s %%I & copy %%I artifacts\
+>>>>>>> mainnet/testnet
 )
 
 REM Copy Python extension
