@@ -71,6 +71,7 @@ class FullNodeImpl : public FullNode {
   void send_ihr_message(AccountIdPrefixFull dst, td::BufferSlice data);
   void send_ext_message(AccountIdPrefixFull dst, td::BufferSlice data);
   void send_ext_message_relay_all(AccountIdPrefixFull dst, td::BufferSlice data);
+  void send_ext_message_raw_all(td::BufferSlice data);
   void send_ext_message_impl(AccountIdPrefixFull dst, td::BufferSlice data, bool force_public);
   void send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data);
   void send_block_candidate(BlockIdExt block_id, CatchainSeqno cc_seqno, td::uint32 validator_set_hash,

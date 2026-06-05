@@ -200,8 +200,8 @@ void FullNodeShardImpl::process_external_message_broadcast(ton_api::tonNode_exte
     promise.set_result(td::Unit());
     return;
   }
-  td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_external_message_broadcast,
-                          std::move(message.message_->data_), 0, std::move(promise));
+  VLOG(FULL_NODE_DEBUG) << "Accepted external message broadcast without local state check";
+  promise.set_result(td::Unit());
 }
 
 void FullNodeShardImpl::remove_neighbour(adnl::AdnlNodeIdShort id) {

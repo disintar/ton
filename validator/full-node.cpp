@@ -507,6 +507,30 @@ void FullNodeImpl::send_ext_message_relay_all(AccountIdPrefixFull dst, td::Buffe
   send_ext_message_impl(dst, std::move(data), true);
 }
 
+void FullNodeImpl::send_ext_message_raw_all(td::BufferSlice data) {
+  bool sent_private = false;
+  for (auto &[_, private_overlay] : custom_overlays_) {
+    for (auto &[local_id, actor] : private_overlay.actors_) {
+      if (private_overlay.params_.msg_senders_.find(local_id) != private_overlay.params_.msg_senders_.end()) {
+        sent_private = true;
+        td::actor::send_closure(actor, &FullNodeCustomOverlay::send_external_message, data.clone());
+      }
+    }
+  }
+
+  bool sent_public = false;
+  for (auto &[_, shard] : shards_) {
+    if (!shard.actor.empty()) {
+      sent_public = true;
+      td::actor::send_closure(shard.actor, &FullNodeShard::send_external_message, data.clone());
+    }
+  }
+  VLOG(FULL_NODE_DEBUG) << "Relayed raw external message"
+                        << " private=" << (sent_private ? 1 : 0)
+                        << " public=" << (sent_public ? 1 : 0)
+                        << " size=" << data.size();
+}
+
 void FullNodeImpl::send_ext_message_impl(AccountIdPrefixFull dst, td::BufferSlice data, bool force_public) {
   bool skip_public = false;
   for (auto &[_, private_overlay] : custom_overlays_) {
@@ -1202,6 +1226,9 @@ void FullNodeImpl::start_up() {
     }
     void send_ext_message_relay_all(AccountIdPrefixFull dst, td::BufferSlice data) override {
       td::actor::send_closure(id_, &FullNodeImpl::send_ext_message_relay_all, dst, std::move(data));
+    }
+    void send_ext_message_raw_all(td::BufferSlice data) override {
+      td::actor::send_closure(id_, &FullNodeImpl::send_ext_message_raw_all, std::move(data));
     }
     void send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) override {
       td::actor::send_closure(id_, &FullNodeImpl::send_shard_block_info, block_id, cc_seqno, std::move(data));
