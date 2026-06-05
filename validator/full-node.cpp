@@ -500,13 +500,21 @@ void FullNodeImpl::send_ihr_message(AccountIdPrefixFull dst, td::BufferSlice dat
 }
 
 void FullNodeImpl::send_ext_message(AccountIdPrefixFull dst, td::BufferSlice data) {
+  send_ext_message_impl(dst, std::move(data), false);
+}
+
+void FullNodeImpl::send_ext_message_relay_all(AccountIdPrefixFull dst, td::BufferSlice data) {
+  send_ext_message_impl(dst, std::move(data), true);
+}
+
+void FullNodeImpl::send_ext_message_impl(AccountIdPrefixFull dst, td::BufferSlice data, bool force_public) {
   bool skip_public = false;
   for (auto &[_, private_overlay] : custom_overlays_) {
     if (private_overlay.params_.send_shard(dst.as_leaf_shard())) {
       for (auto &[local_id, actor] : private_overlay.actors_) {
         if (private_overlay.params_.msg_senders_.find(local_id) != private_overlay.params_.msg_senders_.end()) {
           td::actor::send_closure(actor, &FullNodeCustomOverlay::send_external_message, data.clone());
-          if (private_overlay.params_.skip_public_msg_send_) {
+          if (!force_public && private_overlay.params_.skip_public_msg_send_) {
             skip_public = true;
           }
         }
@@ -1191,6 +1199,9 @@ void FullNodeImpl::start_up() {
     }
     void send_ext_message(AccountIdPrefixFull dst, td::BufferSlice data) override {
       td::actor::send_closure(id_, &FullNodeImpl::send_ext_message, dst, std::move(data));
+    }
+    void send_ext_message_relay_all(AccountIdPrefixFull dst, td::BufferSlice data) override {
+      td::actor::send_closure(id_, &FullNodeImpl::send_ext_message_relay_all, dst, std::move(data));
     }
     void send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) override {
       td::actor::send_closure(id_, &FullNodeImpl::send_shard_block_info, block_id, cc_seqno, std::move(data));

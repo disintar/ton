@@ -826,14 +826,14 @@ void LiteQuery::continue_getBlockHeader(BlockIdExt blkid, int mode, Ref<ton::val
 void LiteQuery::perform_sendMessage(td::BufferSlice data) {
   LOG(INFO) << "started a sendMessage(<" << data.size() << " bytes>) liteserver query";
   td::actor::send_closure(
-      manager_, &ValidatorManager::new_external_message_query, std::move(data),
+      manager_, &ValidatorManager::new_external_message_relay_query, std::move(data),
       td::PromiseCreator::lambda(
           [Self = actor_id(this), cache = cache_, cache_key = cache_key_](td::Result<td::Unit> res) mutable {
             if (res.is_error()) {
               // Don't cache errors
               td::actor::send_closure(cache, &LiteServerCache::drop_send_message_from_cache, cache_key);
               td::actor::send_closure(Self, &LiteQuery::abort_query,
-                                      res.move_as_error_prefix("cannot apply external message to current state : "s));
+                                      res.move_as_error_prefix("cannot relay external message : "s));
             } else {
               auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_sendMsgStatus>(1);
               td::actor::send_closure(Self, &LiteQuery::finish_query, std::move(b), false);

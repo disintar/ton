@@ -471,6 +471,14 @@ td::actor::Task<> ValidatorManagerImpl::new_external_message_query(td::BufferSli
   co_return td::Unit{};
 }
 
+td::actor::Task<> ValidatorManagerImpl::new_external_message_relay_query(td::BufferSlice data) {
+  auto message = co_await create_ext_message(std::move(data), block::SizeLimitsConfig::ExtMsgLimits());
+  LOG(INFO) << "Relaying external message without state check to " << message->wc() << ":"
+            << message->addr().to_hex();
+  callback_->send_ext_message_relay_all(message->shard(), message->serialize());
+  co_return td::Unit{};
+}
+
 td::actor::Task<> ValidatorManagerImpl::new_external_message_query_cont(td::Ref<ExtMessage> message,
                                                                         td::actor::StartedTask<> wait_allow_broadcast) {
   auto result = co_await std::move(wait_allow_broadcast).wrap();
