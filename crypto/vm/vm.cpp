@@ -712,7 +712,7 @@ try {
     return root;
   }
   return {};
-} catch (vm::VmError) {
+} catch (const vm::VmError&) {
   return {};
 }
 }
