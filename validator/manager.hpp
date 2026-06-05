@@ -618,6 +618,9 @@ class ValidatorManagerImpl : public ValidatorManager {
   void get_pending_shard_blocks_for_litequery(
       td::optional<ShardIdFull> shard,
       td::Promise<tl_object_ptr<lite_api::liteServer_nonfinal_pendingShardBlocks>> promise) override;
+  void update_lite_server_state(BlockIdExt shard_client, td::Ref<MasterchainState> state) override {
+    UNREACHABLE();
+  }
 
   void add_lite_query_stats(int lite_query_id, bool success) override {
     ++ls_stats_[lite_query_id];
@@ -669,7 +672,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   td::actor::ActorOwn<LiteServerCache> lite_server_cache_;
   td::actor::ActorId<PrometheusExporterActor> prometheus_exporter_;
   bool prometheus_exporter_available_ = false;
-  std::vector<td::uint16> pending_ext_ports_;
+  std::vector<std::pair<td::uint16, td::Promise<td::Unit>>> pending_ext_ports_;
   std::vector<adnl::AdnlNodeIdShort> pending_ext_ids_;
   bool liteserver_ready_ = false;
   td::MultiPromise::InitGuard initial_liteservers_guard_;
