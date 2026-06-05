@@ -266,6 +266,8 @@ class ValidatorEngine : public td::actor::Actor {
   bool celldb_in_memory_ = false;
   bool celldb_disable_bloom_filter_ = false;
   bool unsynced_liteserver_ = false;
+  double catchain_max_block_delay_ = 0.0;
+  double catchain_max_block_delay_slow_ = 0.0;
   bool read_config_ = false;
   bool started_keyring_ = false;
   bool started_ = false;
