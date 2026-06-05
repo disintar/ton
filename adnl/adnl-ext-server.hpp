@@ -75,7 +75,7 @@ class AdnlInboundConnection : public AdnlExtConnection {
 
 class AdnlExtServerImpl : public AdnlExtServer {
  public:
-  void add_tcp_port(td::uint16 port) override;
+  void add_tcp_port(td::uint16 port, td::Promise<td::Unit> promise = {}) override;
   void add_local_id(AdnlNodeIdShort id) override;
   void accepted(td::SocketFd fd);
   void stop(std::string ip_addr);

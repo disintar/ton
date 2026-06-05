@@ -49,7 +49,7 @@ public:
 class AdnlExtServer : public td::actor::Actor {
  public:
   virtual void add_local_id(AdnlNodeIdShort id) = 0;
-  virtual void add_tcp_port(td::uint16 port) = 0;
+  virtual void add_tcp_port(td::uint16 port, td::Promise<td::Unit> promise = {}) = 0;
   virtual void set_connection_callback(std::shared_ptr<adnl::AdnlInboundConnectionCallback> callback) = 0;
   virtual ~AdnlExtServer() = default;
 };
@@ -90,6 +90,26 @@ class Adnl : public AdnlSenderInterface {
   struct SendFlags {
     enum Flags : td::uint32 { direct_only = 1 };
   };
+
+  class ProtectedPeersGuard {
+   public:
+    ProtectedPeersGuard() = default;
+    ProtectedPeersGuard(td::actor::ActorId<Adnl> adnl, AdnlNodeIdShort local_id,
+                        std::vector<AdnlNodeIdShort> peer_ids);
+    ProtectedPeersGuard(const ProtectedPeersGuard &) = delete;
+    ProtectedPeersGuard &operator=(const ProtectedPeersGuard &) = delete;
+    ProtectedPeersGuard(ProtectedPeersGuard &&other) noexcept;
+    ProtectedPeersGuard &operator=(ProtectedPeersGuard &&other) noexcept;
+    ~ProtectedPeersGuard();
+
+    void reset();
+
+   private:
+    td::actor::ActorId<Adnl> adnl_;
+    AdnlNodeIdShort local_id_ = AdnlNodeIdShort::zero();
+    std::vector<AdnlNodeIdShort> peer_ids_;
+  };
+
   virtual void send_message_ex(AdnlNodeIdShort src, AdnlNodeIdShort dst, td::BufferSlice data, td::uint32 flags) = 0;
 
   // adds node to peer table
@@ -139,6 +159,10 @@ class Adnl : public AdnlSenderInterface {
   }
 
   static td::int32 adnl_start_time();
+
+ protected:
+  virtual void add_protected_peers(AdnlNodeIdShort local_id, std::vector<AdnlNodeIdShort> peer_ids) = 0;
+  virtual void remove_protected_peers(AdnlNodeIdShort local_id, std::vector<AdnlNodeIdShort> peer_ids) = 0;
 };
 
 }  // namespace adnl

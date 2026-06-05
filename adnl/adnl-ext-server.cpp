@@ -241,8 +241,7 @@ void AdnlExtServerImpl::decrypt_init_packet(AdnlNodeIdShort dst, td::BufferSlice
 void AdnlExtServerCreator::create(td::actor::ActorId<AdnlPeerTable> adnl, std::vector<AdnlNodeIdShort> ids,
                                   std::vector<td::uint16> ports,
                                   td::Promise<td::actor::ActorOwn<AdnlExtServer>> promise) {
-  td::actor::create_actor<AdnlExtServerImpl>("extserver", adnl, std::move(ids), std::move(ports), std::move(promise))
-      .release();
+  promise.set_value(td::actor::create_actor<AdnlExtServerImpl>("extserver", adnl, std::move(ids), std::move(ports)));
 }
 
 }  // namespace adnl
