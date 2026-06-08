@@ -43,7 +43,7 @@ namespace fullnode {
 
 static const double INACTIVE_SHARD_TTL = (double)overlay::Overlays::overlay_peer_ttl() + 60.0;
 constexpr long long CUSTOM_OVERLAY_SYNC_SLOW_LOG_MS = 800;
-constexpr double CUSTOM_OVERLAY_NEXT_BLOCK_GRACE_SEC = 0.50;
+constexpr double CUSTOM_OVERLAY_NEXT_BLOCK_GRACE_SEC = 0.05;
 
 bool log_value_is(const char *value, const char *expected) {
   return std::strcmp(value, expected) == 0;
