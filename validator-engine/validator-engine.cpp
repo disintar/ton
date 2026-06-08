@@ -1442,7 +1442,7 @@ void ValidatorEngine::start_up() {
 
   const char *value = getenv("TON_PROMETHEUS_SHARE_CREDENTIALS");
   allow_share_liteserver_credentials_ = bool(value);
-  liteserver_credentials_tag_ = value;
+  liteserver_credentials_tag_ = value ? value : "";
 
 
 #if TON_USE_JEMALLOC
