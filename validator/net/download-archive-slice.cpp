@@ -192,35 +192,58 @@ void DownloadArchiveSlice::start_up() {
   if (!download_from_list_.empty()) {
     got_node_to_download(std::move(download_from_list_));
   } else if (download_from_.is_zero() && client_.empty()) {
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::vector<adnl::AdnlNodeIdShort>> R) {
-      if (R.is_error()) {
-        auto error = R.move_as_error();
-        LOG(WARNING) << "[archive-sync] stage=random_peers.done source=public transport=overlay"
-                     << " result=error reason=" << archive_status_reason(error.clone());
-        td::actor::send_closure(SelfId, &DownloadArchiveSlice::abort_query, std::move(error));
-      } else {
-        auto vec = R.move_as_ok();
-        LOG(WARNING) << "[archive-sync] stage=random_peers.done source=public transport=overlay"
-                     << " peers=" << vec.size() << " result=" << (vec.empty() ? "empty" : "ok");
-        if (vec.size() == 0) {
-          td::actor::send_closure(SelfId, &DownloadArchiveSlice::abort_query,
-                                  td::Status::Error(ErrorCode::notready, "no nodes"));
-        } else {
-          td::actor::send_closure(SelfId, &DownloadArchiveSlice::got_node_to_download, vec);
-        }
-      }
-    });
-
-    LOG(WARNING) << "[archive-sync] stage=random_peers.start source=public transport=overlay"
-                 << " seqno=" << masterchain_seqno_ << " shard=" << shard_prefix_.to_str()
-                 << " requested=" << kPublicArchivePeerCount << " result=start";
-    td::actor::send_closure(overlays_, &overlay::Overlays::get_overlay_random_peers, local_id_, overlay_id_,
-                            kPublicArchivePeerCount, std::move(P));
+    request_random_public_peers("startup_no_peer");
   } else {
     std::vector<adnl::AdnlNodeIdShort> tmp;
     tmp.emplace_back(download_from_);
     got_node_to_download(std::move(tmp));
   }
+}
+
+void DownloadArchiveSlice::request_random_public_peers(const char *reason) {
+  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::vector<adnl::AdnlNodeIdShort>> R) {
+    if (R.is_error()) {
+      auto error = R.move_as_error();
+      LOG(WARNING) << "[archive-sync] stage=random_peers.done source=public transport=overlay"
+                   << " result=error reason=" << archive_status_reason(error.clone());
+      td::actor::send_closure(SelfId, &DownloadArchiveSlice::abort_query, std::move(error));
+    } else {
+      auto vec = R.move_as_ok();
+      LOG(WARNING) << "[archive-sync] stage=random_peers.done source=public transport=overlay"
+                   << " peers=" << vec.size() << " result=" << (vec.empty() ? "empty" : "ok");
+      if (vec.size() == 0) {
+        td::actor::send_closure(SelfId, &DownloadArchiveSlice::abort_query,
+                                td::Status::Error(ErrorCode::notready, "no nodes"));
+      } else {
+        td::actor::send_closure(SelfId, &DownloadArchiveSlice::got_node_to_download, vec);
+      }
+    }
+  });
+
+  LOG(WARNING) << "[archive-sync] stage=random_peers.start source=public transport=overlay"
+               << " seqno=" << masterchain_seqno_ << " shard=" << shard_prefix_.to_str()
+               << " requested=" << kPublicArchivePeerCount << " result=start reason=" << reason;
+  td::actor::send_closure(overlays_, &overlay::Overlays::get_overlay_random_peers, local_id_, overlay_id_,
+                          kPublicArchivePeerCount, std::move(P));
+}
+
+bool DownloadArchiveSlice::try_random_public_peers_fallback(td::Status reason) {
+  if (!client_.empty() || record_archive_sync_metrics_ || random_public_peers_requested_ || timeout_.is_in_past()) {
+    return false;
+  }
+  random_public_peers_requested_ = true;
+  download_from_ = adnl::AdnlNodeIdShort::zero();
+  download_from_list_.clear();
+  resolved_download_from_list_.clear();
+  current_peer_index_ = 0;
+  current_peer_count_ = 0;
+  archive_info_parallel_ = false;
+  archive_info_pending_ = 0;
+  LOG(WARNING) << "[archive-sync] stage=random_peers.fallback source=public transport=overlay"
+               << " seqno=" << masterchain_seqno_ << " shard=" << shard_prefix_.to_str()
+               << " offset=" << offset_ << " result=start reason=" << archive_status_reason(std::move(reason));
+  request_random_public_peers("explicit_peers_failed");
+  return true;
 }
 
 void DownloadArchiveSlice::got_node_to_download(std::vector<adnl::AdnlNodeIdShort> download_from) {
@@ -467,7 +490,9 @@ void DownloadArchiveSlice::got_archive_info_result(td::uint64 query_id, int inde
       if (archive_info_pending_ == 0) {
         ++archive_info_query_id_;
         archive_info_parallel_ = false;
-        abort_query(std::move(error));
+        if (!try_random_public_peers_fallback(error.clone())) {
+          abort_query(std::move(error));
+        }
       }
       return;
     }
@@ -501,7 +526,9 @@ void DownloadArchiveSlice::got_archive_info_result(td::uint64 query_id, int inde
                  << " peer=" << download_from_ << " peer_index=" << index << " peers=" << total_nodes
                  << " ms=" << archive_elapsed_ms(archive_info_started_at_) << " result=error reason=" << reason;
     if (index + 1 >= total_nodes) {
-      abort_query(std::move(error));
+      if (!try_random_public_peers_fallback(error.clone())) {
+        abort_query(std::move(error));
+      }
     } else {
       try_download(index + 1);
     }
@@ -546,7 +573,10 @@ void DownloadArchiveSlice::archive_info_timeout(td::uint64 query_id, int index, 
     if (archive_info_pending_ == 0) {
       ++archive_info_query_id_;
       archive_info_parallel_ = false;
-      abort_query(td::Status::Error(ErrorCode::timeout, PSTRING() << archive_source() << " archive info timeout"));
+      auto error = td::Status::Error(ErrorCode::timeout, PSTRING() << archive_source() << " archive info timeout");
+      if (!try_random_public_peers_fallback(error.clone())) {
+        abort_query(std::move(error));
+      }
     }
     return;
   }
@@ -563,7 +593,10 @@ void DownloadArchiveSlice::archive_info_timeout(td::uint64 query_id, int index, 
                << " result=timeout reason=archive_info_timeout";
   if (index + 1 >= total_nodes) {
     ++archive_info_query_id_;
-    abort_query(td::Status::Error(ErrorCode::timeout, PSTRING() << archive_source() << " archive info timeout"));
+    auto error = td::Status::Error(ErrorCode::timeout, PSTRING() << archive_source() << " archive info timeout");
+    if (!try_random_public_peers_fallback(error.clone())) {
+      abort_query(std::move(error));
+    }
   } else {
     try_download(index + 1);
   }
@@ -608,7 +641,10 @@ void DownloadArchiveSlice::got_archive_info(td::BufferSlice data) {
                                          if (current_peer_index_ + 1 < current_peer_count_) {
                                            try_download(current_peer_index_ + 1);
                                          } else {
-                                           abort_query(td::Status::Error(ErrorCode::notready, error_message));
+                                           auto error = td::Status::Error(ErrorCode::notready, error_message);
+                                           if (!try_random_public_peers_fallback(error.clone())) {
+                                             abort_query(std::move(error));
+                                           }
                                          }
                                          fail = true;
                                        },
@@ -676,7 +712,9 @@ void DownloadArchiveSlice::got_archive_slice_result(td::uint64 query_id, td::Res
     if (current_peer_index_ + 1 < current_peer_count_) {
       try_download(current_peer_index_ + 1);
     } else {
-      abort_query(std::move(error));
+      if (!try_random_public_peers_fallback(error.clone())) {
+        abort_query(std::move(error));
+      }
     }
     return;
   }
@@ -698,7 +736,10 @@ void DownloadArchiveSlice::archive_slice_timeout(td::uint64 query_id) {
   if (current_peer_index_ + 1 < current_peer_count_) {
     try_download(current_peer_index_ + 1);
   } else {
-    abort_query(td::Status::Error(ErrorCode::timeout, PSTRING() << archive_source() << " archive slice timeout"));
+    auto error = td::Status::Error(ErrorCode::timeout, PSTRING() << archive_source() << " archive slice timeout");
+    if (!try_random_public_peers_fallback(error.clone())) {
+      abort_query(std::move(error));
+    }
   }
 }
 

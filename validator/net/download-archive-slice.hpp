@@ -67,6 +67,8 @@ class DownloadArchiveSlice : public td::actor::Actor {
   void got_resolved_download_peer(td::uint64 query_id, adnl::AdnlNodeIdShort peer,
                                   td::Result<adnl::AdnlNode> result);
   void resolve_download_peers_timeout(td::uint64 query_id);
+  void request_random_public_peers(const char *reason);
+  bool try_random_public_peers_fallback(td::Status reason);
   const char *archive_source() const;
   const char *archive_prepare_transport() const;
   const char *archive_slice_transport() const;
@@ -114,6 +116,7 @@ class DownloadArchiveSlice : public td::actor::Actor {
   std::vector<bool> archive_info_finished_by_peer_;
   std::vector<double> archive_info_started_at_by_peer_;
   std::vector<adnl::AdnlNodeIdShort> resolved_download_from_list_;
+  bool random_public_peers_requested_ = false;
   bool record_archive_sync_metrics_ = false;
   CustomOverlaySyncSender archive_sync_sender_ = CustomOverlaySyncSender::Rldp2;
   double archive_sync_started_at_ = 0.0;
