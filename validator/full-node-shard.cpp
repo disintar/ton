@@ -1399,17 +1399,6 @@ void FullNodeShardImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFu
     }
     archive_peers.push_back(candidate->adnl_id);
   }
-  if (archive_peers.empty() && !hint_peers.empty()) {
-    std::sort(hint_peers.begin(), hint_peers.end());
-    hint_peers.erase(std::unique(hint_peers.begin(), hint_peers.end()), hint_peers.end());
-    for (const auto &peer : hint_peers) {
-      if (archive_peers.size() == 5) {
-        break;
-      }
-      archive_peers.push_back(peer);
-    }
-  }
-
   auto first_peer = archive_peers.empty() ? adnl::AdnlNodeIdShort::zero() : archive_peers.front();
   auto first = candidates.empty() ? &Neighbour::zero : candidates.front();
   LOG(WARNING) << "[archive-sync] stage=public.choose_neighbour seqno=" << masterchain_seqno
@@ -1419,7 +1408,7 @@ void FullNodeShardImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFu
                << " hints=" << hint_peers.size()
                << " roundtrip=" << first->roundtrip << " unreliability=" << first->unreliability
                << " version=" << first->version_major << "." << first->version_minor
-               << " result=" << (archive_peers.empty() ? "random_peers" : (candidates.empty() ? "hint_peers" : "ok"));
+               << " result=" << (archive_peers.empty() ? "random_peers" : "ok");
   td::actor::create_actor<DownloadArchiveSlice>(
       "archive", masterchain_seqno, shard_prefix, std::move(tmp_dir), adnl_id_, overlay_id_, first_peer, timeout,
       validator_manager_, rldp2_, overlays_, adnl_, client_, std::move(promise), std::move(archive_peers))
