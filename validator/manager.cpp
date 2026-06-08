@@ -3350,15 +3350,23 @@ void ValidatorManagerImpl::prepare_stats(td::Promise<std::vector<std::pair<std::
 
   std::vector<std::pair<std::string, std::string>> vec;
   vec.emplace_back("ton_node_status_unixtime", td::to_string(static_cast<UnixTime>(td::Clocks::system())));
+  vec.emplace_back("unixtime", td::to_string(static_cast<UnixTime>(td::Clocks::system())));
   if (last_masterchain_block_handle_) {
-    //    vec.emplace_back("masterchainblock", last_masterchain_block_id_.to_str());
-    //    vec.emplace_back("masterchainblocktime", td::to_string(last_masterchain_block_handle_->unix_time()));
-    //    vec.emplace_back("gcmasterchainblock", gc_masterchain_handle_->id().to_str());
-    //    vec.emplace_back("keymasterchainblock", last_key_block_handle_->id().to_str());
-    //    vec.emplace_back("knownkeymasterchainblock", last_known_key_block_handle_->id().to_str());
-    //    vec.emplace_back("rotatemasterchainblock", last_rotate_block_id_.to_str());
-    //    vec.emplace_back("shardclientmasterchainseqno", td::to_string(min_confirmed_masterchain_seqno_));
-    //    vec.emplace_back("stateserializermasterchainseqno", td::to_string(state_serializer_masterchain_seqno_));
+    vec.emplace_back("masterchainblock", last_masterchain_block_id_.to_str());
+    vec.emplace_back("masterchainblocktime", td::to_string(last_masterchain_block_handle_->unix_time()));
+    if (gc_masterchain_handle_) {
+      vec.emplace_back("gcmasterchainblock", gc_masterchain_handle_->id().to_str());
+    }
+    if (last_key_block_handle_) {
+      vec.emplace_back("keymasterchainblock", last_key_block_handle_->id().to_str());
+    }
+    if (last_known_key_block_handle_) {
+      vec.emplace_back("knownkeymasterchainblock", last_known_key_block_handle_->id().to_str());
+    }
+    vec.emplace_back("rotatemasterchainblock", last_rotate_block_id_.to_str());
+    vec.emplace_back("shardclientmasterchainseqno", td::to_string(min_confirmed_masterchain_seqno_));
+    vec.emplace_back("stateserializermasterchainseqno", td::to_string(state_serializer_masterchain_seqno_));
+    vec.emplace_back("last_deleted_mc_state", "0");
 
     vec.emplace_back("ton_node_status_last_masterchain_block_seqno ", std::to_string(last_masterchain_block_id_.seqno()));
     vec.emplace_back("ton_node_status_last_masterchain_gc_block_seqno ", std::to_string(gc_masterchain_handle_->id().seqno()));
@@ -3444,6 +3452,7 @@ void ValidatorManagerImpl::prepare_stats(td::Promise<std::vector<std::pair<std::
   if (is_validator() && last_masterchain_state_.not_null() && last_masterchain_state_->get_global_id() == -239) {
     serializer_enabled = false;
   }
+  vec.emplace_back("stateserializerenabled", serializer_enabled ? "true" : "false");
   vec.emplace_back("ton_node_stateserializerenabled ", serializer_enabled ? "1" : "0");
 
   merger.make_promise("").set_value(std::move(vec));
