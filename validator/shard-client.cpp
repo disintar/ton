@@ -80,6 +80,7 @@ void ShardClient::got_init_handle_from_db(BlockHandle handle) {
 }
 
 void ShardClient::got_init_state_from_db(td::Ref<MasterchainState> state) {
+  masterchain_state_ = std::move(state);
   saved_to_db();
 }
 
@@ -449,7 +450,7 @@ void ShardClient::new_masterchain_block_notification(BlockHandle handle, td::Ref
              << " pending=" << pending_masterchain_notifications_.size() << " result=ok";
   if (waiting_) {
     if (!try_apply_pending_masterchain_block()) {
-      if (!apply_active_ && try_apply_latest_pending_masterchain_block("idle_notification")) {
+      if (try_apply_latest_pending_masterchain_block(apply_active_ ? "handoff_notification" : "idle_notification")) {
         return;
       }
       try_apply_next_masterchain_block_from_db();
