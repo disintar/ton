@@ -57,7 +57,6 @@ namespace fullnode {
 namespace {
 
 constexpr const char *k_called_from_public = "public";
-constexpr td::uint32 k_heavy_request_cost_unit = 1 << 21;
 constexpr size_t k_ed25519_signature_size = 64;
 
 struct NextBlocksOverlayRaceState {
@@ -114,28 +113,6 @@ void finish_next_blocks_overlay_race(std::shared_ptr<NextBlocksOverlayRaceState>
   if (should_finish) {
     promise.set_error(td::Status::Error(ErrorCode::notready, PSTRING() << "next blocks race failed: " << last_error));
   }
-}
-
-size_t heavy_request_cost(td::uint64 requested_max_size) {
-  size_t cost = static_cast<size_t>((requested_max_size + k_heavy_request_cost_unit - 1) / k_heavy_request_cost_unit);
-  return cost == 0 ? 1 : cost;
-}
-
-size_t request_cost_for_limiter(ton_api::Function &function) {
-  size_t cost = 1;
-  ton_api::downcast_call(
-      function, td::overloaded(
-                    [&](const ton_api::tonNode_getArchiveSlice &query) {
-                      cost = heavy_request_cost(query.max_size_ > 0 ? static_cast<td::uint64>(query.max_size_) : 0);
-                    },
-                    [&](const ton_api::tonNode_downloadPersistentStateSliceV2 &query) {
-                      cost = heavy_request_cost(query.max_size_ > 0 ? static_cast<td::uint64>(query.max_size_) : 0);
-                    },
-                    [&](const ton_api::tonNode_downloadZeroState &) {
-                      cost = heavy_request_cost(FullNode::max_zerostate_size());
-                    },
-                    [&](const auto &) {}));
-  return cost;
 }
 
 }  // namespace
@@ -861,13 +838,12 @@ void FullNodeShardImpl::receive_message(adnl::AdnlNodeIdShort src, td::BufferSli
   td::actor::send_closure(overlays_, &overlay::Overlays::forget_peer, adnl_id_, overlay_id_, src);
 }
 
-void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_ihrMessageBroadcast &query) {
-  td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_ihr_message,
-                          std::move(query.message_->data_));
-}
-
 void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_externalMessageBroadcast &query) {
   process_external_message_broadcast(query, [](td::Result<td::Unit>) {});
+}
+
+void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_blockFinalityBroadcast &query) {
+  VLOG(FULL_NODE_DEBUG) << "ignoring block finality broadcast from " << src;
 }
 
 void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_newShardBlockBroadcast &query) {
@@ -1028,21 +1004,8 @@ void FullNodeShardImpl::receive_broadcast(PublicKeyHash src, td::BufferSlice bro
 }
 
 void FullNodeShardImpl::send_ihr_message(td::BufferSlice data) {
-  if (!client_.empty()) {
-    UNREACHABLE();
-    return;
-  }
-  auto B = create_serialize_tl_object<ton_api::tonNode_ihrMessageBroadcast>(
-      create_tl_object<ton_api::tonNode_ihrMessage>(std::move(data)));
-  auto source = choose_outbound_source(static_cast<td::uint32>(B.size()),
-                                       B.size() > overlay::Overlays::max_simple_broadcast_size());
-  if (B.size() <= overlay::Overlays::max_simple_broadcast_size()) {
-    td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_ex, adnl_id_, overlay_id_, source, 0,
-                            std::move(B));
-  } else {
-    td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_fec_ex, adnl_id_, overlay_id_, source, 0,
-                            std::move(B));
-  }
+  VLOG(FULL_NODE_DEBUG) << "dropping IHR message for overlay " << overlay_id_
+                        << " because IHR broadcasts are not present in current TL schema";
 }
 
 void FullNodeShardImpl::send_external_message(td::BufferSlice data) {

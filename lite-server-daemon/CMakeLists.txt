@@ -10,11 +10,11 @@ target_include_directories(lite-proxy PUBLIC ${MHD_INCLUDE_DIR})
 target_include_directories(lite-proxy SYSTEM PRIVATE ${OPENSSL_INCLUDE_DIR})
 
 target_link_libraries(lite-server overlay tdutils tdactor adnl tl_api dht
-        rldp2 validatorsession full-node validator-disk validator ton_validator validator
+        rldp2 full-node validator-disk validator ton_validator validator
         fift-lib memprof git ${JEMALLOC_LIBRARIES} cppkafka ${MHD_LIBRARY})
 
 target_link_libraries(lite-proxy overlay tdutils tdactor adnl tl_api dht
-        rldp2 validatorsession full-node validator-disk validator ton_validator validator
+        rldp2 full-node validator-disk validator ton_validator validator
         fift-lib memprof git ${JEMALLOC_LIBRARIES} cppkafka ${MHD_LIBRARY} ${OPENSSL_LIBRARIES})
 
 if (TARGET OpenSSL)

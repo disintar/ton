@@ -91,7 +91,7 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
     return hardforks_;
   }
   bool check_unsafe_resync_allowed(CatchainSeqno seqno) const override {
-    return unsafe_catchains_.count(seqno) > 0;
+    return unsafe_resync_catchains_.contains(seqno);
   }
   td::uint32 check_unsafe_catchain_rotate(BlockSeqno seqno, CatchainSeqno cc_seqno) const override {
     auto it = unsafe_catchain_rotates_.find(cc_seqno);
@@ -161,9 +161,6 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   td::Ref<CollatorOptions> get_collator_options() const override {
     return collator_options_;
   }
-  double get_catchain_broadcast_speed_multiplier() const override {
-    return catchain_broadcast_speed_multipliers_;
-  }
   bool get_permanent_celldb() const override {
     return permanent_celldb_;
   }
@@ -178,6 +175,9 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   }
   bool get_parallel_validation() const override {
     return parallel_validation;
+  }
+  double get_catchain_broadcast_speed_multiplier() const override {
+    return catchain_broadcast_speed_multiplier_;
   }
   std::string get_db_event_fifo_path() const override {
     return db_event_fifo_path_;
@@ -229,7 +229,8 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
     hardforks_ = std::move(vec);
   }
   void add_unsafe_resync_catchain(CatchainSeqno seqno) override {
-    unsafe_catchains_.insert(seqno);
+    VLOG(INFO) << "Add unsafe resync catchain: " << seqno;
+    unsafe_resync_catchains_.insert(seqno);
   }
   void add_unsafe_catchain_rotate(BlockSeqno seqno, CatchainSeqno cc_seqno, td::uint32 value) override {
     VLOG(INFO) << "Add unsafe catchain rotation: Master block seqno " << seqno << " Catchain seqno " << cc_seqno
@@ -293,9 +294,6 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   void set_collator_options(td::Ref<CollatorOptions> value) override {
     collator_options_ = std::move(value);
   }
-  void set_catchain_broadcast_speed_multiplier(double value) override {
-    catchain_broadcast_speed_multipliers_ = value;
-  }
   void set_permanent_celldb(bool value) override {
     permanent_celldb_ = value;
   }
@@ -318,6 +316,9 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
 
   void set_parallel_validation(bool value) override {
     parallel_validation = value;
+  }
+  void set_catchain_broadcast_speed_multiplier(double value) override {
+    catchain_broadcast_speed_multiplier_ = value;
   }
   void set_db_event_fifo_path(std::string value) override {
     db_event_fifo_path_ = std::move(value);
@@ -358,7 +359,7 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   double key_proof_ttl_;
   bool initial_sync_disabled_;
   std::vector<BlockIdExt> hardforks_;
-  std::set<CatchainSeqno> unsafe_catchains_;
+  std::set<CatchainSeqno> unsafe_resync_catchains_;
   std::map<CatchainSeqno, std::pair<BlockSeqno, td::uint32>> unsafe_catchain_rotates_;
   BlockSeqno truncate_{0};
   BlockSeqno sync_upto_{0};
@@ -375,16 +376,17 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   bool celldb_v2_ = false;
   bool celldb_disable_bloom_filter_ = false;
   bool unsynced_liteserver_ = false;
-  td::optional<double> catchain_max_block_delay_, catchain_max_block_delay_slow_;
+  td::optional<double> catchain_max_block_delay_;
+  td::optional<double> catchain_max_block_delay_slow_;
   bool state_serializer_enabled_ = true;
   td::Ref<CollatorOptions> collator_options_{true};
-  double catchain_broadcast_speed_multipliers_;
   bool permanent_celldb_ = false;
   td::Ref<CollatorsList> collators_list_{true, CollatorsList::default_list()};
   std::set<adnl::AdnlNodeIdShort> collator_node_whitelist_;
   bool collator_node_whitelist_enabled_ = false;
   td::Ref<ShardBlockVerifierConfig> shard_block_verifier_config_{true};
   bool parallel_validation = false;
+  double catchain_broadcast_speed_multiplier_ = 1.0;
   std::string db_event_fifo_path_;
   std::vector<NoncriticalParamsOverride> noncritical_params_overrides_;
 };

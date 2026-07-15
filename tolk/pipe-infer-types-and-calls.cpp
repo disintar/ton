@@ -21,6 +21,7 @@
 #include "generics-helpers.h"
 #include "overload-resolution.h"
 #include "pack-unpack-api.h"
+#include "recursion-guard.h"
 #include "type-system.h"
 #include "smart-casts-cfg.h"
 #include <charconv>
@@ -202,9 +203,11 @@ static TypePtr try_pick_instantiated_generic_from_hint(TypePtr hint, StructPtr l
 static TypePtr try_pick_instantiated_generic_from_hint(TypePtr hint, AliasDefPtr lookup_ref) {
   // when a generic type alias points to a generic struct actually: `type WrapperAlias<T> = Wrapper<T>`
   if (const TypeDataGenericTypeWithTs* as_instT = lookup_ref->underlying_type->try_as<TypeDataGenericTypeWithTs>()) {
-    return as_instT->struct_ref
-         ? try_pick_instantiated_generic_from_hint(hint, as_instT->struct_ref)
-         : try_pick_instantiated_generic_from_hint(hint, as_instT->alias_ref);
+    TypePtr picked = as_instT->struct_ref
+                   ? try_pick_instantiated_generic_from_hint(hint, as_instT->struct_ref)
+                   : try_pick_instantiated_generic_from_hint(hint, as_instT->alias_ref);
+    const TypeDataAlias* picked_alias = picked ? picked->try_as<TypeDataAlias>() : nullptr;
+    return picked_alias && picked_alias->alias_ref->base_alias_ref == lookup_ref ? picked : nullptr;
   }
   // it's something weird, when a generic alias refs non-generic type
   // example: `type StrangeInt<T> = int`, hint is `StrangeInt<builder>`, lookup `StrangeInt`
@@ -443,7 +446,7 @@ class InferTypesAndCallsAndFieldsVisitor final {
 
   static ExprFlow infer_local_var_lhs(V<ast_local_var_lhs> v, FlowContext&& flow, bool used_as_condition) {
     // `var v = rhs`, inferring is called for `v`
-    // at the moment of inferring left side of assignment, we don't know type of rhs (since lhs is executed first)
+    // at the moment of inferring left side of assignment, we don't know type of rhs yet
     // so, mark `v` as "not inferred"
     // later, v's inferred_type will be reassigned; see process_assignment_lhs_after_infer_rhs()
     assign_inferred_type(v, v->type_node ? v->type_node->resolved_type : TypeDataNotInferred::create());
@@ -453,8 +456,8 @@ class InferTypesAndCallsAndFieldsVisitor final {
 
   ExprFlow infer_assignment(V<ast_assign> v, FlowContext&& flow, bool used_as_condition) {
     // v is assignment: `x = 5` / `var x = 5` / `var x: slice = 5` / `(cs,_) = f()` / `val (a,[b],_) = (a,t,0)`
-    // execution flow is: lhs first, rhs second (at IR generation, also lhs is evaluated first, unlike FunC)
-    // after inferring lhs, use it for hint when inferring rhs
+    // infer lhs first only to know the assignment target type and use it as a hint when inferring rhs;
+    // at IR generation, rhs is evaluated before lhs;
     // example: `var i: int = t.tupleAt(0)` is ok (hint=int, T=int), but `var i = t.tupleAt(0)` not, since `tupleAt<T>(t,i): T`
     AnyExprV lhs = v->get_lhs();
     AnyExprV rhs = v->get_rhs();
@@ -1015,6 +1018,10 @@ class InferTypesAndCallsAndFieldsVisitor final {
         if (const TypeDataAlias* r_aliasT = receiver_type->try_as<TypeDataAlias>(); r_aliasT && r_aliasT->alias_ref->is_generic_alias()) {
           if (TypePtr hinted_receiver = hint ? try_pick_instantiated_generic_from_hint(hint, r_aliasT->alias_ref) : nullptr) {
             receiver_type = hinted_receiver;   // assigned to `var v: Maybe<int> = Maybe.none()` or an alias-equivalent hint
+          } else if (r_aliasT->alias_ref->genericTs->size_no_defaults() == 0) {
+            std::vector<TypePtr> type_arguments;    // `SomeAlias.staticMethod()` where `SomeAlias<T=default>`
+            r_aliasT->alias_ref->genericTs->append_defaults(type_arguments);
+            receiver_type = TypeDataAlias::create(instantiate_generic_alias(r_aliasT->alias_ref, GenericsSubstitutions(r_aliasT->alias_ref->genericTs, type_arguments)));
           } else {
             err_cannot_deduce_genericT(r_aliasT).fire(v->get_obj(), cur_f);
           }
@@ -1023,6 +1030,10 @@ class InferTypesAndCallsAndFieldsVisitor final {
         if (const TypeDataStruct* r_structT = receiver_type->unwrap_alias()->try_as<TypeDataStruct>(); r_structT && r_structT->struct_ref->is_generic_struct()) {
           if (const TypeDataStruct* hint_same = hint ? hint->unwrap_alias()->try_as<TypeDataStruct>() : nullptr; hint_same && hint_same->struct_ref->base_struct_ref == r_structT->struct_ref) {
             receiver_type = hint;   // assigned to `var p: Pair<int, bool> = Pair.create(...)`
+          } else if (r_structT->struct_ref->genericTs->size_no_defaults() == 0) {
+            std::vector<TypePtr> type_arguments;    // `SomeStruct.staticMethod()` where `SomeStruct<T=default>`
+            r_structT->struct_ref->genericTs->append_defaults(type_arguments);
+            receiver_type = TypeDataStruct::create(instantiate_generic_struct(r_structT->struct_ref, GenericsSubstitutions(r_structT->struct_ref->genericTs, type_arguments)));
           } else {
             err_cannot_deduce_genericT(r_structT).fire(v->get_obj(), cur_f);
           }
@@ -1468,13 +1479,13 @@ class InferTypesAndCallsAndFieldsVisitor final {
     // either by lhs hint `var u: User = { ... }, or by explicitly provided ref `User { ... }`
     StructPtr struct_ref = nullptr;
 
-    // `User { ... }` / `UserAlias { ... }` / `Wrapper { ... }` / `Wrapper<int> { ... }`
+    // `User { ... }` / `Wrapper { ... }` / `Wrapper<int> { ... }`
     if (v->type_node) {
-      TypePtr provided_type = v->type_node->resolved_type->unwrap_alias();
+      TypePtr provided_type = v->type_node->resolved_type;
       if (const TypeDataStruct* hint_struct = provided_type->try_as<TypeDataStruct>()) {
         struct_ref = hint_struct->struct_ref;     // `Wrapper` / `Wrapper<int>`
       } else if (const TypeDataGenericTypeWithTs* hint_instTs = provided_type->try_as<TypeDataGenericTypeWithTs>()) {
-        struct_ref = hint_instTs->struct_ref;     // if `type WAlias<T> = Wrapper<T>`, here `Wrapper` (generic struct)
+        struct_ref = hint_instTs->struct_ref;     // `Wrapper<T>` inside a generic function
       }
       if (!struct_ref) {
         err("`{}` does not name a struct", v->type_node->resolved_type).fire(v->type_node, cur_f);
@@ -1901,9 +1912,11 @@ static void infer_and_save_return_type_of_function(FunctionPtr fun_ref) {
   // dig into g's body; it's safe, since the compiler is single-threaded
   // on finish, fun_ref->inferred_return_type is filled, and won't be called anymore
   called_stack.push_back(fun_ref);
+  RecursionGuard guard([&] {
+    called_stack.pop_back();
+  });
   InferTypesAndCallsAndFieldsVisitor visitor;
   visitor.start_visiting_function(fun_ref, fun_ref->ast_root->as<ast_function_declaration>());
-  called_stack.pop_back();
 }
 
 // infer constant type "on demand"
@@ -1919,9 +1932,11 @@ static void infer_and_save_type_of_constant(GlobalConstPtr const_ref) {
   }
 
   called_stack.push_back(const_ref);
+  RecursionGuard guard([&] {
+    called_stack.pop_back();
+  });
   InferTypesAndCallsAndFieldsVisitor visitor;
   visitor.start_visiting_constant(const_ref);
-  called_stack.pop_back();
 }
 
 void pipeline_infer_types_and_calls_and_fields() {

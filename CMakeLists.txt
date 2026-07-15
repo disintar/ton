@@ -3,6 +3,10 @@ cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
 
 #set(ENV{LDFLAGS} "-static-libgcc -static-libstdc++ -static")
 project(TON VERSION 0.5 LANGUAGES C CXX)
+
+#Compilation database
+set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
+
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 
@@ -116,6 +120,18 @@ if (TON_WERROR_BUILD)
   add_compile_options(-Werror)
 endif()
 
+# Configure CCache before any bundled dependencies are configured or built.
+find_program(CCACHE_FOUND ccache)
+if (CCACHE_FOUND)
+  if (NOT DEFINED CMAKE_C_COMPILER_LAUNCHER AND NOT DEFINED CMAKE_CXX_COMPILER_LAUNCHER)
+    message(STATUS "Using ccache")
+    set(CMAKE_C_COMPILER_LAUNCHER ccache)
+    set(CMAKE_CXX_COMPILER_LAUNCHER ccache)
+  endif()
+else()
+  message(STATUS "Could NOT find ccache")
+endif()
+
 # Ensure custom build modules (including OpenSSL/Sodium) are available early for QUIC/crypto checks.
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake" ${CMAKE_MODULE_PATH})
 include(BuildOpenSSL)
@@ -143,7 +159,7 @@ endif()
 if (TON_USE_ROCKSDB)
   message("Add rocksdb")
   function(rocksdb_scope)
-    if (ANDROID)
+    if (ANDROID OR (TON_ARCH AND NOT TON_ARCH STREQUAL "native"))
       set(PORTABLE ON CACHE BOOL "")
     endif()
     set(WITH_GFLAGS OFF CACHE BOOL "")
@@ -380,18 +396,6 @@ include(BuildMHD)
 include(BuildZlib)
 
 
-# Configure CCache if available
-find_program(CCACHE_FOUND ccache)
-if (CCACHE_FOUND)
-  if (NOT DEFINED CMAKE_C_COMPILER_LAUNCHER AND NOT DEFINED CMAKE_CXX_COMPILER_LAUNCHER)
-    message(STATUS "Using ccache")
-    set(CMAKE_C_COMPILER_LAUNCHER ccache)
-    set(CMAKE_CXX_COMPILER_LAUNCHER ccache)
-  endif()
-else()
-  message(STATUS "Could NOT find ccache")
-endif()
-
 include(CheckCXXCompilerFlag)
 
 set(CMAKE_THREAD_PREFER_PTHREAD ON)
@@ -467,6 +471,9 @@ if (MSVC)
   endif()
   add_definitions(-D_SCL_SECURE_NO_WARNINGS -D_CRT_SECURE_NO_WARNINGS)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP /W4 /wd4100 /wd4127 /wd4324 /wd4456 /wd4457 /wd4458 /wd4505 /wd4702")
+  if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /clang:-Wno-c++98-compat /clang:-Wno-c++98-compat-pedantic /clang:-Wno-shadow")
+  endif()
 elseif (CLANG OR GCC)
   if (GCC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fstrong-eval-order=some")
@@ -587,9 +594,6 @@ endif()
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=leak")
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -finstrument-functions")
 
-#Compilation database
-set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
-
 #BEGIN internal
 option(TON_BUILD_DOCS "Build LaTeX/PDF documentation targets" OFF)
 find_package(LATEX)
@@ -666,7 +670,6 @@ add_subdirectory(fec)
 add_subdirectory(rldp2)
 add_subdirectory(dht)
 add_subdirectory(overlay)
-add_subdirectory(validator-session)
 add_subdirectory(validator)
 if (NOT USE_EMSCRIPTEN AND NOT EMSCRIPTEN)
   add_subdirectory(blockchain-explorer)
@@ -790,9 +793,20 @@ target_link_libraries(test-quic-sender adnl dht tl_api quic)
 
 add_executable(test-overlay test/test-overlay.cpp)
 target_link_libraries(test-overlay overlay tdutils tdactor adnl adnltest tl_api dht )
+add_executable(plumtree-graph-sim
+  test/plumtree/plumtree-graph-sim.cpp
+  test/plumtree/graph.cpp
+  test/plumtree/scheduler.cpp
+  test/plumtree/transport.cpp
+  test/plumtree/util.cpp
+)
+target_link_libraries(plumtree-graph-sim overlay tdutils tdactor adnl adnltest tl_api dht )
+add_test(NAME plumtree-graph-sim-smoke COMMAND plumtree-graph-sim --smoke)
+add_test(NAME plumtree-graph-sim-simple-smoke COMMAND plumtree-graph-sim --smoke --broadcast-mode simple)
+add_dependencies(all-tests plumtree-graph-sim)
 add_executable(test-ton-collator test/test-ton-collator.cpp)
 target_link_libraries(test-ton-collator overlay tdutils tdactor adnl tl_api dht
-  validatorsession validator-disk ton_validator validator-disk )
+  validator-disk ton_validator validator-disk )
 
 add_executable(test-http test/test-http.cpp)
 target_link_libraries(test-http PRIVATE tonhttp)

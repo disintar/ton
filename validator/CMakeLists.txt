@@ -65,6 +65,8 @@ set(VALIDATOR_HEADERS
   interfaces/validator-full-id.h
   interfaces/validator-manager.h
   invariants.hpp
+  collation-manager.hpp
+  collator-node/collator-node.hpp
 
   import-db-slice.hpp
   import-db-slice-local.hpp
@@ -74,10 +76,6 @@ set(VALIDATOR_HEADERS
   shard-block-verifier.hpp
   shard-block-retainer.hpp
 
-  collation-manager.hpp
-  collator-node/collator-node.hpp
-  collator-node/collator-node-session.hpp
-  collator-node/utils.hpp
   manager-disk.h
   manager-disk.hpp
   manager-init.h
@@ -91,10 +89,6 @@ set(VALIDATOR_HEADERS
   validator.h
 )
 set(VALIDATOR_SOURCE
-  collation-manager.cpp
-  collator-node/collator-node.cpp
-  collator-node/collator-node-session.cpp
-  collator-node/utils.cpp
   downloaders/wait-block-data.cpp
   get-next-key-blocks.cpp
   import-db-slice.cpp
@@ -109,10 +103,12 @@ set(VALIDATOR_SOURCE
   impl/applied-ext-message-cleanup.cpp
 
   manager.cpp
+  validator-group.cpp
 
   consensus/simplex/bus.cpp
   consensus/simplex/candidate-resolver.cpp
   consensus/simplex/certificate.cpp
+  consensus/simplex/collator-schedule.cpp
   consensus/simplex/consensus.cpp
   consensus/simplex/db.cpp
   consensus/simplex/pool.cpp
@@ -126,6 +122,7 @@ set(VALIDATOR_SOURCE
   consensus/bridge.cpp
   consensus/bus.cpp
   consensus/chain-state.cpp
+  consensus/payload.cpp
   consensus/private-overlay.cpp
   consensus/trace-collector.cpp
   consensus/stats.cpp
@@ -180,7 +177,7 @@ set(FULL_NODE_SOURCE
 
 add_library(validator-db OBJECT ${VALIDATOR_DB_SOURCE})
 target_include_directories(validator-db PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
-target_link_libraries(validator-db PUBLIC tdactor adnl tl_api dht tdfec overlay validatorsession ton_db)
+target_link_libraries(validator-db PUBLIC tdactor adnl tl_api dht tdfec overlay ton_db)
 
 add_library(validator-common OBJECT
   downloaders/download-state.cpp
@@ -194,7 +191,7 @@ add_library(validator-common OBJECT
   validator-full-id.cpp
   validator-options.cpp
 )
-target_link_libraries(validator-common PUBLIC validator-db)
+target_link_libraries(validator-common PUBLIC validator-db metrics)
 
 add_library(validator STATIC ${VALIDATOR_SOURCE})
 add_library(validator-disk STATIC ${DISK_VALIDATOR_SOURCE})
@@ -254,6 +251,6 @@ target_link_libraries(validator-disk PRIVATE validator-common validator-db)
 
 target_link_libraries(validator-hardfork PRIVATE validator-common validator-db)
 
-target_link_libraries(validator-hardfork PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} tdactor adnl rldp2 tl_api dht tdfec overlay validatorsession ton_db)
+target_link_libraries(validator-hardfork PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} tdactor adnl rldp2 tl_api dht tdfec overlay ton_db)
 
-target_link_libraries(full-node PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} tdactor adnl rldp2 tl_api dht tdfec overlay validatorsession ton_db)
+target_link_libraries(full-node PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} tdactor adnl rldp2 tl_api dht tdfec overlay ton_db)

@@ -31,6 +31,7 @@
 #include "interfaces/persistent-state.h"
 #include "interfaces/proof.h"
 #include "interfaces/shard.h"
+#include "metrics/collectors.h"
 #include "validator-engine/IBlockParser.hpp"
 #include "overlay/overlays.h"
 #include "td/actor/actor.h"
@@ -47,6 +48,12 @@ class PrometheusExporterActor;
 namespace ton {
 
 namespace validator {
+
+constexpr int VERBOSITY_NAME(VALIDATOR_WARNING) = verbosity_WARNING;
+constexpr int VERBOSITY_NAME(VALIDATOR_NOTICE) = verbosity_INFO;
+constexpr int VERBOSITY_NAME(VALIDATOR_INFO) = verbosity_DEBUG;
+constexpr int VERBOSITY_NAME(VALIDATOR_DEBUG) = verbosity_DEBUG;
+constexpr int VERBOSITY_NAME(VALIDATOR_EXTRA_DEBUG) = verbosity_DEBUG + 1;
 
 class ActionToken {
  public:
@@ -266,6 +273,8 @@ class ValidatorManagerInterface : public td::actor::Actor {
     }
     virtual void send_broadcast(BlockBroadcast broadcast, int mode) {
     }
+    virtual void send_block_finality_broadcast(BlockFinalityBroadcast finality, int mode) {
+    }
     virtual void send_out_msg_queue_proof_broadcast(td::Ref<OutMsgQueueProofBroadcast> broadcats) {
     }
     virtual void download_block(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
@@ -301,9 +310,13 @@ class ValidatorManagerInterface : public td::actor::Actor {
 
   virtual ~ValidatorManagerInterface() = default;
   virtual void install_callback(std::unique_ptr<Callback> new_callback, td::Promise<td::Unit> promise) = 0;
-  virtual void add_permanent_key(PublicKeyHash key, td::Promise<td::Unit> promise) = 0;
+  virtual void add_permanent_key(PublicKeyHash key, td::Promise<td::Unit> promise) {
+    promise.set_error(td::Status::Error("not implemented"));
+  }
   virtual void add_temp_key(PublicKeyHash key, td::Promise<td::Unit> promise) = 0;
-  virtual void del_permanent_key(PublicKeyHash key, td::Promise<td::Unit> promise) = 0;
+  virtual void del_permanent_key(PublicKeyHash key, td::Promise<td::Unit> promise) {
+    promise.set_error(td::Status::Error("not implemented"));
+  }
   virtual void del_temp_key(PublicKeyHash key, td::Promise<td::Unit> promise) = 0;
 
   virtual void validate_block_is_next_proof(BlockIdExt prev_block_id, BlockIdExt next_block_id, td::BufferSlice proof,
@@ -312,9 +325,24 @@ class ValidatorManagerInterface : public td::actor::Actor {
   virtual void validate_block_proof_link(BlockIdExt block_id, td::BufferSlice proof, td::Promise<td::Unit> promise) = 0;
   virtual void validate_block_proof_rel(BlockIdExt block_id, BlockIdExt rel_block_id, td::BufferSlice proof,
                                         td::Promise<td::Unit> promise) = 0;
-  virtual void on_next_masterchain_block(ReceivedBlock block, td::Promise<BlockHandle> promise) = 0;
+  virtual void got_next_masterchain_block(ReceivedBlock block, td::Promise<BlockHandle> promise) {
+    on_next_masterchain_block(std::move(block), std::move(promise));
+  }
+  virtual void on_next_masterchain_block(ReceivedBlock block, td::Promise<BlockHandle> promise) {
+    promise.set_error(td::Status::Error("not implemented"));
+  }
+  virtual td::actor::Task<> new_block_broadcast(BlockBroadcast broadcast, bool signatures_checked,
+                                                BroadcastSource source) {
+    co_return td::Unit{};
+  }
   virtual void new_block_broadcast(BlockBroadcast broadcast, bool signatures_checked,
-                                   td::Promise<td::Unit> promise, bool from_custom_overlay = false) = 0;
+                                   td::Promise<td::Unit> promise, bool from_custom_overlay = false) {
+    new_block_broadcast(std::move(broadcast), signatures_checked,
+                        from_custom_overlay ? BroadcastSource::custom_overlay : BroadcastSource::public_overlay)
+        .start()
+        .detach_silent();
+    promise.set_value(td::Unit{});
+  }
   virtual void validate_block_broadcast_signatures(BlockBroadcast broadcast, td::Promise<td::Unit> promise) = 0;
 
   //virtual void create_validate_block(BlockId block, td::BufferSlice data, td::Promise<Block> promise) = 0;
@@ -358,11 +386,19 @@ class ValidatorManagerInterface : public td::actor::Actor {
   virtual td::actor::Task<> new_external_message_query(td::BufferSlice data) {
     co_return td::Status::Error("not implemented");
   }
-  virtual void new_ihr_message(td::BufferSlice data) = 0;
+  virtual void new_ihr_message(td::BufferSlice data) {
+  }
   virtual void new_shard_block_description_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno,
                                                      td::BufferSlice data) = 0;
   virtual td::actor::Task<> new_block_candidate_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno,
                                                           td::BufferSlice data) {
+    co_return td::Unit{};
+  }
+  virtual td::actor::Task<> new_block_candidate_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno,
+                                                          td::BufferSlice data, BroadcastSource source) {
+    co_return td::Unit{};
+  }
+  virtual td::actor::Task<> new_block_finality_broadcast(BlockFinalityBroadcast finality, BroadcastSource source) {
     co_return td::Unit{};
   }
 
@@ -379,7 +415,9 @@ class ValidatorManagerInterface : public td::actor::Actor {
   virtual void get_block_data_from_db_short(BlockIdExt block_id, td::Promise<td::Ref<BlockData>> promise) = 0;
   virtual void get_shard_state_from_db(ConstBlockHandle handle, td::Promise<td::Ref<ShardState>> promise) = 0;
   virtual void get_shard_state_root_cell_from_db(ConstBlockHandle handle,
-                                                 td::Promise<td::Ref<vm::DataCell>> promise) = 0;
+                                                 td::Promise<td::Ref<vm::DataCell>> promise) {
+    promise.set_error(td::Status::Error("not implemented"));
+  }
   virtual void get_shard_state_from_db_short(BlockIdExt block_id, td::Promise<td::Ref<ShardState>> promise) = 0;
   virtual void get_block_proof_from_db(ConstBlockHandle handle, td::Promise<td::Ref<Proof>> promise) = 0;
   virtual void get_block_proof_from_db_short(BlockIdExt id, td::Promise<td::Ref<Proof>> promise) = 0;
@@ -446,6 +484,8 @@ class ValidatorManagerInterface : public td::actor::Actor {
   virtual void add_out_msg_queue_proof(ShardIdFull dst_shard, td::Ref<OutMsgQueueProof> proof) {
     LOG(ERROR) << "Unimplemented add_out_msg_queu_proof - ignore broadcast";
   }
+
+  virtual td::actor::Task<> collect(metrics::Context ctx) = 0;
 
   virtual void get_collation_manager_stats(
       td::Promise<tl_object_ptr<ton_api::engine_validator_collationManagerStats>> promise) = 0;

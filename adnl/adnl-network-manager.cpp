@@ -113,15 +113,15 @@ void AdnlNetworkManagerImpl::receive_udp_message(td::UdpMessage message, size_t 
     return;
   }
   if (message.error.is_error()) {
-    VLOG(ADNL_WARNING) << this << ": dropping ERROR message: " << message.error;
+    VLOG(adnl, WARNING) << this << ": dropping ERROR message: " << message.error;
     return;
   }
   if (message.data.size() < 32) {
-    VLOG(ADNL_WARNING) << this << ": received too small proxy packet of size " << message.data.size();
+    VLOG(adnl, WARNING) << this << ": received too small packet of size " << message.data.size();
     return;
   }
   if (message.data.size() >= get_mtu() + 128) {
-    VLOG(ADNL_NOTICE) << this << ": received huge packet of size " << message.data.size();
+    VLOG(adnl, INFO) << this << ": received huge packet of size " << message.data.size();
   }
   CHECK(idx < udp_sockets_.size());
   auto &socket = udp_sockets_[idx];
@@ -138,7 +138,7 @@ void AdnlNetworkManagerImpl::receive_udp_message(td::UdpMessage message, size_t 
       CHECK(proxy_iface.is_proxy());
       auto R = in_desc_[it->second].proxy->decrypt(std::move(message.data));
       if (R.is_error()) {
-        VLOG(ADNL_WARNING) << this << ": failed to decrypt proxy mesage: " << R.move_as_error();
+        VLOG(adnl, WARNING) << this << ": failed to decrypt proxy message: " << R.move_as_error();
         return;
       }
       auto packet = R.move_as_ok();
@@ -149,28 +149,28 @@ void AdnlNetworkManagerImpl::receive_udp_message(td::UdpMessage message, size_t 
       }
       if ((packet.flags & 6) == 6) {
         if (packet.seqno <= 0 || packet.adnl_start_time < 0) {
-          VLOG(ADNL_WARNING) << this << ": dropping proxy packet: invalid start_time/seqno";
+          VLOG(adnl, WARNING) << this << ": dropping proxy packet: invalid start_time/seqno";
           return;
         }
         if (proxy_iface.received.packet_is_delivered(packet.adnl_start_time, packet.seqno)) {
-          VLOG(ADNL_WARNING) << this << ": dropping duplicate proxy packet";
+          VLOG(adnl, WARNING) << this << ": dropping duplicate proxy packet";
           return;
         }
       }
       if (packet.flags & 8) {
         if (packet.date < td::Clocks::system() - 60 || packet.date > td::Clocks::system() + 60) {
-          VLOG(ADNL_WARNING) << this << ": dropping proxy packet: bad time " << packet.date;
+          VLOG(adnl, WARNING) << this << ": dropping proxy packet: bad time " << packet.date;
           return;
         }
       }
       if (!(packet.flags & (1 << 16))) {
-        VLOG(ADNL_WARNING) << this << ": dropping proxy packet: packet has outbound flag";
+        VLOG(adnl, WARNING) << this << ": dropping proxy packet: packet has outbound flag";
         return;
       }
       if (packet.flags & (1 << 17)) {
         auto F = fetch_tl_object<ton_api::adnl_ProxyControlPacket>(std::move(packet.data), true);
         if (F.is_error()) {
-          VLOG(ADNL_WARNING) << this << ": dropping proxy packet: bad control packet";
+          VLOG(adnl, WARNING) << this << ": dropping proxy packet: bad control packet";
           return;
         }
         ton_api::downcast_call(*F.move_as_ok().get(),
@@ -205,20 +205,20 @@ void AdnlNetworkManagerImpl::receive_udp_message(td::UdpMessage message, size_t 
   }
   if (!from_proxy) {
     if (socket.in_desc == std::numeric_limits<size_t>::max()) {
-      VLOG(ADNL_WARNING) << this << ": received bad packet to proxy-only listenung port";
+      VLOG(adnl, WARNING) << this << ": received bad packet to proxy-only listening port";
       return;
     }
     cat_mask = in_desc_[socket.in_desc].cat_mask;
   }
   if (message.data.size() >= get_mtu()) {
-    VLOG(ADNL_NOTICE) << this << ": received huge packet of size " << message.data.size();
+    VLOG(adnl, INFO) << this << ": received huge packet of size " << message.data.size();
   }
   received_messages_++;
   if (received_messages_ % 64 == 0) {
-    VLOG(ADNL_DEBUG) << this << ": received " << received_messages_ << " udp messages";
+    VLOG(adnl, DEBUG) << this << ": received " << received_messages_ << " udp messages";
   }
 
-  VLOG(ADNL_EXTRA_DEBUG) << this << ": received message of size " << message.data.size();
+  VLOG(adnl, DEBUG) << this << ": received message of size " << message.data.size();
   callback_->receive_packet(message.address, cat_mask, std::move(message.data));
 }
 
@@ -226,14 +226,14 @@ void AdnlNetworkManagerImpl::send_udp_packet(AdnlNodeIdShort src_id, AdnlNodeIdS
                                              td::uint32 priority, td::BufferSlice data) {
   auto it = adnl_id_2_cat_.find(src_id);
   if (it == adnl_id_2_cat_.end()) {
-    VLOG(ADNL_WARNING) << this << ": dropping OUT message [" << src_id << "->" << dst_id
+    VLOG(adnl, WARNING) << this << ": dropping OUT message [" << src_id << "->" << dst_id
                        << "]: unknown src: " << src_id.bits256_value().to_hex();
     return;
   }
 
   auto out = choose_out_iface(it->second, priority);
   if (!out) {
-    VLOG(ADNL_WARNING) << this << ": dropping OUT message [" << src_id << "->" << dst_id << "]: no out rules";
+    VLOG(adnl, WARNING) << this << ": dropping OUT message [" << src_id << "->" << dst_id << "]: no out rules";
     return;
   }
 

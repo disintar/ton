@@ -79,7 +79,7 @@ fun test108(calcMin: bool) {
 
 @method_id(109)
 fun test109(bigCost: bool) {
-    return bigCost ? ton("0.05") : (ton("0.001"));
+    return bigCost ? grams("0.05") : (grams("0.001"));
 }
 
 @method_id(110)
@@ -93,6 +93,16 @@ fun test111(g: bool) {
     return g ? (1, 2) : (3, 4);
 }
 
+fun fail112(): never {
+    throw 123;
+}
+
+@method_id(112)
+fun test112(flag: bool) {
+    var (_, _) = flag ? (1, 2) : fail112();
+    var (a, _) = flag ? (3, 4) : fail112();
+    return (112, a);
+}
 
 @method_id(200)
 fun test200(x: int) {
@@ -208,6 +218,7 @@ fun main() {}
 @testcase | 110 | -5      | 7
 @testcase | 111 | -1      | 1 2
 @testcase | 111 | 0       | 3 4
+@testcase | 112 | -1      | 112 3
 
 @testcase | 200 | 20      | 200
 @testcase | 201 | 5       | 5

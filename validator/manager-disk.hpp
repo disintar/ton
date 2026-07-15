@@ -301,6 +301,8 @@ class ValidatorManagerImpl : public ValidatorManager {
   void send_top_shard_block_description(td::Ref<ShardTopBlockDescription> desc) override;
   void send_block_broadcast(BlockBroadcast broadcast, int mode) override {
   }
+  void send_block_finality_broadcast(BlockFinalityBroadcast finality, int mode) override {
+  }
   void send_get_out_msg_queue_proof_request(ShardIdFull dst_shard, std::vector<BlockIdExt> blocks,
                                             block::ImportedMsgQueueLimits limits,
                                             td::Promise<std::vector<td::Ref<OutMsgQueueProof>>> promise) override {
@@ -368,6 +370,9 @@ class ValidatorManagerImpl : public ValidatorManager {
   };
   void set_prometheus_exporter(td::actor::ActorId<PrometheusExporterActor>) override {
     UNREACHABLE();
+  }
+  td::actor::Task<> collect(metrics::Context ctx) override {
+    co_return td::Unit{};
   }
   void add_lite_query_stats_extended(int lite_query_id, adnl::AdnlNodeIdShort dst, long start_at, long end_at,
                                      bool success) override;

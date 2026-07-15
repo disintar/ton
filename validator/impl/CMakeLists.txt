@@ -12,6 +12,7 @@ set(TON_VALIDATOR_SOURCE
   collator.cpp
   config.cpp
   external-message.cpp
+  ext-message-checker.cpp
   ext-message-pool.cpp
   fabric.cpp
   ihr-message.cpp
@@ -30,6 +31,7 @@ set(TON_VALIDATOR_SOURCE
   collator-impl.h
   config.hpp
   external-message.hpp
+  ext-message-checker.hpp
   ext-message-pool.hpp
   ihr-message.hpp
   liteserver.hpp
@@ -52,4 +54,4 @@ target_include_directories(ton_validator PUBLIC
 )
 
 target_link_libraries(ton_validator PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} tdutils tdactor adnl tl_api tl_lite_api tl-lite-utils dht tdfec
-  overlay validatorsession ton_crypto ton_block)
+  overlay ton_crypto ton_block)

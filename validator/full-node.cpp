@@ -27,6 +27,7 @@
 
 #include <algorithm>
 #include <mutex>
+#include <set>
 
 #include "block-propagation-trace.h"
 #include "custom-overlay-metrics.h"
@@ -1069,7 +1070,9 @@ void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast, bool signat
     record_custom_overlay_block_broadcast_received();
   }
   send_block_broadcast_to_custom_overlays(broadcast);
-  td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_block_broadcast, std::move(broadcast),
+  auto new_block_broadcast = static_cast<void (ValidatorManagerInterface::*)(
+      BlockBroadcast, bool, td::Promise<td::Unit>, bool)>(&ValidatorManagerInterface::new_block_broadcast);
+  td::actor::send_closure(validator_manager_, new_block_broadcast, std::move(broadcast),
                           signatures_checked, [block_id, trace, final_known, final, source](td::Result<td::Unit> R) {
                             if (R.is_error()) {
                               auto error = R.move_as_error();
@@ -1089,7 +1092,9 @@ void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast, bool signat
 void FullNodeImpl::process_block_candidate_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno,
                                                      td::uint32 validator_set_hash, td::BufferSlice data) {
   send_block_candidate_broadcast_to_custom_overlays(block_id, cc_seqno, validator_set_hash, data);
-  td::actor::ask(validator_manager_, &ValidatorManagerInterface::new_block_candidate_broadcast, block_id, cc_seqno,
+  auto new_block_candidate_broadcast = static_cast<td::actor::Task<> (ValidatorManagerInterface::*)(
+      BlockIdExt, CatchainSeqno, td::BufferSlice)>(&ValidatorManagerInterface::new_block_candidate_broadcast);
+  td::actor::ask(validator_manager_, new_block_candidate_broadcast, block_id, cc_seqno,
                  std::move(data))
       .detach();
 }
@@ -1409,21 +1414,18 @@ decltype(FullNodeImpl::limiter_) FullNodeImpl::make_limiter(const FullNodeOption
   size_t h_limit = opts.ratelimit_heavy_;
   size_t m_limit = opts.ratelimit_medium_;
   size_t g_limit = opts.ratelimit_global_;
+  size_t s_limit = 200;
   return std::make_shared<RateLimiter<>>(
-      RateLimit{w_size, g_limit},
-      std::map<int32_t, RateLimit>{{ton_api::tonNode_getArchiveSlice::ID, {w_size, h_limit}},
-                                   {ton_api::tonNode_downloadPersistentStateSliceV2::ID, {w_size, h_limit}},
-                                   {ton_api::tonNode_downloadZeroState::ID, {w_size, h_limit}},
-
-                                   {ton_api::tonNode_downloadBlock::ID, {w_size, m_limit}},
-                                   {ton_api::tonNode_downloadBlockFull::ID, {w_size, m_limit}},
-                                   {ton_api::tonNode_downloadNextBlockFull::ID, {w_size, m_limit}},
-                                   {ton_api::tonNode_downloadNextBlocksFull::ID, {w_size, m_limit}},
-                                   {ton_api::tonNode_downloadBlockProof::ID, {w_size, m_limit}},
-                                   {ton_api::tonNode_downloadBlockProofLink::ID, {w_size, m_limit}},
-                                   {ton_api::tonNode_downloadKeyBlockProof::ID, {w_size, m_limit}},
-                                   {ton_api::tonNode_downloadKeyBlockProofLink::ID, {w_size, m_limit}},
-                                   {ton_api::tonNode_getOutMsgQueueProof::ID, {w_size, m_limit}}});
+      RateLimit{w_size, g_limit}, RateLimit{w_size, h_limit},
+      std::set<int32_t>{ton_api::tonNode_getArchiveSlice::ID, ton_api::tonNode_downloadPersistentStateSliceV2::ID,
+                        ton_api::tonNode_downloadZeroState::ID},
+      RateLimit{w_size, m_limit},
+      std::set<int32_t>{ton_api::tonNode_downloadBlock::ID, ton_api::tonNode_downloadBlockFull::ID,
+                        ton_api::tonNode_downloadNextBlockFull::ID, ton_api::tonNode_downloadNextBlocksFull::ID,
+                        ton_api::tonNode_downloadBlockProof::ID, ton_api::tonNode_downloadBlockProofLink::ID,
+                        ton_api::tonNode_downloadKeyBlockProof::ID,
+                        ton_api::tonNode_downloadKeyBlockProofLink::ID, ton_api::tonNode_getOutMsgQueueProof::ID},
+      RateLimit{w_size, s_limit}, std::set<int32_t>{});
 }
 
 }  // namespace fullnode

@@ -164,7 +164,8 @@ class ValidatorManagerImpl : public ValidatorManager {
   void get_key_block_proof_link(BlockIdExt block_id, td::Promise<td::BufferSlice> promise) override;
 
   td::actor::Task<> new_external_message_broadcast(td::BufferSlice data, int priority) override;
-  void new_ihr_message(td::BufferSlice data) override;
+  void new_ihr_message(td::BufferSlice data) override {
+  }
   void new_shard_block_description_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno,
                                              td::BufferSlice data) override {
     UNREACHABLE();
@@ -263,7 +264,9 @@ class ValidatorManagerImpl : public ValidatorManager {
   void wait_block_message_queue_short(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                       td::Promise<td::Ref<MessageQueue>> promise) override;
   void get_external_messages(ShardIdFull shard, std::unique_ptr<ExtMsgCallback> callback) override;
-  void get_ihr_messages(ShardIdFull shard, td::Promise<std::vector<td::Ref<IhrMessage>>> promise) override;
+  void get_ihr_messages(ShardIdFull shard, td::Promise<std::vector<td::Ref<IhrMessage>>> promise) override {
+    promise.set_value({});
+  }
   void get_shard_blocks_for_collator(BlockIdExt masterchain_block_id,
                                      td::Promise<std::vector<td::Ref<ShardTopBlockDescription>>> promise) override;
   void complete_external_messages(std::vector<ExtMessage::Hash> to_delay,
@@ -352,6 +355,8 @@ class ValidatorManagerImpl : public ValidatorManager {
     UNREACHABLE();
   }
   void send_block_broadcast(BlockBroadcast broadcast, int mode) override {
+  }
+  void send_block_finality_broadcast(BlockFinalityBroadcast finality, int mode) override {
   }
   void send_get_out_msg_queue_proof_request(ShardIdFull dst_shard, std::vector<BlockIdExt> blocks,
                                             block::ImportedMsgQueueLimits limits,
@@ -498,6 +503,9 @@ class ValidatorManagerImpl : public ValidatorManager {
 
   void set_prometheus_exporter(td::actor::ActorId<PrometheusExporterActor>) override {
     UNREACHABLE();
+  }
+  td::actor::Task<> collect(metrics::Context ctx) override {
+    co_return td::Unit{};
   }
   void add_collator(adnl::AdnlNodeIdShort id, ShardIdFull shard) override {
     UNREACHABLE();

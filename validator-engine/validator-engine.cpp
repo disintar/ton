@@ -4451,6 +4451,43 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_setVerbos
   promise.set_value(ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
 }
 
+void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_setLogCategoryVerbosity &query,
+                                        td::BufferSlice data, ton::PublicKeyHash src, td::uint32 perm,
+                                        td::Promise<td::BufferSlice> promise) {
+  if (!(perm & ValidatorEnginePermissions::vep_default)) {
+    promise.set_value(create_control_query_error(td::Status::Error(ton::ErrorCode::error, "not authorized")));
+    return;
+  }
+
+  if (query.verbosity_ < 0 || query.verbosity_ > 10) {
+    promise.set_value(create_control_query_error(
+        td::Status::Error(ton::ErrorCode::error, "verbosity should be in range [0..10]")));
+    return;
+  }
+
+  if (!td::set_log_category_level(query.name_, VERBOSITY_NAME(ERROR) + query.verbosity_)) {
+    promise.set_value(create_control_query_error(td::Status::Error(ton::ErrorCode::error, "unknown log category")));
+    return;
+  }
+
+  promise.set_value(ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+}
+
+void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_getLogCategories &query, td::BufferSlice data,
+                                        ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise) {
+  if (!(perm & ValidatorEnginePermissions::vep_default)) {
+    promise.set_value(create_control_query_error(td::Status::Error(ton::ErrorCode::error, "not authorized")));
+    return;
+  }
+
+  td::StringBuilder sb;
+  for (auto *category = td::first_log_category(); category != nullptr; category = category->next()) {
+    sb << category->name() << " level=" << category->get_level() << " default=" << category->default_level()
+       << " override=" << category->override_level() << "\n";
+  }
+  promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_textStats>(sb.as_cslice().str()));
+}
+
 void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_getStats &query, td::BufferSlice data,
                                         ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise) {
   if (!(perm & ValidatorEnginePermissions::vep_default)) {

@@ -12,7 +12,7 @@ enum InvertedColor {
     Red = Color.Blue,
     Green = Color.Green,
     Blue = Color.Red,
-    OneTon = ton("1"),
+    OneGram = grams("1"),
 }
 
 type ColorAlias = Color
@@ -261,7 +261,7 @@ fun test13(x: int) {
 @method_id(114)
 fun test14(x: InvertedColor) {
     __expect_type(InvertedColor.Red, "InvertedColor");
-    return (InvertedColor.Red, InvertedColor.Green, InvertedColor.Blue, InvertedColor.OneTon, x == InvertedColor.Red);
+    return (InvertedColor.Red, InvertedColor.Green, InvertedColor.Blue, InvertedColor.OneGram, x == InvertedColor.Red);
 }
 
 @method_id(115)
@@ -281,6 +281,11 @@ fun test16() {
     };
     var x: int32 = Err.DisabledId;
     return (p1.exitCode is int32, p2.exitCode is int32, p2.exitCode is (int32 -> bool), x);
+}
+
+@method_id(117)
+fun test27() {
+    return [[Color.Red]].toCell().beginParse().remainingBitsAndRefsCount()
 }
 
 
@@ -319,6 +324,7 @@ fun main(c: Color) {
 @testcase | 114 | 2   | 2 1 0 1000000000 -1 
 @testcase | 115 |     | 0 2
 @testcase | 116 |     | -1 0 -1 258
+@testcase | 117 |     | 9 1
 
 @fif_codegen
 """
