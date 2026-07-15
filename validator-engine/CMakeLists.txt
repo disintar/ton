@@ -24,7 +24,7 @@ set(VALIDATOR_ENGINE_SOURCE
 
 add_executable(validator-engine ${VALIDATOR_ENGINE_SOURCE})
 target_link_libraries(validator-engine metrics overlay tdutils tdactor adnl tl_api dht
-  rldp rldp2 quic catchain validatorsession full-node validator ton_validator validator
+  rldp2 quic validatorsession full-node validator ton_validator validator
   fift-lib memprof git ${JEMALLOC_LIBRARIES}  ${MHD_LIBRARY})
 
 target_include_directories(validator-engine PUBLIC ${MHD_INCLUDE_DIR})

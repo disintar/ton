@@ -108,6 +108,14 @@ void FullNodeMasterImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::tonNo
       .release();
 }
 
+void FullNodeMasterImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_downloadNextBlocksFull &query,
+                                       td::Promise<td::BufferSlice> promise) {
+  BlockIdExt block_id = create_block_id(query.prev_block_);
+  td::actor::create_actor<NextBlocksFullSender>("sender.nexts", block_id, query.max_blocks_, validator_manager_,
+                                                std::move(promise))
+      .release();
+}
+
 void FullNodeMasterImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_prepareBlockProof &query,
                                        td::Promise<td::BufferSlice> promise) {
   if (query.block_->seqno_ == 0) {
@@ -368,6 +376,10 @@ void FullNodeMasterImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::tonNo
 
 void FullNodeMasterImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_getArchiveSlice &query,
                                        td::Promise<td::BufferSlice> promise) {
+  if (query.max_size_ < 0 || query.max_size_ > (1 << 24)) {
+    promise.set_error(td::Status::Error(ErrorCode::protoviolation, "invalid max_size"));
+    return;
+  }
   td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_archive_slice, query.archive_id_,
                           query.offset_, query.max_size_, std::move(promise));
 }
@@ -385,6 +397,10 @@ void FullNodeMasterImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::tonNo
 void FullNodeMasterImpl::process_query(adnl::AdnlNodeIdShort src,
                                        ton_api::tonNode_downloadPersistentStateSliceV2 &query,
                                        td::Promise<td::BufferSlice> promise) {
+  if (query.max_size_ < 0 || query.max_size_ > (1 << 24)) {
+    promise.set_error(td::Status::Error(ErrorCode::protoviolation, "invalid max_size"));
+    return;
+  }
   auto P = td::PromiseCreator::lambda(
       [SelfId = actor_id(this), promise = std::move(promise)](td::Result<td::BufferSlice> R) mutable {
         if (R.is_error()) {

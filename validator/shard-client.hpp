@@ -18,13 +18,11 @@
 */
 #pragma once
 
-#include <cstdint>
-#include <cstddef>
-#include <iterator>
-#include <map>
 #include <set>
+#include <vector>
 
 #include "interfaces/validator-manager.h"
+#include "td/actor/SharedFuture.h"
 
 namespace ton {
 
@@ -36,84 +34,78 @@ class ShardClient : public td::actor::Actor {
     BlockIdExt shard;
     td::uint32 split_depth;
   };
-  static constexpr std::size_t MAX_PENDING_MASTERCHAIN_NOTIFICATIONS = 64;
 
-  td::Ref<ValidatorManagerOptions> opts_;
+  Ref<ValidatorManagerOptions> opts_;
 
   BlockHandle masterchain_block_handle_;
-  td::Ref<MasterchainState> masterchain_state_;
+  Ref<MasterchainState> init_mode_mc_state_;
+  BlockSeqno processed_masterchain_block_{0};
   std::vector<BlockIdExt> latest_shards_;
-  std::map<BlockSeqno, std::pair<BlockHandle, td::Ref<MasterchainState>>> pending_masterchain_notifications_;
 
   std::vector<td::actor::ActorOwn<ShardClient>> children_;
 
-  std::uint64_t apply_generation_ = 0;
-  BlockIdExt applying_masterchain_block_id_;
-  double apply_started_at_ = 0.0;
-  bool apply_active_ = false;
-  bool waiting_ = false;
-  bool init_mode_ = false;
   bool started_ = false;
+  bool init_mode_ = false;
+  td::actor::SharedFuture<td::Unit> initialize_waiter_;
+  std::vector<td::Promise<>> waiters_;
 
   td::actor::ActorId<ValidatorManager> manager_;
+  td::Promise<> initialize_promise_;
 
-  td::Promise<td::Unit> promise_;
+  td::actor::Task<> wait() {
+    auto [task, promise] = td::actor::StartedTask<>::make_bridge();
+    waiters_.push_back(std::move(promise));
+    co_return co_await std::move(task);
+  }
+
+  void notify() {
+    auto waiters = std::move(waiters_);
+    waiters_.clear();
+    for (auto &p : waiters) {
+      p.set_value(td::Unit{});
+    }
+  }
 
  public:
-  ShardClient(td::Ref<ValidatorManagerOptions> opts, BlockHandle masterchain_block_handle,
-              td::Ref<MasterchainState> masterchain_state, td::actor::ActorId<ValidatorManager> manager,
-              td::Promise<td::Unit> promise)
+  ShardClient(Ref<ValidatorManagerOptions> opts, BlockHandle masterchain_block_handle,
+              Ref<MasterchainState> masterchain_state, td::actor::ActorId<ValidatorManager> manager,
+              td::Promise<> promise)
       : opts_(std::move(opts))
       , masterchain_block_handle_(masterchain_block_handle)
-      , masterchain_state_(std::move(masterchain_state))
+      , init_mode_mc_state_(std::move(masterchain_state))
       , manager_(manager)
-      , promise_(std::move(promise)) {
+      , initialize_promise_(std::move(promise)) {
     init_mode_ = true;
   }
-  ShardClient(td::Ref<ValidatorManagerOptions> opts, td::actor::ActorId<ValidatorManager> manager,
-              td::Promise<td::Unit> promise)
-      : opts_(std::move(opts)), manager_(manager), promise_(std::move(promise)) {
-  }
-
-  static constexpr td::uint32 shard_client_priority() {
-    return 2;
+  ShardClient(Ref<ValidatorManagerOptions> opts, td::actor::ActorId<ValidatorManager> manager, td::Promise<> promise)
+      : opts_(std::move(opts)), manager_(manager), initialize_promise_(std::move(promise)) {
   }
 
   void start_up() override;
-  void start_up_init_mode();
-  void download_shard_states(BlockIdExt masterchain_block_id, std::vector<DownloadableShard> shards, size_t idx);
+
+  td::actor::Task<> initialize();
+  td::actor::Task<> initialize_init_mode();
+
   void start();
-  void got_state_from_db(BlockIdExt masterchain_block_id);
-  void got_init_handle_from_db(BlockHandle handle);
-  void got_init_state_from_db(td::Ref<MasterchainState> state);
+  td::actor::Task<> run();
+  td::actor::Task<> run_preprocess();
 
-  void new_masterchain_block_id(BlockIdExt masterchain_block_id);
-  void got_masterchain_block_handle(BlockHandle handle);
-  void download_masterchain_state();
-  void got_masterchain_block_state(td::Ref<MasterchainState> state);
-  void apply_all_shards();
-  void finish_apply_all_shards(BlockIdExt masterchain_block_id, std::uint64_t generation, td::Status status);
-  void downloaded_shard_state(td::Ref<ShardState> state, td::Promise<td::Unit> promise);
-  void downloaded_shard_state_for_masterchain(td::Ref<ShardState> state, BlockIdExt masterchain_block_id,
-                                              std::uint64_t generation, td::Promise<td::Unit> promise);
-  void applied_all_shards();
-  void saved_to_db();
+  td::actor::Task<> apply_all_shards(Ref<MasterchainState> mc_state);
+  td::actor::Task<> apply_shard(BlockIdExt block_id);
+  td::actor::Task<> wait_shard_states(Ref<MasterchainState> mc_state);
+  td::actor::Task<Ref<MasterchainState>> wait_mc_state(BlockHandle handle);
 
-  void new_masterchain_block_notification(BlockHandle handle, td::Ref<MasterchainState> state);
-  bool try_apply_pending_masterchain_block();
-  bool try_apply_latest_pending_masterchain_block(const char *reason);
-  bool try_apply_next_masterchain_block_from_db();
-  void prune_pending_masterchain_notifications();
-  void apply_all_shards_timed_out(BlockIdExt masterchain_block_id, std::uint64_t generation);
-
+  void new_masterchain_block_notification();
   void get_processed_masterchain_block(td::Promise<BlockSeqno> promise);
-  void get_processed_masterchain_block_id(td::Promise<BlockIdExt> promise);
-
-  void force_update_shard_client(BlockHandle handle, td::Promise<td::Unit> promise);
-  void force_update_shard_client_ex(BlockHandle handle, td::Ref<MasterchainState> state, td::Promise<td::Unit> promise);
-
-  void update_options(td::Ref<ValidatorManagerOptions> opts);
   void get_current_shards(td::Promise<std::vector<BlockIdExt>> promise);
+  void force_update_shard_client_ex(BlockHandle handle, Ref<MasterchainState> state, td::Promise<> promise);
+  td::actor::Task<> force_update_shard_client(BlockHandle handle, Ref<MasterchainState> state);
+
+  void update_options(Ref<ValidatorManagerOptions> opts);
+
+ private:
+  static constexpr td::uint32 SHARD_CLIENT_PRIORITY = 2;
+  static constexpr td::uint32 MAX_PREPROCESS_DELTA = 10;
 };
 
 }  // namespace validator

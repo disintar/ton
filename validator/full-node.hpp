@@ -68,6 +68,7 @@ class FullNodeImpl : public FullNode {
   void sync_completed();
 
   void initial_read_complete(BlockHandle top_block);
+  void archive_sync_complete(BlockHandle top_block);
   void send_ihr_message(AccountIdPrefixFull dst, td::BufferSlice data);
   void send_ext_message(AccountIdPrefixFull dst, td::BufferSlice data);
   void send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data);
@@ -78,6 +79,8 @@ class FullNodeImpl : public FullNode {
   void download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout, td::Promise<ReceivedBlock> promise);
   void download_next_block(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
                            td::Promise<ReceivedBlock> promise) override;
+  void download_next_blocks(BlockHandle handle, td::uint32 priority, td::Timestamp timeout,
+                            td::Promise<BlockHandle> promise) override;
   void download_zero_state(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                            td::Promise<td::BufferSlice> promise);
   void download_persistent_state(BlockIdExt id, BlockIdExt masterchain_block_id, PersistentStateType type,
@@ -117,9 +120,8 @@ class FullNodeImpl : public FullNode {
 
   FullNodeImpl(PublicKeyHash local_id, adnl::AdnlNodeIdShort adnl_id, FileHash zero_state_file_hash,
                FullNodeOptions opts, td::actor::ActorId<keyring::Keyring> keyring, td::actor::ActorId<adnl::Adnl> adnl,
-               td::actor::ActorId<rldp::Rldp> rldp, td::actor::ActorId<rldp2::Rldp> rldp2,
-               td::actor::ActorId<quic::QuicSender> quic, td::actor::ActorId<dht::Dht> dht,
-               td::actor::ActorId<overlay::Overlays> overlays,
+               td::actor::ActorId<rldp2::Rldp> rldp2, td::actor::ActorId<quic::QuicSender> quic,
+               td::actor::ActorId<dht::Dht> dht, td::actor::ActorId<overlay::Overlays> overlays,
                td::actor::ActorId<ValidatorManagerInterface> validator_manager,
                td::actor::ActorId<adnl::AdnlExtClient> client, std::string db_root,
                td::Promise<td::Unit> started_promise);
@@ -156,7 +158,6 @@ class FullNodeImpl : public FullNode {
 
   td::actor::ActorId<keyring::Keyring> keyring_;
   td::actor::ActorId<adnl::Adnl> adnl_;
-  td::actor::ActorId<rldp::Rldp> rldp_;
   td::actor::ActorId<rldp2::Rldp> rldp2_;
   td::actor::ActorId<quic::QuicSender> quic_;
   td::actor::ActorId<dht::Dht> dht_;

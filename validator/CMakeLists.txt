@@ -17,8 +17,8 @@ set(VALIDATOR_DB_SOURCE
   db/archive-slice.hpp
   db/celldb.cpp
   db/celldb.hpp
-  db/permanent-celldb/permanent-celldb-utils.cpp
-  db/permanent-celldb/permanent-celldb-utils.h
+  db/celldb-utils.cpp
+  db/celldb-utils.h
   db/files-async.hpp
   db/fileref.hpp
   db/fileref.cpp
@@ -115,13 +115,13 @@ set(VALIDATOR_SOURCE
   consensus/simplex/certificate.cpp
   consensus/simplex/consensus.cpp
   consensus/simplex/db.cpp
-  consensus/simplex/metric-collector.cpp
   consensus/simplex/pool.cpp
   consensus/simplex/state-resolver.cpp
   consensus/simplex/stats.cpp
   consensus/simplex/votes.cpp
   consensus/block-accepter.cpp
   consensus/block-producer.cpp
+  consensus/block-sync-overlay.cpp
   consensus/block-validator.cpp
   consensus/bridge.cpp
   consensus/bus.cpp
@@ -166,6 +166,8 @@ set(FULL_NODE_SOURCE
 
   net/download-block-new.hpp
   net/download-block-new.cpp
+  net/download-next-blocks.hpp
+  net/download-next-blocks.cpp
   net/download-archive-slice.hpp
   net/download-archive-slice.cpp
   net/download-state.hpp
@@ -178,7 +180,7 @@ set(FULL_NODE_SOURCE
 
 add_library(validator-db OBJECT ${VALIDATOR_DB_SOURCE})
 target_include_directories(validator-db PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
-target_link_libraries(validator-db PUBLIC tdactor adnl rldp tl_api dht tdfec overlay catchain validatorsession ton_db)
+target_link_libraries(validator-db PUBLIC tdactor adnl tl_api dht tdfec overlay validatorsession ton_db)
 
 add_library(validator-common OBJECT
   downloaders/download-state.cpp
@@ -190,7 +192,6 @@ add_library(validator-common OBJECT
   queue-size-counter.cpp
   shard-client.cpp
   validator-full-id.cpp
-  validator-group.cpp
   validator-options.cpp
 )
 target_link_libraries(validator-common PUBLIC validator-db)
@@ -209,11 +210,11 @@ if (MSVC)
     set(TON_MSVC_CONSENSUS_OPTS "/Od" "/GL-")
     if (TON_MSVC_HAS_D2SSAOPT)
       list(APPEND TON_MSVC_CONSENSUS_OPTS "/d2ssaoptimizer-")
-    endif()
+    endif ()
     set_source_files_properties(consensus/simplex/consensus.cpp PROPERTIES
       COMPILE_OPTIONS "${TON_MSVC_CONSENSUS_OPTS}")
-  endif()
-endif()
+  endif ()
+endif ()
 
 target_include_directories(validator PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
@@ -227,21 +228,21 @@ target_include_directories(validator-disk PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>/..
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>/../crypto
   ${OPENSSL_INCLUDE_DIR}
-  )
+)
 
 target_include_directories(validator-hardfork PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>/..
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>/../crypto
   ${OPENSSL_INCLUDE_DIR}
-  )
+)
 
 target_include_directories(full-node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>/..
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>/../crypto
   ${OPENSSL_INCLUDE_DIR}
-  )
+)
 
 target_include_directories(full-node PUBLIC ${MHD_INCLUDE_DIR} ${MHD_STATIC_INCLUDE_DIRS})
 target_include_directories(validator-hardfork PUBLIC ${MHD_INCLUDE_DIR} ${MHD_STATIC_INCLUDE_DIRS})
@@ -253,6 +254,6 @@ target_link_libraries(validator-disk PRIVATE validator-common validator-db)
 
 target_link_libraries(validator-hardfork PRIVATE validator-common validator-db)
 
-target_link_libraries(validator-hardfork PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} tdactor adnl rldp tl_api dht tdfec overlay catchain validatorsession ton_db)
+target_link_libraries(validator-hardfork PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} tdactor adnl rldp2 tl_api dht tdfec overlay validatorsession ton_db)
 
-target_link_libraries(full-node PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} tdactor adnl rldp rldp2 tl_api dht tdfec overlay catchain validatorsession ton_db)
+target_link_libraries(full-node PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} tdactor adnl rldp2 tl_api dht tdfec overlay validatorsession ton_db)

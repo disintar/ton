@@ -40,7 +40,7 @@ void ApplyBlock::abort_query(td::Status reason) {
   auto reason_str = reason.to_string();
   trace_stage("apply.abort", "error", reason_str);
   if (promise_) {
-    VLOG(VALIDATOR_WARNING) << "aborting apply block query for " << id_.to_str() << ": " << reason;
+    VLOG(VALIDATOR_WARNING) << "aborting apply block query for " << id_ << ": " << reason;
     promise_.set_error(std::move(reason));
   }
   stop();

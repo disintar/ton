@@ -26,7 +26,6 @@
 #include "dht/dht.h"
 #include "overlay/overlays.h"
 #include "quic/quic-sender.h"
-#include "rldp/rldp.h"
 #include "rldp2/rldp.h"
 #include "td/actor/actor.h"
 #include "ton/ton-types.h"
@@ -111,6 +110,8 @@ class FullNode : public td::actor::Actor {
   virtual void get_out_msg_queue_query_token(td::Promise<std::unique_ptr<ActionToken>> promise) = 0;
   virtual void download_next_block(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
                                    td::Promise<ReceivedBlock> promise) = 0;
+  virtual void download_next_blocks(BlockHandle handle, td::uint32 priority, td::Timestamp timeout,
+                                    td::Promise<BlockHandle> promise) = 0;
 
   virtual void set_validator_telemetry_filename(std::string value) = 0;
 
@@ -133,10 +134,10 @@ class FullNode : public td::actor::Actor {
   static td::actor::ActorOwn<FullNode> create(
       ton::PublicKeyHash local_id, adnl::AdnlNodeIdShort adnl_id, FileHash zero_state_file_hash, FullNodeOptions opts,
       td::actor::ActorId<keyring::Keyring> keyring, td::actor::ActorId<adnl::Adnl> adnl,
-      td::actor::ActorId<rldp::Rldp> rldp, td::actor::ActorId<rldp2::Rldp> rldp2,
-      td::actor::ActorId<quic::QuicSender> quic, td::actor::ActorId<dht::Dht> dht,
-      td::actor::ActorId<overlay::Overlays> overlays, td::actor::ActorId<ValidatorManagerInterface> validator_manager,
-      td::actor::ActorId<adnl::AdnlExtClient> client, std::string db_root, td::Promise<td::Unit> started_promise);
+      td::actor::ActorId<rldp2::Rldp> rldp2, td::actor::ActorId<quic::QuicSender> quic,
+      td::actor::ActorId<dht::Dht> dht, td::actor::ActorId<overlay::Overlays> overlays,
+      td::actor::ActorId<ValidatorManagerInterface> validator_manager, td::actor::ActorId<adnl::AdnlExtClient> client,
+      std::string db_root, td::Promise<td::Unit> started_promise);
 };
 
 }  // namespace fullnode

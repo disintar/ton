@@ -358,6 +358,13 @@ void FullNodeImpl::initial_read_complete(BlockHandle top_handle) {
   td::actor::send_closure(it->second.actor, &FullNodeShard::set_handle, top_handle, std::move(P));
 }
 
+void FullNodeImpl::archive_sync_complete(BlockHandle top_handle) {
+  auto P = td::PromiseCreator::lambda([](td::Result<td::Unit> R) { R.ensure(); });
+  auto it = shards_.find(ShardIdFull{masterchainId});
+  CHECK(it != shards_.end() && !it->second.actor.empty());
+  td::actor::send_closure(it->second.actor, &FullNodeShard::set_handle, top_handle, std::move(P));
+}
+
 void FullNodeImpl::on_new_masterchain_block(td::Ref<MasterchainState> state, std::set<ShardIdFull> shards_to_monitor) {
   CHECK(shards_to_monitor.count(ShardIdFull(masterchainId)));
   bool join_all_overlays = !sign_cert_by_.is_zero();
@@ -442,9 +449,8 @@ void FullNodeImpl::on_new_masterchain_block(td::Ref<MasterchainState> state, std
 void FullNodeImpl::update_shard_actor(ShardIdFull shard, bool active) {
   ShardInfo &info = shards_[shard];
   if (info.actor.empty()) {
-    info.actor =
-        FullNodeShard::create(shard, local_id_, adnl_id_, zero_state_file_hash_, opts_, limiter_, keyring_, adnl_,
-                              rldp_, rldp2_, overlays_, validator_manager_, client_, actor_id(this), active);
+    info.actor = FullNodeShard::create(shard, local_id_, adnl_id_, zero_state_file_hash_, opts_, limiter_, keyring_,
+                                       adnl_, rldp2_, overlays_, validator_manager_, client_, actor_id(this), active);
     if (!all_validators_.empty()) {
       td::actor::send_closure(info.actor, &FullNodeShard::update_validators, all_validators_, sign_cert_by_);
     }
@@ -662,6 +668,36 @@ void FullNodeImpl::download_next_block(BlockIdExt prev_id, td::uint32 priority, 
                                       ? "no_local_actor"
                                       : (has_custom_overlay ? "shard_not_served" : "no_custom_overlay"));
   download_next_block_from_public_overlay(prev_id, priority, timeout, std::move(promise));
+}
+
+void FullNodeImpl::download_next_blocks(BlockHandle handle, td::uint32 priority, td::Timestamp timeout,
+                                        td::Promise<BlockHandle> promise) {
+  auto prev_id = handle->id();
+  bool has_custom_overlay = !custom_overlays_.empty();
+  bool shard_served_by_custom_overlay = false;
+  for (auto &[name, custom_overlay] : custom_overlays_) {
+    if (!custom_overlay.params_.send_shard(prev_id.shard_full())) {
+      continue;
+    }
+    shard_served_by_custom_overlay = true;
+    for (auto &[local_id, actor] : custom_overlay.actors_) {
+      log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, prev_id, "fullnode.custom_select_many",
+                                      "custom", "attempt", "parallel_next_blocks", name, PSTRING() << local_id);
+      td::actor::send_closure(actor, &FullNodeCustomOverlay::download_next_blocks, std::move(handle), priority,
+                              timeout, std::move(promise));
+      return;
+    }
+  }
+  record_custom_overlay_sync_fallback(
+      CustomOverlaySyncKind::NextBlock,
+      shard_served_by_custom_overlay
+          ? CustomOverlaySyncFallbackReason::NoLocalActor
+          : (has_custom_overlay ? CustomOverlaySyncFallbackReason::ShardNotServed
+                                : CustomOverlaySyncFallbackReason::NoCustomOverlay));
+  log_fullnode_overlay_sync_stage(
+      CustomOverlaySyncKind::NextBlock, prev_id, "fullnode.custom_select_many", "custom", "not_ready",
+      shard_served_by_custom_overlay ? "no_local_actor" : (has_custom_overlay ? "shard_not_served" : "no_custom_overlay"));
+  promise.set_error(td::Status::Error(ErrorCode::notready, "no custom overlay available for next blocks"));
 }
 
 void FullNodeImpl::download_block_from_public_overlay(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
@@ -1108,6 +1144,9 @@ void FullNodeImpl::start_up() {
     void initial_read_complete(BlockHandle handle) override {
       td::actor::send_closure(id_, &FullNodeImpl::initial_read_complete, handle);
     }
+    void archive_sync_complete(BlockHandle handle) override {
+      td::actor::send_closure(id_, &FullNodeImpl::archive_sync_complete, handle);
+    }
     void on_new_masterchain_block(td::Ref<MasterchainState> state, std::set<ShardIdFull> shards_to_monitor) override {
       td::actor::send_closure(id_, &FullNodeImpl::on_new_masterchain_block, std::move(state),
                               std::move(shards_to_monitor));
@@ -1297,9 +1336,9 @@ void FullNodeImpl::send_shard_block_info_to_custom_overlays(BlockIdExt block_id,
 
 FullNodeImpl::FullNodeImpl(PublicKeyHash local_id, adnl::AdnlNodeIdShort adnl_id, FileHash zero_state_file_hash,
                            FullNodeOptions opts, td::actor::ActorId<keyring::Keyring> keyring,
-                           td::actor::ActorId<adnl::Adnl> adnl, td::actor::ActorId<rldp::Rldp> rldp,
-                           td::actor::ActorId<rldp2::Rldp> rldp2, td::actor::ActorId<quic::QuicSender> quic,
-                           td::actor::ActorId<dht::Dht> dht, td::actor::ActorId<overlay::Overlays> overlays,
+                           td::actor::ActorId<adnl::Adnl> adnl, td::actor::ActorId<rldp2::Rldp> rldp2,
+                           td::actor::ActorId<quic::QuicSender> quic, td::actor::ActorId<dht::Dht> dht,
+                           td::actor::ActorId<overlay::Overlays> overlays,
                            td::actor::ActorId<ValidatorManagerInterface> validator_manager,
                            td::actor::ActorId<adnl::AdnlExtClient> client, std::string db_root,
                            td::Promise<td::Unit> started_promise)
@@ -1308,7 +1347,6 @@ FullNodeImpl::FullNodeImpl(PublicKeyHash local_id, adnl::AdnlNodeIdShort adnl_id
     , zero_state_file_hash_(zero_state_file_hash)
     , keyring_(keyring)
     , adnl_(adnl)
-    , rldp_(rldp)
     , rldp2_(rldp2)
     , quic_(quic)
     , dht_(dht)
@@ -1324,12 +1362,11 @@ FullNodeImpl::FullNodeImpl(PublicKeyHash local_id, adnl::AdnlNodeIdShort adnl_id
 td::actor::ActorOwn<FullNode> FullNode::create(
     ton::PublicKeyHash local_id, adnl::AdnlNodeIdShort adnl_id, FileHash zero_state_file_hash, FullNodeOptions opts,
     td::actor::ActorId<keyring::Keyring> keyring, td::actor::ActorId<adnl::Adnl> adnl,
-    td::actor::ActorId<rldp::Rldp> rldp, td::actor::ActorId<rldp2::Rldp> rldp2,
-    td::actor::ActorId<quic::QuicSender> quic, td::actor::ActorId<dht::Dht> dht,
+    td::actor::ActorId<rldp2::Rldp> rldp2, td::actor::ActorId<quic::QuicSender> quic, td::actor::ActorId<dht::Dht> dht,
     td::actor::ActorId<overlay::Overlays> overlays, td::actor::ActorId<ValidatorManagerInterface> validator_manager,
     td::actor::ActorId<adnl::AdnlExtClient> client, std::string db_root, td::Promise<td::Unit> started_promise) {
   return td::actor::create_actor<FullNodeImpl>("fullnode", local_id, adnl_id, zero_state_file_hash, opts, keyring, adnl,
-                                               rldp, rldp2, quic, dht, overlays, validator_manager, client, db_root,
+                                               rldp2, quic, dht, overlays, validator_manager, client, db_root,
                                                std::move(started_promise));
 }
 
@@ -1381,6 +1418,7 @@ decltype(FullNodeImpl::limiter_) FullNodeImpl::make_limiter(const FullNodeOption
                                    {ton_api::tonNode_downloadBlock::ID, {w_size, m_limit}},
                                    {ton_api::tonNode_downloadBlockFull::ID, {w_size, m_limit}},
                                    {ton_api::tonNode_downloadNextBlockFull::ID, {w_size, m_limit}},
+                                   {ton_api::tonNode_downloadNextBlocksFull::ID, {w_size, m_limit}},
                                    {ton_api::tonNode_downloadBlockProof::ID, {w_size, m_limit}},
                                    {ton_api::tonNode_downloadBlockProofLink::ID, {w_size, m_limit}},
                                    {ton_api::tonNode_downloadKeyBlockProof::ID, {w_size, m_limit}},

@@ -21,7 +21,7 @@ file(COPY ../crypto/fift/lib DESTINATION ./)
 
 target_include_directories(blockchain-indexer PUBLIC)
 target_link_libraries(blockchain-indexer overlay tdutils tdactor adnl tl_api dht
-        rldp catchain validatorsession full-node validator-disk validator-hardfork ton_validator
+        rldp2 validatorsession full-node validator-disk validator-hardfork ton_validator
         validator-hardfork fift-lib memprof ${JEMALLOC_LIBRARIES})
 
 # TODO: option or smth

@@ -15,23 +15,31 @@
     along with TON Blockchain Library.  If not, see <http://www.gnu.org/licenses/>.
 */
 #pragma once
+
 #include <string>
 #include <vector>
+#include "fwd-declarations.h"
 
-#include "interfaces/block.h"
-#include "ton/ton-types.h"
-#include "vm/cells.h"
-#include "vm/db/DynamicBagOfCellsDb.h"
+namespace tolk {
 
-namespace ton::validator {
+struct ContractDirective {
+  std::string contractName;
+  std::string author;
+  std::string version;
+  std::string description;
 
-struct PermanentCellDbUpdate {
-  BlockIdExt block_id;
-  RootHash state_root_hash;
-  std::vector<std::pair<vm::CellHash, std::string>> to_store;
+  AnyTypeV incomingMessages = nullptr;
+  AnyTypeV incomingExternal = nullptr;
+  AnyTypeV outgoingMessages = nullptr;
+  AnyTypeV emittedEvents = nullptr;
+  AnyTypeV thrownErrors = nullptr;
+  AnyTypeV storage = nullptr;
+  AnyTypeV storageAtDeployment = nullptr;
+
+  AnyTypeV forceAbiExport = nullptr;
 };
-void calculate_permanent_celldb_update(const std::map<BlockIdExt, td::Ref<BlockData>>& blocks,
-                                       std::shared_ptr<vm::DynamicBagOfCellsDb::AsyncExecutor> executor,
-                                       td::Promise<std::vector<PermanentCellDbUpdate>> promise);
 
-}  // namespace ton::validator
+bool is_contract_property_type_node(std::string_view name);
+ContractDirective* parse_contract_directive(AnyV v);
+
+} // namespace tolk

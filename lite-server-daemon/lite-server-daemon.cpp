@@ -99,7 +99,6 @@ private:
   td::Ref<ton::validator::ValidatorManagerOptions> opts_;
   td::actor::ActorOwn<ton::validator::ValidatorManagerInterface> validator_manager_;
   td::actor::ActorOwn<ton::overlay::Overlays> overlay_manager_;
-  td::actor::ActorOwn<ton::rldp::Rldp> rldp_;
   td::actor::ActorOwn<ton::rldp2::Rldp> rldp2_;
   td::actor::ActorOwn<ton::liteserver::LiteServerLimiter> lslimiter_;
 
@@ -115,7 +114,7 @@ private:
 
     auto id = ton::PublicKeyHash::zero();
     validator_manager_ = ton::validator::ValidatorManagerDiskFactory::create(
-        id, opts_, shard, shard_top, db_root_, keyring_.get(), adnl_.get(), rldp_.get(), overlay_manager_.get(),
+        id, opts_, shard, shard_top, db_root_, keyring_.get(), adnl_.get(), rldp2_.get(), overlay_manager_.get(),
         lslimiter_.get(), true);
 
     td::actor::send_closure(lslimiter_, &LiteServerLimiter::set_validator_manager, validator_manager_.get());
@@ -251,7 +250,6 @@ private:
     }
 
     // Start RLDP
-    rldp_ = ton::rldp::Rldp::create(adnl_.get());
     rldp2_ = ton::rldp2::Rldp::create(adnl_.get());
 
     if (default_dht_node_.is_zero()) {

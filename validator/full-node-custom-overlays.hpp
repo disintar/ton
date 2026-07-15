@@ -57,6 +57,8 @@ class FullNodeCustomOverlay : public td::actor::Actor {
                      td::Promise<td::BufferSlice> promise);
   void process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_downloadNextBlockFull &query,
                      td::Promise<td::BufferSlice> promise);
+  void process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_downloadNextBlocksFull &query,
+                     td::Promise<td::BufferSlice> promise);
   void process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_prepareBlockProof &query,
                      td::Promise<td::BufferSlice> promise);
   void process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_downloadBlockProof &query,
@@ -84,6 +86,8 @@ class FullNodeCustomOverlay : public td::actor::Actor {
                       td::Promise<ReceivedBlock> promise);
   void download_next_block(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
                            td::Promise<ReceivedBlock> promise);
+  void download_next_blocks(BlockHandle handle, td::uint32 priority, td::Timestamp timeout,
+                            td::Promise<BlockHandle> promise);
   void download_block_proof(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
                             td::Promise<td::BufferSlice> promise);
   void download_block_proof_link(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
@@ -158,6 +162,9 @@ class FullNodeCustomOverlay : public td::actor::Actor {
   void download_next_block_from_custom_peers(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
                                              std::vector<adnl::AdnlNodeIdShort> peers, double started_at,
                                              td::Promise<ReceivedBlock> promise);
+  void download_next_blocks_from_custom_peers(BlockHandle handle, td::uint32 priority, td::Timestamp timeout,
+                                              std::vector<adnl::AdnlNodeIdShort> peers, double started_at,
+                                              td::Promise<BlockHandle> promise);
 
   void try_init();
   void init();

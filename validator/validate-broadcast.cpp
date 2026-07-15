@@ -38,8 +38,7 @@ void ValidateBroadcast::abort_query(td::Status reason) {
   auto reason_str = reason.to_string();
   trace_stage("validate.abort", "error", reason_str);
   if (promise_) {
-    VLOG(VALIDATOR_WARNING) << "aborting validate broadcast query for " << broadcast_.block_id.to_str() << ": "
-                            << reason;
+    VLOG(VALIDATOR_WARNING) << "aborting validate broadcast query for " << broadcast_.block_id << ": " << reason;
     promise_.set_error(std::move(reason));
   }
   stop();
@@ -47,8 +46,8 @@ void ValidateBroadcast::abort_query(td::Status reason) {
 
 void ValidateBroadcast::finish_query() {
   if (promise_) {
-    VLOG(VALIDATOR_DEBUG) << "validated broadcast for " << broadcast_.block_id.to_str() << " in "
-                          << perf_timer_.elapsed() << " s";
+    VLOG(VALIDATOR_DEBUG) << "validated broadcast for " << broadcast_.block_id << " in " << perf_timer_.elapsed()
+                          << " s";
     promise_.set_result(td::Unit());
   }
   stop();
@@ -152,7 +151,7 @@ void ValidateBroadcast::start_up() {
 }
 
 void ValidateBroadcast::got_key_block_id(BlockIdExt block_id) {
-  VLOG(VALIDATOR_DEBUG) << "got_key_block_id " << block_id.id.to_str();
+  VLOG(VALIDATOR_DEBUG) << "got_key_block_id " << block_id.id;
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<BlockHandle> R) {
     if (R.is_error()) {
       td::actor::send_closure(SelfId, &ValidateBroadcast::abort_query,
@@ -165,7 +164,7 @@ void ValidateBroadcast::got_key_block_id(BlockIdExt block_id) {
 }
 
 void ValidateBroadcast::got_key_block_handle(ConstBlockHandle handle) {
-  VLOG(VALIDATOR_DEBUG) << "got_key_block_handle " << handle->id().id.to_str();
+  VLOG(VALIDATOR_DEBUG) << "got_key_block_handle " << handle->id().id;
   if (handle->id().seqno() == 0) {
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
       if (R.is_error()) {
@@ -274,7 +273,7 @@ void ValidateBroadcast::checked_signatures() {
 }
 
 void ValidateBroadcast::got_block_handle(BlockHandle handle) {
-  VLOG(VALIDATOR_DEBUG) << "got_block_handle " << handle->id().id.to_str();
+  VLOG(VALIDATOR_DEBUG) << "got_block_handle " << handle->id().id;
   handle_ = std::move(handle);
 
   auto dataR = create_block(broadcast_.block_id, broadcast_.data.clone());
@@ -297,7 +296,7 @@ void ValidateBroadcast::got_block_handle(BlockHandle handle) {
     }
   });
 
-  VLOG(VALIDATOR_DEBUG) << "writing block data for " << handle_->id().id.to_str();
+  VLOG(VALIDATOR_DEBUG) << "writing block data for " << handle_->id().id;
   td::actor::send_closure(manager_, &ValidatorManager::set_block_data, handle_, data_, std::move(P));
 }
 

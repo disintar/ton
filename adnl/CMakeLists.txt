@@ -22,9 +22,9 @@ set(ADNL_HEADERS
   adnl-peer-table.hpp
   adnl-peer.h
   adnl-peer.hpp
-  adnl-query.h
   adnl-proxy-types.h
   adnl-proxy-types.hpp
+  adnl-query.h
   adnl-sender-ex.h
   adnl.h
   utils.hpp
@@ -43,9 +43,9 @@ set(ADNL_SOURCE
   adnl-packet.cpp
   adnl-peer-table.cpp
   adnl-peer.cpp
+  adnl-proxy-types.cpp
   adnl-query.cpp
   adnl-channel.cpp
-  adnl-proxy-types.cpp
   adnl-sender-ex.cpp
   utils.cpp
   ${ADNL_HEADERS}
@@ -96,6 +96,7 @@ target_include_directories(adnltest PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOU
 target_link_libraries(adnltest PUBLIC adnl)
 
 install(TARGETS adnl-proxy RUNTIME DESTINATION bin)
+
 endif()
 #END internal
 

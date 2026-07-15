@@ -62,7 +62,6 @@ adnl.proxyToFast ip:int port:int date:int signature:int256 = adnl.ProxyToSign;
 adnl.proxy.none id:int256 = adnl.Proxy;
 adnl.proxy.fast id:int256 shared_secret:bytes = adnl.Proxy;
 
-
 adnl.address.udp ip:int port:int = adnl.Address;
 adnl.address.udp6 ip:int128 port:int = adnl.Address;
 //adnl.address.tcp ip:int port:int = adnl.Address;
@@ -112,7 +111,6 @@ adnl.tunnelPacketContents
   rand2:bytes
         = adnl.TunnelPacketContents;
 
-
 // flag 16 - packet is outbound
 // flag 17 - control packet
 adnl.proxyPacketHeader
@@ -128,7 +126,6 @@ adnl.proxyPacketHeader
 adnl.proxyControlPacketPing id:int256 = adnl.ProxyControlPacket;
 adnl.proxyControlPacketPong id:int256 = adnl.ProxyControlPacket;
 adnl.proxyControlPacketRegister ip:int port:int = adnl.ProxyControlPacket;
-
 
 adnl.message.createChannel key:int256 date:int = adnl.Message;
 adnl.message.confirmChannel key:int256 peer_key:int256 date:int = adnl.Message;
@@ -476,6 +473,8 @@ tonNode.dataFullCompressed id:tonNode.blockIdExt flags:# compressed:bytes is_lin
 tonNode.dataFullCompressedV2 id:tonNode.blockIdExt flags:# proof:bytes block_compressed:bytes is_link:Bool = tonNode.DataFull;
 tonNode.dataFullEmpty = tonNode.DataFull;
 
+tonNode.nextBlocksFull blocks:(vector tonNode.DataFull) = tonNode.NextBlocksFull;
+
 tonNode.capabilities#f5bf60c0 version_major:int version_minor:int flags:# = tonNode.Capabilities;
 
 tonNode.success = tonNode.Success;
@@ -505,6 +504,7 @@ tonNode.prepareBlocks blocks:(vector tonNode.blockIdExt) = tonNode.Prepared;
 tonNode.prepareZeroState block:tonNode.blockIdExt = tonNode.PreparedState;
 tonNode.getNextKeyBlockIds block:tonNode.blockIdExt max_size:int = tonNode.KeyBlocks;
 tonNode.downloadNextBlockFull prev_block:tonNode.blockIdExt = tonNode.DataFull;
+tonNode.downloadNextBlocksFull prev_block:tonNode.blockIdExt max_blocks:int = tonNode.NextBlocksFull;
 tonNode.downloadBlockFull block:tonNode.blockIdExt = tonNode.DataFull;
 tonNode.downloadBlock block:tonNode.blockIdExt = tonNode.Data;
 tonNode.downloadZeroState block:tonNode.blockIdExt = tonNode.Data;
@@ -672,9 +672,11 @@ liteclient.config.global liteservers:(vector liteserver.desc) liteservers_v2:(ve
 
 engine.adnl id:int256 category:int = engine.Adnl;
 engine.addr ip:int port:int categories:(vector int) priority_categories:(vector int) = engine.Addr;
-engine.addrProxy in_ip:int in_port:int out_ip:int out_port:int
-          proxy_type:adnl.Proxy categories:(vector int) priority_categories:(vector int) = engine.Addr;
+engine.addrProxy in_ip:int in_port:int out_ip:int out_port:int proxy_type:adnl.Proxy
+    categories:(vector int) priority_categories:(vector int) = engine.Addr;
 engine.quicAddr ip:int port:int categories:(vector int) priority_categories:(vector int) = engine.Addr;
+engine.adnlProxy.port in_port:int out_port:int dst_ip:int dst_port:int proxy_type:adnl.Proxy = engine.adnlProxy.Port;
+engine.adnlProxy.config ports:(vector engine.adnlProxy.Port) = engine.adnlProxy.Config;
 engine.dht id:int256 = engine.Dht;
 engine.validatorTempKey key:int256 expire_at:int = engine.ValidatorTempKey;
 engine.validatorAdnlAddress id:int256 expire_at:int = engine.ValidatorAdnlAddress;
@@ -732,13 +734,6 @@ engine.validator.shardBlockVerifierConfig.shard shard_id:(tonNode.shardId) trust
     required_confirms:int = engine.validator.shardBlockVerifierConfig.Shard;
 engine.validator.shardBlockVerifierConfig shards:(vector engine.validator.shardBlockVerifierConfig.shard)
     = engine.validator.ShardBlockVerifierConfig;
-
----functions---
----types---
-
-engine.adnlProxy.port in_port:int out_port:int dst_ip:int dst_port:int proxy_type:adnl.Proxy = engine.adnlProxy.Port;
-
-engine.adnlProxy.config ports:(vector engine.adnlProxy.port) = engine.adnlProxy.Config;
 
 ---functions---
 
@@ -834,8 +829,10 @@ engine.validator.delValidatorTempKey permanent_key_hash:int256 key_hash:int256 =
 engine.validator.delValidatorAdnlAddress permanent_key_hash:int256 key_hash:int256 = engine.validator.Success;
 
 engine.validator.addListeningPort ip:int port:int categories:(vector int) priority_categories:(vector int) = engine.validator.Success;
-engine.validator.addProxy in_ip:int in_port:int out_ip:int out_port:int proxy:adnl.Proxy categories:(vector int) priority_categories:(vector int) = engine.validator.Success;
 engine.validator.delListeningPort ip:int port:int categories:(vector int) priority_categories:(vector int) = engine.validator.Success;
+
+engine.validator.addProxy in_ip:int in_port:int out_ip:int out_port:int proxy_type:adnl.Proxy
+    categories:(vector int) priority_categories:(vector int) = engine.validator.Success;
 engine.validator.delProxy out_ip:int out_port:int categories:(vector int) priority_categories:(vector int) = engine.validator.Success;
 
 engine.validator.addQuicAddr ip:int port:int categories:(vector int) priority_categories:(vector int) = engine.validator.Success;
@@ -901,6 +898,9 @@ engine.validator.delFastSyncClient adnl_id:int256 = engine.validator.Success;
 
 engine.validator.setShardBlockVerifierConfig config:engine.validator.shardBlockVerifierConfig = engine.validator.Success;
 engine.validator.showShardBlockVerifierConfig = engine.validator.ShardBlockVerifierConfig;
+
+engine.validator.waitForLiteServer = engine.validator.Success;
+engine.validator.waitForInitialSync = engine.validator.Success;
 
 ---types---
 
@@ -995,6 +995,7 @@ validatorStats.collatedBlock
     total_time:double work_time:double cpu_work_time:double time_stats:string
     work_time_real_stats:string
     work_time_cpu_stats:string
+    wait_externals_time:double check_load_do_collate_time:double check_load_total_time:double
     block_limits:validatorStats.blockLimitsStatus
     block_stats:validatorStats.blockStats
     storage_stat_cache:validatorStats.storageStatCacheStats = validatorSession.stats.CollatedBlock;
@@ -1190,6 +1191,7 @@ quic.answer data:bytes = quic.Response;
 engineConsoleClient.config address:string server_public_key:PublicKey client_private_key:PrivateKey = engineConsoleClient.Config;
 
 consensus.overlayId session_id:int256 nodes:(vector int256) = consensus.OverlayId;
+consensus.blockSyncOverlayId session_id:int256 = consensus.BlockOverlayId;
 consensus.dataToSign session_id:int256 data:bytes = consensus.DataToSign;
 
 consensus.candidateId slot:int hash:int256 = consensus.CandidateId;

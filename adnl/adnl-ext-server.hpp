@@ -22,7 +22,7 @@
 #include <set>
 
 #include <unordered_map>
-#include "adnl-peer-table.h"
+#include "td/actor/MultiPromise.h"
 #include "td/net/TcpListener.h"
 #include "td/utils/BufferedFd.h"
 #include "td/utils/crypto.h"
@@ -77,7 +77,7 @@ class AdnlInboundConnection : public AdnlExtConnection {
 
 class AdnlExtServerImpl : public AdnlExtServer {
  public:
-  void add_tcp_port(td::uint16 port) override;
+  void add_tcp_port(td::uint16 port, td::Promise<td::Unit> promise) override;
   void add_local_id(AdnlNodeIdShort id) override;
   void accepted(td::SocketFd fd);
   void stop(std::string ip_addr);
@@ -87,21 +87,29 @@ class AdnlExtServerImpl : public AdnlExtServer {
   void decrypt_init_packet(AdnlNodeIdShort dst, td::BufferSlice data, td::Promise<td::BufferSlice> promise);
 
   void start_up() override {
+    td::MultiPromise mp;
+    auto ig = mp.init_guard();
+    ig.add_promise(td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) {
+      td::actor::send_closure(SelfId, &AdnlExtServerImpl::initial_ports_bound);
+    }));
     for (auto &port : ports_) {
-      add_tcp_port(port);
+      add_tcp_port(port, ig.get_promise());
     }
     ports_.clear();
     alarm_timestamp() = td::Timestamp::in(1);
   }
 
+  void initial_ports_bound() {
+    promise_.set_value(td::actor::ActorOwn{actor_id(this)});
+  }
   void alarm() override;
 
   void reopen_port() {
   }
 
   AdnlExtServerImpl(td::actor::ActorId<AdnlPeerTable> adnl, std::vector<AdnlNodeIdShort> ids,
-                    std::vector<td::uint16> ports)
-      : peer_table_(adnl) {
+                    std::vector<td::uint16> ports, td::Promise<td::actor::ActorOwn<AdnlExtServer>> promise)
+      : promise_(std::move(promise)), peer_table_(adnl) {
     alarm_timestamp() = td::Timestamp::in(10);
 
     for (auto &id : ids) {
@@ -113,6 +121,7 @@ class AdnlExtServerImpl : public AdnlExtServer {
   }
 
  private:
+  td::Promise<td::actor::ActorOwn<AdnlExtServer>> promise_;
   td::actor::ActorId<AdnlPeerTable> peer_table_;
   std::shared_ptr<AdnlInboundConnectionCallback> connection_callback_;
   std::set<AdnlNodeIdShort> local_ids_;
