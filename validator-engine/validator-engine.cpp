@@ -136,7 +136,26 @@ Config::Config(const ton::ton_api::engine_validator_config &config) {
               for (auto cat : obj.priority_categories_) {
                 priority_categories.push_back(td::narrow_cast<td::uint8>(cat));
               }
-              config_add_network_addr(ip, ip, categories, priority_categories).ensure();
+              config_add_network_addr(ip, ip, nullptr, categories, priority_categories).ensure();
+            },
+            [&](const ton::ton_api::engine_addrProxy &obj) {
+              td::IPAddress out_ip;
+              std::shared_ptr<ton::adnl::AdnlProxy> proxy;
+              ip.init_ipv4_port(td::IPAddress::ipv4_to_str(obj.in_ip_), static_cast<td::uint16>(obj.in_port_)).ensure();
+              out_ip.init_ipv4_port(td::IPAddress::ipv4_to_str(obj.out_ip_), static_cast<td::uint16>(obj.out_port_))
+                  .ensure();
+              if (obj.proxy_type_) {
+                auto R = ton::adnl::AdnlProxy::create(*obj.proxy_type_.get());
+                R.ensure();
+                proxy = R.move_as_ok();
+              }
+              for (auto cat : obj.categories_) {
+                categories.push_back(td::narrow_cast<td::uint8>(cat));
+              }
+              for (auto cat : obj.priority_categories_) {
+                priority_categories.push_back(td::narrow_cast<td::uint8>(cat));
+              }
+              config_add_network_addr(ip, out_ip, std::move(proxy), categories, priority_categories).ensure();
             },
             [&](const ton::ton_api::engine_quicAddr &obj) {
               ip.init_ipv4_port(td::IPAddress::ipv4_to_str(obj.ip_), static_cast<td::uint16>(obj.port_)).ensure();
@@ -235,10 +254,18 @@ Config::Config(const ton::ton_api::engine_validator_config &config) {
 ton::tl_object_ptr<ton::ton_api::engine_validator_config> Config::tl() const {
   std::vector<ton::tl_object_ptr<ton::ton_api::engine_Addr>> addrs_vec;
   for (auto &x : addrs) {
-    addrs_vec.push_back(ton::create_tl_object<ton::ton_api::engine_addr>(
-        static_cast<td::int32>(x.first.addr.get_ipv4()), x.first.addr.get_port(),
-        std::vector<td::int32>(x.second.cats.begin(), x.second.cats.end()),
-        std::vector<td::int32>(x.second.priority_cats.begin(), x.second.priority_cats.end())));
+    if (x.second.proxy) {
+      addrs_vec.push_back(ton::create_tl_object<ton::ton_api::engine_addrProxy>(
+          static_cast<td::int32>(x.second.in_addr.get_ipv4()), x.second.in_addr.get_port(),
+          static_cast<td::int32>(x.first.addr.get_ipv4()), x.first.addr.get_port(), x.second.proxy->tl(),
+          std::vector<td::int32>(x.second.cats.begin(), x.second.cats.end()),
+          std::vector<td::int32>(x.second.priority_cats.begin(), x.second.priority_cats.end())));
+    } else {
+      addrs_vec.push_back(ton::create_tl_object<ton::ton_api::engine_addr>(
+          static_cast<td::int32>(x.first.addr.get_ipv4()), x.first.addr.get_port(),
+          std::vector<td::int32>(x.second.cats.begin(), x.second.cats.end()),
+          std::vector<td::int32>(x.second.priority_cats.begin(), x.second.priority_cats.end())));
+    }
   }
   for (auto &x : quic_addrs) {
     addrs_vec.push_back(ton::create_tl_object<ton::ton_api::engine_quicAddr>(
@@ -354,6 +381,7 @@ ton::tl_object_ptr<ton::ton_api::engine_validator_config> Config::tl() const {
 }
 
 td::Result<bool> Config::config_add_network_addr(td::IPAddress in_ip, td::IPAddress out_ip,
+                                                 std::shared_ptr<ton::adnl::AdnlProxy> proxy,
                                                  std::vector<AdnlCategory> cats, std::vector<AdnlCategory> prio_cats) {
   Addr addr{out_ip};
 
@@ -362,6 +390,10 @@ td::Result<bool> Config::config_add_network_addr(td::IPAddress in_ip, td::IPAddr
     bool mod = false;
     if (!(it->second.in_addr == in_ip)) {
       it->second.in_addr = in_ip;
+      mod = true;
+    }
+    if (it->second.proxy != proxy) {
+      it->second.proxy = std::move(proxy);
       mod = true;
     }
     for (auto &c : cats) {
@@ -378,6 +410,7 @@ td::Result<bool> Config::config_add_network_addr(td::IPAddress in_ip, td::IPAddr
   } else {
     it = addrs.emplace(std::move(addr), AddrCats{}).first;
     it->second.in_addr = in_ip;
+    it->second.proxy = std::move(proxy);
     for (auto &c : cats) {
       it->second.cats.insert(c);
     }
@@ -1442,7 +1475,7 @@ void ValidatorEngine::start_up() {
 
   const char *value = getenv("TON_PROMETHEUS_SHARE_CREDENTIALS");
   allow_share_liteserver_credentials_ = bool(value);
-  liteserver_credentials_tag_ = value ? value : "";
+  liteserver_credentials_tag_ = value;
 
 
 #if TON_USE_JEMALLOC
@@ -1703,7 +1736,10 @@ td::Status ValidatorEngine::load_global_config() {
   if (key_proof_ttl_ != 0) {
     validator_options_.write().set_key_proof_ttl(key_proof_ttl_);
   }
-  for (auto rot : unsafe_catchain_rotations_) {
+  for (auto seq: unsafe_catchains_) {
+    validator_options_.write().add_unsafe_resync_catchain(seq);
+  }
+  for (auto rot: unsafe_catchain_rotations_) {
     validator_options_.write().add_unsafe_catchain_rotate(rot.first, rot.second.first, rot.second.second);
   }
   if (truncate_seqno_ > 0) {
@@ -1732,6 +1768,12 @@ td::Status ValidatorEngine::load_global_config() {
   }
   validator_options_.write().set_celldb_direct_io(celldb_direct_io_);
   validator_options_.write().set_celldb_preload_all(celldb_preload_all_);
+  if (catchain_max_block_delay_) {
+    validator_options_.write().set_catchain_max_block_delay(catchain_max_block_delay_.value());
+  }
+  if (catchain_max_block_delay_slow_) {
+    validator_options_.write().set_catchain_max_block_delay_slow(catchain_max_block_delay_slow_.value());
+  }
   validator_options_.write().set_permanent_celldb(permanent_celldb_);
   validator_options_.write().set_initial_sync_disabled(skip_key_sync_);
 
@@ -1753,6 +1795,7 @@ td::Status ValidatorEngine::load_global_config() {
     h.push_back(b);
   }
   validator_options_.write().set_hardforks(std::move(h));
+  validator_options_.write().set_catchain_broadcast_speed_multiplier(broadcast_speed_multiplier_catchain_);
   validator_options_.write().set_parallel_validation(parallel_validation_);
   validator_options_.write().set_db_event_fifo_path(db_event_fifo_path_);
 
@@ -1933,7 +1976,8 @@ void ValidatorEngine::load_empty_local_config(td::Promise<> promise) {
   ig.add_promise(std::move(ret_promise));
 
   for (auto &addr : addrs_) {
-    config_.config_add_network_addr(addr, addr, std::vector<AdnlCategory>{0, 1, 2, 3}, std::vector<AdnlCategory>{})
+    config_.config_add_network_addr(addr, addr, nullptr, std::vector<AdnlCategory>{0, 1, 2, 3},
+                                    std::vector<AdnlCategory>{})
         .ensure();
   }
 
@@ -2003,7 +2047,8 @@ void ValidatorEngine::load_local_config(td::Promise<> promise) {
   ig.add_promise(std::move(ret_promise));
 
   for (auto &addr : addrs_) {
-    config_.config_add_network_addr(addr, addr, std::vector<AdnlCategory>{0, 1, 2, 3}, std::vector<AdnlCategory>{})
+    config_.config_add_network_addr(addr, addr, nullptr, std::vector<AdnlCategory>{0, 1, 2, 3},
+                                    std::vector<AdnlCategory>{})
         .ensure();
   }
 
@@ -2267,8 +2312,14 @@ void ValidatorEngine::add_addr(const Config::Addr &addr, const Config::AddrCats 
   for (auto cat: cats.priority_cats) {
     cat_mask[cat] = true;
   }
-  td::actor::send_closure(adnl_network_manager_, &ton::adnl::AdnlNetworkManager::add_self_addr, addr.addr,
-                          std::move(cat_mask), cats.cats.size() ? 0 : 1);
+  if (!cats.proxy) {
+    td::actor::send_closure(adnl_network_manager_, &ton::adnl::AdnlNetworkManager::add_self_addr, addr.addr,
+                            std::move(cat_mask), cats.cats.size() ? 0 : 1);
+  } else {
+    td::actor::send_closure(adnl_network_manager_, &ton::adnl::AdnlNetworkManager::add_proxy_addr, cats.in_addr,
+                            static_cast<td::uint16>(addr.addr.get_port()), cats.proxy, std::move(cat_mask),
+                            cats.cats.size() ? 0 : 1);
+  }
 
   td::uint32 ts = static_cast<td::uint32>(td::Clocks::system());
 
@@ -2921,7 +2972,7 @@ void ValidatorEngine::try_add_listening_port(td::uint32 ip, td::int32 port, std:
                                              std::vector<AdnlCategory> prio_cats, td::Promise<> promise) {
   td::IPAddress a;
   a.init_ipv4_port(td::IPAddress::ipv4_to_str(ip), static_cast<td::uint16>(port)).ensure();
-  auto R = config_.config_add_network_addr(a, a, std::move(cats), std::move(prio_cats));
+  auto R = config_.config_add_network_addr(a, a, nullptr, std::move(cats), std::move(prio_cats));
   if (R.is_error()) {
     promise.set_error(R.move_as_error());
     return;
@@ -2939,6 +2990,49 @@ void ValidatorEngine::try_add_listening_port(td::uint32 ip, td::int32 port, std:
 
 void ValidatorEngine::try_del_listening_port(td::uint32 ip, td::int32 port, std::vector<AdnlCategory> cats,
                                              std::vector<AdnlCategory> prio_cats, td::Promise<> promise) {
+  td::IPAddress a;
+  a.init_ipv4_port(td::IPAddress::ipv4_to_str(ip), static_cast<td::uint16>(port)).ensure();
+  auto R = config_.config_del_network_addr(a, std::move(cats), std::move(prio_cats));
+  if (R.is_error()) {
+    promise.set_error(R.move_as_error());
+    return;
+  }
+
+  if (!R.move_as_ok()) {
+    promise.set_value({});
+    return;
+  }
+
+  reload_adnl_addrs();
+
+  write_config(std::move(promise));
+}
+
+void ValidatorEngine::try_add_proxy(td::uint32 in_ip, td::int32 in_port, td::uint32 out_ip, td::int32 out_port,
+                                    std::shared_ptr<ton::adnl::AdnlProxy> proxy, std::vector<AdnlCategory> cats,
+                                    std::vector<AdnlCategory> prio_cats, td::Promise<> promise) {
+  td::IPAddress in_addr;
+  in_addr.init_ipv4_port(td::IPAddress::ipv4_to_str(in_ip), static_cast<td::uint16>(in_port)).ensure();
+  td::IPAddress out_addr;
+  out_addr.init_ipv4_port(td::IPAddress::ipv4_to_str(out_ip), static_cast<td::uint16>(out_port)).ensure();
+  auto R = config_.config_add_network_addr(in_addr, out_addr, std::move(proxy), std::move(cats), std::move(prio_cats));
+  if (R.is_error()) {
+    promise.set_error(R.move_as_error());
+    return;
+  }
+
+  if (!R.move_as_ok()) {
+    promise.set_value({});
+    return;
+  }
+
+  reload_adnl_addrs();
+
+  write_config(std::move(promise));
+}
+
+void ValidatorEngine::try_del_proxy(td::uint32 ip, td::int32 port, std::vector<AdnlCategory> cats,
+                                    std::vector<AdnlCategory> prio_cats, td::Promise<> promise) {
   td::IPAddress a;
   a.init_ipv4_port(td::IPAddress::ipv4_to_str(ip), static_cast<td::uint16>(port)).ensure();
   auto R = config_.config_del_network_addr(a, std::move(cats), std::move(prio_cats));
@@ -4096,6 +4190,80 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_delListen
   try_del_listening_port(query.ip_, query.port_, std::move(cats), std::move(prio_cats), std::move(P));
 }
 
+void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addProxy &query, td::BufferSlice data,
+                                        ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise) {
+  if (!(perm & ValidatorEnginePermissions::vep_modify)) {
+    promise.set_value(create_control_query_error(td::Status::Error(ton::ErrorCode::error, "not authorized")));
+    return;
+  }
+  if (!started_) {
+    promise.set_value(create_control_query_error(td::Status::Error(ton::ErrorCode::notready, "not started")));
+    return;
+  }
+
+  auto R = ton::adnl::AdnlProxy::create(*query.proxy_type_.get());
+  if (R.is_error()) {
+    promise.set_value(create_control_query_error(R.move_as_error_prefix("bad proxy type: ")));
+    return;
+  }
+
+  auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<> R) mutable {
+    if (R.is_error()) {
+      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to add listening proxy: ")));
+    } else {
+      promise.set_value(
+          ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+    }
+  });
+
+  std::vector<td::uint8> cats;
+  for (auto cat : query.categories_) {
+    TRY_RESULT_PROMISE(P, c, td::narrow_cast_safe<td::uint8>(cat));
+    cats.push_back(c);
+  }
+  std::vector<td::uint8> prio_cats;
+  for (auto cat : query.priority_categories_) {
+    TRY_RESULT_PROMISE(P, c, td::narrow_cast_safe<td::uint8>(cat));
+    prio_cats.push_back(c);
+  }
+  try_add_proxy(query.in_ip_, query.in_port_, query.out_ip_, query.out_port_, R.move_as_ok(), std::move(cats),
+                std::move(prio_cats), std::move(P));
+}
+
+void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_delProxy &query, td::BufferSlice data,
+                                        ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise) {
+  if (!(perm & ValidatorEnginePermissions::vep_modify)) {
+    promise.set_value(create_control_query_error(td::Status::Error(ton::ErrorCode::error, "not authorized")));
+    return;
+  }
+  if (!started_) {
+    promise.set_value(create_control_query_error(td::Status::Error(ton::ErrorCode::notready, "not started")));
+    return;
+  }
+
+  auto P = td::PromiseCreator::lambda([promise = std::move(promise)](td::Result<> R) mutable {
+    if (R.is_error()) {
+      promise.set_value(create_control_query_error(R.move_as_error_prefix("failed to del listening proxy: ")));
+    } else {
+      promise.set_value(
+          ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+    }
+  });
+
+  std::vector<td::uint8> cats;
+  for (auto cat : query.categories_) {
+    TRY_RESULT_PROMISE(P, c, td::narrow_cast_safe<td::uint8>(cat));
+    cats.push_back(c);
+  }
+  std::vector<td::uint8> prio_cats;
+  for (auto cat : query.priority_categories_) {
+    TRY_RESULT_PROMISE(P, c, td::narrow_cast_safe<td::uint8>(cat));
+    prio_cats.push_back(c);
+  }
+
+  try_del_proxy(query.out_ip_, query.out_port_, std::move(cats), std::move(prio_cats), std::move(P));
+}
+
 void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addQuicAddr &query, td::BufferSlice data,
                                         ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise) {
   if (!(perm & ValidatorEnginePermissions::vep_modify)) {
@@ -4281,6 +4449,43 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_setVerbos
   SET_VERBOSITY_LEVEL(VERBOSITY_NAME(ERROR) + query.verbosity_);
 
   promise.set_value(ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+}
+
+void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_setLogCategoryVerbosity &query,
+                                        td::BufferSlice data, ton::PublicKeyHash src, td::uint32 perm,
+                                        td::Promise<td::BufferSlice> promise) {
+  if (!(perm & ValidatorEnginePermissions::vep_default)) {
+    promise.set_value(create_control_query_error(td::Status::Error(ton::ErrorCode::error, "not authorized")));
+    return;
+  }
+
+  if (query.verbosity_ < 0 || query.verbosity_ > 10) {
+    promise.set_value(create_control_query_error(
+        td::Status::Error(ton::ErrorCode::error, "verbosity should be in range [0..10]")));
+    return;
+  }
+
+  if (!td::set_log_category_level(query.name_, VERBOSITY_NAME(ERROR) + query.verbosity_)) {
+    promise.set_value(create_control_query_error(td::Status::Error(ton::ErrorCode::error, "unknown log category")));
+    return;
+  }
+
+  promise.set_value(ton::serialize_tl_object(ton::create_tl_object<ton::ton_api::engine_validator_success>(), true));
+}
+
+void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_getLogCategories &query, td::BufferSlice data,
+                                        ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise) {
+  if (!(perm & ValidatorEnginePermissions::vep_default)) {
+    promise.set_value(create_control_query_error(td::Status::Error(ton::ErrorCode::error, "not authorized")));
+    return;
+  }
+
+  td::StringBuilder sb;
+  for (auto *category = td::first_log_category(); category != nullptr; category = category->next()) {
+    sb << category->name() << " level=" << category->get_level() << " default=" << category->default_level()
+       << " override=" << category->override_level() << "\n";
+  }
+  promise.set_value(ton::create_serialize_tl_object<ton::ton_api::engine_validator_textStats>(sb.as_cslice().str()));
 }
 
 void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_getStats &query, td::BufferSlice data,
@@ -5845,6 +6050,12 @@ int main(int argc, char *argv[]) {
   p.add_option('\0', "session-logs", "file for validator session stats (default: {logname}.session-stats)",
                [&](td::Slice fname) { session_logs_file = fname.str(); });
   acts.push_back([&]() { td::actor::send_closure(x, &ValidatorEngine::set_session_logs_file, session_logs_file); });
+  p.add_checked_option(
+          'U', "unsafe-catchain-restore", "use SLOW and DANGEROUS catchain recover method", [&](td::Slice id) {
+              TRY_RESULT(seq, td::to_integer_safe<ton::CatchainSeqno>(id));
+              acts.push_back([&x, seq]() { td::actor::send_closure(x, &ValidatorEngine::add_unsafe_catchain, seq); });
+              return td::Status::OK();
+          });
   p.add_checked_option('F', "unsafe-catchain-rotate", "use forceful and DANGEROUS catchain rotation",
                        [&](td::Slice params) {
                            auto pos1 = params.find(':');
@@ -5977,7 +6188,6 @@ int main(int argc, char *argv[]) {
   p.add_option('\0', "unsynced-liteserver", "allow liteserver queries before node is fully synced", [&]() {
     acts.push_back([&x]() { td::actor::send_closure(x, &ValidatorEngine::set_unsynced_liteserver, true); });
   });
-  p.add_option('\0', "fast-state-serializer", "deprecated option (enabled by default)", [&]() {});
   p.add_checked_option(
           '\0', "catchain-max-block-delay", "delay before creating a new catchain block, in seconds (default: 0.4)",
           [&](td::Slice s) -> td::Status {
@@ -6035,6 +6245,18 @@ int main(int argc, char *argv[]) {
       '\0', "disable-state-serializer",
       "disable persistent state serializer (similar to set-state-serializer-enabled 0 in validator console)", [&]() {
         acts.push_back([&x]() { td::actor::send_closure(x, &ValidatorEngine::set_state_serializer_disabled_flag); });
+      });
+  p.add_checked_option(
+      '\0', "broadcast-speed-catchain",
+      "multiplier for broadcast speed in catchain overlays (experimental, default is 3.33, which is ~1 MB/s)",
+      [&](td::Slice s) -> td::Status {
+        auto v = td::to_double(s);
+        if (v <= 0.0) {
+          return td::Status::Error("broadcast-speed-catchain should be positive");
+        }
+        acts.push_back(
+            [&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_broadcast_speed_multiplier_catchain, v); });
+        return td::Status::OK();
       });
   p.add_checked_option(
       '\0', "broadcast-speed-public",

@@ -145,6 +145,9 @@ td::Status AdnlInboundConnection::process_custom_packet(td::BufferSlice &data, b
       }
 
       auto pub_key = PublicKey{f->key_};
+      if (!pub_key.is_ed25519()) {
+        return td::Status::Error("expected ed25519 key");
+      }
       TRY_RESULT(enc, pub_key.create_encryptor());
       TRY_STATUS(enc->check_signature(nonce_.as_slice(), f->signature_.as_slice()));
 
@@ -241,7 +244,8 @@ void AdnlExtServerImpl::decrypt_init_packet(AdnlNodeIdShort dst, td::BufferSlice
 void AdnlExtServerCreator::create(td::actor::ActorId<AdnlPeerTable> adnl, std::vector<AdnlNodeIdShort> ids,
                                   std::vector<td::uint16> ports,
                                   td::Promise<td::actor::ActorOwn<AdnlExtServer>> promise) {
-  promise.set_value(td::actor::create_actor<AdnlExtServerImpl>("extserver", adnl, std::move(ids), std::move(ports)));
+  td::actor::create_actor<AdnlExtServerImpl>("extserver", adnl, std::move(ids), std::move(ports), std::move(promise))
+      .release();
 }
 
 }  // namespace adnl

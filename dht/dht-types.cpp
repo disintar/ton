@@ -394,7 +394,7 @@ bool DhtUpdateRuleOverlayNodes::check_is_acceptable(const ton::dht::DhtValue &va
   auto L = F.move_as_ok();
   auto now = td::Clocks::system();
   for (auto &node : L->nodes_) {
-    if (node->version_ + 600 > now) {
+    if (node->version_ > now - 600) {
       return true;
     }
   }

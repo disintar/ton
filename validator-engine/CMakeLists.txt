@@ -24,11 +24,10 @@ set(VALIDATOR_ENGINE_SOURCE
 
 add_executable(validator-engine ${VALIDATOR_ENGINE_SOURCE})
 target_link_libraries(validator-engine metrics overlay tdutils tdactor adnl tl_api dht
-  rldp2 quic validatorsession full-node validator ton_validator validator
-  fift-lib memprof git ${JEMALLOC_LIBRARIES} ${MHD_LIBRARY})
+  rldp2 quic full-node validator ton_validator validator
+  fift-lib memprof git ${JEMALLOC_LIBRARIES} ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES})
 
 target_include_directories(validator-engine PUBLIC ${MHD_INCLUDE_DIR})
-
 if (JEMALLOC_FOUND)
   target_include_directories(validator-engine PRIVATE ${JEMALLOC_INCLUDE_DIR})
   target_compile_definitions(validator-engine PRIVATE -DTON_USE_JEMALLOC=1)

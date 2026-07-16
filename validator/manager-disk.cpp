@@ -216,12 +216,12 @@ void ValidatorManagerImpl::add_ext_server_port(td::uint16 port) {
     if (lite_server_.empty()) {
       pending_ext_ports_.push_back(port);
     } else {
-      td::actor::send_closure(lite_server_, &adnl::AdnlExtServer::add_tcp_port, port, td::Promise<td::Unit>());
+      td::actor::send_closure(lite_server_, &adnl::AdnlExtServer::add_tcp_port, port, [](td::Result<td::Unit>) {});
     }
   }
 }
 
-void ValidatorManagerImpl::validate_block(ReceivedBlock block, td::Promise<BlockHandle> promise) {
+void ValidatorManagerImpl::on_next_masterchain_block(ReceivedBlock block, td::Promise<BlockHandle> promise) {
   UNREACHABLE();
 }
 
@@ -1219,7 +1219,7 @@ void ValidatorManagerImpl::created_ext_server(td::actor::ActorOwn<adnl::AdnlExtS
       td::actor::send_closure(lite_server_, &adnl::AdnlExtServer::add_local_id, id);
     }
     for (auto port : pending_ext_ports_) {
-      td::actor::send_closure(lite_server_, &adnl::AdnlExtServer::add_tcp_port, port, td::Promise<td::Unit>());
+      td::actor::send_closure(lite_server_, &adnl::AdnlExtServer::add_tcp_port, port, [](td::Result<td::Unit>) {});
     }
     pending_ext_ids_.clear();
     pending_ext_ports_.clear();
@@ -1483,7 +1483,7 @@ void ValidatorManagerImpl::try_get_static_file(FileHash file_hash, td::Promise<t
 td::actor::ActorOwn<ValidatorManagerInterface> ValidatorManagerDiskFactory::create(
     PublicKeyHash id, td::Ref<ValidatorManagerOptions> opts, ShardIdFull shard, BlockIdExt shard_top_block_id,
     std::string db_root, td::actor::ActorId<keyring::Keyring> keyring, td::actor::ActorId<adnl::Adnl> adnl,
-    td::actor::ActorId<rldp::Rldp> rldp, td::actor::ActorId<overlay::Overlays> overlays,
+    td::actor::ActorId<rldp2::Rldp> rldp, td::actor::ActorId<overlay::Overlays> overlays,
     td::actor::ActorId<liteserver::LiteServerLimiter> lslimiter, bool read_only_) {
   return td::actor::create_actor<validator::ValidatorManagerImpl>(
       "manager", id, std::move(opts), shard, shard_top_block_id, db_root, std::move(keyring), std::move(adnl),

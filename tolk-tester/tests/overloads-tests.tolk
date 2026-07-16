@@ -72,6 +72,7 @@ fun test4() {
     __expect_type((5 as int).unionMix(), "bool");
     __expect_type((createEmptySlice().unionMix()), "slice");
     __expect_type(((5 as int|slice).unionMix()), "slice");
+    __expect_type(((5 as slice|int).unionMix()), "slice");
 }
 
 fun WrapA<T>.dup(self): WrapA<T> { return self }
@@ -255,6 +256,9 @@ fun map<int8, V>.mySize(self): int3 { return 0 }
 fun map<int8, map<K, V>>.mySize(self): int4 { return 0 }
 fun map<int8, map<int16, V>>.mySize(self): int5 { return 0 }
 
+fun map<K, V|slice>.whichSlice(self): int2 { return 0 }
+fun map<K, slice>.whichSlice(self): int3 { return 0 }
+
 type MInt16 = int16
 type MInt16ov = MInt16
 type MMap32 = map<int32, map<bool, varint16>>
@@ -266,6 +270,7 @@ fun test14(
     m6: map<int8, map<int8,int8>?>, 
     m7: map<int8, bool|cell>, m8: map<MInt16, ()|cell|Point>,
     m9: map<address, address>,
+    m10: map<int8, slice>,
 ) {
     __expect_type(m1.mySize(), "int5");
     __expect_type(m2.mySize(), "int5");
@@ -276,6 +281,7 @@ fun test14(
     __expect_type(m7.mySize(), "int2");
     __expect_type(m8.mySize(), "int2");
     __expect_type(m9.mySize(), "int1");
+    __expect_type(m10.whichSlice(), "int3");
 }
 
 type ArrAlias<T> = array<T>
@@ -367,6 +373,48 @@ fun test19() {
     __expect_type(throughAlias.which(), "int1");
 }
 
+type TaggedCellForPick<T> = cell
+
+fun TaggedCellForPick<(T, T)>.pickSpecialized(self): int22 {
+    return 22;
+}
+
+fun TaggedCellForPick<T | (U, V)>.pickSpecialized(self): int33 {
+    return 33;
+}
+
+@method_id(120)
+fun test20(): int {
+    val c: TaggedCellForPick<(int, int)> = createEmptyCell();
+    __expect_type(c.pickSpecialized(), "int22");
+    return c.pickSpecialized();
+}
+
+struct BoxForPick<T> { value: T }
+
+fun (T | BoxForPick<T>).pickT(self): int { return 111; }
+
+@method_id(121)
+fun test21(): int {
+    val order1 = 7 as int | BoxForPick<int>;
+    val order2 = 7 as BoxForPick<int> | int;
+    __expect_type(order2.pickT(), "int");
+    return order1.pickT() + order2.pickT();
+}
+
+struct OkRes<T> { v: T }
+struct ErrRes<E> { e: E }
+
+fun (OkRes<T> | ErrRes<E>).tagRes(self): int { return 222; }
+
+@method_id(122)
+fun test22(): int {
+    val order1 = ErrRes<slice>{ e: createEmptySlice() } as OkRes<int> | ErrRes<slice>;
+    val order2 = OkRes<int>{ v: 9 } as ErrRes<slice> | OkRes<int>;
+    __expect_type(order2.tagRes(), "int");
+    return order1.tagRes() + order2.tagRes();
+}
+
 fun main() {
     // besides these positive tests, there are many negative resulting in "ambiguous call"
     return 0
@@ -377,6 +425,9 @@ fun main() {
 @testcase | 113 |   | [ 1 2 258 1 2 -777 ]
 @testcase | 116 |   | 111222
 @testcase | 118 |   | 123
+@testcase | 120 |   | 22
+@testcase | 121 |   | 222
+@testcase | 122 |   | 444
 
 @fif_codegen
 """

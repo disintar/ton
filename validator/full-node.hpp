@@ -68,6 +68,7 @@ class FullNodeImpl : public FullNode {
   void sync_completed();
 
   void initial_read_complete(BlockHandle top_block);
+  void archive_sync_complete(BlockHandle top_block);
   void send_ihr_message(AccountIdPrefixFull dst, td::BufferSlice data);
   void send_ext_message(AccountIdPrefixFull dst, td::BufferSlice data);
   void send_ext_message_relay_all(AccountIdPrefixFull dst, td::BufferSlice data);
@@ -81,6 +82,8 @@ class FullNodeImpl : public FullNode {
   void download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout, td::Promise<ReceivedBlock> promise);
   void download_next_block(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
                            td::Promise<ReceivedBlock> promise) override;
+  void download_next_blocks(BlockHandle handle, td::uint32 priority, td::Timestamp timeout,
+                            td::Promise<BlockHandle> promise) override;
   void download_zero_state(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                            td::Promise<td::BufferSlice> promise);
   void download_persistent_state(BlockIdExt id, BlockIdExt masterchain_block_id, PersistentStateType type,

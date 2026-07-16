@@ -20,7 +20,7 @@
 #include <overlays.h>
 
 #include "adnl/adnl.h"
-#include "rldp/rldp.h"
+#include "rldp2/rldp.h"
 #include "lite-server-rate-limiter.h"
 #include "validator/validator.h"
 
@@ -36,7 +36,7 @@ class ValidatorManagerDiskFactory {
   static td::actor::ActorOwn<ValidatorManagerInterface> create(
       PublicKeyHash id, td::Ref<ValidatorManagerOptions> opts, ShardIdFull shard, BlockIdExt shard_top_block_id,
       std::string db_root, td::actor::ActorId<keyring::Keyring> keyring, td::actor::ActorId<adnl::Adnl> adnl,
-      td::actor::ActorId<rldp::Rldp> rldp, td::actor::ActorId<overlay::Overlays> overlays,
+      td::actor::ActorId<rldp2::Rldp> rldp, td::actor::ActorId<overlay::Overlays> overlays,
       td::actor::ActorId<ton::liteserver::LiteServerLimiter> lslimiter, bool read_only_ = false);
 };
 

@@ -2312,25 +2312,6 @@ namespace ton::liteserver {
                                     << " limit: " << limit << " refire: " << refire << query_compiled;
                                 },
 
-                                [&](lite_api::liteServer_nonfinal_getCandidate &q) {
-                                    query_compiled = " Query: nonfinal_getCandidate(" + q.id_->creator_.to_hex()
-                                                     + ", block_id: " + string_block_id(q.id_->block_id_)
-                                                     + ", collated_data_hash: " + q.id_->collated_data_hash_.to_hex() +
-                                                     ")";
-                                    LOG(INFO)
-                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
-                                    << " limit: " << limit << " refire: " << refire << query_compiled;
-                                },
-                                [&](lite_api::liteServer_nonfinal_getValidatorGroups &q) {
-                                    query_compiled =
-                                            " Query: nonfinal_getValidatorGroups(mode: " + std::to_string(q.mode_)
-                                            + ", shard: " + std::to_string(q.wc_) + ":" + std::to_string(q.shard_) +
-                                            ")";
-                                    LOG(INFO)
-                                    << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst]
-                                    << " limit: " << limit << " refire: " << refire << query_compiled;
-                                },
-
                                 [&](lite_api::liteServer_getOutMsgQueueSizes &q) {
                                     query_compiled = " Query: getOutMsgQueueSizes("
                                                      + std::string(q.mode_ & 1 ? "ShardIdFull" : "optional") + ")";

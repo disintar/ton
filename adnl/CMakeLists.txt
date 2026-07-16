@@ -22,6 +22,8 @@ set(ADNL_HEADERS
   adnl-peer-table.hpp
   adnl-peer.h
   adnl-peer.hpp
+  adnl-proxy-types.h
+  adnl-proxy-types.hpp
   adnl-query.h
   adnl-sender-ex.h
   adnl.h
@@ -41,6 +43,7 @@ set(ADNL_SOURCE
   adnl-packet.cpp
   adnl-peer-table.cpp
   adnl-peer.cpp
+  adnl-proxy-types.cpp
   adnl-query.cpp
   adnl-channel.cpp
   adnl-sender-ex.cpp
@@ -51,6 +54,13 @@ set(ADNL_SOURCE
 set(ADNL_TEST_SOURCE
   adnl-test-loopback-implementation.h
   adnl-test-loopback-implementation.cpp
+)
+
+set(ADNL_PROXY_SOURCE
+  adnl-proxy.cpp
+  adnl-proxy-types.h
+  adnl-proxy-types.hpp
+  adnl-proxy-types.cpp
 )
 
 #FIXME
@@ -73,6 +83,10 @@ add_library(adnl STATIC ${ADNL_SOURCE})
 target_include_directories(adnl PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)
 target_link_libraries(adnl PUBLIC tdactor ton_crypto tl_api tdnet tddb keys keyring )
 
+add_executable(adnl-proxy ${ADNL_PROXY_SOURCE})
+target_include_directories(adnl-proxy PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)
+target_link_libraries(adnl-proxy PUBLIC tdactor ton_crypto tl_api tdnet common tl-utils git)
+
 add_executable(adnl-pong adnl-pong.cpp)
 target_include_directories(adnl-pong PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)
 target_link_libraries(adnl-pong PUBLIC tdactor ton_crypto tl_api tdnet common tl-utils adnl dht git)
@@ -80,6 +94,8 @@ target_link_libraries(adnl-pong PUBLIC tdactor ton_crypto tl_api tdnet common tl
 add_library(adnltest STATIC ${ADNL_TEST_SOURCE})
 target_include_directories(adnltest PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)
 target_link_libraries(adnltest PUBLIC adnl)
+
+install(TARGETS adnl-proxy RUNTIME DESTINATION bin)
 
 endif()
 #END internal

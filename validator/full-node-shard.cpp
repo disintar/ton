@@ -17,6 +17,8 @@
     Copyright 2017-2020 Telegram Systems LLP
 */
 #include <algorithm>
+#include <memory>
+#include <mutex>
 
 #include "adnl/utils.hpp"
 #include "auto/tl/ton_api.h"
@@ -25,6 +27,7 @@
 #include "impl/out-msg-queue-proof.hpp"
 #include "net/download-archive-slice.hpp"
 #include "net/download-block-new.hpp"
+#include "net/download-next-blocks.hpp"
 #include "net/download-proof.hpp"
 #include "net/download-state.hpp"
 #include "net/get-next-key-blocks.hpp"
@@ -43,7 +46,6 @@
 #include "full-node-serializer.hpp"
 #include "full-node-shard-queries.hpp"
 #include "full-node-shard.hpp"
-#include "overlay-gap-diagnostics.h"
 #include "overlays.h"
 
 namespace ton {
@@ -55,32 +57,62 @@ namespace fullnode {
 namespace {
 
 constexpr const char *k_called_from_public = "public";
-constexpr td::uint32 k_heavy_request_cost_unit = 1 << 21;
 constexpr size_t k_ed25519_signature_size = 64;
-constexpr td::uint32 kLocalNextMaxRetries = 2;
-constexpr double kLocalNextInitialGraceSec = 0.05;
-constexpr double kLocalNextRetryDelaySec = 0.05;
 
-size_t heavy_request_cost(td::uint64 requested_max_size) {
-  size_t cost = static_cast<size_t>((requested_max_size + k_heavy_request_cost_unit - 1) / k_heavy_request_cost_unit);
-  return cost == 0 ? 1 : cost;
-}
+struct NextBlocksOverlayRaceState {
+  explicit NextBlocksOverlayRaceState(td::Promise<BlockHandle> promise) : promise(std::move(promise)) {
+  }
 
-size_t request_cost_for_limiter(ton_api::Function &function) {
-  size_t cost = 1;
-  ton_api::downcast_call(
-      function, td::overloaded(
-                    [&](const ton_api::tonNode_getArchiveSlice &query) {
-                      cost = heavy_request_cost(query.max_size_ > 0 ? static_cast<td::uint64>(query.max_size_) : 0);
-                    },
-                    [&](const ton_api::tonNode_downloadPersistentStateSliceV2 &query) {
-                      cost = heavy_request_cost(query.max_size_ > 0 ? static_cast<td::uint64>(query.max_size_) : 0);
-                    },
-                    [&](const ton_api::tonNode_downloadZeroState &) {
-                      cost = heavy_request_cost(FullNode::max_zerostate_size());
-                    },
-                    [&](const auto &) {}));
-  return cost;
+  td::Promise<BlockHandle> promise;
+  std::mutex mutex;
+  std::size_t pending = 2;
+  bool done = false;
+  std::string last_error;
+};
+
+void finish_next_blocks_overlay_race(std::shared_ptr<NextBlocksOverlayRaceState> state, const char *source,
+                                     td::Result<BlockHandle> R) {
+  if (R.is_ok()) {
+    auto value = R.move_as_ok();
+    td::Promise<BlockHandle> promise;
+    bool should_finish = false;
+    {
+      std::lock_guard<std::mutex> lock(state->mutex);
+      if (!state->done) {
+        state->done = true;
+        promise = std::move(state->promise);
+        should_finish = true;
+      }
+    }
+    if (should_finish) {
+      VLOG(FULL_NODE_DEBUG) << "next blocks race won by " << source << " up to " << value->id();
+      promise.set_value(std::move(value));
+    }
+    return;
+  }
+
+  auto error = R.move_as_error();
+  td::Promise<BlockHandle> promise;
+  bool should_finish = false;
+  std::string last_error = PSTRING() << source << ": " << error;
+  {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    if (state->done) {
+      return;
+    }
+    state->last_error = last_error;
+    CHECK(state->pending > 0);
+    state->pending--;
+    if (state->pending == 0) {
+      state->done = true;
+      promise = std::move(state->promise);
+      should_finish = true;
+      last_error = state->last_error;
+    }
+  }
+  if (should_finish) {
+    promise.set_error(td::Status::Error(ErrorCode::notready, PSTRING() << "next blocks race failed: " << last_error));
+  }
 }
 
 }  // namespace
@@ -204,8 +236,8 @@ void FullNodeShardImpl::process_external_message_broadcast(ton_api::tonNode_exte
     promise.set_result(td::Unit());
     return;
   }
-  VLOG(FULL_NODE_DEBUG) << "Accepted external message broadcast without local state check";
-  promise.set_result(td::Unit());
+  td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_external_message_broadcast,
+                          std::move(message.message_->data_), 0, std::move(promise));
 }
 
 void FullNodeShardImpl::remove_neighbour(adnl::AdnlNodeIdShort id) {
@@ -232,292 +264,65 @@ void FullNodeShardImpl::set_active(bool active) {
   create_overlay();
 }
 
-void FullNodeShardImpl::try_get_next_block(td::Timestamp timeout, td::Promise<ReceivedBlock> promise) {
-  if (timeout.is_in_past()) {
-    promise.set_error(td::Status::Error(ErrorCode::timeout, "timeout"));
-    return;
-  }
-
-  auto P = td::PromiseCreator::lambda(
-      [SelfId = actor_id(this), timeout, promise = std::move(promise)](td::Result<ReceivedBlock> R) mutable {
-        if (R.is_ok()) {
-          promise.set_value(R.move_as_ok());
-          return;
-        }
-        td::actor::send_closure(SelfId, &FullNodeShardImpl::try_get_next_block_from_public_overlay, timeout,
-                                std::move(promise));
-      });
-  td::actor::send_closure(full_node_, &FullNode::download_next_block, handle_->id(), download_next_priority(),
-                          timeout, std::move(P));
-}
-
-void FullNodeShardImpl::try_get_next_block_from_public_overlay(td::Timestamp timeout,
-                                                               td::Promise<ReceivedBlock> promise) {
-  if (timeout.is_in_past()) {
-    promise.set_error(td::Status::Error(ErrorCode::timeout, "timeout"));
-    return;
-  }
-
-  auto &b = choose_neighbour();
-  td::actor::create_actor<DownloadBlockNew>("downloadnext", adnl_id_, overlay_id_, handle_->id(), b.adnl_id,
-                                            download_next_priority(), timeout, validator_manager_, rldp2_, overlays_,
-                                            adnl_, client_, create_neighbour_promise(b, std::move(promise)))
-      .release();
-}
-
-void FullNodeShardImpl::got_next_block(td::Result<BlockHandle> R) {
-  if (R.is_error()) {
-    if (R.error().code() != ErrorCode::timeout && R.error().code() != ErrorCode::notready) {
-      LOG(WARNING) << "Failed to get next block: " << R.move_as_error();
-    }
-    delay_action([SelfId = actor_id(this)]() { td::actor::send_closure(SelfId, &FullNodeShardImpl::get_next_block); },
-                 td::Timestamp::in(0.1));
-    return;
-  }
-  attempt_ = 0;
-  R.ensure();
-  auto old_seqno = handle_->id().id.seqno;
-  handle_ = R.move_as_ok();
-  CHECK(handle_->id().id.seqno == old_seqno + 1);
-
-  if (promise_) {
-    if (handle_->unix_time() > td::Clocks::system() - 300) {
-      promise_.set_value(td::Unit());
-    } else {
-      sync_completed_at_ = td::Timestamp::in(opts_.initial_sync_delay_);
-    }
-  }
-  get_next_block();
-}
-
-void FullNodeShardImpl::try_get_next_block_from_overlay_hint(BlockIdExt block_id, td::uint32 attempt) {
-  if (handle_->id() != block_id) {
-    VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=overlay_hint"
-                          << " prev=" << block_id.to_str()
-                          << " current=" << handle_->id().to_str()
-                          << " result=skip"
-                          << " reason=handle_already_advanced";
-    get_next_block();
-    return;
-  }
-
-  overlay_gap::Record hint;
-  if (!overlay_gap::find_next_hint(block_id, hint)) {
-    VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=overlay_hint"
-                          << " prev=" << block_id.to_str()
-                          << " result=fallback"
-                          << " reason=no_hint";
-    download_next_block_after_local_lookup(block_id, attempt);
-    return;
-  }
-
-  auto next_id = hint.block_id;
-  auto P = td::PromiseCreator::lambda([validator_manager = validator_manager_, block_id, next_id, attempt,
-                                       SelfId = actor_id(this)](td::Result<BlockHandle> R) mutable {
-    if (R.is_error()) {
-      VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=overlay_hint"
-                            << " prev=" << block_id.to_str()
-                            << " next=" << next_id.to_str()
-                            << " result=fallback"
-                            << " reason=" << R.move_as_error();
-      td::actor::send_closure(SelfId, &FullNodeShardImpl::download_next_block_after_local_lookup, block_id, attempt);
-      return;
-    }
-    auto handle = R.move_as_ok();
-    if (!handle->received()) {
-      VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=overlay_hint"
-                            << " prev=" << block_id.to_str()
-                            << " next=" << next_id.to_str()
-                            << " result=fallback"
-                            << " reason=hint_not_received";
-      td::actor::send_closure(SelfId, &FullNodeShardImpl::download_next_block_after_local_lookup, block_id, attempt);
-      return;
-    }
-
-    auto P_data = td::PromiseCreator::lambda([validator_manager, block_id, next_id, attempt,
-                                              SelfId](td::Result<td::BufferSlice> R) mutable {
-      if (R.is_error()) {
-        VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=overlay_hint"
-                              << " prev=" << block_id.to_str()
-                              << " next=" << next_id.to_str()
-                              << " result=fallback"
-                              << " reason=" << R.move_as_error();
-        td::actor::send_closure(SelfId, &FullNodeShardImpl::download_next_block_after_local_lookup, block_id, attempt);
+td::actor::Task<> FullNodeShardImpl::get_next_blocks_loop() {
+  CHECK(shard_.is_masterchain());
+  CHECK(handle_);
+  td::uint32 attempt = 0;
+  while (true) {
+    ++attempt;
+    auto prev_id = handle_->id();
+    auto apply_next_handle = [&](BlockHandle next_handle, const char *source) {
+      if (next_handle->id().id.seqno <= handle_->id().id.seqno) {
+        VLOG(FULL_NODE_DEBUG) << "ignoring stale next block response from " << source << " after " << prev_id
+                              << ": current=" << handle_->id() << " response=" << next_handle->id();
         return;
       }
-      auto P_validate = td::PromiseCreator::lambda([block_id, next_id, SelfId](td::Result<BlockHandle> R) mutable {
-        if (R.is_error()) {
-          VLOG(FULL_NODE_WARNING) << "[fullnode-next] stage=overlay_hint"
-                                  << " prev=" << block_id.to_str()
-                                  << " next=" << next_id.to_str()
-                                  << " result=fallback"
-                                  << " reason=" << R.move_as_error();
-          td::actor::send_closure(SelfId, &FullNodeShardImpl::download_next_block_after_local_lookup, block_id, 0);
-          return;
-        }
-        VLOG(FULL_NODE_WARNING) << "[fullnode-next] stage=overlay_hint"
-                                << " prev=" << block_id.to_str()
-                                << " next=" << next_id.to_str()
-                                << " result=ok";
-        td::actor::send_closure(SelfId, &FullNodeShardImpl::got_next_block, std::move(R));
-      });
-      td::actor::send_closure(validator_manager, &ValidatorManagerInterface::validate_block,
-                              ReceivedBlock{next_id, R.move_as_ok()}, std::move(P_validate));
-    });
-    td::actor::send_closure(validator_manager, &ValidatorManagerInterface::get_block_data, handle, std::move(P_data));
-  });
-  td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_block_handle, next_id, false,
-                          std::move(P));
-}
-
-void FullNodeShardImpl::download_next_block_after_local_lookup(BlockIdExt block_id, td::uint32 attempt) {
-  if (handle_->id() != block_id) {
-    VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=download_skip"
-                          << " prev=" << block_id.to_str()
-                          << " current=" << handle_->id().to_str()
-                          << " reason=handle_already_advanced";
-    get_next_block();
-    return;
-  }
-  auto P = td::PromiseCreator::lambda([validator_manager = validator_manager_, attempt, block_id,
-                                       SelfId = actor_id(this)](td::Result<ReceivedBlock> R) {
-    if (R.is_ok()) {
-      auto P = td::PromiseCreator::lambda([SelfId](td::Result<BlockHandle> R) {
-        td::actor::send_closure(SelfId, &FullNodeShardImpl::got_next_block, std::move(R));
-      });
-      td::actor::send_closure(validator_manager, &ValidatorManagerInterface::validate_block, R.move_as_ok(),
-                              std::move(P));
-    } else {
-      auto S = R.move_as_error();
-      if (S.code() != ErrorCode::notready && S.code() != ErrorCode::timeout) {
-        VLOG(FULL_NODE_WARNING) << "failed to download next block after " << block_id << ": " << S;
-      } else {
-        if ((attempt % 128) == 0) {
-          VLOG(FULL_NODE_INFO) << "failed to download next block after " << block_id << ": " << S;
+      handle_ = std::move(next_handle);
+      if (sync_promise_) {
+        if (handle_->unix_time() > td::Clocks::system() - 300) {
+          sync_promise_.set_value(td::Unit());
         } else {
-          VLOG(FULL_NODE_DEBUG) << "failed to download next block after " << block_id << ": " << S;
+          sync_completed_at_ = td::Timestamp::in(opts_.initial_sync_delay_);
+          alarm_timestamp().relax(sync_completed_at_);
         }
       }
-      delay_action([SelfId]() mutable { td::actor::send_closure(SelfId, &FullNodeShardImpl::get_next_block); },
-                   td::Timestamp::in(0.1));
+    };
+
+    auto &b = choose_neighbour();
+    bool allow_many = b.version() >= std::make_pair<td::uint32, td::uint32>(3, 2);
+    auto [task, promise] = td::actor::StartedTask<BlockHandle>::make_bridge();
+    auto race = std::make_shared<NextBlocksOverlayRaceState>(std::move(promise));
+    auto custom_promise = td::PromiseCreator::lambda([race](td::Result<BlockHandle> R) mutable {
+      finish_next_blocks_overlay_race(std::move(race), "custom", std::move(R));
+    });
+    auto public_promise = td::PromiseCreator::lambda([race](td::Result<BlockHandle> R) mutable {
+      finish_next_blocks_overlay_race(std::move(race), "public", std::move(R));
+    });
+    td::actor::send_closure(full_node_, &FullNode::download_next_blocks, handle_, download_next_priority(),
+                            td::Timestamp::in(1.0), std::move(custom_promise));
+    td::actor::create_actor<DownloadNextBlocks>(PSTRING() << "downloadnextblocks" << prev_id.id, adnl_id_, overlay_id_,
+                                                handle_, b.adnl_id, download_next_priority(), allow_many,
+                                                validator_manager_, rldp2_, overlays_, client_,
+                                                create_neighbour_promise<BlockHandle>(b, std::move(public_promise)))
+        .release();
+    auto R = co_await std::move(task).wrap();
+    if (R.is_error()) {
+      auto S = R.move_as_error();
+      if (S.code() != ErrorCode::notready && S.code() != ErrorCode::timeout) {
+        VLOG(FULL_NODE_WARNING) << "failed to download next block after " << handle_->id() << ": " << S;
+      } else {
+        if ((attempt % 128) == 0) {
+          VLOG(FULL_NODE_INFO) << "failed to download next block after " << handle_->id() << ": " << S;
+        } else {
+          VLOG(FULL_NODE_DEBUG) << "failed to download next block after " << handle_->id() << ": " << S;
+        }
+      }
+      co_await td::actor::coro_sleep(td::Timestamp::in(0.1));
+      continue;
     }
-  });
-  try_get_next_block(td::Timestamp::in(2.0), std::move(P));
-}
-
-void FullNodeShardImpl::retry_get_next_block_after_local_grace(BlockIdExt block_id, td::uint32 attempt,
-                                                              td::uint32 local_retry) {
-  if (handle_->id() != block_id) {
-    VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=local_grace"
-                          << " prev=" << block_id.to_str()
-                          << " current=" << handle_->id().to_str()
-                          << " local_retry=" << local_retry
-                          << " result=skip"
-                          << " reason=handle_already_advanced";
-    get_next_block();
-    return;
+    attempt = 0;
+    apply_next_handle(R.move_as_ok(), "public");
   }
-  auto P = td::PromiseCreator::lambda(
-      [block_id, attempt, local_retry, SelfId = actor_id(this)](td::Result<BlockHandle> R) mutable {
-        if (R.is_ok()) {
-          auto next = R.move_as_ok();
-          if (next->received()) {
-            VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=local_grace"
-                                  << " prev=" << block_id.to_str()
-                                  << " next=" << next->id().to_str()
-                                  << " local_retry=" << local_retry
-                                  << " result=ok";
-            td::actor::send_closure(SelfId, &FullNodeShardImpl::got_next_block, std::move(next));
-            return;
-          }
-          if (local_retry >= kLocalNextMaxRetries) {
-            LOG(WARNING) << "[fullnode-next] stage=local_grace"
-                         << " prev=" << block_id.to_str()
-                         << " next=" << next->id().to_str()
-                         << " local_retry=" << local_retry
-                         << " result=fallback"
-                         << " reason=next_not_received";
-          } else {
-            VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=local_grace"
-                                  << " prev=" << block_id.to_str()
-                                  << " next=" << next->id().to_str()
-                                  << " local_retry=" << local_retry
-                                  << " result=wait"
-                                  << " reason=next_not_received";
-          }
-        } else {
-          auto S = R.move_as_error();
-          if (local_retry >= kLocalNextMaxRetries) {
-            LOG(WARNING) << "[fullnode-next] stage=local_grace"
-                         << " prev=" << block_id.to_str()
-                         << " local_retry=" << local_retry
-                         << " result=fallback"
-                         << " reason=" << S;
-          } else {
-            VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=local_grace"
-                                  << " prev=" << block_id.to_str()
-                                  << " local_retry=" << local_retry
-                                  << " result=wait"
-                                  << " reason=" << S;
-          }
-        }
-        if (local_retry < kLocalNextMaxRetries) {
-          delay_action(
-              [SelfId, block_id, attempt, local_retry]() mutable {
-                td::actor::send_closure(SelfId, &FullNodeShardImpl::retry_get_next_block_after_local_grace, block_id,
-                                        attempt, local_retry + 1);
-              },
-              td::Timestamp::in(kLocalNextRetryDelaySec));
-          return;
-        }
-        td::actor::send_closure(SelfId, &FullNodeShardImpl::try_get_next_block_from_overlay_hint, block_id, attempt);
-      });
-  td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_next_block, block_id, std::move(P));
-}
-
-void FullNodeShardImpl::get_next_block() {
-  attempt_++;
-  auto block_id = handle_->id();
-  auto attempt = attempt_;
-  auto P = td::PromiseCreator::lambda(
-      [block_id, attempt, SelfId = actor_id(this)](td::Result<BlockHandle> R) mutable {
-        if (R.is_ok()) {
-          auto next = R.move_as_ok();
-          if (next->received()) {
-            VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=local_next"
-                                  << " prev=" << block_id.to_str()
-                                  << " next=" << next->id().to_str()
-                                  << " result=ok";
-            td::actor::send_closure(SelfId, &FullNodeShardImpl::got_next_block, std::move(next));
-            return;
-          }
-          VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=local_next"
-                                << " prev=" << block_id.to_str()
-                                << " next=" << next->id().to_str()
-                                << " result=fallback"
-                                << " reason=next_not_received";
-        } else {
-          auto S = R.move_as_error();
-          if (S.code() != ErrorCode::notready && S.code() != ErrorCode::timeout) {
-            VLOG(FULL_NODE_WARNING) << "[fullnode-next] stage=local_next"
-                                    << " prev=" << block_id.to_str()
-                                    << " result=error"
-                                    << " reason=" << S;
-          } else {
-            VLOG(FULL_NODE_DEBUG) << "[fullnode-next] stage=local_next"
-                                  << " prev=" << block_id.to_str()
-                                  << " result=fallback"
-                                  << " reason=" << S;
-          }
-        }
-        delay_action(
-            [SelfId, block_id, attempt]() mutable {
-              td::actor::send_closure(SelfId, &FullNodeShardImpl::retry_get_next_block_after_local_grace, block_id,
-                                      attempt, 0);
-            },
-            td::Timestamp::in(kLocalNextInitialGraceSec));
-      });
-  td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::get_next_block, block_id, std::move(P));
 }
 
 void FullNodeShardImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_getNextBlockDescription &query,
@@ -594,14 +399,28 @@ void FullNodeShardImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::tonNod
                                       td::Promise<td::BufferSlice> promise) {
   BlockIdExt block_id = create_block_id(query.block_);
   VLOG(FULL_NODE_DEBUG) << "Got query downloadBlockFull " << block_id << " from " << src;
-  td::actor::create_actor<BlockFullSender>("sender", block_id, false, validator_manager_, std::move(promise)).release();
+  td::actor::create_actor<BlockFullSender>(PSTRING() << "sender" << block_id.id, block_id, false, validator_manager_,
+                                           std::move(promise))
+      .release();
 }
 
 void FullNodeShardImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_downloadNextBlockFull &query,
                                       td::Promise<td::BufferSlice> promise) {
   BlockIdExt block_id = create_block_id(query.prev_block_);
   VLOG(FULL_NODE_DEBUG) << "Got query downloadNextBlockFull " << block_id << " from " << src;
-  td::actor::create_actor<BlockFullSender>("sender", block_id, true, validator_manager_, std::move(promise)).release();
+  td::actor::create_actor<BlockFullSender>(PSTRING() << "sender.next" << block_id.id, block_id, true,
+                                           validator_manager_, std::move(promise))
+      .release();
+}
+
+void FullNodeShardImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_downloadNextBlocksFull &query,
+                                      td::Promise<td::BufferSlice> promise) {
+  BlockIdExt block_id = create_block_id(query.prev_block_);
+  VLOG(FULL_NODE_DEBUG) << "Got query downloadNextBlocksFull " << block_id << ", max_blocks=" << query.max_blocks_
+                        << " from " << src;
+  td::actor::create_actor<NextBlocksFullSender>(PSTRING() << "sender.nexts" << block_id.id, block_id, query.max_blocks_,
+                                                validator_manager_, std::move(promise))
+      .release();
 }
 
 void FullNodeShardImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_prepareBlockProof &query,
@@ -1019,13 +838,12 @@ void FullNodeShardImpl::receive_message(adnl::AdnlNodeIdShort src, td::BufferSli
   td::actor::send_closure(overlays_, &overlay::Overlays::forget_peer, adnl_id_, overlay_id_, src);
 }
 
-void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_ihrMessageBroadcast &query) {
-  td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_ihr_message,
-                          std::move(query.message_->data_));
-}
-
 void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_externalMessageBroadcast &query) {
   process_external_message_broadcast(query, [](td::Result<td::Unit>) {});
+}
+
+void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_blockFinalityBroadcast &query) {
+  VLOG(FULL_NODE_DEBUG) << "ignoring block finality broadcast from " << src;
 }
 
 void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_newShardBlockBroadcast &query) {
@@ -1186,21 +1004,8 @@ void FullNodeShardImpl::receive_broadcast(PublicKeyHash src, td::BufferSlice bro
 }
 
 void FullNodeShardImpl::send_ihr_message(td::BufferSlice data) {
-  if (!client_.empty()) {
-    UNREACHABLE();
-    return;
-  }
-  auto B = create_serialize_tl_object<ton_api::tonNode_ihrMessageBroadcast>(
-      create_tl_object<ton_api::tonNode_ihrMessage>(std::move(data)));
-  auto source = choose_outbound_source(static_cast<td::uint32>(B.size()),
-                                       B.size() > overlay::Overlays::max_simple_broadcast_size());
-  if (B.size() <= overlay::Overlays::max_simple_broadcast_size()) {
-    td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_ex, adnl_id_, overlay_id_, source, 0,
-                            std::move(B));
-  } else {
-    td::actor::send_closure(overlays_, &overlay::Overlays::send_broadcast_fec_ex, adnl_id_, overlay_id_, source, 0,
-                            std::move(B));
-  }
+  VLOG(FULL_NODE_DEBUG) << "dropping IHR message for overlay " << overlay_id_
+                        << " because IHR broadcasts are not present in current TL schema";
 }
 
 void FullNodeShardImpl::send_external_message(td::BufferSlice data) {
@@ -1295,56 +1100,18 @@ void FullNodeShardImpl::send_broadcast(BlockBroadcast broadcast) {
 void FullNodeShardImpl::download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                        td::Promise<ReceivedBlock> promise) {
   auto &b = choose_neighbour();
-  if (b.adnl_id == adnl::AdnlNodeIdShort::zero()) {
-    LOG(WARNING) << "[public-overlay-sync] stage=download_block.start"
-                 << " target=" << id.to_str()
-                 << " shard=" << shard_.to_str()
-                 << " peer=" << b.adnl_id
-                 << " neighbours=" << neighbours_.size()
-                 << " result=no_peer";
-  } else {
-    LOG(DEBUG) << "[public-overlay-sync] stage=download_block.start"
-               << " target=" << id.to_str()
-               << " shard=" << shard_.to_str()
-               << " peer=" << b.adnl_id
-               << " neighbours=" << neighbours_.size()
-               << " roundtrip=" << b.roundtrip
-               << " unreliability=" << b.unreliability
-               << " version=" << b.version_major << "." << b.version_minor
-               << " result=ok";
-  }
-  td::actor::create_actor<DownloadBlockNew>("downloadreq", id, adnl_id_, overlay_id_, b.adnl_id, priority, timeout,
-                                            validator_manager_, rldp2_, overlays_, adnl_, client_,
-                                            create_neighbour_promise(b, std::move(promise), false,
-                                                                     "download_block", id.to_str()))
+  td::actor::create_actor<DownloadBlockNew>(PSTRING() << "downloadreq" << id.id, id, adnl_id_, overlay_id_, b.adnl_id,
+                                            priority, timeout, validator_manager_, rldp2_, overlays_, adnl_, client_,
+                                            create_neighbour_promise(b, std::move(promise)))
       .release();
 }
 
 void FullNodeShardImpl::download_next_block(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
                                             td::Promise<ReceivedBlock> promise) {
   auto &b = choose_neighbour();
-  if (b.adnl_id == adnl::AdnlNodeIdShort::zero()) {
-    LOG(WARNING) << "[public-overlay-sync] stage=download_next.start"
-                 << " target=" << prev_id.to_str()
-                 << " shard=" << shard_.to_str()
-                 << " peer=" << b.adnl_id
-                 << " neighbours=" << neighbours_.size()
-                 << " result=no_peer";
-  } else {
-    LOG(DEBUG) << "[public-overlay-sync] stage=download_next.start"
-               << " target=" << prev_id.to_str()
-               << " shard=" << shard_.to_str()
-               << " peer=" << b.adnl_id
-               << " neighbours=" << neighbours_.size()
-               << " roundtrip=" << b.roundtrip
-               << " unreliability=" << b.unreliability
-               << " version=" << b.version_major << "." << b.version_minor
-               << " result=ok";
-  }
-  td::actor::create_actor<DownloadBlockNew>("downloadnextreq", adnl_id_, overlay_id_, prev_id, b.adnl_id, priority,
+  td::actor::create_actor<DownloadBlockNew>("downloadnextreq", prev_id, adnl_id_, overlay_id_, b.adnl_id, priority,
                                             timeout, validator_manager_, rldp2_, overlays_, adnl_, client_,
-                                            create_neighbour_promise(b, std::move(promise), false,
-                                                                     "download_next", prev_id.to_str()))
+                                            create_neighbour_promise(b, std::move(promise)))
       .release();
 }
 
@@ -1369,8 +1136,9 @@ void FullNodeShardImpl::download_persistent_state(BlockIdExt id, BlockIdExt mast
 void FullNodeShardImpl::download_block_proof(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
                                              td::Promise<td::BufferSlice> promise) {
   auto &b = choose_neighbour();
-  td::actor::create_actor<DownloadProof>("downloadproofreq", block_id, false, false, adnl_id_, overlay_id_, b.adnl_id,
-                                         priority, timeout, validator_manager_, rldp2_, overlays_, adnl_, client_,
+  td::actor::create_actor<DownloadProof>(PSTRING() << "downloadproofreq" << block_id.id, block_id, false, false,
+                                         adnl_id_, overlay_id_, b.adnl_id, priority, timeout, validator_manager_,
+                                         rldp2_, overlays_, adnl_, client_,
                                          create_neighbour_promise(b, std::move(promise)))
       .release();
 }
@@ -1378,18 +1146,18 @@ void FullNodeShardImpl::download_block_proof(BlockIdExt block_id, td::uint32 pri
 void FullNodeShardImpl::download_block_proof_link(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
                                                   td::Promise<td::BufferSlice> promise) {
   auto &b = choose_neighbour();
-  td::actor::create_actor<DownloadProof>("downloadproofreq", block_id, true, false, adnl_id_, overlay_id_, b.adnl_id,
-                                         priority, timeout, validator_manager_, rldp2_, overlays_, adnl_, client_,
-                                         create_neighbour_promise(b, std::move(promise)))
+  td::actor::create_actor<DownloadProof>(
+      PSTRING() << "downloadproofreq" << block_id.id, block_id, true, false, adnl_id_, overlay_id_, b.adnl_id, priority,
+      timeout, validator_manager_, rldp2_, overlays_, adnl_, client_, create_neighbour_promise(b, std::move(promise)))
       .release();
 }
 
 void FullNodeShardImpl::get_next_key_blocks(BlockIdExt block_id, td::Timestamp timeout,
                                             td::Promise<std::vector<BlockIdExt>> promise) {
   auto &b = choose_neighbour();
-  td::actor::create_actor<GetNextKeyBlocks>("next", block_id, 16, adnl_id_, overlay_id_, b.adnl_id, 1, timeout,
-                                            validator_manager_, rldp2_, overlays_, adnl_, client_,
-                                            create_neighbour_promise(b, std::move(promise)))
+  td::actor::create_actor<GetNextKeyBlocks>(PSTRING() << "getnextkeyblocks" << block_id.id, block_id, 16, adnl_id_,
+                                            overlay_id_, b.adnl_id, 1, timeout, validator_manager_, rldp2_, overlays_,
+                                            adnl_, client_, create_neighbour_promise(b, std::move(promise)))
       .release();
 }
 
@@ -1416,6 +1184,17 @@ void FullNodeShardImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFu
     }
     archive_peers.push_back(candidate->adnl_id);
   }
+  if (archive_peers.empty() && !hint_peers.empty()) {
+    std::sort(hint_peers.begin(), hint_peers.end());
+    hint_peers.erase(std::unique(hint_peers.begin(), hint_peers.end()), hint_peers.end());
+    for (const auto &peer : hint_peers) {
+      if (archive_peers.size() == 5) {
+        break;
+      }
+      archive_peers.push_back(peer);
+    }
+  }
+
   auto first_peer = archive_peers.empty() ? adnl::AdnlNodeIdShort::zero() : archive_peers.front();
   auto first = candidates.empty() ? &Neighbour::zero : candidates.front();
   LOG(WARNING) << "[archive-sync] stage=public.choose_neighbour seqno=" << masterchain_seqno
@@ -1425,7 +1204,7 @@ void FullNodeShardImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFu
                << " hints=" << hint_peers.size()
                << " roundtrip=" << first->roundtrip << " unreliability=" << first->unreliability
                << " version=" << first->version_major << "." << first->version_minor
-               << " result=" << (archive_peers.empty() ? "random_peers" : "ok");
+               << " result=" << (archive_peers.empty() ? "random_peers" : (candidates.empty() ? "hint_peers" : "ok"));
   td::actor::create_actor<DownloadArchiveSlice>(
       "archive", masterchain_seqno, shard_prefix, std::move(tmp_dir), adnl_id_, overlay_id_, first_peer, timeout,
       validator_manager_, rldp2_, overlays_, adnl_, client_, std::move(promise), std::move(archive_peers))
@@ -1474,10 +1253,27 @@ void FullNodeShardImpl::download_out_msg_queue_proof(ShardIdFull dst_shard, std:
 }
 
 void FullNodeShardImpl::set_handle(BlockHandle handle, td::Promise<td::Unit> promise) {
-  CHECK(!handle_);
+  if (handle_) {
+    auto old_seqno = handle_->id().id.seqno;
+    auto new_seqno = handle->id().id.seqno;
+    if (new_seqno <= old_seqno) {
+      VLOG(FULL_NODE_DEBUG) << "Ignoring stale fullnode handle update: current=" << handle_->id()
+                            << " received=" << handle->id();
+      promise.set_value(td::Unit());
+      return;
+    }
+    LOG(WARNING) << "[archive-sync] stage=fullnode.rebase prev=" << handle_->id() << " next=" << handle->id()
+                 << " prev_seqno=" << old_seqno << " next_seqno=" << new_seqno << " result=ok";
+    handle_ = std::move(handle);
+    promise.set_value(td::Unit());
+    return;
+  }
   handle_ = std::move(handle);
-  promise_ = std::move(promise);
-  get_next_block();
+  sync_promise_ = std::move(promise);
+  if (!next_blocks_loop_started_) {
+    next_blocks_loop_started_ = true;
+    get_next_blocks_loop().start().detach_ensure("get_next_blocks_loop");
+  }
 
   sync_completed_at_ = td::Timestamp::in(opts_.initial_sync_delay_);
   alarm_timestamp().relax(sync_completed_at_);
@@ -1485,8 +1281,8 @@ void FullNodeShardImpl::set_handle(BlockHandle handle, td::Promise<td::Unit> pro
 
 void FullNodeShardImpl::alarm() {
   if (sync_completed_at_ && sync_completed_at_.is_in_past()) {
-    if (promise_) {
-      promise_.set_value(td::Unit());
+    if (sync_promise_) {
+      sync_promise_.set_value(td::Unit());
     }
     sync_completed_at_ = td::Timestamp::never();
   }

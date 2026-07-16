@@ -633,8 +633,8 @@ void FullNodeFastSyncOverlays::update_overlays(
       bool receive_broadcasts = monitoring_shards.contains(shard);
       // Enable twostep broadcasts by ConfigParam 30
       auto new_consensus_config = state->get_new_consensus_config(shard.workchain);
-      bool send_twostep_broadcasts = (bool)new_consensus_config;
-      bool use_quic = new_consensus_config && new_consensus_config.value().use_quic;
+      bool send_twostep_broadcasts = new_consensus_config.enable_block_sync();
+      bool use_quic = send_twostep_broadcasts;
       td::actor::ActorId<adnl::AdnlSenderEx> adnl_sender =
           use_quic ? td::actor::ActorId<adnl::AdnlSenderEx>{quic} : rldp2;
       auto &overlay = overlays_info.overlays_[shard];

@@ -13,13 +13,29 @@
 
     You should have received a copy of the GNU Lesser General Public License
     along with TON Blockchain Library.  If not, see <http://www.gnu.org/licenses/>.
+
+    Copyright 2017-2020 Telegram Systems LLP
 */
 #pragma once
 
-#include "rldp2/rldp.h"
+#include "adnl/adnl-sender-ex.h"
 
-namespace ton::rldp {
+namespace ton {
 
-using Rldp = rldp2::Rldp;
+namespace rldp {
 
-}  // namespace ton::rldp
+class Rldp : public adnl::AdnlSenderEx {
+ public:
+  Rldp() : AdnlSenderEx(adnl::Adnl::get_mtu()) {
+  }
+  ~Rldp() override = default;
+
+  virtual void send_message_ex(adnl::AdnlNodeIdShort src, adnl::AdnlNodeIdShort dst, td::Timestamp timeout,
+                               td::BufferSlice data) = 0;
+
+  static td::actor::ActorOwn<Rldp> create(td::actor::ActorId<adnl::Adnl> adnl);
+};
+
+}  // namespace rldp
+
+}  // namespace ton

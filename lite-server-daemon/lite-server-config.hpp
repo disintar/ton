@@ -1,6 +1,5 @@
 #include "adnl/adnl.h"
 #include "auto/tl/ton_api.h"
-#include "rldp/rldp.h"
 #include "rldp2/rldp.h"
 #include "dht/dht.h"
 #include "validator/manager.h"

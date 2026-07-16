@@ -26,14 +26,13 @@
 #include "ton/ton-tl.hpp"
 
 #include <algorithm>
-#include <cstring>
 #include <mutex>
+#include <set>
 
 #include "block-propagation-trace.h"
 #include "custom-overlay-metrics.h"
 #include "full-node.h"
 #include "full-node.hpp"
-#include "overlay-gap-diagnostics.h"
 
 namespace ton {
 
@@ -42,38 +41,11 @@ namespace validator {
 namespace fullnode {
 
 static const double INACTIVE_SHARD_TTL = (double)overlay::Overlays::overlay_peer_ttl() + 60.0;
-constexpr long long CUSTOM_OVERLAY_SYNC_SLOW_LOG_MS = 800;
-constexpr double CUSTOM_OVERLAY_NEXT_BLOCK_GRACE_SEC = 0.05;
-
-bool log_value_is(const char *value, const char *expected) {
-  return std::strcmp(value, expected) == 0;
-}
-
-bool should_log_fullnode_overlay_sync_stage(const char *stage, const char *source, const char *result, long long ms) {
-  if (block_propagation_trace_enabled()) {
-    return true;
-  }
-  if (log_value_is(result, "error") || log_value_is(result, "timeout")) {
-    return true;
-  }
-  if (log_value_is(stage, "fullnode.custom_done")) {
-    return true;
-  }
-  if (log_value_is(stage, "fullnode.race_done")) {
-    return log_value_is(source, "public") || ms >= CUSTOM_OVERLAY_SYNC_SLOW_LOG_MS;
-  }
-  if (log_value_is(stage, "fullnode.public") && log_value_is(result, "direct")) {
-    return true;
-  }
-  return ms >= CUSTOM_OVERLAY_SYNC_SLOW_LOG_MS;
-}
 
 void log_fullnode_overlay_sync_stage(CustomOverlaySyncKind kind, const BlockIdExt &id, const char *stage,
                                      const char *source, const char *result, std::string reason,
-                                     std::string overlay = "-", std::string local = "-", double started_at = 0.0) {
-  auto now = block_propagation_trace_now();
-  auto ms = started_at > 0.0 ? block_propagation_trace_ms(started_at, now) : -1;
-  if (!should_log_fullnode_overlay_sync_stage(stage, source, result, ms)) {
+                                     std::string overlay = "-", std::string local = "-") {
+  if (!block_propagation_trace_enabled()) {
     return;
   }
   LOG(WARNING) << "[custom-overlay-sync]"
@@ -89,7 +61,7 @@ void log_fullnode_overlay_sync_stage(CustomOverlaySyncKind kind, const BlockIdEx
                << " shard=" << id.id.shard
                << " seqno=" << id.id.seqno
                << " peers=0"
-               << " ms=" << ms
+               << " ms=-1"
                << " result=" << result
                << " reason=" << block_propagation_trace_sanitize(std::move(reason));
 }
@@ -106,7 +78,6 @@ struct PublicFallbackRaceState {
   std::size_t pending{2};
   bool done{false};
   std::string last_error;
-  double started_at{block_propagation_trace_now()};
 };
 
 struct PublicArchiveFallbackRaceState {
@@ -139,8 +110,7 @@ void finish_public_fallback_race(std::shared_ptr<PublicFallbackRaceState> state,
       }
     }
     if (should_finish) {
-      log_fullnode_overlay_sync_stage(state->kind, state->block_id, "fullnode.race_done", source, "ok", {}, "-", "-",
-                                      state->started_at);
+      log_fullnode_overlay_sync_stage(state->kind, state->block_id, "fullnode.race_done", source, "ok", {});
       promise.set_value(std::move(value));
     }
     return;
@@ -167,7 +137,7 @@ void finish_public_fallback_race(std::shared_ptr<PublicFallbackRaceState> state,
   }
   if (should_finish) {
     log_fullnode_overlay_sync_stage(state->kind, state->block_id, "fullnode.race_done", source, "error",
-                                    error_string, "-", "-", state->started_at);
+                                    error_string);
     promise.set_error(td::Status::Error(ErrorCode::notready, PSTRING() << "custom and public overlay failed: "
                                                                        << error_string));
   }
@@ -389,6 +359,13 @@ void FullNodeImpl::initial_read_complete(BlockHandle top_handle) {
   td::actor::send_closure(it->second.actor, &FullNodeShard::set_handle, top_handle, std::move(P));
 }
 
+void FullNodeImpl::archive_sync_complete(BlockHandle top_handle) {
+  auto P = td::PromiseCreator::lambda([](td::Result<td::Unit> R) { R.ensure(); });
+  auto it = shards_.find(ShardIdFull{masterchainId});
+  CHECK(it != shards_.end() && !it->second.actor.empty());
+  td::actor::send_closure(it->second.actor, &FullNodeShard::set_handle, top_handle, std::move(P));
+}
+
 void FullNodeImpl::on_new_masterchain_block(td::Ref<MasterchainState> state, std::set<ShardIdFull> shards_to_monitor) {
   CHECK(shards_to_monitor.count(ShardIdFull(masterchainId)));
   bool join_all_overlays = !sign_cert_by_.is_zero();
@@ -499,45 +476,13 @@ void FullNodeImpl::send_ihr_message(AccountIdPrefixFull dst, td::BufferSlice dat
 }
 
 void FullNodeImpl::send_ext_message(AccountIdPrefixFull dst, td::BufferSlice data) {
-  send_ext_message_impl(dst, std::move(data), false);
-}
-
-void FullNodeImpl::send_ext_message_relay_all(AccountIdPrefixFull dst, td::BufferSlice data) {
-  send_ext_message_impl(dst, std::move(data), true);
-}
-
-void FullNodeImpl::send_ext_message_raw_all(td::BufferSlice data) {
-  bool sent_private = false;
-  for (auto &[_, private_overlay] : custom_overlays_) {
-    for (auto &[local_id, actor] : private_overlay.actors_) {
-      if (private_overlay.params_.msg_senders_.find(local_id) != private_overlay.params_.msg_senders_.end()) {
-        sent_private = true;
-        td::actor::send_closure(actor, &FullNodeCustomOverlay::send_external_message, data.clone());
-      }
-    }
-  }
-
-  bool sent_public = false;
-  for (auto &[_, shard] : shards_) {
-    if (!shard.actor.empty()) {
-      sent_public = true;
-      td::actor::send_closure(shard.actor, &FullNodeShard::send_external_message, data.clone());
-    }
-  }
-  VLOG(FULL_NODE_DEBUG) << "Relayed raw external message"
-                        << " private=" << (sent_private ? 1 : 0)
-                        << " public=" << (sent_public ? 1 : 0)
-                        << " size=" << data.size();
-}
-
-void FullNodeImpl::send_ext_message_impl(AccountIdPrefixFull dst, td::BufferSlice data, bool force_public) {
   bool skip_public = false;
   for (auto &[_, private_overlay] : custom_overlays_) {
     if (private_overlay.params_.send_shard(dst.as_leaf_shard())) {
       for (auto &[local_id, actor] : private_overlay.actors_) {
         if (private_overlay.params_.msg_senders_.find(local_id) != private_overlay.params_.msg_senders_.end()) {
           td::actor::send_closure(actor, &FullNodeCustomOverlay::send_external_message, data.clone());
-          if (!force_public && private_overlay.params_.skip_public_msg_send_) {
+          if (private_overlay.params_.skip_public_msg_send_) {
             skip_public = true;
           }
         }
@@ -674,38 +619,6 @@ void FullNodeImpl::download_block(BlockIdExt id, td::uint32 priority, td::Timest
 
 void FullNodeImpl::download_next_block(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
                                        td::Promise<ReceivedBlock> promise) {
-  bool shard_served_by_custom_overlay = false;
-  for (auto &[name, custom_overlay] : custom_overlays_) {
-    if (!custom_overlay.params_.send_shard(prev_id.shard_full())) {
-      continue;
-    }
-    shard_served_by_custom_overlay = !custom_overlay.actors_.empty();
-    if (shard_served_by_custom_overlay) {
-      break;
-    }
-  }
-  if (shard_served_by_custom_overlay) {
-    LOG(WARNING) << "[overlay-gap] event=download_next_defer"
-                 << " prev=" << prev_id.to_str()
-                 << " wc=" << prev_id.id.workchain
-                 << " shard=" << prev_id.id.shard
-                 << " prev_seqno=" << prev_id.id.seqno
-                 << " expected_seqno=" << prev_id.id.seqno + 1
-                 << " delay_ms=" << static_cast<long long>(CUSTOM_OVERLAY_NEXT_BLOCK_GRACE_SEC * 1000)
-                 << " reason=custom_overlay_grace";
-    delay_action(
-        [SelfId = actor_id(this), prev_id, priority, timeout, promise = std::move(promise)]() mutable {
-          td::actor::send_closure(SelfId, &FullNodeImpl::download_next_block_now, prev_id, priority, timeout,
-                                  std::move(promise));
-        },
-        td::Timestamp::in(CUSTOM_OVERLAY_NEXT_BLOCK_GRACE_SEC));
-    return;
-  }
-  download_next_block_now(prev_id, priority, timeout, std::move(promise));
-}
-
-void FullNodeImpl::download_next_block_now(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
-                                           td::Promise<ReceivedBlock> promise) {
   bool has_custom_overlay = !custom_overlays_.empty();
   bool shard_served_by_custom_overlay = false;
   for (auto &[name, custom_overlay] : custom_overlays_) {
@@ -714,7 +627,6 @@ void FullNodeImpl::download_next_block_now(BlockIdExt prev_id, td::uint32 priori
     }
     shard_served_by_custom_overlay = true;
     for (auto &[local_id, actor] : custom_overlay.actors_) {
-      overlay_gap::log_download_next_decision(prev_id, "custom", name.c_str(), "race_public_fallback");
       log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, prev_id, "fullnode.custom_select", "custom",
                                       "attempt", {}, name, PSTRING() << local_id);
       auto state =
@@ -737,7 +649,6 @@ void FullNodeImpl::download_next_block_now(BlockIdExt prev_id, td::uint32 priori
         finish_public_fallback_race(std::move(state), "public", std::move(R));
       });
       record_public_overlay_sync_download(CustomOverlaySyncKind::NextBlock, PublicOverlaySyncReason::Fallback);
-      overlay_gap::log_download_next_decision(prev_id, "public", name.c_str(), "race_custom_overlay");
       log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, prev_id, "fullnode.public", "public",
                                       "fallback", "race_custom_overlay", name);
       td::actor::send_closure(actor, &FullNodeCustomOverlay::download_next_block, prev_id, priority, timeout,
@@ -750,18 +661,44 @@ void FullNodeImpl::download_next_block_now(BlockIdExt prev_id, td::uint32 priori
       CustomOverlaySyncKind::NextBlock,
       shard_served_by_custom_overlay
           ? CustomOverlaySyncFallbackReason::NoLocalActor
-                                : (has_custom_overlay ? CustomOverlaySyncFallbackReason::ShardNotServed
-                                                      : CustomOverlaySyncFallbackReason::NoCustomOverlay));
+          : (has_custom_overlay ? CustomOverlaySyncFallbackReason::ShardNotServed
+                                : CustomOverlaySyncFallbackReason::NoCustomOverlay));
   record_public_overlay_sync_download(CustomOverlaySyncKind::NextBlock, PublicOverlaySyncReason::Direct);
-  overlay_gap::log_download_next_decision(
-      prev_id, "public", "-", shard_served_by_custom_overlay
-                                ? "no_local_actor"
-                                : (has_custom_overlay ? "shard_not_served" : "no_custom_overlay"));
   log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, prev_id, "fullnode.public", "public", "direct",
                                   shard_served_by_custom_overlay
                                       ? "no_local_actor"
                                       : (has_custom_overlay ? "shard_not_served" : "no_custom_overlay"));
   download_next_block_from_public_overlay(prev_id, priority, timeout, std::move(promise));
+}
+
+void FullNodeImpl::download_next_blocks(BlockHandle handle, td::uint32 priority, td::Timestamp timeout,
+                                        td::Promise<BlockHandle> promise) {
+  auto prev_id = handle->id();
+  bool has_custom_overlay = !custom_overlays_.empty();
+  bool shard_served_by_custom_overlay = false;
+  for (auto &[name, custom_overlay] : custom_overlays_) {
+    if (!custom_overlay.params_.send_shard(prev_id.shard_full())) {
+      continue;
+    }
+    shard_served_by_custom_overlay = true;
+    for (auto &[local_id, actor] : custom_overlay.actors_) {
+      log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, prev_id, "fullnode.custom_select_many",
+                                      "custom", "attempt", "parallel_next_blocks", name, PSTRING() << local_id);
+      td::actor::send_closure(actor, &FullNodeCustomOverlay::download_next_blocks, std::move(handle), priority,
+                              timeout, std::move(promise));
+      return;
+    }
+  }
+  record_custom_overlay_sync_fallback(
+      CustomOverlaySyncKind::NextBlock,
+      shard_served_by_custom_overlay
+          ? CustomOverlaySyncFallbackReason::NoLocalActor
+          : (has_custom_overlay ? CustomOverlaySyncFallbackReason::ShardNotServed
+                                : CustomOverlaySyncFallbackReason::NoCustomOverlay));
+  log_fullnode_overlay_sync_stage(
+      CustomOverlaySyncKind::NextBlock, prev_id, "fullnode.custom_select_many", "custom", "not_ready",
+      shard_served_by_custom_overlay ? "no_local_actor" : (has_custom_overlay ? "shard_not_served" : "no_custom_overlay"));
+  promise.set_error(td::Status::Error(ErrorCode::notready, "no custom overlay available for next blocks"));
 }
 
 void FullNodeImpl::download_block_from_public_overlay(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
@@ -1127,21 +1064,18 @@ void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast, bool signat
   const bool final = final_known && broadcast.sig_set->is_final();
   const char *source = from_custom_overlay ? "custom" : "public";
   if (from_custom_overlay) {
-    overlay_gap::remember(block_id, "fullnode.process", trace.overlay_name, trace.src_adnl, {}, final_known && final);
     log_block_propagation_stage(broadcast, "fullnode.process", source, "ok", {}, trace.custom_deserialized_at);
   }
   if (from_custom_overlay) {
     record_custom_overlay_block_broadcast_received();
   }
   send_block_broadcast_to_custom_overlays(broadcast);
-  td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_block_broadcast, std::move(broadcast),
+  auto new_block_broadcast = static_cast<void (ValidatorManagerInterface::*)(
+      BlockBroadcast, bool, td::Promise<td::Unit>, bool)>(&ValidatorManagerInterface::new_block_broadcast);
+  td::actor::send_closure(validator_manager_, new_block_broadcast, std::move(broadcast),
                           signatures_checked, [block_id, trace, final_known, final, source](td::Result<td::Unit> R) {
                             if (R.is_error()) {
                               auto error = R.move_as_error();
-                              if (source == std::string{"custom"}) {
-                                overlay_gap::remember(block_id, "fullnode.process", trace.overlay_name, trace.src_adnl,
-                                                      error.to_string(), final_known && final);
-                              }
                               log_block_propagation_stage(block_id, trace, "fullnode.process", source, final_known, final,
                                                           error.code() == ErrorCode::notready ? "drop" : "error",
                                                           error.to_string(), trace.custom_deserialized_at);
@@ -1158,7 +1092,9 @@ void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast, bool signat
 void FullNodeImpl::process_block_candidate_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno,
                                                      td::uint32 validator_set_hash, td::BufferSlice data) {
   send_block_candidate_broadcast_to_custom_overlays(block_id, cc_seqno, validator_set_hash, data);
-  td::actor::ask(validator_manager_, &ValidatorManagerInterface::new_block_candidate_broadcast, block_id, cc_seqno,
+  auto new_block_candidate_broadcast = static_cast<td::actor::Task<> (ValidatorManagerInterface::*)(
+      BlockIdExt, CatchainSeqno, td::BufferSlice)>(&ValidatorManagerInterface::new_block_candidate_broadcast);
+  td::actor::ask(validator_manager_, new_block_candidate_broadcast, block_id, cc_seqno,
                  std::move(data))
       .detach();
 }
@@ -1213,6 +1149,9 @@ void FullNodeImpl::start_up() {
     void initial_read_complete(BlockHandle handle) override {
       td::actor::send_closure(id_, &FullNodeImpl::initial_read_complete, handle);
     }
+    void archive_sync_complete(BlockHandle handle) override {
+      td::actor::send_closure(id_, &FullNodeImpl::archive_sync_complete, handle);
+    }
     void on_new_masterchain_block(td::Ref<MasterchainState> state, std::set<ShardIdFull> shards_to_monitor) override {
       td::actor::send_closure(id_, &FullNodeImpl::on_new_masterchain_block, std::move(state),
                               std::move(shards_to_monitor));
@@ -1222,12 +1161,6 @@ void FullNodeImpl::start_up() {
     }
     void send_ext_message(AccountIdPrefixFull dst, td::BufferSlice data) override {
       td::actor::send_closure(id_, &FullNodeImpl::send_ext_message, dst, std::move(data));
-    }
-    void send_ext_message_relay_all(AccountIdPrefixFull dst, td::BufferSlice data) override {
-      td::actor::send_closure(id_, &FullNodeImpl::send_ext_message_relay_all, dst, std::move(data));
-    }
-    void send_ext_message_raw_all(td::BufferSlice data) override {
-      td::actor::send_closure(id_, &FullNodeImpl::send_ext_message_raw_all, std::move(data));
     }
     void send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) override {
       td::actor::send_closure(id_, &FullNodeImpl::send_shard_block_info, block_id, cc_seqno, std::move(data));
@@ -1481,20 +1414,18 @@ decltype(FullNodeImpl::limiter_) FullNodeImpl::make_limiter(const FullNodeOption
   size_t h_limit = opts.ratelimit_heavy_;
   size_t m_limit = opts.ratelimit_medium_;
   size_t g_limit = opts.ratelimit_global_;
+  size_t s_limit = 200;
   return std::make_shared<RateLimiter<>>(
-      RateLimit{w_size, g_limit},
-      std::map<int32_t, RateLimit>{{ton_api::tonNode_getArchiveSlice::ID, {w_size, h_limit}},
-                                   {ton_api::tonNode_downloadPersistentStateSliceV2::ID, {w_size, h_limit}},
-                                   {ton_api::tonNode_downloadZeroState::ID, {w_size, h_limit}},
-
-                                   {ton_api::tonNode_downloadBlock::ID, {w_size, m_limit}},
-                                   {ton_api::tonNode_downloadBlockFull::ID, {w_size, m_limit}},
-                                   {ton_api::tonNode_downloadNextBlockFull::ID, {w_size, m_limit}},
-                                   {ton_api::tonNode_downloadBlockProof::ID, {w_size, m_limit}},
-                                   {ton_api::tonNode_downloadBlockProofLink::ID, {w_size, m_limit}},
-                                   {ton_api::tonNode_downloadKeyBlockProof::ID, {w_size, m_limit}},
-                                   {ton_api::tonNode_downloadKeyBlockProofLink::ID, {w_size, m_limit}},
-                                   {ton_api::tonNode_getOutMsgQueueProof::ID, {w_size, m_limit}}});
+      RateLimit{w_size, g_limit}, RateLimit{w_size, h_limit},
+      std::set<int32_t>{ton_api::tonNode_getArchiveSlice::ID, ton_api::tonNode_downloadPersistentStateSliceV2::ID,
+                        ton_api::tonNode_downloadZeroState::ID},
+      RateLimit{w_size, m_limit},
+      std::set<int32_t>{ton_api::tonNode_downloadBlock::ID, ton_api::tonNode_downloadBlockFull::ID,
+                        ton_api::tonNode_downloadNextBlockFull::ID, ton_api::tonNode_downloadNextBlocksFull::ID,
+                        ton_api::tonNode_downloadBlockProof::ID, ton_api::tonNode_downloadBlockProofLink::ID,
+                        ton_api::tonNode_downloadKeyBlockProof::ID,
+                        ton_api::tonNode_downloadKeyBlockProofLink::ID, ton_api::tonNode_getOutMsgQueueProof::ID},
+      RateLimit{w_size, s_limit}, std::set<int32_t>{});
 }
 
 }  // namespace fullnode

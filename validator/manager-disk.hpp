@@ -124,9 +124,9 @@ class ValidatorManagerImpl : public ValidatorManager {
                                 td::Promise<td::Unit> promise) override {
     UNREACHABLE();
   }
-  void validate_block(ReceivedBlock block, td::Promise<BlockHandle> promise) override;
   void update_lite_server_state(BlockIdExt shard_client, td::Ref<MasterchainState> state) override;
   void update_lite_server_state_final(BlockIdExt shard_client, td::Ref<MasterchainState> state);
+  void on_next_masterchain_block(ReceivedBlock block, td::Promise<BlockHandle> promise) override;
   void new_block_broadcast(BlockBroadcast broadcast, bool signatures_checked, td::Promise<td::Unit> promise,
                            bool from_custom_overlay = false) override;
   void validate_block_broadcast_signatures(BlockBroadcast broadcast, td::Promise<td::Unit> promise) override;
@@ -301,6 +301,8 @@ class ValidatorManagerImpl : public ValidatorManager {
   void send_top_shard_block_description(td::Ref<ShardTopBlockDescription> desc) override;
   void send_block_broadcast(BlockBroadcast broadcast, int mode) override {
   }
+  void send_block_finality_broadcast(BlockFinalityBroadcast finality, int mode) override {
+  }
   void send_get_out_msg_queue_proof_request(ShardIdFull dst_shard, std::vector<BlockIdExt> blocks,
                                             block::ImportedMsgQueueLimits limits,
                                             td::Promise<std::vector<td::Ref<OutMsgQueueProof>>> promise) override {
@@ -369,6 +371,9 @@ class ValidatorManagerImpl : public ValidatorManager {
   void set_prometheus_exporter(td::actor::ActorId<PrometheusExporterActor>) override {
     UNREACHABLE();
   }
+  td::actor::Task<> collect(metrics::Context ctx) override {
+    co_return td::Unit{};
+  }
   void add_lite_query_stats_extended(int lite_query_id, adnl::AdnlNodeIdShort dst, long start_at, long end_at,
                                      bool success) override;
 
@@ -384,7 +389,7 @@ class ValidatorManagerImpl : public ValidatorManager {
 
   ValidatorManagerImpl(PublicKeyHash local_id, td::Ref<ValidatorManagerOptions> opts, ShardIdFull shard_id,
                        BlockIdExt shard_to_block_id, std::string db_root, td::actor::ActorId<keyring::Keyring> keyring,
-                       td::actor::ActorId<adnl::Adnl> adnl, td::actor::ActorId<rldp::Rldp> rldp,
+                       td::actor::ActorId<adnl::Adnl> adnl, td::actor::ActorId<rldp2::Rldp> rldp,
                        td::actor::ActorId<overlay::Overlays> overlays,
                        td::actor::ActorId<liteserver::LiteServerLimiter> lslimiter, bool read_only = false)
       : local_id_(local_id)
@@ -585,7 +590,7 @@ class ValidatorManagerImpl : public ValidatorManager {
 
   td::actor::ActorId<keyring::Keyring> keyring_;
   td::actor::ActorId<adnl::Adnl> adnl_;
-  td::actor::ActorId<rldp::Rldp> rldp_;
+  td::actor::ActorId<rldp2::Rldp> rldp_;
   td::actor::ActorId<overlay::Overlays> overlays_;
   td::actor::ActorId<liteserver::LiteServerLimiter> lslimiter_;
   td::actor::ActorId<ShardClientDetector> shardclientdetector_;

@@ -24,12 +24,12 @@ fun testFlatten() {
     __expect_type(0 as (string | (string | (string | int) | (| cell | string?))), "string | int | cell | null");
 
     __expect_type(0 as (MInt | MNull), "MInt?");
-    __expect_type(0 as (MInt | slice | int), "MInt | slice");
+    __expect_type(0 as (MInt | slice | MInt), "MInt | slice");
     __expect_type(0 as (MIntN), "MIntN");
     __expect_type(0 as (MIntN | null), "int?");
     __expect_type(0 as (MIntN | MNull | MSlice), "int | null | MSlice");
     __expect_type(0 as (MIntN | MNull? | MSlice), "int | null | MSlice");
-    __expect_type(0 as (MInt | IntOrSliceOrBuilder | MSlice), "MInt | slice | builder");
+    __expect_type(0 as (MInt | builder | MSlice), "MInt | builder | MSlice");
     __expect_type((1, 2) as (Pair2 | Pair2Or3 | (slice, int?)), "Pair2 | (int, int, int) | (slice, int?)");
 
     __expect_type(0 as (int | int8), "int | int8");
@@ -112,8 +112,8 @@ fun test4() {
 
 @method_id(105)
 fun test5() {
-    var a: int | int | IntOrSlice = getIntOrSlice();
-    __expect_type(a, "int | slice");
+    var a: MInt | MInt | IntOrSlice = getIntOrSlice();
+    __expect_type(a, "MInt | slice");
     a = 5;
     return (a, a as IntOrSlice, a as IntOrSliceOrBuilder, a as MIntN);
 }
@@ -980,6 +980,24 @@ fun test74(case: int) {
     return a + 0;
 }
 
+type TensorLcaSecondSlotUnion = (int, slice) | (int | int8, builder);
+
+@method_id(175)
+fun test75(case: int) {
+    var x: TensorLcaSecondSlotUnion = case == 1 ? (5, getSlice32()) : (8 as int8, beginCell());
+    if (x !is (int, slice)) {
+        __expect_type(x, "(int | int8, builder)");
+    }
+    __expect_type(x, "TensorLcaSecondSlotUnion");
+    return match (x) {
+        (int, slice) => x.0 + x.1.loadInt(32),
+        (int | int8, builder) => match (x.0) {
+            int => { __expect_type(x.0, "int"); throw 123 }
+            int8 => x.0 + x.1.bitsCount(),
+        }
+    };
+}
+
 
 fun main() {
     return 0;
@@ -1076,6 +1094,8 @@ fun main() {
 @testcase | 173 |           | -1 0 -1 0
 @testcase | 174 | 0         | 7
 @testcase | 174 | 1         | 42
+@testcase | 175 | 0         | 8
+@testcase | 175 | 1         | 37
 
 
 @fif_codegen

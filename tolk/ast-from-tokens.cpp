@@ -189,9 +189,11 @@ static std::string parse_tok_string_const(std::string_view text, SrcRange cur_ra
   std::string unescaped;
   unescaped.reserve(text.size());
   for (size_t i = 0; i < text.size(); ++i) {
-    if (text[i] == '\r' && text[i + 1] == '\n') {   // normalize CRLF line endings to LF
+    if (text[i] == '\r') {   // normalize CR/CRLF line endings to LF
       unescaped += '\n';
-      ++i;
+      if (i + 1 < text.size() && text[i + 1] == '\n') {
+        i++;
+      }
       continue;
     }
     if (text[i] != '\\') {
@@ -210,6 +212,35 @@ static std::string parse_tok_string_const(std::string_view text, SrcRange cur_ra
     }
   }
   return unescaped;
+}
+
+// parse asm "HERE"; unlike regular strings, keep \n, \t, and other backslash sequences original
+static std::string parse_tok_asm_instruction(std::string_view text) {
+  int trim_n = text.starts_with(R"(""")") ? 3 : 1;
+  text = text.substr(trim_n, text.size() - 2 * trim_n);
+
+  std::string asm_str;
+  asm_str.reserve(text.size());
+  for (size_t i = 0; i < text.size(); ++i) {
+    if (text[i] == '\r') {   // normalize CR/CRLF line endings to LF
+      asm_str += '\n';
+      if (i + 1 < text.size() && text[i + 1] == '\n') {
+        i++;
+      }
+      continue;
+    }
+    if (text[i] != '\\') {
+      asm_str += text[i];
+      continue;
+    }
+    char after_slash = text[++i];
+    switch (after_slash) {
+      case '\'':
+      case '"':   asm_str += after_slash; break;
+      default:    asm_str += '\\'; asm_str += after_slash; break;
+    }
+  }
+  return asm_str;
 }
 
 // when we meet `(expr)` in parentheses, we keep `expr` in AST,
@@ -544,6 +575,9 @@ static AnyV parse_parameter(Lexer& lex, AnyTypeV self_type, bool in_lambda) {
   V<ast_identifier> v_ident = nullptr;
   bool is_self = false;
   if (lex.tok() == tok_identifier) {
+    if (lex.cur_str() == "self") {    // smb cheated "fun f(`self`: T)" in backticks
+      lex.error("`self` can not be used as a parameter name");
+    }
     v_ident = parse_identifier(lex, "parameter name");
   } else if (lex.tok() == tok_self) {
     if (!self_type) {
@@ -1294,19 +1328,14 @@ static AnyExprV parse_expr75(Lexer& lex) {
 static AnyExprV parse_expr40(Lexer& lex) {
   AnyExprV lhs = parse_expr75(lex);
   TokenType t = lex.tok();
-  while (t == tok_as || t == tok_is) {
+  while (t == tok_as || t == tok_is || t == tok_not_is) {
     lex.next();
     AnyTypeV rhs_type = parse_type_from_tokens(lex);
     SrcRange range = SrcRange::overlap(lhs->range, rhs_type->range);
     if (t == tok_as) {
       lhs = createV<ast_cast_as_operator>(range, lhs, rhs_type);
     } else {
-      // detect `a !is T`, which is parsed as `a! is T` (lhs = `a!`), don't confuse with `(a!) is T`
-      bool is_negated = lhs->kind == ast_not_null_operator && !lhs->was_parenthesized;
-      if (is_negated) {
-        lhs = lhs->as<ast_not_null_operator>()->get_expr();
-      }
-      lhs = createV<ast_is_type_operator>(range, lhs, rhs_type, is_negated);
+      lhs = createV<ast_is_type_operator>(range, lhs, rhs_type, t == tok_not_is);
     }
     t = lex.tok();
   }
@@ -1665,8 +1694,11 @@ static AnyV parse_asm_func_body(Lexer& lex, V<ast_identifier> name_ident, V<ast_
     if (lex.tok() == tok_arrow) {
       lex.next();
       while (lex.tok() == tok_int_const) {
-        int ret_idx = static_cast<int>(parse_tok_int_const(lex.cur_str(), lex.cur_range())->to_long());
-        ret_order.push_back(ret_idx);
+        td::RefInt256 ret_idx = parse_tok_int_const(lex.cur_str(), lex.cur_range());
+        if (ret_idx < 0 || ret_idx >= 256) {
+          err("invalid asm index").fire(lex.cur_range());
+        }
+        ret_order.push_back(static_cast<int>(ret_idx->to_long()));
         lex.next();
       }
     }
@@ -1675,7 +1707,8 @@ static AnyV parse_asm_func_body(Lexer& lex, V<ast_identifier> name_ident, V<ast_
   std::vector<AnyV> asm_commands;
   lex.check(tok_string_const, "\"ASM COMMAND\"");
   while (lex.tok() == tok_string_const) {
-    auto v_asm_str = parse_expr100(lex)->as<ast_string_const>();
+    auto v_asm_str = createV<ast_string_const>(lex.cur_range(), parse_tok_asm_instruction(lex.cur_str()));
+    lex.next();
     if (v_asm_str->str_val.empty()) {
       err("invalid asm instruction").fire(v_asm_str);
     }
@@ -1784,12 +1817,21 @@ static AnyV parse_function_declaration(Lexer& lex, AnnotationsAbove& annotations
   for (auto v_annotation : annotations.above) {
     switch (v_annotation->kind) {
       case AnnotationKind::inline_simple:
+        if (v_body->kind == ast_asm_body) {
+          err("inline annotations are not applicable to asm functions").fire(v_annotation);
+        }
         inline_mode = FunctionInlineMode::inlineViaFif;   // maybe will be replaced by inlineInPlace later
         break;
       case AnnotationKind::inline_ref:
+        if (v_body->kind == ast_asm_body) {
+          err("inline annotations are not applicable to asm functions").fire(v_annotation);
+        }
         inline_mode = FunctionInlineMode::inlineRef;
         break;
       case AnnotationKind::noinline:
+        if (v_body->kind == ast_asm_body) {
+          err("inline annotations are not applicable to asm functions").fire(v_annotation);
+        }
         inline_mode = FunctionInlineMode::noInline;
         break;
       case AnnotationKind::pure:
@@ -2051,19 +2093,44 @@ static AnyV parse_enum_declaration(Lexer& lex, AnnotationsAbove& annotations) {
   return createV<ast_enum_declaration>(range, v_ident, colon_type, doc_lines, body);
 }
 
+// for `tolk 1.4.0`, check for every "1","4","0" that it's a decimal token, not "0x..."
+static bool is_decimal_semver_part(std::string_view str) {
+  bool all_digits = true;
+  for (char c : str) {
+    all_digits &= c >= '0' && c <= '9';
+  }
+  return all_digits;
+}
+
 static AnyV parse_tolk_required_version(Lexer& lex) {
   SrcRange range = lex.range_start();
-  lex.next_special(tok_semver, "semver");   // syntax: "tolk 0.6"
+  lex.expect(tok_tolk, "`tolk`");
+
+  if (lex.tok() != tok_int_const || !is_decimal_semver_part(lex.cur_str())) {
+    lex.unexpected("semver, like `tolk 1.2`");
+  }
+
   std::string semver = static_cast<std::string>(lex.cur_str());
   range.end(lex.cur_range());
   lex.next();
+  while (lex.tok() == tok_dot) {      // allow `tolk 1.4`, `tolk 1.4.1`, etc.
+    lex.next();
+    if (lex.tok() != tok_int_const || !is_decimal_semver_part(lex.cur_str())) {
+      lex.unexpected("semver, like `tolk 1.2`");
+    }
+
+    semver += '.';
+    semver += lex.cur_str();
+    range.end(lex.cur_range());
+    lex.next();
+  }
 
   // for simplicity, there is no syntax ">= version" and so on, just strict compare
   if (TOLK_VERSION != semver && TOLK_VERSION != semver + ".0") {    // 0.6 = 0.6.0
     err("the contract is written in Tolk v{}, but you use Tolk compiler v{}; probably, it will lead to compilation errors or hash changes", semver, TOLK_VERSION).warning(range, nullptr);
   }
 
-  return createV<ast_tolk_required_version>(range, semver);  // semicolon is not necessary
+  return createV<ast_tolk_required_version>(range, std::move(semver));
 }
 
 static AnyV parse_import_directive(Lexer& lex) {

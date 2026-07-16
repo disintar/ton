@@ -6,10 +6,13 @@ features below even if upstream moved, deleted, or rewrote nearby code.
 
 Snapshot used for this document:
 
-- Local branch: `dev`, `HEAD=ba75ac771` (`Add gated block propagation trace`)
-- Upstream reference: `mainnet/master=8e6f09172`
-- Merge base: `9f24a2644d97948392ff2280d4b4a433dcd51be8`
-- Local branch is 2268 commits ahead of `mainnet/master` at the time of scan.
+- Local branch before merge: `dev`, `HEAD=de69678d7` (`Improve overlay live sync diagnostics and dedupe`)
+- Current merge worktree: `codex/merge-testnet-pr2417`
+- Upstream testnet reference applied during merge: `mainnet/testnet=c686c88a7`
+- Upstream PR reference applied during merge: `ton-blockchain/ton#2417=612f986af`
+- Working tree includes live archive-resync changes for validator-manager,
+  coroutine shard-client, fullnode rebase handling, and parallel custom/public
+  next-block batch sync as of 2026-06-05.
 
 ## Merge rules
 
@@ -20,7 +23,8 @@ Snapshot used for this document:
 - Keep CMake target wiring in sync: many features depend on each other
   (`lite-server-daemon`, `blockchain-indexer`, `validator-engine`, `tvm-python`,
   `cppkafka`, `librdkafka`, `PrometheusExporterActor`).
-- `scripts/` was untracked during this scan and is not described here.
+- `scripts/k8s_propagation_monitor.py` is a tracked diagnostic tool and must
+  move together with the propagation trace/log format.
 
 ## Prometheus actor and analytics
 
@@ -48,7 +52,17 @@ Keep these entry points and environment variables:
 - Metrics: `ton_node_status_*`, actor stats blob, `ton_balancer_*`,
   `ton_liteserver_credentials`, `ton_fullnode_adnl`,
   `ton_custom_overlay_block_broadcasts_received_total`,
-  `ton_custom_overlay_block_broadcasts_applied_total`
+  `ton_custom_overlay_block_broadcasts_applied_total`,
+  `ton_custom_overlay_duplicate_block_broadcasts_dropped_total`,
+  `ton_custom_overlay_duplicate_block_candidates_dropped_total`,
+  `ton_public_overlay_duplicate_block_broadcasts_dropped_total`,
+  `ton_public_overlay_duplicate_block_candidates_dropped_total`,
+  `ton_custom_overlay_sync_downloads_total`,
+  `ton_custom_overlay_sync_download_latency_ms_*`,
+  `ton_custom_overlay_sync_peer_downloads_total`,
+  `ton_custom_overlay_sync_peer_latency_ms_*`,
+  `ton_custom_overlay_sync_fallbacks_total`,
+  `ton_public_overlay_sync_downloads_total`
 
 Merge invariant: `ValidatorEngine::started_full_node_masters()` must create the
 `PrometheusExporterActor` and pass it into `ValidatorManagerInterface`; lite
@@ -182,6 +196,9 @@ Important behavior:
 - `lite-proxy` exposes liteserver ADNL identities, tracks upstream private
   liteserver freshness, chooses up-to-date servers, supports lazy update mode,
   and can fire/refire requests to multiple liteservers.
+- Balancer selection checks shard-client freshness as well as masterchain
+  freshness. `TON_BALANCER_MAX_SHARD_LAG` controls the tolerated shard lag and
+  Prometheus exports per-server shard status/lag.
 - `lite-proxy` modes: `0` means random LS, `1` means fire to all and return the
   first success.
 - `LiteServerLimiter` and proxy-side limiter persist users in `rate-limits/`
@@ -189,8 +206,11 @@ Important behavior:
 - Admin liteserver queries include add user, get stats, and check item
   published.
 - Usage analytics: `DTON_PUSH_USAGE` enables HTTP or HTTPS batch push from
-  lite-proxy. Events include query name, request, rps limit, start time, and
-  `duration_ms` after request completion.
+  lite-proxy. Events include client/destination ADNL, query name, compiled
+  request, raw request base64, request size, rps limit, start time, refire id,
+  `duration_ms`, success/ratelimit status, and error text when present.
+  Batches flush every five seconds in a detached HTTP/TLS thread; events wait
+  for `duration_ms` when possible and are forced out after 30 seconds.
 - Kafka lite-proxy topics include `lite-call-logs` and `lite-messages`.
 - Proxy Prometheus includes `ton_balancer_*` and credential metrics.
 
@@ -205,9 +225,11 @@ Key proxy options:
 - `-P/--publisher`
 - `-m/--mode`
 - `-t/--threads`
+- Env: `DTON_PUSH_USAGE`, `TON_BALANCER_MAX_SHARD_LAG`
 
 Merge invariant: do not drop the custom TL admin API, rate-limit DB layout,
-usage push code, or the read-only manager creation in standalone liteserver.
+usage push code, shard-aware balancer selection, or the read-only manager
+creation in standalone liteserver.
 
 ## LiteServer protocol extensions
 
@@ -227,8 +249,7 @@ Important `lite_api.tl` additions:
 - `liteServer.getParsedBlock`
 - `liteServer.adminQuery`
 - `liteServer.waitMasterchainSeqno`
-- `liteServer.nonfinal.getValidatorGroups`
-- `liteServer.nonfinal.getCandidate`
+- `liteServer.nonfinal.getPendingShardBlocks`
 
 Important `ton_api.tl` additions:
 
@@ -316,6 +337,137 @@ Important behavior:
 Merge invariant: when upstream changes ADNL networking, port proxy wrapping,
 packet validation, duplicate protection, and control packet handling.
 
+## Fast sync through private/custom overlays
+
+The fork extends custom overlays from broadcast-only propagation into a sync
+transport for archive recovery, block catch-up, next-block catch-up, and proof
+queries. Public overlay sync must remain a working fallback in every path.
+
+Critical files:
+
+- `validator/full-node-custom-overlays.*`
+- `validator/full-node.*`
+- `validator/full-node-shard.*`
+- `validator/full-node-shard-queries.hpp`
+- `validator/full-node-serializer.*`
+- `validator/net/download-archive-slice.*`
+- `validator/import-db-slice.*`
+- `validator/custom-overlay-metrics.h`
+- `validator/shard-client.*`
+- `validator/manager.*`
+- `validator/validator.h`
+- `validator/interfaces/validator-manager.h`
+- `validator-engine/prometheus/PrometheusExporterActor.cpp`
+- `overlay/overlay.cpp`
+- `scripts/k8s_propagation_monitor.py`
+- `TO_MAINREPO.md`
+
+Custom overlay query behavior:
+
+- `FullNodeCustomOverlay::receive_query()` accepts only authorized custom
+  overlay peers and rate-limits expensive archive/block queries.
+- Private peers can answer `tonNode_getArchiveInfo`,
+  `tonNode_getShardArchiveInfo`, `tonNode_getArchiveSlice`,
+  `tonNode_downloadBlockFull`, `tonNode_downloadNextBlockFull`,
+  `tonNode_downloadNextBlocksFull`, `tonNode_prepareBlockProof`,
+  `tonNode_downloadBlockProof`, and `tonNode_downloadBlockProofLink`.
+- `BlockFullSender` serves full block data plus proof/proof-link from the local
+  DB and retries briefly while `next` is not yet initialized.
+- `NextBlocksFullSender` serves up to 10 consecutive masterchain blocks in a
+  single response, bounded by the same 8 MiB total-size cap used by PR #2417.
+- Custom overlay archive requests use the overlay sender path for prepare and
+  slice queries; the implementation still has optional peer pre-resolve support,
+  but the current hot path skips DHT pre-resolve to avoid slow startup waits.
+
+Archive and catch-up behavior:
+
+- Archive recovery races custom overlay archive download and public overlay
+  fallback. A bad, slow, or empty private peer must not make recovery slower than
+  public sync.
+- Public archive fallback can use custom overlay members as public peer hints,
+  retries archive slices across neighbours, and logs selected peer/result.
+- Archive recovery is not limited to startup. After initial sync completes,
+  `ValidatorManagerImpl::alarm()` periodically checks whether masterchain or
+  shard-client lag has grown again. If lag is above the live-resync threshold,
+  or if shard-client is more than 16 MC seqnos behind, it re-enters the same
+  archive importer path with custom/private sync first and public overlay as
+  fallback.
+- Block and single next-block downloads try explicit custom overlay peers, race
+  bounded peer requests, record per-peer results, and fall back to public
+  overlay on no-peer, timeout, not-ready, exhausted, or invalid data.
+- Batched next-block catch-up uses the upstream PR #2417 `DownloadNextBlocks`
+  actor for both transports. `FullNodeShardImpl::get_next_blocks_loop()` starts
+  private custom-overlay batch sync and public-overlay batch sync concurrently;
+  the first successful `BlockHandle` wins. Public overlay must not wait for a
+  slow or broken private peer.
+- `FullNodeCustomOverlay::download_next_blocks_from_custom_peers()` fans out the
+  same batch request to all configured custom peers and returns the fastest
+  successful peer. Exhaustion, timeout, and no-peer are logged and surfaced as
+  not-ready errors to the custom side of the race only.
+- Custom sync uses `CustomOverlaySyncKind::{block,next_block,archive}`,
+  `CustomOverlaySyncSender::{rldp2,quic}`, and result labels
+  `attempt/ok/error/no_peer/timeout/not_ready/shard_not_served/exhausted`.
+- Downloaded data still goes through the existing proof/hash/import/validation
+  path. The private path changes peer selection and timeout/fallback behavior,
+  not trust rules.
+
+Shard-client recovery behavior:
+
+- `ShardClient` is based on the coroutine loop from upstream PR #2417. It waits
+  for initialized next masterchain handles, applies all shard states in parallel,
+  preprocesses upcoming shard states, and saves progress through
+  `update_shard_client_state`.
+- The dTON merge adds `latest_shards_` export, verbose `[shardclient-sync]`
+  stage logs, block-propagation trace stages, stale-save detection after
+  fullnode/archive rebase, and live `force_update_shard_client_ex()`.
+- Live handoff can rebase the coroutine shard-client during the archive-to-live
+  transition, and `ValidatorManagerImpl::out_of_sync()` keeps archive recovery
+  close to live before switching to ordinary live sync.
+- `ValidatorManagerImpl::out_of_sync()` must consider both masterchain and
+  shard-client freshness. Startup archive sync must not finish only because the
+  latest masterchain handle is fresh while the shard-client handle is still old.
+- Live archive resync calls `ValidatorManagerInterface::Callback::
+  archive_sync_complete()` so fullnode can rebase its current masterchain shard
+  actor to the new top block without replaying the whole startup completion
+  flow.
+- `FullNodeShardImpl::set_handle()` supports post-start fast-forward rebase.
+  Old or equal handles are ignored, newer handles reset the next-block attempt
+  counter and restart `get_next_block()`.
+- `FullNodeShardImpl::got_next_block()` must tolerate stale async replies after
+  a rebase. Do not restore a hard `CHECK(next_seqno == old_seqno + 1)` without
+  also proving old callbacks cannot arrive after live archive resync.
+- `ShardClient::force_update_shard_client_ex()` supports live fast-forward when
+  `started_` is true. It replaces the current MC handle/state, applies shards
+  for the new top state, updates DB progress, and notifies the coroutine loop.
+- Seqno comparisons are stabilized so stale/current callbacks after rebase do
+  not overwrite newer progress and do not skip the next required masterchain
+  block.
+
+Diagnostics and log markers:
+
+- `[archive-sync]` logs archive race start/done, random public peer selection,
+  archive-info/slice chunk start/done, peer counts, transport, result, elapsed
+  milliseconds, fallback decisions, live-resync start/done, shard-client rebase,
+  and fullnode rebase.
+- `[custom-overlay-sync]` logs custom block/next-block races, per-peer attempts,
+  sender (`rldp2`/`quic`), local/peer ADNL, target block, result, and elapsed
+  milliseconds. These logs are gated by `DTON_TRACE_BLOCK_PROPAGATION`.
+- `[shardclient.*]` block-propagation stages show notification, wait-state,
+  apply-all-shards, and save-to-db timing.
+- Expected recovery-time broadcast failures (`broadcast is forbidden`, temporary
+  peer ban, and `Non solvable`) are quieted so real transport/validation errors
+  remain visible.
+- `scripts/k8s_propagation_monitor.py` correlates `[block-propagation]` logs
+  with `/metrics`, reports propagation delays, shard seqno spread, shard lag,
+  and actor max delay for selected Kubernetes nodes.
+
+Merge invariant: custom overlay sync must always have bounded waits and public
+fallback; startup and live archive sync must require both masterchain and
+shard-client to be fresh; live archive resync must be able to rebase shard-client
+and fullnode without crashing on stale callbacks; batched next-block sync must
+exist on both public and custom overlay paths; recovery log quieting must not
+hide real bad signature, bad proof, or import validation errors.
+
 ## Block propagation tracing and custom overlay metrics
 
 Recent local commits add env-gated block propagation tracing and custom overlay
@@ -333,6 +485,7 @@ Critical files:
 - `validator/shard-client.cpp`
 - `validator/custom-overlay-metrics.h`
 - `validator-engine/prometheus/PrometheusExporterActor.cpp`
+- `scripts/k8s_propagation_monitor.py`
 
 Important behavior:
 
@@ -345,11 +498,17 @@ Important behavior:
 - Log marker: `[block-propagation]`
 - Metrics:
   `ton_custom_overlay_block_broadcasts_received_total`,
-  `ton_custom_overlay_block_broadcasts_applied_total`
+  `ton_custom_overlay_block_broadcasts_applied_total`,
+  duplicate broadcast/candidate counters for custom and public overlays, and
+  custom/public sync attempt, latency, peer, and fallback counters.
+- Custom/public broadcast dedupe tracks non-final and final signature sets
+  separately, so a later final custom block broadcast is not dropped only because
+  an earlier non-final broadcast was seen.
 
 Merge invariant: if upstream changes `BlockBroadcast`, broadcast serializers,
 validation, or apply flow, keep the trace field and stage logging wired through
-the whole path.
+the whole path. If upstream changes fullnode broadcast dedupe, keep the
+non-final/final split and the duplicate counters.
 
 ## Fullnode and liteserver rate limits
 
@@ -374,23 +533,43 @@ Important CLI options:
 Merge invariant: preserve limiter actor integration in manager-disk and the
 fullnode request-cost limits in `FullNodeOptions`.
 
-## Out-of-sync threshold
+## Out-of-sync threshold and live archive resync
 
 The fork lowers the last masterchain block freshness threshold in
-`ValidatorManagerImpl::out_of_sync()` from upstream's longer window to 80
-seconds.
+`ValidatorManagerImpl::out_of_sync()` from upstream's longer window to about 8
+seconds so archive recovery stays close to live before handoff. In addition,
+dTON treats an old shard-client handle as out-of-sync even if masterchain itself
+is fresh.
 
 Critical file:
 
 - `validator/manager.cpp`
+- `validator/manager.hpp`
+- `validator/shard-client.cpp`
+- `validator/full-node.cpp`
+- `validator/full-node.hpp`
+- `validator/full-node-shard.cpp`
+- `validator/validator.h`
 
 Important behavior:
 
 - In `out_of_sync()`, preserve
-  `last_masterchain_block_handle_->unix_time() + 80 > td::Clocks::system()`.
+  `last_masterchain_block_handle_->unix_time() + 8 > td::Clocks::system()`.
+- Also preserve the shard-client freshness check:
+  `shard_client_handle_->unix_time() + 8 <= td::Clocks::system()` means the
+  node is still out of sync.
+- After startup, `maybe_start_live_archive_resync()` must keep re-entering
+  archive sync when masterchain or shard-client lag grows again. The current
+  threshold is intentionally low enough to catch the archive-to-live bounce
+  before it becomes minutes of lag.
+- Live archive-resync completion must call `archive_sync_complete()` and must
+  not call the normal startup `initial_read_complete()` path again.
 
-Merge invariant: if upstream rewrites sync health checks, keep the dTON 80
-second threshold unless there is an explicit product decision to change it.
+Merge invariant: if upstream rewrites sync health checks, keep the dTON
+8-second near-live handoff threshold and the shard-client freshness requirement
+unless there is an explicit product decision to change them. Do not reintroduce
+a post-archive state where masterchain is live but shard-client is allowed to
+lag indefinitely.
 
 ## Deployment and build process
 
@@ -460,7 +639,7 @@ from those libraries.
 Useful grep check:
 
 ```bash
-rtk rg -n "PrometheusExporterActor|DTON_PUSH_USAGE|DTON_TRACE_BLOCK_PROPAGATION|ValidatorManagerDiskFactory::create\\(.*true|python_ton|liteServer.getParsedBlock|adnl.proxy|BlockPublisherKafka|LiteServerLimiter" .
+rtk rg -n "PrometheusExporterActor|DTON_PUSH_USAGE|TON_BALANCER_MAX_SHARD_LAG|DTON_TRACE_BLOCK_PROPAGATION|ton_custom_overlay_sync|custom-overlay-sync|archive-sync|live_archive_resync|archive_sync_complete|shardclient.rebase|fullnode.rebase|force_update_shard_client_ex|saved_to_db.*stale|latest_shards|ValidatorManagerDiskFactory::create\\(.*true|python_ton|liteServer.getParsedBlock|adnl.proxy|BlockPublisherKafka|LiteServerLimiter" .
 ```
 
 Useful target check after a configured build exists:
@@ -478,4 +657,8 @@ rtk test -f blockchain-indexer/indexer.cpp
 rtk test -f tvm-python/python_ton.cpp
 rtk test -f validator/block-propagation-trace.h
 rtk test -f adnl/adnl-proxy.cpp
+rtk test -f validator/custom-overlay-metrics.h
+rtk test -f validator/full-node-custom-overlays.cpp
+rtk test -f validator/net/download-archive-slice.cpp
+rtk test -f scripts/k8s_propagation_monitor.py
 ```

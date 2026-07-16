@@ -31,6 +31,7 @@
 
 #include "adnl/adnl-ext-client.h"
 #include "adnl/adnl-node-id.hpp"
+#include "adnl/adnl-proxy-types.h"
 #include "adnl/adnl.h"
 #include "auto/tl/ton_api.h"
 #include "auto/tl/ton_api.hpp"
@@ -66,6 +67,7 @@ struct Config {
   };
   struct AddrCats {
     td::IPAddress in_addr;
+    std::shared_ptr<ton::adnl::AdnlProxy> proxy;
     std::set<AdnlCategory> cats;
     std::set<AdnlCategory> priority_cats;
   };
@@ -121,7 +123,8 @@ struct Config {
   }
 
   td::Result<bool> config_add_network_addr(td::IPAddress in_addr, td::IPAddress out_addr,
-                                           std::vector<AdnlCategory> cats, std::vector<AdnlCategory> prio_cats);
+                                           std::shared_ptr<ton::adnl::AdnlProxy> proxy, std::vector<AdnlCategory> cats,
+                                           std::vector<AdnlCategory> prio_cats);
   td::Result<bool> config_add_quic_addr(td::IPAddress ip, std::vector<AdnlCategory> cats,
                                         std::vector<AdnlCategory> prio_cats);
   td::Result<bool> config_add_adnl_addr(ton::PublicKeyHash addr, AdnlCategory cat);
@@ -260,26 +263,31 @@ class ValidatorEngine : public td::actor::Actor {
   double archive_preload_period_ = 0.0;
   bool disable_rocksdb_stats_ = false;
   bool nonfinal_ls_queries_enabled_ = false;
+  bool enable_deprecated_control_queries_ = false;
   td::optional<td::uint64> celldb_cache_size_ = 1LL << 30;
   bool celldb_direct_io_ = false;
   bool celldb_preload_all_ = false;
   bool celldb_in_memory_ = false;
   bool celldb_disable_bloom_filter_ = false;
   bool unsynced_liteserver_ = false;
-  double catchain_max_block_delay_ = 0.0;
-  double catchain_max_block_delay_slow_ = 0.0;
   bool read_config_ = false;
   bool started_keyring_ = false;
   bool started_ = false;
   td::FileFd console_ready_fd_;
+  bool dht_server_ = false;
   ton::BlockSeqno truncate_seqno_{0};
   std::string session_logs_file_;
   std::string validator_telemetry_filename_;
+  std::string plumtree_stats_filename_;
   bool not_all_shards_ = false;
   std::vector<ton::ShardIdFull> add_shard_cmds_;
   bool state_serializer_disabled_flag_ = false;
   bool permanent_celldb_ = false;
   bool skip_key_sync_ = false;
+  std::set<ton::CatchainSeqno> unsafe_catchains_;
+  td::optional<double> catchain_max_block_delay_;
+  td::optional<double> catchain_max_block_delay_slow_;
+  double broadcast_speed_multiplier_catchain_ = 3.33;
   td::optional<ton::BlockSeqno> sync_shards_upto_;
   ton::adnl::AdnlNodeIdShort shard_block_retainer_adnl_id_ = ton::adnl::AdnlNodeIdShort::zero();
   bool shard_block_retainer_adnl_id_fullnode_ = false;
@@ -301,6 +309,9 @@ class ValidatorEngine : public td::actor::Actor {
 
   void add_unsafe_catchain_rotation(ton::BlockSeqno b_seqno, ton::CatchainSeqno cc_seqno, td::uint32 value) {
     unsafe_catchain_rotations_.insert({b_seqno, {cc_seqno, value}});
+  }
+  void add_unsafe_catchain(ton::CatchainSeqno cc_seqno) {
+    unsafe_catchains_.insert(cc_seqno);
   }
   void set_local_config(std::string str);
   void set_global_config(std::string str);
@@ -335,6 +346,9 @@ class ValidatorEngine : public td::actor::Actor {
   void set_console_ready_fd(td::FileFd fd) {
     console_ready_fd_ = std::move(fd);
   }
+  void set_dht_server(bool value) {
+    dht_server_ = value;
+  }
   void add_ip(td::IPAddress addr) {
     addrs_.push_back(addr);
   }
@@ -356,6 +370,9 @@ class ValidatorEngine : public td::actor::Actor {
   }
   void set_nonfinal_ls_queries_enabled() {
     nonfinal_ls_queries_enabled_ = true;
+  }
+  void set_enable_deprecated_control_queries() {
+    enable_deprecated_control_queries_ = true;
   }
   void set_celldb_cache_size(td::uint64 value) {
     celldb_cache_size_ = value;
@@ -388,6 +405,9 @@ class ValidatorEngine : public td::actor::Actor {
   void set_validator_telemetry_filename(std::string value) {
     validator_telemetry_filename_ = std::move(value);
   }
+  void set_plumtree_stats_filename(std::string value) {
+    plumtree_stats_filename_ = std::move(value);
+  }
   void set_not_all_shards() {
     not_all_shards_ = true;
   }
@@ -399,6 +419,9 @@ class ValidatorEngine : public td::actor::Actor {
   }
   void set_broadcast_speed_multiplier_public(double value) {
     full_node_options_.public_broadcast_speed_multiplier_ = value;
+  }
+  void set_broadcast_speed_multiplier_catchain(double value) {
+    broadcast_speed_multiplier_catchain_ = value;
   }
   void set_broadcast_speed_multiplier_private(double value) {
     full_node_options_.private_broadcast_speed_multiplier_ = value;
@@ -430,17 +453,20 @@ class ValidatorEngine : public td::actor::Actor {
   void set_initial_sync_delay(double value) {
     full_node_options_.initial_sync_delay_ = value;
   }
-  void set_ratelimit_window_size(double seconds) {
-    full_node_options_.ratelimit_window_size_ = seconds;
+  void set_ratelimit_window_size(double value) {
+    full_node_options_.ratelimit_window_size_ = value;
   }
-  void set_ratelimit_global(size_t count) {
-    full_node_options_.ratelimit_global_ = count;
+  void set_ratelimit_global(size_t value) {
+    full_node_options_.ratelimit_global_ = value;
   }
-  void set_ratelimit_heavy(size_t count) {
-    full_node_options_.ratelimit_heavy_ = count;
+  void set_ratelimit_heavy(size_t value) {
+    full_node_options_.ratelimit_heavy_ = value;
   }
-  void set_ratelimit_medium(size_t count) {
-    full_node_options_.ratelimit_medium_ = count;
+  void set_ratelimit_medium(size_t value) {
+    full_node_options_.ratelimit_medium_ = value;
+  }
+  void with_full_node_options(std::function<void(ton::validator::fullnode::FullNodeOptions &)> f) {
+    f(full_node_options_);
   }
   void add_auto_sign_adnl(ton::adnl::AdnlNodeIdShort id) {
     LOG(INFO) << "configured auto-sign shard overlay certificates for adnl=" << id;
@@ -547,6 +573,11 @@ class ValidatorEngine : public td::actor::Actor {
                               std::vector<AdnlCategory> prio_cats, td::Promise<td::Unit> promise);
   void try_del_listening_port(td::uint32 ip, td::int32 port, std::vector<AdnlCategory> cats,
                               std::vector<AdnlCategory> prio_cats, td::Promise<td::Unit> promise);
+  void try_add_proxy(td::uint32 in_ip, td::int32 in_port, td::uint32 out_ip, td::int32 out_port,
+                     std::shared_ptr<ton::adnl::AdnlProxy> proxy, std::vector<AdnlCategory> cats,
+                     std::vector<AdnlCategory> prio_cats, td::Promise<td::Unit> promise);
+  void try_del_proxy(td::uint32 ip, td::int32 port, std::vector<AdnlCategory> cats, std::vector<AdnlCategory> prio_cats,
+                     td::Promise<td::Unit> promise);
   void try_add_quic_addr(td::uint32 ip, td::int32 port, std::vector<AdnlCategory> cats,
                          std::vector<AdnlCategory> prio_cats, td::Promise<td::Unit> promise);
   void try_del_quic_addr(td::uint32 ip, td::int32 port, std::vector<AdnlCategory> cats,
@@ -637,6 +668,10 @@ class ValidatorEngine : public td::actor::Actor {
                          ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
   void run_control_query(ton::ton_api::engine_validator_delListeningPort &query, td::BufferSlice data,
                          ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
+  void run_control_query(ton::ton_api::engine_validator_addProxy &query, td::BufferSlice data, ton::PublicKeyHash src,
+                         td::uint32 perm, td::Promise<td::BufferSlice> promise);
+  void run_control_query(ton::ton_api::engine_validator_delProxy &query, td::BufferSlice data, ton::PublicKeyHash src,
+                         td::uint32 perm, td::Promise<td::BufferSlice> promise);
   void run_control_query(ton::ton_api::engine_validator_addQuicAddr &query, td::BufferSlice data,
                          ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
   void run_control_query(ton::ton_api::engine_validator_delQuicAddr &query, td::BufferSlice data,
@@ -648,6 +683,10 @@ class ValidatorEngine : public td::actor::Actor {
   void run_control_query(ton::ton_api::engine_validator_exportAllPrivateKeys &query, td::BufferSlice data,
                          ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
   void run_control_query(ton::ton_api::engine_validator_setVerbosity &query, td::BufferSlice data,
+                         ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
+  void run_control_query(ton::ton_api::engine_validator_setLogCategoryVerbosity &query, td::BufferSlice data,
+                         ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
+  void run_control_query(ton::ton_api::engine_validator_getLogCategories &query, td::BufferSlice data,
                          ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise);
   void run_control_query(ton::ton_api::engine_validator_getStats &query, td::BufferSlice data, ton::PublicKeyHash src,
                          td::uint32 perm, td::Promise<td::BufferSlice> promise);
