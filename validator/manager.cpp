@@ -61,6 +61,7 @@ namespace validator {
 namespace {
 
 constexpr double kPrestartArchiveSyncTargetLagSeconds = 10.0;
+constexpr double kLiveArchiveSyncRecoveryLagSeconds = 30.0;
 
 }  // namespace
 
@@ -2363,6 +2364,7 @@ bool ValidatorManagerImpl::out_of_sync() {
 }
 
 void ValidatorManagerImpl::prestart_sync() {
+  archive_sync_active_ = true;
   download_next_archive();
 }
 
@@ -2430,10 +2432,17 @@ void ValidatorManagerImpl::checked_archive_slice(BlockSeqno new_last_mc_seqno, B
 
 void ValidatorManagerImpl::finish_prestart_sync() {
   to_import_.clear();
+  archive_sync_active_ = false;
   completed_prestart_sync();
 }
 
 void ValidatorManagerImpl::completed_prestart_sync() {
+  if (started_) {
+    LOG(WARNING) << "[archive-sync] stage=recover_complete mc=" << last_masterchain_block_handle_->id()
+                 << " shard_client=" << (shard_client_handle_ ? shard_client_handle_->id().to_str() : "none")
+                 << " result=ok";
+    return;
+  }
   td::actor::send_closure(shard_client_, &ShardClient::start);
 
   send_peek_key_block_request();
@@ -2441,6 +2450,29 @@ void ValidatorManagerImpl::completed_prestart_sync() {
   LOG(WARNING) << "initial read complete: " << last_masterchain_block_handle_->id() << " "
                << last_masterchain_block_id_;
   callback_->initial_read_complete(last_masterchain_block_handle_);
+}
+
+void ValidatorManagerImpl::maybe_recover_archive_sync() {
+  if (!started_ || archive_sync_active_ || !last_masterchain_block_handle_ || !shard_client_handle_) {
+    return;
+  }
+  auto now = td::Clocks::system();
+  auto master_lag = now - last_masterchain_block_handle_->unix_time();
+  auto shard_lag = now - shard_client_handle_->unix_time();
+  auto shard_gap = shard_client_handle_->id().seqno() + 16 < last_masterchain_seqno_;
+  if (master_lag <= kLiveArchiveSyncRecoveryLagSeconds && shard_lag <= kLiveArchiveSyncRecoveryLagSeconds &&
+      !shard_gap) {
+    return;
+  }
+  LOG(WARNING) << "[archive-sync] stage=recover_start mc=" << last_masterchain_block_handle_->id()
+               << " shard_client=" << shard_client_handle_->id()
+               << " master_lag=" << td::format::as_time(master_lag)
+               << " shard_lag=" << td::format::as_time(shard_lag)
+               << " master_seqno=" << last_masterchain_seqno_
+               << " shard_seqno=" << shard_client_handle_->id().seqno()
+               << " result=start";
+  archive_sync_active_ = true;
+  download_next_archive();
 }
 
 void ValidatorManagerImpl::new_masterchain_block() {
@@ -2744,6 +2776,7 @@ void ValidatorManagerImpl::state_serializer_update(BlockSeqno seqno) {
 }
 
 void ValidatorManagerImpl::alarm() {
+  maybe_recover_archive_sync();
   try_advance_gc_masterchain_block();
   alarm_timestamp() = td::Timestamp::in(1.0);
   if (shard_client_state_.not_null() && gc_masterchain_handle_) {

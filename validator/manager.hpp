@@ -354,6 +354,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   void checked_archive_slice(BlockSeqno new_last_mc_seqno, BlockSeqno new_shard_client_seqno);
   void finish_prestart_sync();
   void completed_prestart_sync();
+  void maybe_recover_archive_sync();
 
  public:
   void install_callback(std::unique_ptr<Callback> new_callback, td::Promise<td::Unit> promise) override {
@@ -746,6 +747,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   td::actor::ActorOwn<td::actor::ActorStats> actor_stats_;
 
   bool started_ = false;
+  bool archive_sync_active_ = false;
 
  private:
   double state_ttl() const {
