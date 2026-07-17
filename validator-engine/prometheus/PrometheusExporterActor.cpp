@@ -40,7 +40,7 @@ namespace ton {
         return "ton_node_status_" + sanitized;
       }
 
-      bool parse_number(td::Slice raw, double &value, std::string *unit = nullptr) {
+      bool parse_number_text(td::Slice raw, std::string &value, std::string *unit = nullptr) {
         std::string s = raw.str();
         auto first = s.find_first_not_of(" \t");
         if (first == std::string::npos) {
@@ -50,10 +50,11 @@ namespace ton {
         s = s.substr(first, last - first + 1);
 
         char *end = nullptr;
-        value = std::strtod(s.c_str(), &end);
+        std::strtod(s.c_str(), &end);
         if (end == s.c_str()) {
           return false;
         }
+        value.assign(s.c_str(), static_cast<std::size_t>(end - s.c_str()));
         while (*end == ' ' || *end == '\t') {
           ++end;
         }
@@ -80,7 +81,7 @@ namespace ton {
         return true;
       }
 
-      bool parse_block_seqno(td::Slice raw, double &value) {
+      bool parse_block_seqno(td::Slice raw, std::string &value) {
         std::string s = raw.str();
         auto close = s.find(')');
         if (close == std::string::npos) {
@@ -90,7 +91,7 @@ namespace ton {
         if (comma == std::string::npos || comma + 1 >= close) {
           return false;
         }
-        return parse_number(td::Slice(s).substr(comma + 1, close - comma - 1), value);
+        return parse_number_text(td::Slice(s).substr(comma + 1, close - comma - 1), value);
       }
 
       bool emit_colon_pairs(std::stringstream &out, const std::string &metric, td::Slice raw) {
@@ -102,8 +103,8 @@ namespace ton {
           if (colon == std::string::npos || colon == 0 || colon + 1 >= token.size()) {
             continue;
           }
-          double value = 0.0;
-          if (!parse_number(td::Slice(token).substr(colon + 1), value)) {
+          std::string value;
+          if (!parse_number_text(td::Slice(token).substr(colon + 1), value)) {
             continue;
           }
           auto label = sanitize_metric_name(td::Slice(token).substr(0, colon));
@@ -123,9 +124,9 @@ namespace ton {
           if (colon != ":") {
             return false;
           }
-          double value = 0.0;
+          std::string value;
           std::string unit;
-          if (!parse_number(td::Slice(value_s), value, &unit)) {
+          if (!parse_number_text(td::Slice(value_s), value, &unit)) {
             return false;
           }
           auto suffix = sanitize_metric_name(name);
@@ -143,14 +144,14 @@ namespace ton {
       void append_validator_manager_metric(std::stringstream &out, td::Slice key, td::Slice raw_value) {
         auto metric = validator_status_metric_name(key);
 
-        double value = 0.0;
+        std::string value;
         if (key == "masterchainblock" && parse_block_seqno(raw_value, value)) {
           out << metric << " " << value << "\n";
           return;
         }
 
         std::string unit;
-        if (parse_number(raw_value, value, &unit)) {
+        if (parse_number_text(raw_value, value, &unit)) {
           if (!unit.empty()) {
             metric += "_" + unit;
           }
