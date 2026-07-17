@@ -60,7 +60,7 @@ namespace validator {
 
 namespace {
 
-constexpr double kPrestartArchiveSyncTargetLagSeconds = 10.0;
+constexpr double kPrestartArchiveSyncTargetLagSeconds = 2.0;
 constexpr double kLiveArchiveSyncRecoveryLagSeconds = 30.0;
 
 }  // namespace
