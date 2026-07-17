@@ -58,6 +58,12 @@ namespace ton {
 
 namespace validator {
 
+namespace {
+
+constexpr double kPrestartArchiveSyncTargetLagSeconds = 10.0;
+
+}  // namespace
+
 void ValidatorManagerImpl::validate_block_is_next_proof(BlockIdExt prev_block_id, BlockIdExt next_block_id,
                                                         td::BufferSlice proof, td::Promise<td::Unit> promise) {
   if (!prev_block_id.is_masterchain() || !next_block_id.is_masterchain()) {
@@ -2335,7 +2341,7 @@ bool ValidatorManagerImpl::out_of_sync() {
   if (shard_client_handle_->id().seqno() + 16 < last_masterchain_seqno_) {
     return true;
   }
-  if (last_masterchain_block_handle_->unix_time() + 80 > td::Clocks::system()) {
+  if (last_masterchain_block_handle_->unix_time() + kPrestartArchiveSyncTargetLagSeconds > td::Clocks::system()) {
     return false;
   }
 
