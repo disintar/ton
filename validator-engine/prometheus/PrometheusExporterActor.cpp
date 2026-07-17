@@ -3,6 +3,171 @@
 
 namespace ton {
     namespace {
+      bool is_valid_metric_start(char c) {
+        return std::isalpha(static_cast<unsigned char>(c)) || c == '_' || c == ':';
+      }
+
+      bool is_valid_metric_char(char c) {
+        return std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == ':';
+      }
+
+      std::string sanitize_metric_name(td::Slice raw) {
+        std::string name;
+        name.reserve(raw.size());
+        for (char c : raw.str()) {
+          name.push_back(is_valid_metric_char(c) ? c : '_');
+        }
+        while (!name.empty() && name.back() == '_') {
+          name.pop_back();
+        }
+        if (name.empty() || !is_valid_metric_start(name.front())) {
+          name.insert(name.begin(), '_');
+        }
+        return name;
+      }
+
+      std::string validator_status_metric_name(td::Slice key) {
+        std::string sanitized = sanitize_metric_name(key);
+        if (sanitized == "shardclientmasterchainseqno") {
+          return "ton_node_status_shard_client_masterchain_seqno";
+        }
+        if (sanitized == "masterchainblock") {
+          return "ton_node_status_last_masterchain_block_seqno";
+        }
+        if (sanitized == "masterchainblocktime") {
+          return "ton_node_status_shard_client_at";
+        }
+        return "ton_node_status_" + sanitized;
+      }
+
+      bool parse_number(td::Slice raw, double &value, std::string *unit = nullptr) {
+        std::string s = raw.str();
+        auto first = s.find_first_not_of(" \t");
+        if (first == std::string::npos) {
+          return false;
+        }
+        auto last = s.find_last_not_of(" \t");
+        s = s.substr(first, last - first + 1);
+
+        char *end = nullptr;
+        value = std::strtod(s.c_str(), &end);
+        if (end == s.c_str()) {
+          return false;
+        }
+        while (*end == ' ' || *end == '\t') {
+          ++end;
+        }
+        if (*end == '\0') {
+          if (unit) {
+            unit->clear();
+          }
+          return true;
+        }
+        const char *unit_start = end;
+        while (std::isalpha(static_cast<unsigned char>(*end))) {
+          ++end;
+        }
+        while (*end == ' ' || *end == '\t') {
+          ++end;
+        }
+        if (*end != '\0') {
+          return false;
+        }
+        if (unit) {
+          *unit = sanitize_metric_name(td::Slice(unit_start, static_cast<std::size_t>(end - unit_start)));
+          std::transform(unit->begin(), unit->end(), unit->begin(), [](unsigned char c) { return std::tolower(c); });
+        }
+        return true;
+      }
+
+      bool parse_block_seqno(td::Slice raw, double &value) {
+        std::string s = raw.str();
+        auto close = s.find(')');
+        if (close == std::string::npos) {
+          return false;
+        }
+        auto comma = s.rfind(',', close);
+        if (comma == std::string::npos || comma + 1 >= close) {
+          return false;
+        }
+        return parse_number(td::Slice(s).substr(comma + 1, close - comma - 1), value);
+      }
+
+      bool emit_colon_pairs(std::stringstream &out, const std::string &metric, td::Slice raw) {
+        std::stringstream in(raw.str());
+        std::string token;
+        bool emitted = false;
+        while (in >> token) {
+          auto colon = token.find(':');
+          if (colon == std::string::npos || colon == 0 || colon + 1 >= token.size()) {
+            continue;
+          }
+          double value = 0.0;
+          if (!parse_number(td::Slice(token).substr(colon + 1), value)) {
+            continue;
+          }
+          auto label = sanitize_metric_name(td::Slice(token).substr(0, colon));
+          out << metric << "{item=\"" << label << "\"} " << value << "\n";
+          emitted = true;
+        }
+        return emitted;
+      }
+
+      bool emit_named_pairs(std::stringstream &out, const std::string &metric, td::Slice raw) {
+        std::stringstream in(raw.str());
+        std::string name;
+        std::string colon;
+        std::string value_s;
+        bool emitted = false;
+        while (in >> name >> colon >> value_s) {
+          if (colon != ":") {
+            return false;
+          }
+          double value = 0.0;
+          std::string unit;
+          if (!parse_number(td::Slice(value_s), value, &unit)) {
+            return false;
+          }
+          auto suffix = sanitize_metric_name(name);
+          std::transform(suffix.begin(), suffix.end(), suffix.begin(), [](unsigned char c) { return std::tolower(c); });
+          out << metric << "_" << suffix;
+          if (!unit.empty()) {
+            out << "_" << unit;
+          }
+          out << " " << value << "\n";
+          emitted = true;
+        }
+        return emitted;
+      }
+
+      void append_validator_manager_metric(std::stringstream &out, td::Slice key, td::Slice raw_value) {
+        auto metric = validator_status_metric_name(key);
+
+        double value = 0.0;
+        if (key == "masterchainblock" && parse_block_seqno(raw_value, value)) {
+          out << metric << " " << value << "\n";
+          return;
+        }
+
+        std::string unit;
+        if (parse_number(raw_value, value, &unit)) {
+          if (!unit.empty()) {
+            metric += "_" + unit;
+          }
+          out << metric << " " << value << "\n";
+          return;
+        }
+
+        if (emit_named_pairs(out, metric, raw_value)) {
+          return;
+        }
+        if (emit_colon_pairs(out, metric, raw_value)) {
+          return;
+        }
+
+        out << "# skipped non-numeric validator manager stat " << sanitize_metric_name(key) << "\n";
+      }
+
       std::string sanitize_metrics_blob(td::Slice raw) {
         std::stringstream in(raw.str());
         std::stringstream out;
@@ -42,8 +207,9 @@ namespace ton {
     std::string TonNodeStatus::to_text() const {
       std::stringstream ss;
 
-      for (auto x: validator_manager_stats) {
-        ss << x.first << " " << x.second << "\n";
+      ss << "# Validator manager stats\n";
+      for (const auto &x : validator_manager_stats) {
+        append_validator_manager_metric(ss, x.first, x.second);
       }
 
       ss << "\n" << sanitize_metrics_blob(validator_manager_actor_stats);
