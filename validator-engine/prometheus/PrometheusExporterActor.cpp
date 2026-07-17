@@ -156,6 +156,9 @@ namespace ton {
             metric += "_" + unit;
           }
           out << metric << " " << value << "\n";
+          if (key == "masterchainblocktime" && unit.empty()) {
+            out << "ton_node_status_last_masterchain_block_at " << value << "\n";
+          }
           return;
         }
 
