@@ -1475,7 +1475,7 @@ void ValidatorEngine::start_up() {
 
   const char *value = getenv("TON_PROMETHEUS_SHARE_CREDENTIALS");
   allow_share_liteserver_credentials_ = bool(value);
-  liteserver_credentials_tag_ = value;
+  liteserver_credentials_tag_ = value ? value : "";
 
 
 #if TON_USE_JEMALLOC
@@ -1489,6 +1489,8 @@ void ValidatorEngine::update_prometheus_exporter_stats() {
   auto P = td::PromiseCreator::lambda(
           [PromId](td::Result<std::vector<std::pair<std::string, std::string>>> R) {
               if (R.is_ok()) {
+                td::actor::send_closure(PromId, &ton::PrometheusExporterActor::set_validator_manager_alive_at,
+                                        static_cast<ton::UnixTime>(td::Clocks::system()));
                 td::actor::send_closure(PromId, &ton::PrometheusExporterActor::set_validator_manager_stats,
                                         R.move_as_ok());
               }
