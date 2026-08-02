@@ -105,6 +105,7 @@ class FullNode : public td::actor::Actor {
                                        bool from_custom_overlay = false) = 0;
   virtual void process_block_candidate_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno,
                                                  td::uint32 validator_set_hash, td::BufferSlice data) = 0;
+  virtual void process_block_finality_broadcast(BlockFinalityBroadcast finality) = 0;
   virtual void process_shard_block_info_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno,
                                                   td::BufferSlice data) = 0;
   virtual void get_out_msg_queue_query_token(td::Promise<std::unique_ptr<ActionToken>> promise) = 0;

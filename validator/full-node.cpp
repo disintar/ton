@@ -415,7 +415,8 @@ void FullNodeImpl::on_new_masterchain_block(td::Ref<MasterchainState> state, std
     bool active = new_active.find(shard) != new_active.end();
     bool overlay_exists = !shards_[shard].actor.empty();
     if (active || join_all_overlays || overlay_exists) {
-      update_shard_actor(shard, active);
+      bool enable_plumtree_broadcast = state->get_new_consensus_config(shard.workchain).enable_plumtree_broadcast();
+      update_shard_actor(shard, active, enable_plumtree_broadcast);
     }
   }
 
@@ -447,18 +448,20 @@ void FullNodeImpl::on_new_masterchain_block(td::Ref<MasterchainState> state, std
   update_validator_telemetry_collector();
 }
 
-void FullNodeImpl::update_shard_actor(ShardIdFull shard, bool active) {
+void FullNodeImpl::update_shard_actor(ShardIdFull shard, bool active, bool enable_plumtree_broadcast) {
   ShardInfo &info = shards_[shard];
   if (info.actor.empty()) {
     info.actor = FullNodeShard::create(shard, local_id_, adnl_id_, zero_state_file_hash_, opts_, limiter_, keyring_,
-                                       adnl_, rldp2_, overlays_, validator_manager_, client_, actor_id(this), active);
+                                       adnl_, rldp2_, quic_, overlays_, validator_manager_, client_, actor_id(this),
+                                       active, enable_plumtree_broadcast);
     if (!all_validators_.empty()) {
       td::actor::send_closure(info.actor, &FullNodeShard::update_validators, all_validators_, sign_cert_by_);
     }
-  } else if (info.active != active) {
-    td::actor::send_closure(info.actor, &FullNodeShard::set_active, active);
+  } else if (info.active != active || info.enable_plumtree_broadcast != enable_plumtree_broadcast) {
+    td::actor::send_closure(info.actor, &FullNodeShard::set_params, active, enable_plumtree_broadcast);
   }
   info.active = active;
+  info.enable_plumtree_broadcast = enable_plumtree_broadcast;
   info.delete_at = active ? td::Timestamp::never() : td::Timestamp::in(INACTIVE_SHARD_TTL);
 }
 
@@ -563,6 +566,17 @@ void FullNodeImpl::send_broadcast(BlockBroadcast broadcast, int mode) {
       return;
     }
     td::actor::send_closure(shard, &FullNodeShard::send_broadcast, std::move(broadcast));
+  }
+}
+
+void FullNodeImpl::send_block_finality_broadcast(BlockFinalityBroadcast finality, int mode) {
+  if (mode & broadcast_mode_public) {
+    auto shard = get_shard(finality.block_id.shard_full());
+    if (shard.empty()) {
+      VLOG(FULL_NODE_WARNING) << "dropping OUT block finality broadcast to unknown shard";
+      return;
+    }
+    td::actor::send_closure(shard, &FullNodeShard::send_block_finality_broadcast, std::move(finality));
   }
 }
 
@@ -969,7 +983,7 @@ td::actor::ActorId<FullNodeShard> FullNodeImpl::get_shard(ShardIdFull shard, boo
   while (true) {
     auto it = shards_.find(shard);
     if (it != shards_.end()) {
-      update_shard_actor(shard, it->second.active);
+      update_shard_actor(shard, it->second.active, it->second.enable_plumtree_broadcast);
       return it->second.actor.get();
     }
     if (shard.pfx_len() == 0) {
@@ -1099,6 +1113,12 @@ void FullNodeImpl::process_block_candidate_broadcast(BlockIdExt block_id, Catcha
       .detach();
 }
 
+void FullNodeImpl::process_block_finality_broadcast(BlockFinalityBroadcast finality) {
+  td::actor::ask(validator_manager_, &ValidatorManagerInterface::new_block_finality_broadcast, std::move(finality),
+                 BroadcastSource::public_overlay)
+      .detach();
+}
+
 void FullNodeImpl::process_shard_block_info_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno,
                                                       td::BufferSlice data) {
   send_shard_block_info_to_custom_overlays(block_id, cc_seqno, data);
@@ -1133,7 +1153,7 @@ void FullNodeImpl::update_validator_telemetry_collector() {
 }
 
 void FullNodeImpl::start_up() {
-  update_shard_actor(ShardIdFull{masterchainId}, true);
+  update_shard_actor(ShardIdFull{masterchainId}, true, false);
   if (local_id_.is_zero()) {
     if (adnl_id_.is_zero()) {
       auto pk = ton::PrivateKey{ton::privkeys::Ed25519::random()};
@@ -1175,6 +1195,9 @@ void FullNodeImpl::start_up() {
     }
     void send_broadcast(validator::BlockBroadcast broadcast, int mode) override {
       td::actor::send_closure(id_, &FullNodeImpl::send_broadcast, std::move(broadcast), mode);
+    }
+    void send_block_finality_broadcast(BlockFinalityBroadcast finality, int mode) override {
+      td::actor::send_closure(id_, &FullNodeImpl::send_block_finality_broadcast, std::move(finality), mode);
     }
     void download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                         td::Promise<validator::ReceivedBlock> promise) override {

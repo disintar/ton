@@ -78,6 +78,7 @@ class FullNodeImpl : public FullNode {
   void send_block_candidate(BlockIdExt block_id, CatchainSeqno cc_seqno, td::uint32 validator_set_hash,
                             td::BufferSlice data, int mode);
   void send_broadcast(BlockBroadcast broadcast, int mode);
+  void send_block_finality_broadcast(BlockFinalityBroadcast finality, int mode);
   void send_out_msg_queue_proof_broadcast(td::Ref<OutMsgQueueProofBroadcast> broadcats);
   void download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout, td::Promise<ReceivedBlock> promise);
   void download_next_block(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
@@ -106,6 +107,7 @@ class FullNodeImpl : public FullNode {
                                bool from_custom_overlay = false) override;
   void process_block_candidate_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno, td::uint32 validator_set_hash,
                                          td::BufferSlice data) override;
+  void process_block_finality_broadcast(BlockFinalityBroadcast finality) override;
   void process_shard_block_info_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) override;
   void get_out_msg_queue_query_token(td::Promise<std::unique_ptr<ActionToken>> promise) override;
 
@@ -133,10 +135,11 @@ class FullNodeImpl : public FullNode {
   struct ShardInfo {
     td::actor::ActorOwn<FullNodeShard> actor;
     bool active = false;
+    bool enable_plumtree_broadcast = false;
     td::Timestamp delete_at = td::Timestamp::never();
   };
 
-  void update_shard_actor(ShardIdFull shard, bool active);
+  void update_shard_actor(ShardIdFull shard, bool active, bool enable_plumtree_broadcast);
   void download_next_block_now(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
                                td::Promise<ReceivedBlock> promise);
 
