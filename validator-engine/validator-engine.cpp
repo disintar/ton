@@ -1513,6 +1513,28 @@ void ValidatorEngine::update_prometheus_exporter_stats() {
     if (!config_.full_node.is_zero()) {
       liteserver_credentials += "ton_fullnode_adnl{tag=\"" + liteserver_credentials_tag_ + "\",adnl=\"" +
                                 config_.full_node.bits256_value().to_hex() + "\"} 1\n";
+      auto it = keys_.find(config_.full_node);
+      if (it != keys_.end()) {
+        std::string ip;
+        std::string port;
+        std::string quic_port;
+        if (!config_.addrs.empty()) {
+          const auto &addr = config_.addrs.begin()->second.in_addr;
+          ip = addr.get_ip_str().str();
+          port = std::to_string(addr.get_port());
+        }
+        if (!config_.quic_addrs.empty()) {
+          const auto &addr = config_.quic_addrs.begin()->second.in_addr;
+          if (ip.empty()) {
+            ip = addr.get_ip_str().str();
+          }
+          quic_port = std::to_string(addr.get_port());
+        }
+        liteserver_credentials += "ton_fullnode_adnl_full{tag=\"" + liteserver_credentials_tag_ + "\",adnl=\"" +
+                                  config_.full_node.bits256_value().to_hex() + "\",pubkey=\"" +
+                                  it->second.ed25519_value().raw().to_hex() + "\",ip=\"" + ip + "\",port=\"" +
+                                  port + "\",quic_port=\"" + quic_port + "\"} 1\n";
+      }
     }
     for (auto &ip: addrs_) {
       for (auto &[t, e]: config_.liteservers) {

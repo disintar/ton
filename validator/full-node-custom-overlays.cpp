@@ -1002,7 +1002,6 @@ void FullNodeCustomOverlay::download_next_blocks_from_custom_peers(BlockHandle h
     return;
   }
 
-  auto peer_timeout = custom_overlay_peer_download_timeout(timeout);
   log_custom_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, sender, name_, local, "-", target,
                                 "custom.race_start", "attempt", "parallel_next_blocks", peers.size(), started_at);
   auto state = std::make_shared<CustomOverlaySyncNextBlocksState>(sender, started_at, peers.size(), name_, local,
