@@ -1153,7 +1153,7 @@ void FullNodeImpl::update_validator_telemetry_collector() {
 }
 
 void FullNodeImpl::start_up() {
-  update_shard_actor(ShardIdFull{masterchainId}, true, false);
+  update_shard_actor(ShardIdFull{masterchainId}, true, true);
   if (local_id_.is_zero()) {
     if (adnl_id_.is_zero()) {
       auto pk = ton::PrivateKey{ton::privkeys::Ed25519::random()};

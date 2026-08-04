@@ -24,6 +24,9 @@
 
 #include "wait-block-state.hpp"
 
+#include <cstdlib>
+#include <cstring>
+
 namespace ton {
 
 namespace validator {
@@ -87,9 +90,23 @@ void WaitBlockState::start() {
       }
     });
     td::actor::send_closure(manager_, &ValidatorManager::get_shard_state_from_db, handle_, std::move(P));
+  } else if (handle_->id().id.seqno == 0 && next_static_file_attempt_.is_in_past()) {
+  static bool tontester_mode = []() -> bool {
+    const char* s = std::getenv("TON_TONTESTER");
+    return s != nullptr && !strcmp(s, "1");
+  }();
+  if (tontester_mode && handle_->id().id.seqno == 0 && !checked_celldb_) {
+    checked_celldb_ = true;
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::shared_ptr<vm::CellDbReader>> R) {
+      if (R.is_error()) {
+        td::actor::send_closure(SelfId, &WaitBlockState::start);
+      } else {
+        td::actor::send_closure(SelfId, &WaitBlockState::try_load_zero_state_from_celldb, R.move_as_ok());
+      }
+    });
+    td::actor::send_closure(manager_, &ValidatorManager::get_cell_db_reader, std::move(P));
+    return;
   }
-  else if (handle_->id().id.seqno == 0 && next_static_file_attempt_.is_in_past()) {
-
     next_static_file_attempt_ = td::Timestamp::in(60.0);
     // id.file_hash contains correct file hash of zero state
     // => if file with this sha256 is found it is guaranteed to be correct
@@ -381,6 +398,32 @@ void WaitBlockState::got_state_from_db(td::Ref<ShardState> state, bool force_rea
   } else {
     finish_query();
   }
+}
+
+void WaitBlockState::try_load_zero_state_from_celldb(std::shared_ptr<vm::CellDbReader> reader) {
+  if (force_reading_from_db_) {
+    return;
+  }
+  auto r_cell = reader->load_cell(handle_->id().root_hash.as_slice());
+  if (r_cell.is_error()) {
+    // zero state is not in celldb, fall through to static file / network
+    start();
+    return;
+  }
+  auto r_state = create_shard_state(handle_->id(), r_cell.move_as_ok());
+  if (r_state.is_error()) {
+    LOG(WARNING) << "failed to create zero state from celldb root: " << r_state.move_as_error();
+    start();
+    return;
+  }
+  auto state = r_state.move_as_ok();
+  LOG(INFO) << "loading zero state " << handle_->id() << " from celldb";
+  handle_->set_state_root_hash(handle_->id().root_hash);
+  handle_->set_logical_time(state->get_logical_time());
+  handle_->set_unix_time(state->get_unix_time());
+  handle_->set_is_key_block(handle_->id().is_masterchain());
+  handle_->set_split(state->before_split());
+  got_state_from_db(std::move(state), false);
 }
 
 void WaitBlockState::got_state_from_static_file(td::Ref<ShardState> state, td::BufferSlice data) {

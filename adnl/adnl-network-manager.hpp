@@ -20,6 +20,7 @@
 
 #include <map>
 
+#include "metrics/well-known.h"
 #include "td/actor/PromiseFuture.h"
 #include "td/actor/actor.h"
 #include "td/net/TcpListener.h"
@@ -94,6 +95,7 @@ class AdnlNetworkManagerImpl : public AdnlNetworkManager {
     td::actor::ActorOwn<td::UdpServer> server;
     size_t in_desc{std::numeric_limits<size_t>::max()};
     bool allow_proxy{false};
+    td::UdpServerStats reflected;  // cumulative socket counters already folded into metrics_
   };
 
   OutDesc *choose_out_iface(td::uint8 cat, td::uint32 priority);
@@ -145,7 +147,15 @@ class AdnlNetworkManagerImpl : public AdnlNetworkManager {
   void receive_udp_message(td::UdpMessage message, size_t idx);
   void proxy_register(OutDesc &desc);
 
+  td::actor::Task<> collect(metrics::Context ctx) override;
+
  private:
+  metrics::UdpWireStats metrics_;
+
+  void record_dropped(metrics::Direction dir, metrics::Reason reason) {
+    metrics_.dir.at(dir).dropped.at(reason).inc();
+  }
+
   std::unique_ptr<Callback> callback_;
 
   std::map<td::uint32, std::vector<OutDesc>> out_desc_;
