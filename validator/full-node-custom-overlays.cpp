@@ -1033,7 +1033,7 @@ void FullNodeCustomOverlay::download_next_blocks_from_custom_peers(BlockHandle h
         });
     td::actor::create_actor<DownloadNextBlocks>(
         PSTRING() << "customdownloadnextblocks" << handle->id().id, local_id_, overlay_id_, handle, peer, priority,
-        true, validator_manager_, td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_}, overlays_,
+        false, validator_manager_, td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_}, overlays_,
         td::actor::ActorId<adnl::AdnlExtClient>{}, std::move(P))
         .release();
   }
