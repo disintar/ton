@@ -224,7 +224,7 @@ void WaitBlockData::start() {
     });
 
     auto send_get_block_request =
-        static_cast<void (ValidatorManager::*)(BlockIdExt, td::uint32, td::Promise<ReceivedBlock>)>(
+        static_cast<td::actor::Task<ReceivedBlock> (ValidatorManager::*)(BlockIdExt, td::uint32)>(
             &ValidatorManager::send_get_block_request);
     td::actor::send_closure(manager_, send_get_block_request, handle_->id(), priority_, std::move(P));
   }

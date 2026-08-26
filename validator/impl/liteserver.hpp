@@ -17,6 +17,9 @@
     Copyright 2017-2020 Telegram Systems LLP
 */
 #pragma once
+#include <memory>
+#include <vector>
+
 #include "auto/tl/lite_api.h"
 #include "block/block-auto.h"
 #include "interfaces/block-handle.h"
@@ -193,6 +196,8 @@ class LiteQuery : public td::actor::Actor {
                                    std::vector<std::pair<BlockIdExt, td::BufferSlice>> result);
   void perform_getOutMsgQueueSizes(td::optional<ShardIdFull> shard);
   void continue_getOutMsgQueueSizes(td::optional<ShardIdFull> shard, Ref<MasterchainState> state);
+  void finish_getOutMsgQueueSizes(
+      std::shared_ptr<std::vector<tl_object_ptr<lite_api::liteServer_outMsgQueueSize>>> result);
   void perform_getBlockOutMsgQueueSize(int mode, BlockIdExt blkid);
   void finish_getBlockOutMsgQueueSize();
   void perform_getDispatchQueueInfo(int mode, BlockIdExt blkid, StdSmcAddress after_addr, int max_accounts);

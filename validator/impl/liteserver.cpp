@@ -16,6 +16,7 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
+#include <algorithm>
 #include <ctime>
 
 #include "adnl/utils.hpp"
@@ -3431,11 +3432,19 @@ void LiteQuery::continue_getOutMsgQueueSizes(td::optional<ShardIdFull> shard, Re
       td::actor::send_closure(Self, &LiteQuery::abort_query, R.move_as_error());
       return;
     }
-    td::actor::send_closure(Self, &LiteQuery::finish_query,
-                            create_serialize_tl_object<lite_api::liteServer_outMsgQueueSizes>(
-                                std::move(*res), Collator::get_skip_externals_queue_size()),
-                            false);
+    td::actor::send_closure(Self, &LiteQuery::finish_getOutMsgQueueSizes, std::move(res));
   });
+}
+
+void LiteQuery::finish_getOutMsgQueueSizes(
+    std::shared_ptr<std::vector<tl_object_ptr<lite_api::liteServer_outMsgQueueSize>>> result) {
+  if (std::any_of(result->begin(), result->end(), [](const auto& item) { return item == nullptr; })) {
+    abort_query(td::Status::Error(ErrorCode::notready, "failed to calculate all out message queue sizes"));
+    return;
+  }
+  finish_query(create_serialize_tl_object<lite_api::liteServer_outMsgQueueSizes>(
+                   std::move(*result), Collator::get_skip_externals_queue_size()),
+               false);
 }
 
 void LiteQuery::perform_getBlockOutMsgQueueSize(int mode, BlockIdExt blkid) {

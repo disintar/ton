@@ -99,7 +99,7 @@ td::actor::Task<> DownloadNextBlocks::run() {
       auto block =
           co_await td::actor::ask(validator_manager_, &ValidatorManagerInterface::get_block_data_from_db, next_handle);
       ReceivedBlock result{.id = block->block_id(), .data = block->data()};
-      handle_ = co_await td::actor::ask(validator_manager_, &ValidatorManagerInterface::on_next_masterchain_block,
+      handle_ = co_await td::actor::ask(validator_manager_, &ValidatorManagerInterface::got_next_masterchain_block,
                                         std::move(result));
       success_ = success_local_ = true;
       co_return {};
@@ -200,7 +200,7 @@ td::actor::Task<> DownloadNextBlocks::process_block(tl_object_ptr<ton_api::tonNo
   co_await td::actor::ask(validator_manager_, &ValidatorManagerInterface::validate_block_is_next_proof, handle_->id(),
                           id, std::move(proof));
   ReceivedBlock result{.id = id, .data = std::move(block_data)};
-  handle_ = co_await td::actor::ask(validator_manager_, &ValidatorManagerInterface::on_next_masterchain_block,
+  handle_ = co_await td::actor::ask(validator_manager_, &ValidatorManagerInterface::got_next_masterchain_block,
                                     std::move(result));
   success_ = true;
   VLOG(FULL_NODE_DEBUG) << "Downloaded block " << id;
