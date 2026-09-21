@@ -46,6 +46,7 @@
 #include "full-node-serializer.hpp"
 #include "full-node-shard-queries.hpp"
 #include "full-node-shard.hpp"
+#include "external-message-relay.h"
 #include "overlays.h"
 
 namespace ton {
@@ -1047,6 +1048,10 @@ void FullNodeShardImpl::send_external_message(td::BufferSlice data) {
   td::Bits256 hash = td::sha256_bits256(data);
   if (processed_ext_msg_broadcasts_.count(hash)) {
     return;
+  }
+  if (trace_external_message_relay()) {
+    LOG(WARNING) << "[ext-message-relay] stage=public.broadcast boc_hash=" << hash.to_hex()
+                 << " overlay=" << overlay_id_;
   }
   my_ext_msg_broadcasts_.insert(hash);
   auto B = create_serialize_tl_object<ton_api::tonNode_externalMessageBroadcast>(

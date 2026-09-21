@@ -31,6 +31,7 @@
 #include "td/utils/LRUCache.h"
 
 #include "full-node-custom-overlays.hpp"
+#include "external-message-relay.h"
 #include "full-node-fast-sync-overlays.hpp"
 #include "rate-limiter.h"
 
@@ -71,6 +72,7 @@ class FullNodeImpl : public FullNode {
   void archive_sync_complete(BlockHandle top_block);
   void send_ihr_message(AccountIdPrefixFull dst, td::BufferSlice data);
   void send_ext_message(AccountIdPrefixFull dst, td::BufferSlice data);
+  void send_ext_message_to_public(AccountIdPrefixFull dst, td::BufferSlice data);
   void send_ext_message_relay_all(AccountIdPrefixFull dst, td::BufferSlice data);
   void send_ext_message_raw_all(td::BufferSlice data);
   void send_ext_message_impl(AccountIdPrefixFull dst, td::BufferSlice data, bool force_public);
@@ -184,6 +186,7 @@ class FullNodeImpl : public FullNode {
 
   td::Promise<td::Unit> started_promise_;
   FullNodeOptions opts_;
+  ExternalMessageRelayCache external_message_relay_cache_;
 
   FullNodeFastSyncOverlays fast_sync_overlays_;
 

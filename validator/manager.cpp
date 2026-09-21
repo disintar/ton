@@ -469,6 +469,15 @@ void ValidatorManagerImpl::get_key_block_proof_link(BlockIdExt block_id, td::Pro
 }
 
 td::actor::Task<> ValidatorManagerImpl::new_external_message_broadcast(td::BufferSlice data, int priority) {
+  co_return co_await check_external_message_broadcast(std::move(data), priority, false);
+}
+
+td::actor::Task<> ValidatorManagerImpl::new_external_message_custom_broadcast(td::BufferSlice data, int priority) {
+  co_return co_await check_external_message_broadcast(std::move(data), priority, true);
+}
+
+td::actor::Task<> ValidatorManagerImpl::check_external_message_broadcast(td::BufferSlice data, int priority,
+                                                                        bool relay_to_public) {
   if (!started_) {
     co_return td::Status::Error(ErrorCode::notready, "node not synced");
   }
@@ -490,6 +499,11 @@ td::actor::Task<> ValidatorManagerImpl::new_external_message_broadcast(td::Buffe
   }
   VLOG(validator, DEBUG) << "Checked external message broadcast to " << check_result.message->wc() << ":"
                          << check_result.message->addr().to_hex() << " (prio=" << priority << ")";
+  if (relay_to_public) {
+    // Only custom-overlay input is relayed, and only after the normal admission checks.
+    // Do not call send_ext_message: that would feed the message back into custom overlays.
+    callback_->send_ext_message_to_public(check_result.message->shard(), check_result.message->serialize());
+  }
   co_return td::Unit{};
 }
 

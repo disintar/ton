@@ -266,6 +266,8 @@ class ValidatorManagerInterface : public td::actor::Actor {
     }
     virtual void send_ext_message(AccountIdPrefixFull dst, td::BufferSlice data) {
     }
+    virtual void send_ext_message_to_public(AccountIdPrefixFull dst, td::BufferSlice data) {
+    }
     virtual void send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) {
     }
     virtual void send_block_candidate(BlockIdExt block_id, CatchainSeqno cc_seqno, td::uint32 validator_set_hash,
@@ -383,6 +385,9 @@ class ValidatorManagerInterface : public td::actor::Actor {
   virtual void write_handle(BlockHandle handle, td::Promise<td::Unit> promise) = 0;
 
   virtual td::actor::Task<> new_external_message_broadcast(td::BufferSlice data, int priority) = 0;
+  virtual td::actor::Task<> new_external_message_custom_broadcast(td::BufferSlice data, int priority) {
+    co_return co_await new_external_message_broadcast(std::move(data), priority);
+  }
   virtual td::actor::Task<> new_external_message_query(td::BufferSlice data) {
     co_return td::Status::Error("not implemented");
   }

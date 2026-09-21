@@ -411,6 +411,8 @@ class ValidatorManagerImpl : public ValidatorManager {
   //void get_block_description(BlockIdExt block_id, td::Promise<BlockDescription> promise) override;
 
   td::actor::Task<> new_external_message_broadcast(td::BufferSlice data, int priority) override;
+  td::actor::Task<> new_external_message_custom_broadcast(td::BufferSlice data, int priority) override;
+  td::actor::Task<> check_external_message_broadcast(td::BufferSlice data, int priority, bool relay_to_public);
   td::actor::Task<> new_external_message_query(td::BufferSlice data) override;
   td::actor::Task<> new_external_message_query_cont(td::Ref<ExtMessage> message,
                                                     td::actor::StartedTask<> wait_allow_broadcast);

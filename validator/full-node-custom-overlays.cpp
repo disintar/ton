@@ -33,6 +33,7 @@
 #include "block-propagation-trace.h"
 #include "custom-overlay-metrics.h"
 #include "full-node-custom-overlays.hpp"
+#include "external-message-relay.h"
 #include "full-node-shard-queries.hpp"
 #include "full-node-serializer.hpp"
 
@@ -513,7 +514,11 @@ void FullNodeCustomOverlay::process_broadcast(PublicKeyHash src, ton_api::tonNod
   }
   VLOG(FULL_NODE_DEBUG) << "Got external message in custom overlay \"" << name_ << "\" from " << src
                         << " (priority=" << it->second << ")";
-  td::actor::ask(validator_manager_, &ValidatorManagerInterface::new_external_message_broadcast,
+  if (trace_external_message_relay()) {
+    LOG(WARNING) << "[ext-message-relay] stage=custom.recv overlay=" << name_ << " source=" << src
+                 << " boc_hash=" << td::sha256_bits256(query.message_->data_).to_hex();
+  }
+  td::actor::ask(validator_manager_, &ValidatorManagerInterface::new_external_message_custom_broadcast,
                  std::move(query.message_->data_), it->second)
       .detach();
 }
