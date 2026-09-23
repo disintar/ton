@@ -483,7 +483,6 @@ void FullNodeImpl::send_ext_message_to_public(AccountIdPrefixFull dst, td::Buffe
   if (opts_.config_.ext_messages_broadcast_disabled_) {
     return;
   }
-  toncenter::submit(data.as_slice());
   auto shard = get_shard(dst);
   if (shard.empty()) {
     VLOG(FULL_NODE_WARNING) << "dropping custom overlay ext message to unknown shard";

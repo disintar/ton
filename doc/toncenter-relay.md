@@ -1,7 +1,9 @@
 # Toncenter relay from the node
 
-An independent C++ module adds a best-effort HTTP path after external-message admission.
-Both direct LiteServer sends and validated private-overlay relays submit to it.
+An independent C++ module adds a best-effort HTTP path. Direct LiteServer sends submit
+after local admission. Messages from authorized private-overlay senders submit immediately,
+before local execution validation; Toncenter validates them against its own state.
+Local admission is still required before relaying to the public TON overlay.
 Public-overlay input is not sent to Toncenter. The global broadcast-disable flag is respected.
 Native TON overlay delivery never waits for the HTTP response.
 
@@ -32,6 +34,8 @@ The existing node Prometheus endpoint exports:
 - ton_node_toncenter_enabled
 - ton_node_toncenter_requests_total (actual HTTP attempts)
 - ton_node_toncenter_accepted_total (accepted API responses)
+- ton_node_toncenter_private_overlay_requests_total (subset from private overlay)
+- ton_node_toncenter_private_overlay_accepted_total (accepted subset from private overlay)
 - ton_node_toncenter_network_errors_total
 - ton_node_toncenter_http_errors_total (excluding 429)
 - ton_node_toncenter_rate_limited_total (429)

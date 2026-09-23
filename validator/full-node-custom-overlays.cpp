@@ -14,6 +14,7 @@
     You should have received a copy of the GNU Lesser General Public License
     along with TON Blockchain Library.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "toncenter-relay.h"
 #include <algorithm>
 #include <mutex>
 
@@ -517,6 +518,11 @@ void FullNodeCustomOverlay::process_broadcast(PublicKeyHash src, ton_api::tonNod
   if (trace_external_message_relay()) {
     LOG(WARNING) << "[ext-message-relay] stage=custom.recv overlay=" << name_ << " source=" << src
                  << " boc_hash=" << td::sha256_bits256(query.message_->data_).to_hex();
+  }
+  // Authorized overlay peers already admitted the message. Let Toncenter validate
+  // against its own state even if our local execution check rejects the message.
+  if (!opts_.config_.ext_messages_broadcast_disabled_) {
+    toncenter::submit(query.message_->data_.as_slice(), toncenter::Source::PrivateOverlay);
   }
   td::actor::ask(validator_manager_, &ValidatorManagerInterface::new_external_message_custom_broadcast,
                  std::move(query.message_->data_), it->second)

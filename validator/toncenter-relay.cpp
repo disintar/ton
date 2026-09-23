@@ -47,7 +47,7 @@ class Relay {
     ready_.notify_all();
     if (worker_.joinable()) worker_.join();
   }
-  void enqueue(td::Slice boc) {
+  void enqueue(td::Slice boc, Source source) {
     if (!enabled_ || boc.empty() || boc.size() > 65536) return;
     auto hash = td::hex_encode(td::sha256(boc));
     std::lock_guard<std::mutex> lock(mutex_);
@@ -56,13 +56,13 @@ class Relay {
     if (!seen_.admit(hash, std::chrono::duration<double>(now.time_since_epoch()).count())) {
       ++metrics().duplicates; return;
     }
-    queue_.push_back({boc.str(), std::move(hash), now});
+    queue_.push_back({boc.str(), std::move(hash), now, source});
     ++metrics().enqueued;
     metrics().queue_size = queue_.size();
     ready_.notify_one();
   }
  private:
-  struct Item { std::string boc, hash; Clock::time_point enqueued; };
+  struct Item { std::string boc, hash; Clock::time_point enqueued; Source source; };
   void run() {
     auto next = Clock::now();
     while (true) {
@@ -78,15 +78,21 @@ class Relay {
       }
       if (Clock::now() - item.enqueued > std::chrono::seconds(5)) { ++metrics().expired; continue; }
       ++metrics().attempts;
+      if (item.source == Source::PrivateOverlay) ++metrics().private_attempts;
       auto response = post_message(endpoint, api_key_, item.boc);
       next = Clock::now() + (response.http_status == 429 ? std::chrono::milliseconds(5000) : interval_);
       const char *result;
       if (response.transport_error) { ++metrics().network_errors; result = "network_error"; }
-      else if (response.accepted) { ++metrics().accepted; result = "accepted"; }
+      else if (response.accepted) {
+        ++metrics().accepted;
+        if (item.source == Source::PrivateOverlay) ++metrics().private_accepted;
+        result = "accepted";
+      }
       else if (response.http_status == 429) { ++metrics().rate_limited; result = "rate_limited"; }
       else if (response.http_status != 200) { ++metrics().http_errors; result = "http_error"; }
       else { ++metrics().invalid_responses; result = "invalid_response"; }
-      LOG(WARNING) << "[toncenter-relay] boc_hash=" << item.hash << " result=" << result
+      LOG(WARNING) << "[toncenter-relay] boc_hash=" << item.hash << " source=" << (item.source == Source::PrivateOverlay ? "private_overlay" : "liteserver")
+                   << " result=" << result
                    << " http_status=" << response.http_status << " transport_error=" << response.transport_error
                    << " message_hash=" << response.message_hash;
     }
@@ -142,5 +148,5 @@ Response post_message(const std::string &url, const std::string &api_key, td::Sl
   }
   return result;
 }
-void submit(td::Slice boc) { static Relay relay; relay.enqueue(boc); }
+void submit(td::Slice boc, Source source) { static Relay relay; relay.enqueue(boc, source); }
 }
