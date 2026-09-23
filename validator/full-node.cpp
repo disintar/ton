@@ -16,6 +16,7 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
+#include "toncenter-relay.h"
 #include "common/delay.h"
 #include "impl/out-msg-queue-proof.hpp"
 #include "interfaces/validator-full-id.h"
@@ -482,6 +483,7 @@ void FullNodeImpl::send_ext_message_to_public(AccountIdPrefixFull dst, td::Buffe
   if (opts_.config_.ext_messages_broadcast_disabled_) {
     return;
   }
+  toncenter::submit(data.as_slice());
   auto shard = get_shard(dst);
   if (shard.empty()) {
     VLOG(FULL_NODE_WARNING) << "dropping custom overlay ext message to unknown shard";
@@ -498,6 +500,9 @@ void FullNodeImpl::send_ext_message_to_public(AccountIdPrefixFull dst, td::Buffe
 }
 
 void FullNodeImpl::send_ext_message(AccountIdPrefixFull dst, td::BufferSlice data) {
+  if (!opts_.config_.ext_messages_broadcast_disabled_) {
+    toncenter::submit(data.as_slice());
+  }
   bool skip_public = false;
   for (auto &[_, private_overlay] : custom_overlays_) {
     if (private_overlay.params_.send_shard(dst.as_leaf_shard())) {
@@ -1172,6 +1177,7 @@ void FullNodeImpl::update_validator_telemetry_collector() {
 }
 
 void FullNodeImpl::start_up() {
+  toncenter::submit(td::Slice());
   update_shard_actor(ShardIdFull{masterchainId}, true, true);
   if (local_id_.is_zero()) {
     if (adnl_id_.is_zero()) {

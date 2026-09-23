@@ -4,3 +4,13 @@ add_executable(test-external-message-relay test-external-message-relay.cpp)
 target_include_directories(test-external-message-relay PRIVATE ${PROJECT_SOURCE_DIR})
 target_link_libraries(test-external-message-relay PRIVATE td-test-main tdutils)
 add_test(NAME test-external-message-relay COMMAND test-external-message-relay)
+
+if(TON_USE_TONCENTER_RELAY)
+add_executable(toncenter-relay-client toncenter-relay-client.cpp)
+target_link_libraries(toncenter-relay-client PRIVATE toncenter-relay)
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+  add_test(NAME test-toncenter-relay-http
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-toncenter-relay-http.py $<TARGET_FILE:toncenter-relay-client>)
+endif()
+endif()

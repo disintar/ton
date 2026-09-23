@@ -1,3 +1,4 @@
+#include "validator/toncenter-relay-metrics.h"
 #include "validator-engine/prometheus/PrometheusExporterActor.h"
 #include "validator/custom-overlay-metrics.h"
 
@@ -211,6 +212,7 @@ namespace ton {
     std::string TonNodeStatus::to_text() const {
       std::stringstream ss;
 
+      ss << ton::validator::toncenter::metrics().prometheus();
       ss << "# Validator manager stats\n";
       for (const auto &x : validator_manager_stats) {
         append_validator_manager_metric(ss, x.first, x.second);

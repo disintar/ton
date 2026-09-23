@@ -254,3 +254,13 @@ target_link_libraries(validator-hardfork PRIVATE validator-common validator-db)
 target_link_libraries(validator-hardfork PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} tdactor adnl rldp2 tl_api dht tdfec overlay ton_db)
 
 target_link_libraries(full-node PRIVATE ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES} tdactor adnl rldp2 tl_api dht tdfec overlay ton_db)
+
+option(TON_USE_TONCENTER_RELAY "Build the optional Toncenter HTTPS relay" OFF)
+if(TON_USE_TONCENTER_RELAY)
+  find_package(CURL REQUIRED)
+  add_library(toncenter-relay STATIC toncenter-relay.cpp)
+  target_include_directories(toncenter-relay PUBLIC ${PROJECT_SOURCE_DIR})
+  target_compile_definitions(toncenter-relay PUBLIC TON_WITH_TONCENTER_RELAY=1)
+  target_link_libraries(toncenter-relay PUBLIC tdutils CURL::libcurl)
+  target_link_libraries(full-node PRIVATE toncenter-relay)
+endif()
