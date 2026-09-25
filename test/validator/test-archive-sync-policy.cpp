@@ -4,23 +4,32 @@
 
 using namespace ton::validator;
 
-TEST(ArchiveSync, HandsSmallWarmRestartGapToLiveDownloader) {
-  ASSERT_TRUE(archive_sync_near_live(100.0, 90.0, 85.0));
-  ASSERT_TRUE(archive_sync_near_live(100.0, 80.001, 80.001));
+TEST(ArchiveSync, HandsBoundedArchiveGapToLiveDownloader) {
+  ASSERT_TRUE(archive_sync_near_live(100.0, 70.0, 56.0));
+  ASSERT_TRUE(archive_sync_near_live(100.0, 40.001, 40.001));
 }
 
 TEST(ArchiveSync, RequiresBothChainsStrictlyWithinWindow) {
-  ASSERT_TRUE(!archive_sync_near_live(100.0, 80.0, 99.0));
-  ASSERT_TRUE(!archive_sync_near_live(100.0, 99.0, 80.0));
-  ASSERT_TRUE(!archive_sync_near_live(100.0, 99.0, 70.0));
-  ASSERT_TRUE(!archive_sync_near_live(100.0, 70.0, 99.0));
+  ASSERT_TRUE(!archive_sync_near_live(100.0, 40.0, 99.0));
+  ASSERT_TRUE(!archive_sync_near_live(100.0, 99.0, 40.0));
+  ASSERT_TRUE(!archive_sync_near_live(100.0, 99.0, 30.0));
+  ASSERT_TRUE(!archive_sync_near_live(100.0, 30.0, 99.0));
 }
 
-TEST(ArchiveSync, LeavesRecoveryHysteresis) {
-  // A just-admitted state remains below the recovery threshold even after
-  // nine seconds without progress. Recovery itself keeps its thirty-second bound.
-  const double oldest_admitted = 80.001;
-  ASSERT_TRUE(archive_sync_near_live(100.0, oldest_admitted, oldest_admitted));
-  ASSERT_TRUE(109.0 - oldest_admitted < kLiveArchiveSyncRecoveryLagSeconds);
+TEST(ArchiveSync, CatchupGraceExpiresEvenWithoutProgress) {
+  const double deadline = 100.0 + kLiveSyncCatchupGraceSeconds;
+  ASSERT_TRUE(!live_archive_recovery_needed(44.0, 44.0, false, 100.0, deadline));
+  ASSERT_TRUE(!live_archive_recovery_needed(100.0, 110.0, true, 159.999, deadline));
+  ASSERT_TRUE(live_archive_recovery_needed(100.0, 110.0, true, 160.0, deadline));
+  ASSERT_EQ(kLiveSyncCatchupGraceSeconds, 60.0);
+}
+
+TEST(ArchiveSync, NormalRecoveryBoundsResumeAfterGrace) {
+  ASSERT_TRUE(!live_archive_recovery_needed(1.0, 2.0, false, 160.0, 160.0));
+  ASSERT_TRUE(!live_archive_recovery_needed(30.0, 30.0, false, 160.0, 160.0));
+  ASSERT_TRUE(live_archive_recovery_needed(30.001, 1.0, false, 160.0, 160.0));
+  ASSERT_TRUE(live_archive_recovery_needed(1.0, 30.001, false, 160.0, 160.0));
+  ASSERT_TRUE(live_archive_recovery_needed(1.0, 1.0, true, 160.0, 160.0));
+  ASSERT_TRUE(live_archive_recovery_needed(44.0, 44.0, false, 100.0, 0.0));
   ASSERT_EQ(kLiveArchiveSyncRecoveryLagSeconds, 30.0);
 }

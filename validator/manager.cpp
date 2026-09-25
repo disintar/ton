@@ -2448,6 +2448,10 @@ void ValidatorManagerImpl::finish_prestart_sync() {
 }
 
 void ValidatorManagerImpl::completed_prestart_sync() {
+  live_sync_catchup_grace_until_ = td::Time::now() + kLiveSyncCatchupGraceSeconds;
+  LOG(WARNING) << "[live-sync] stage=catchup_start mc=" << last_masterchain_block_handle_->id()
+               << " shard_client=" << (shard_client_handle_ ? shard_client_handle_->id().to_str() : "none")
+               << " grace_seconds=" << kLiveSyncCatchupGraceSeconds;
   if (started_) {
     LOG(WARNING) << "[archive-sync] stage=recover_complete mc=" << last_masterchain_block_handle_->id()
                  << " shard_client=" << (shard_client_handle_ ? shard_client_handle_->id().to_str() : "none")
@@ -2471,8 +2475,8 @@ void ValidatorManagerImpl::maybe_recover_archive_sync() {
   auto master_lag = now - last_masterchain_block_handle_->unix_time();
   auto shard_lag = now - shard_client_handle_->unix_time();
   auto shard_gap = shard_client_handle_->id().seqno() + 16 < last_masterchain_seqno_;
-  if (master_lag <= kLiveArchiveSyncRecoveryLagSeconds && shard_lag <= kLiveArchiveSyncRecoveryLagSeconds &&
-      !shard_gap) {
+  if (!live_archive_recovery_needed(master_lag, shard_lag, shard_gap, td::Time::now(),
+                                    live_sync_catchup_grace_until_)) {
     return;
   }
   LOG(WARNING) << "[archive-sync] stage=recover_start mc=" << last_masterchain_block_handle_->id()

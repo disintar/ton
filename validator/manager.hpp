@@ -750,6 +750,7 @@ class ValidatorManagerImpl : public ValidatorManager {
 
   bool started_ = false;
   bool archive_sync_active_ = false;
+  double live_sync_catchup_grace_until_ = 0.0;
 
  private:
   double state_ttl() const {

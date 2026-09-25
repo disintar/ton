@@ -286,6 +286,8 @@ td::actor::Task<> FullNodeShardImpl::get_next_blocks_loop() {
   CHECK(shard_.is_masterchain());
   CHECK(handle_);
   td::uint32 attempt = 0;
+  bool logged_progress = false;
+  LOG(WARNING) << "[live-sync] stage=download_loop_start mc=" << handle_->id();
   while (true) {
     ++attempt;
     auto prev_id = handle_->id();
@@ -296,6 +298,11 @@ td::actor::Task<> FullNodeShardImpl::get_next_blocks_loop() {
         return;
       }
       handle_ = std::move(next_handle);
+      if (!logged_progress) {
+        logged_progress = true;
+        LOG(WARNING) << "[live-sync] stage=first_progress prev=" << prev_id << " mc=" << handle_->id()
+                     << " source=" << source;
+      }
       if (sync_promise_) {
         if (handle_->unix_time() > td::Clocks::system() - 300) {
           sync_promise_.set_value(td::Unit());
@@ -339,7 +346,7 @@ td::actor::Task<> FullNodeShardImpl::get_next_blocks_loop() {
       continue;
     }
     attempt = 0;
-    apply_next_handle(R.move_as_ok(), "public");
+    apply_next_handle(R.move_as_ok(), "overlay_race");
   }
 }
 
