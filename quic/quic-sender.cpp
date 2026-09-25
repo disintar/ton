@@ -761,8 +761,23 @@ void QuicSender::on_request(std::shared_ptr<Connection> connection, QuicStreamID
 
 td::actor::Task<> QuicSender::on_inbound_query(std::shared_ptr<Connection> connection, QuicStreamID stream_id,
                                                td::BufferSlice query) {
-  auto answer = co_await td::actor::ask(adnl_, &adnl::AdnlPeerTable::deliver_query, connection->path.second,
-                                        connection->path.first, std::move(query));
+  const auto magic = metrics::resolve_tl_magic(query.as_slice());
+  auto result = co_await td::actor::ask(adnl_, &adnl::AdnlPeerTable::deliver_query, connection->path.second,
+                                        connection->path.first, std::move(query)).wrap();
+  if (result.is_error()) {
+    // An application rejection has no wire answer. Reset both directions so the caller can
+    // immediately try another peer and the failed query does not keep stream credit occupied.
+    // Do not log arbitrary application error text: it may contain request data.
+    static metrics::SlowLogThrottle throttle;
+    if (throttle.take()) {
+      LOG(INFO) << "quic inbound query rejected peer=" << connection->path.second
+                << " tl=" << metrics::tl_name(magic) << " error_code=" << result.error().code()
+                << " action=reset_stream";
+    }
+    td::actor::send_closure(connection->server, &QuicServer::shutdown_stream, connection->cid, stream_id);
+    co_return td::Unit{};
+  }
+  auto answer = result.move_as_ok();
   app_.record(metrics::Kind::answer, metrics::Direction::out, answer.as_slice());
   td::BufferSlice wire_data = create_serialize_tl_object<ton_api::quic_answer>(std::move(answer));
   td::actor::send_closure(connection->server, &QuicServer::send_stream, connection->cid, stream_id,

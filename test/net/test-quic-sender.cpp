@@ -1411,6 +1411,35 @@ TEST(QuicSender, EmptyMessage) {
   });
 }
 
+TEST(QuicSender, ApplicationErrorResetsStreamWithoutWaitingForTimeout) {
+  run_test([](TestRunner& t) -> td::actor::Task<td::Unit> {
+    auto a = co_await t.create_node("reject-a", next_port());
+    auto b = co_await t.create_node("reject-b", next_port());
+    t.add_peer(a, b);
+    t.add_peer(b, a);
+    td::actor::send_closure(b.adnl, &ton::adnl::Adnl::subscribe, b.id, "R",
+                            std::make_unique<LimitedEchoCallback>(1));
+    auto warmup = co_await t.send_query(a, b, "warmup");
+    ASSERT_EQ(warmup.as_slice(), td::Slice("Qwarmup"));
+
+    // Repeat application rejections on the same connection, then verify healthy queries still work.
+    for (int i = 0; i < 8; ++i) {
+      auto result = std::make_shared<std::optional<td::Result<td::BufferSlice>>>();
+      td::actor::send_closure(
+          a.quic_sender, &ton::quic::QuicSender::send_query_ex, a.id, b.id, std::string("R"),
+          td::make_promise([result](td::Result<td::BufferSlice> r) mutable { *result = std::move(r); }),
+          td::Timestamp::in(20.0), td::BufferSlice("Rreject"), 2000);
+      co_await t.wait_until([result] { return result->has_value(); }, 3.0);
+      ASSERT_TRUE(result->has_value());
+      ASSERT_TRUE(result->value().is_error());
+      ASSERT_TRUE(result->value().error().message().str().find("timeout") == std::string::npos);
+    }
+    auto response = co_await t.send_query(a, b, "after");
+    ASSERT_EQ(response.as_slice(), td::Slice("Qafter"));
+    co_return td::Unit{};
+  });
+}
+
 TEST(QuicSender, ResponseSizeLimit) {
   run_test([](TestRunner& t) -> td::actor::Task<td::Unit> {
     auto a = co_await t.create_node("lim-a", next_port());
