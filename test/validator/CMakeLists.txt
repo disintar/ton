@@ -19,3 +19,8 @@ add_executable(test-archive-peer-selection test-archive-peer-selection.cpp)
 target_include_directories(test-archive-peer-selection PRIVATE ${PROJECT_SOURCE_DIR})
 target_link_libraries(test-archive-peer-selection PRIVATE td-test-main tdutils)
 add_test(NAME test-archive-peer-selection COMMAND test-archive-peer-selection)
+
+add_executable(test-archive-sync-policy test-archive-sync-policy.cpp)
+target_include_directories(test-archive-sync-policy PRIVATE ${PROJECT_SOURCE_DIR})
+target_link_libraries(test-archive-sync-policy PRIVATE td-test-main tdutils)
+add_test(NAME test-archive-sync-policy COMMAND test-archive-sync-policy)

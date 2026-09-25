@@ -355,6 +355,8 @@ void DownloadArchiveSlice::try_download(int index){
       return;
     }
     offset_ = 0;
+    prev_logged_sum_ = 0;
+    prev_logged_timer_ = td::Timer();
   }
   download_from_ = download_from_list_[index];
   current_peer_index_ = index;

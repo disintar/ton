@@ -42,6 +42,7 @@
 #include "ton/ton-tl.hpp"
 #include "validator/stats-merger.h"
 
+#include "archive-sync-policy.h"
 #include "checksum.h"
 #include "fabric.h"
 #include "get-next-key-blocks.h"
@@ -57,13 +58,6 @@
 namespace ton {
 
 namespace validator {
-
-namespace {
-
-constexpr double kPrestartArchiveSyncTargetLagSeconds = 2.0;
-constexpr double kLiveArchiveSyncRecoveryLagSeconds = 30.0;
-
-}  // namespace
 
 void ValidatorManagerImpl::validate_block_is_next_proof(BlockIdExt prev_block_id, BlockIdExt next_block_id,
                                                         td::BufferSlice proof, td::Promise<td::Unit> promise) {
@@ -2358,7 +2352,8 @@ bool ValidatorManagerImpl::out_of_sync() {
   if (shard_client_handle_->id().seqno() + 16 < last_masterchain_seqno_) {
     return true;
   }
-  if (last_masterchain_block_handle_->unix_time() + kPrestartArchiveSyncTargetLagSeconds > td::Clocks::system()) {
+  if (archive_sync_near_live(td::Clocks::system(), last_masterchain_block_handle_->unix_time(),
+                             shard_client_handle_->unix_time())) {
     return false;
   }
 
