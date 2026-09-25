@@ -14,3 +14,8 @@ if(Python3_Interpreter_FOUND)
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-toncenter-relay-http.py $<TARGET_FILE:toncenter-relay-client>)
 endif()
 endif()
+
+add_executable(test-archive-peer-selection test-archive-peer-selection.cpp)
+target_include_directories(test-archive-peer-selection PRIVATE ${PROJECT_SOURCE_DIR})
+target_link_libraries(test-archive-peer-selection PRIVATE td-test-main tdutils)
+add_test(NAME test-archive-peer-selection COMMAND test-archive-peer-selection)

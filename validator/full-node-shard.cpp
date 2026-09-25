@@ -26,6 +26,7 @@
 #include "common/delay.h"
 #include "impl/out-msg-queue-proof.hpp"
 #include "net/download-archive-slice.hpp"
+#include "net/archive-peer-selection.h"
 #include "net/download-block-new.hpp"
 #include "net/download-next-blocks.hpp"
 #include "net/download-proof.hpp"
@@ -1219,27 +1220,21 @@ void FullNodeShardImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFu
     return left->roundtrip < right->roundtrip;
   });
 
-  std::vector<adnl::AdnlNodeIdShort> archive_peers;
-  archive_peers.reserve(std::min<std::size_t>(candidates.size(), 5));
+  std::vector<adnl::AdnlNodeIdShort> ranked_peers;
+  ranked_peers.reserve(candidates.size() + hint_peers.size());
   for (const auto *candidate : candidates) {
-    if (archive_peers.size() == 5) {
-      break;
-    }
-    archive_peers.push_back(candidate->adnl_id);
+    ranked_peers.push_back(candidate->adnl_id);
   }
-  if (archive_peers.empty() && !hint_peers.empty()) {
-    std::sort(hint_peers.begin(), hint_peers.end());
-    hint_peers.erase(std::unique(hint_peers.begin(), hint_peers.end()), hint_peers.end());
-    for (const auto &peer : hint_peers) {
-      if (archive_peers.size() == 5) {
-        break;
-      }
-      archive_peers.push_back(peer);
+  for (const auto &peer : hint_peers) {
+    if (std::find(ranked_peers.begin(), ranked_peers.end(), peer) == ranked_peers.end()) {
+      ranked_peers.push_back(peer);
     }
   }
+  auto archive_peers = archive_peer_window(ranked_peers, archive_peer_cursor_, 5);
 
   auto first_peer = archive_peers.empty() ? adnl::AdnlNodeIdShort::zero() : archive_peers.front();
-  auto first = candidates.empty() ? &Neighbour::zero : candidates.front();
+  auto first_it = neighbours_.find(first_peer);
+  auto first = first_it == neighbours_.end() ? &Neighbour::zero : &first_it->second;
   LOG(WARNING) << "[archive-sync] stage=public.choose_neighbour seqno=" << masterchain_seqno
                << " shard=" << shard_prefix.to_str() << " local_shard=" << shard_.to_str()
                << " peer=" << first_peer << " peer_count=" << archive_peers.size()

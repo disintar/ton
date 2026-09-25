@@ -26,6 +26,7 @@
 
 #include "validator/block-propagation-trace.h"
 #include "download-archive-slice.hpp"
+#include "archive-peer-selection.h"
 
 namespace ton {
 
@@ -341,6 +342,20 @@ void DownloadArchiveSlice::try_download(int index){
     return;
   }
 
+  // Archive ids and byte layouts are peer-local. Never append a new peer's
+  // bytes to a partially downloaded archive from the previous peer.
+  ++archive_slice_query_id_;
+  if (offset_ != 0) {
+    auto status = fd_.seek(0);
+    if (status.is_ok()) {
+      status = fd_.truncate_to_current_position(0);
+    }
+    if (status.is_error()) {
+      abort_query(std::move(status));
+      return;
+    }
+    offset_ = 0;
+  }
   download_from_ = download_from_list_[index];
   current_peer_index_ = index;
   current_peer_count_ = static_cast<int>(download_from_list_.size());
@@ -452,6 +467,14 @@ void DownloadArchiveSlice::got_archive_info_result(td::uint64 query_id, int inde
     archive_info_finished_by_peer_[index] = true;
     CHECK(archive_info_pending_ > 0);
     archive_info_pending_--;
+    if (result.is_ok()) {
+      auto info = fetch_tl_object<ton_api::tonNode_ArchiveInfo>(result.ok().clone(), true);
+      if (info.is_error()) {
+        result = info.move_as_error();
+      } else if (info.ok()->get_id() != ton_api::tonNode_archiveInfo::ID) {
+        result = td::Status::Error(ErrorCode::notready, "archive not found");
+      }
+    }
     if (result.is_error()) {
       auto error = result.move_as_error();
       auto reason = archive_status_reason(error.clone());
@@ -479,8 +502,11 @@ void DownloadArchiveSlice::got_archive_info_result(td::uint64 query_id, int inde
                  << " shard=" << shard_prefix_.to_str()
                  << " peer=" << peer << " peer_index=" << index << " peers=" << total_nodes
                  << " mode=parallel ms=" << archive_elapsed_ms(started_at) << " result=ok";
+    // Re-query the retained candidates on failure; their in-flight responses
+    // belong to this info race and will be ignored after its generation changes.
+    archive_promote_peer(download_from_list_, static_cast<std::size_t>(index));
     download_from_ = peer;
-    current_peer_index_ = index;
+    current_peer_index_ = 0;
     current_peer_count_ = total_nodes;
     ++archive_info_query_id_;
     archive_info_parallel_ = false;

@@ -299,6 +299,7 @@ class FullNodeShardImpl : public FullNodeShard {
   overlay::OverlayPrivacyRules rules_;
 
   std::map<adnl::AdnlNodeIdShort, Neighbour> neighbours_;
+  std::size_t archive_peer_cursor_ = 0;
   td::Timestamp reload_neighbours_at_;
   td::Timestamp ping_neighbours_at_;
   adnl::AdnlNodeIdShort last_pinged_neighbour_ = adnl::AdnlNodeIdShort::zero();
