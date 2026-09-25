@@ -19,6 +19,8 @@
 #pragma once
 
 #include <vector>
+#include <functional>
+#include "archive-peer-selection.h"
 
 #include "adnl/adnl-ext-client.h"
 #include "adnl/adnl-node.h"
@@ -34,6 +36,11 @@ namespace validator {
 
 namespace fullnode {
 
+struct ArchivePeerFeedback {
+  std::function<void(adnl::AdnlNodeIdShort, ArchivePeerResult)> report;
+  bool prefer_first = false;
+};
+
 class DownloadArchiveSlice : public td::actor::Actor {
  public:
   DownloadArchiveSlice(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
@@ -46,7 +53,8 @@ class DownloadArchiveSlice : public td::actor::Actor {
                        std::vector<adnl::AdnlNodeIdShort> download_from_list = {},
                        bool use_sender_for_prepare_query = false, bool use_sender_for_slice_query = true,
                        bool resolve_peers_before_download = false, bool record_archive_sync_metrics = false,
-                       CustomOverlaySyncSender archive_sync_sender = CustomOverlaySyncSender::Rldp2);
+                       CustomOverlaySyncSender archive_sync_sender = CustomOverlaySyncSender::Rldp2,
+                       ArchivePeerFeedback peer_feedback = {});
 
   void abort_query(td::Status reason);
   void alarm() override;
@@ -89,6 +97,8 @@ class DownloadArchiveSlice : public td::actor::Actor {
   td::uint64 offset_ = 0;
   td::uint64 archive_id_;
   bool original_zero_download_ = true;
+  ArchivePeerFeedback peer_feedback_;
+  void report_peer(ArchivePeerResult result);
 
   adnl::AdnlNodeIdShort download_from_ = adnl::AdnlNodeIdShort::zero();
   std::vector<adnl::AdnlNodeIdShort> download_from_list_;

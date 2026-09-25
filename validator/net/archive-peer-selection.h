@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <map>
+#include <optional>
 #include <vector>
 
 namespace ton::validator::fullnode {
@@ -31,5 +33,63 @@ std::vector<Peer> archive_peer_window(const std::vector<Peer> &peers, std::size_
   cursor = (cursor + count) % peers.size();
   return result;
 }
+
+enum class ArchivePeerResult { Success, Unavailable, BulkFailure };
+
+// Owned exclusively by the overlay/shard actor. Downloader actors return
+// feedback through actor messages, never sharing this mutable state.
+template <class Peer>
+class ArchivePeerHistory {
+ public:
+  void record(const Peer &peer, ArchivePeerResult result, double now) {
+    expire(now);
+    if (result == ArchivePeerResult::Success) {
+      failed_until_.erase(peer);
+      preferred_ = peer;
+    } else {
+      if (preferred_ && *preferred_ == peer) preferred_.reset();
+      if (result == ArchivePeerResult::BulkFailure) {
+        failed_until_[peer] = now + 30.0;
+        if (failed_until_.size() > 64) {
+          auto oldest = std::min_element(failed_until_.begin(), failed_until_.end(),
+                                        [](const auto &a, const auto &b) { return a.second < b.second; });
+          failed_until_.erase(oldest);
+        }
+      }
+    }
+  }
+
+  std::vector<Peer> select(const std::vector<Peer> &candidates, std::size_t limit, double now) {
+    expire(now);
+    std::vector<Peer> eligible;
+    std::vector<Peer> result;
+    if (!limit) return result;
+    for (const auto &peer : candidates) {
+      if (failed_until_.count(peer)) continue;
+      if (preferred_ && peer == *preferred_) {
+        if (result.empty()) result.push_back(peer);
+      } else if (std::find(eligible.begin(), eligible.end(), peer) == eligible.end()) {
+        eligible.push_back(peer);
+      }
+    }
+    auto rest = archive_peer_window(eligible, cursor_, limit - result.size());
+    result.insert(result.end(), rest.begin(), rest.end());
+    return result;
+  }
+
+  bool is_preferred(const Peer &peer) const { return preferred_ && *preferred_ == peer; }
+  std::size_t quarantined_count() const { return failed_until_.size(); }
+
+ private:
+  void expire(double now) {
+    for (auto it = failed_until_.begin(); it != failed_until_.end();) {
+      if (it->second <= now) it = failed_until_.erase(it);
+      else ++it;
+    }
+  }
+  std::optional<Peer> preferred_;
+  std::map<Peer, double> failed_until_;
+  std::size_t cursor_ = 0;
+};
 
 }  // namespace ton::validator::fullnode

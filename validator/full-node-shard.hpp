@@ -27,6 +27,8 @@
 
 #include "full-node-shard.h"
 #include "rate-limiter.h"
+#include "net/archive-peer-selection.h"
+#include "td/utils/Time.h"
 
 namespace ton {
 
@@ -209,6 +211,9 @@ class FullNodeShardImpl : public FullNodeShard {
   void download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
                         td::Timestamp timeout, td::Promise<std::string> promise,
                         std::vector<adnl::AdnlNodeIdShort> hint_peers = {}) override;
+  void archive_peer_result(adnl::AdnlNodeIdShort peer, ArchivePeerResult result) {
+    archive_peer_history_.record(peer, result, td::Time::now());
+  }
   void download_out_msg_queue_proof(ShardIdFull dst_shard, std::vector<BlockIdExt> blocks,
                                     block::ImportedMsgQueueLimits limits, td::Timestamp timeout,
                                     td::Promise<std::vector<td::Ref<OutMsgQueueProof>>> promise) override;
@@ -299,7 +304,7 @@ class FullNodeShardImpl : public FullNodeShard {
   overlay::OverlayPrivacyRules rules_;
 
   std::map<adnl::AdnlNodeIdShort, Neighbour> neighbours_;
-  std::size_t archive_peer_cursor_ = 0;
+  ArchivePeerHistory<adnl::AdnlNodeIdShort> archive_peer_history_;
   td::Timestamp reload_neighbours_at_;
   td::Timestamp ping_neighbours_at_;
   adnl::AdnlNodeIdShort last_pinged_neighbour_ = adnl::AdnlNodeIdShort::zero();

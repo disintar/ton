@@ -22,6 +22,8 @@
 #include "common/errorcode.h"
 #include "full-node.h"
 #include "rate-limiter.h"
+#include "net/archive-peer-selection.h"
+#include "td/utils/Time.h"
 #include "td/utils/LRUCache.h"
 #include "validator-telemetry.hpp"
 
@@ -29,6 +31,9 @@ namespace ton::validator::fullnode {
 
 class FullNodeCustomOverlay : public td::actor::Actor {
  public:
+  void archive_peer_result(adnl::AdnlNodeIdShort peer, ArchivePeerResult result) {
+    archive_peer_history_.record(peer, result, td::Time::now());
+  }
   void process_broadcast(PublicKeyHash src, ton_api::tonNode_blockBroadcast &query);
   void process_broadcast(PublicKeyHash src, ton_api::tonNode_blockBroadcastCompressed &query);
   void process_broadcast(PublicKeyHash src, ton_api::tonNode_blockBroadcastCompressedV2 &query);
@@ -152,6 +157,7 @@ class FullNodeCustomOverlay : public td::actor::Actor {
   td::LRUCache<BlockIdExt, td::uint32> received_block_broadcasts_{512};
   td::LRUCache<BlockIdExt, td::Unit> received_block_candidates_{512};
 
+  ArchivePeerHistory<adnl::AdnlNodeIdShort> archive_peer_history_;
   std::vector<adnl::AdnlNodeIdShort> custom_download_peers() const;
   bool mark_block_broadcast_received(BlockIdExt block_id, bool final);
   bool mark_block_candidate_received(BlockIdExt block_id);

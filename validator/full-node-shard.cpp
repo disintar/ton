@@ -1230,7 +1230,15 @@ void FullNodeShardImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFu
       ranked_peers.push_back(peer);
     }
   }
-  auto archive_peers = archive_peer_window(ranked_peers, archive_peer_cursor_, 5);
+  auto archive_peers = archive_peer_history_.select(ranked_peers, 5, td::Time::now());
+  if (!ranked_peers.empty() && archive_peers.empty()) {
+    promise.set_error(td::Status::Error(ErrorCode::notready, "archive peers temporarily quarantined"));
+    return;
+  }
+  ArchivePeerFeedback feedback;
+  feedback.report = [self = actor_id(this)](adnl::AdnlNodeIdShort peer, ArchivePeerResult result) {
+    td::actor::send_closure(self, &FullNodeShardImpl::archive_peer_result, peer, result);
+  };
 
   auto first_peer = archive_peers.empty() ? adnl::AdnlNodeIdShort::zero() : archive_peers.front();
   auto first_it = neighbours_.find(first_peer);
@@ -1245,7 +1253,8 @@ void FullNodeShardImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFu
                << " result=" << (archive_peers.empty() ? "random_peers" : (candidates.empty() ? "hint_peers" : "ok"));
   td::actor::create_actor<DownloadArchiveSlice>(
       "archive", masterchain_seqno, shard_prefix, std::move(tmp_dir), adnl_id_, overlay_id_, first_peer, timeout,
-      validator_manager_, rldp2_, overlays_, adnl_, client_, std::move(promise), std::move(archive_peers))
+      validator_manager_, rldp2_, overlays_, adnl_, client_, std::move(promise), std::move(archive_peers),
+      false, true, false, false, CustomOverlaySyncSender::Rldp2, std::move(feedback))
       .release();
 }
 

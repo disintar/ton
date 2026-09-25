@@ -1192,11 +1192,17 @@ void FullNodeCustomOverlay::download_archive(BlockSeqno masterchain_seqno, Shard
     promise.set_error(td::Status::Error(ErrorCode::notready, "custom overlay does not serve shard"));
     return;
   }
-  auto peers = custom_download_peers();
+  auto candidates = custom_download_peers();
+  auto peers = archive_peer_history_.select(candidates, candidates.size(), td::Time::now());
   if (peers.empty()) {
     promise.set_error(td::Status::Error(ErrorCode::notready, "custom overlay has no remote peers"));
     return;
   }
+  ArchivePeerFeedback feedback;
+  feedback.prefer_first = archive_peer_history_.is_preferred(peers.front());
+  feedback.report = [self = actor_id(this)](adnl::AdnlNodeIdShort peer, ArchivePeerResult result) {
+    td::actor::send_closure(self, &FullNodeCustomOverlay::archive_peer_result, peer, result);
+  };
   LOG(INFO) << "Trying custom overlay \"" << name_ << "\" archive slice #" << masterchain_seqno << " "
             << shard_prefix.to_str() << " from " << peers.size() << " peers";
   td::actor::create_actor<DownloadArchiveSlice>(
@@ -1206,7 +1212,7 @@ void FullNodeCustomOverlay::download_archive(BlockSeqno masterchain_seqno, Shard
       td::actor::ActorId<adnl::AdnlExtClient>{}, std::move(promise), std::move(peers),
       true /* use_sender_for_prepare_query */, true /* use_sender_for_slice_query */,
       false /* resolve_peers_before_download */, true /* record_archive_sync_metrics */,
-      custom_overlay_sync_sender(use_quic_))
+      custom_overlay_sync_sender(use_quic_), std::move(feedback))
       .release();
 }
 

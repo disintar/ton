@@ -70,7 +70,7 @@ DownloadArchiveSlice::DownloadArchiveSlice(
     td::actor::ActorId<adnl::AdnlExtClient> client, td::Promise<std::string> promise,
     std::vector<adnl::AdnlNodeIdShort> download_from_list, bool use_sender_for_prepare_query,
     bool use_sender_for_slice_query, bool resolve_peers_before_download, bool record_archive_sync_metrics,
-    CustomOverlaySyncSender archive_sync_sender)
+    CustomOverlaySyncSender archive_sync_sender, ArchivePeerFeedback peer_feedback)
     : masterchain_seqno_(masterchain_seqno)
     , shard_prefix_(shard_prefix)
     , tmp_dir_(std::move(tmp_dir))
@@ -93,6 +93,13 @@ DownloadArchiveSlice::DownloadArchiveSlice(
     original_zero_download_ = false;
   }
   download_from_list_ = std::move(download_from_list);
+  peer_feedback_ = std::move(peer_feedback);
+}
+
+void DownloadArchiveSlice::report_peer(ArchivePeerResult result) {
+  if (peer_feedback_.report) {
+    peer_feedback_.report(download_from_, result);
+  }
 }
 
 const char *DownloadArchiveSlice::archive_source() const {
@@ -152,6 +159,9 @@ void DownloadArchiveSlice::alarm() {
 
 void DownloadArchiveSlice::finish_query() {
   if (promise_) {
+    if (offset_ != 0) {
+      report_peer(ArchivePeerResult::Success);
+    }
     if (record_archive_sync_metrics_ && !archive_sync_metric_finished_) {
       record_custom_overlay_sync_download(CustomOverlaySyncKind::Archive, archive_sync_sender_,
                                           CustomOverlaySyncResult::Ok, archive_sync_started_at_,
@@ -337,7 +347,8 @@ void DownloadArchiveSlice::resolve_download_peers_timeout(td::uint64 query_id) {
 }
 
 void DownloadArchiveSlice::try_download(int index){
-  if (record_archive_sync_metrics_ && use_sender_for_prepare_query_ && index == 0 && download_from_list_.size() > 1) {
+  if (!peer_feedback_.prefer_first && record_archive_sync_metrics_ && use_sender_for_prepare_query_ && index == 0 &&
+      download_from_list_.size() > 1) {
     try_download_parallel();
     return;
   }
@@ -516,6 +527,7 @@ void DownloadArchiveSlice::got_archive_info_result(td::uint64 query_id, int inde
     return;
   }
   if (result.is_error()) {
+    report_peer(ArchivePeerResult::Unavailable);
     auto error = result.move_as_error();
     auto reason = archive_status_reason(error.clone());
     if (record_archive_sync_metrics_) {
@@ -589,6 +601,7 @@ void DownloadArchiveSlice::archive_info_timeout(td::uint64 query_id, int index, 
                << " peer=" << download_from_ << " peer_index=" << index << " peers=" << total_nodes
                << " ms=" << archive_elapsed_ms(archive_info_started_at_)
                << " result=timeout reason=archive_info_timeout";
+  report_peer(ArchivePeerResult::Unavailable);
   if (index + 1 >= total_nodes) {
     ++archive_info_query_id_;
     abort_query(td::Status::Error(ErrorCode::timeout, PSTRING() << archive_source() << " archive info timeout"));
@@ -610,6 +623,7 @@ void DownloadArchiveSlice::got_archive_info(td::BufferSlice data) {
 
   ton_api::downcast_call(*f.get(), td::overloaded(
                                        [&](const ton_api::tonNode_archiveNotFound &obj) {
+                                         report_peer(ArchivePeerResult::Unavailable);
                                          auto error_message = "remote db not found in member " + download_from_.serialize();
 
                                          if (original_zero_download_){
@@ -692,6 +706,7 @@ void DownloadArchiveSlice::got_archive_slice_result(td::uint64 query_id, td::Res
     return;
   }
   if (result.is_error()) {
+    report_peer(ArchivePeerResult::BulkFailure);
     auto error = result.move_as_error();
     auto reason = archive_status_reason(error.clone());
     LOG(WARNING) << "[archive-sync] stage=slice.chunk.done source=" << archive_source()
@@ -722,6 +737,7 @@ void DownloadArchiveSlice::archive_slice_timeout(td::uint64 query_id) {
                << " peers=" << current_peer_count_ << " archive_id=" << archive_id_ << " offset=" << offset_
                << " ms=" << archive_elapsed_ms(archive_slice_started_at_)
                << " result=timeout reason=archive_slice_timeout";
+  report_peer(ArchivePeerResult::BulkFailure);
   ++archive_slice_query_id_;
   if (current_peer_index_ + 1 < current_peer_count_) {
     try_download(current_peer_index_ + 1);
