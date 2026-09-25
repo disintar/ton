@@ -33,6 +33,8 @@
 
 #include "block-propagation-trace.h"
 #include "custom-overlay-metrics.h"
+#include "net/download-race.h"
+#include "net/proof-download-validation.h"
 #include "full-node-custom-overlays.hpp"
 #include "external-message-relay.h"
 #include "full-node-shard-queries.hpp"
@@ -1155,12 +1157,21 @@ void FullNodeCustomOverlay::download_block_proof(BlockIdExt block_id, td::uint32
     promise.set_error(td::Status::Error(ErrorCode::notready, "custom overlay does not serve shard"));
     return;
   }
-  VLOG(FULL_NODE_DEBUG) << "Trying custom overlay \"" << name_ << "\" block proof " << block_id.to_str();
-  td::actor::create_actor<DownloadProof>(
-      "customdownloadproof", block_id, false, false, local_id_, overlay_id_, adnl::AdnlNodeIdShort::zero(), priority,
-      timeout, validator_manager_, td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_}, overlays_, adnl_,
-      td::actor::ActorId<adnl::AdnlExtClient>{}, std::move(promise))
-      .release();
+  auto peers = custom_download_peers();
+  peers.resize(std::min<std::size_t>(peers.size(), 5));
+  if (peers.empty()) {
+    promise.set_error(td::Status::Error(ErrorCode::notready, "no authorized proof peers"));
+    return;
+  }
+  auto callbacks = download_race_promises<td::BufferSlice>(peers.size(), std::move(promise));
+  for (std::size_t i = 0; i < peers.size(); ++i) {
+    td::actor::create_actor<DownloadProof>(
+        "customdownloadproof", block_id, false, false, local_id_, overlay_id_, peers[i], priority,
+        timeout, validator_manager_, td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_}, overlays_, adnl_,
+        td::actor::ActorId<adnl::AdnlExtClient>{},
+        validated_proof_download(validator_manager_, block_id, false, timeout, std::move(callbacks[i])))
+        .release();
+  }
 }
 
 void FullNodeCustomOverlay::download_block_proof_link(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
@@ -1173,12 +1184,21 @@ void FullNodeCustomOverlay::download_block_proof_link(BlockIdExt block_id, td::u
     promise.set_error(td::Status::Error(ErrorCode::notready, "custom overlay does not serve shard"));
     return;
   }
-  VLOG(FULL_NODE_DEBUG) << "Trying custom overlay \"" << name_ << "\" block proof link " << block_id.to_str();
-  td::actor::create_actor<DownloadProof>(
-      "customdownloadproof", block_id, true, false, local_id_, overlay_id_, adnl::AdnlNodeIdShort::zero(), priority,
-      timeout, validator_manager_, td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_}, overlays_, adnl_,
-      td::actor::ActorId<adnl::AdnlExtClient>{}, std::move(promise))
-      .release();
+  auto peers = custom_download_peers();
+  peers.resize(std::min<std::size_t>(peers.size(), 5));
+  if (peers.empty()) {
+    promise.set_error(td::Status::Error(ErrorCode::notready, "no authorized proof peers"));
+    return;
+  }
+  auto callbacks = download_race_promises<td::BufferSlice>(peers.size(), std::move(promise));
+  for (std::size_t i = 0; i < peers.size(); ++i) {
+    td::actor::create_actor<DownloadProof>(
+        "customdownloadproof", block_id, true, false, local_id_, overlay_id_, peers[i], priority,
+        timeout, validator_manager_, td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_}, overlays_, adnl_,
+        td::actor::ActorId<adnl::AdnlExtClient>{},
+        validated_proof_download(validator_manager_, block_id, true, timeout, std::move(callbacks[i])))
+        .release();
+  }
 }
 
 void FullNodeCustomOverlay::download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix,

@@ -17,6 +17,8 @@
     Copyright 2017-2020 Telegram Systems LLP
 */
 #include "toncenter-relay.h"
+#include "net/download-race.h"
+#include "net/proof-download-validation.h"
 #include "common/delay.h"
 #include "impl/out-msg-queue-proof.hpp"
 #include "interfaces/validator-full-id.h"
@@ -786,27 +788,21 @@ void FullNodeImpl::download_persistent_state(BlockIdExt id, BlockIdExt mastercha
 }
 
 void FullNodeImpl::download_block_proof(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
-                                        td::Promise<td::BufferSlice> promise) {
+                                             td::Promise<td::BufferSlice> promise) {
   for (auto &[name, custom_overlay] : custom_overlays_) {
-    if (!custom_overlay.params_.send_shard(block_id.shard_full())) {
-      continue;
-    }
+    if (!custom_overlay.params_.send_shard(block_id.shard_full())) continue;
     for (auto &[local_id, actor] : custom_overlay.actors_) {
-      auto P = td::PromiseCreator::lambda(
-          [SelfId = actor_id(this), block_id, priority, timeout, promise = std::move(promise),
-           name](td::Result<td::BufferSlice> R) mutable {
-            if (R.is_ok()) {
-              promise.set_value(R.move_as_ok());
-              return;
-            }
-            VLOG(FULL_NODE_DEBUG) << "failed to download block proof " << block_id.to_str()
-                                  << " from custom overlay \"" << name << "\": " << R.move_as_error()
-                                  << "; falling back to public overlay";
-            td::actor::send_closure(SelfId, &FullNodeImpl::download_block_proof_from_public_overlay, block_id,
-                                    priority, timeout, std::move(promise));
+      start_download_race<td::BufferSlice>(
+          timeout, std::move(promise),
+          [actor = actor.get(), block_id, priority](td::Timestamp deadline, td::Promise<td::BufferSlice> result) mutable {
+            td::actor::send_closure(actor, &FullNodeCustomOverlay::download_block_proof, block_id,
+                                    priority, deadline, std::move(result));
+          },
+          [this, block_id, priority](td::Timestamp deadline, td::Promise<td::BufferSlice> result) mutable {
+            download_block_proof_from_public_overlay(
+                block_id, priority, deadline,
+                validated_proof_download(validator_manager_, block_id, false, deadline, std::move(result)));
           });
-      td::actor::send_closure(actor, &FullNodeCustomOverlay::download_block_proof, block_id, priority, timeout,
-                              std::move(P));
       return;
     }
   }
@@ -828,25 +824,19 @@ void FullNodeImpl::download_block_proof_from_public_overlay(BlockIdExt block_id,
 void FullNodeImpl::download_block_proof_link(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
                                              td::Promise<td::BufferSlice> promise) {
   for (auto &[name, custom_overlay] : custom_overlays_) {
-    if (!custom_overlay.params_.send_shard(block_id.shard_full())) {
-      continue;
-    }
+    if (!custom_overlay.params_.send_shard(block_id.shard_full())) continue;
     for (auto &[local_id, actor] : custom_overlay.actors_) {
-      auto P = td::PromiseCreator::lambda(
-          [SelfId = actor_id(this), block_id, priority, timeout, promise = std::move(promise),
-           name](td::Result<td::BufferSlice> R) mutable {
-            if (R.is_ok()) {
-              promise.set_value(R.move_as_ok());
-              return;
-            }
-            VLOG(FULL_NODE_DEBUG) << "failed to download block proof link " << block_id.to_str()
-                                  << " from custom overlay \"" << name << "\": " << R.move_as_error()
-                                  << "; falling back to public overlay";
-            td::actor::send_closure(SelfId, &FullNodeImpl::download_block_proof_link_from_public_overlay, block_id,
-                                    priority, timeout, std::move(promise));
+      start_download_race<td::BufferSlice>(
+          timeout, std::move(promise),
+          [actor = actor.get(), block_id, priority](td::Timestamp deadline, td::Promise<td::BufferSlice> result) mutable {
+            td::actor::send_closure(actor, &FullNodeCustomOverlay::download_block_proof_link, block_id,
+                                    priority, deadline, std::move(result));
+          },
+          [this, block_id, priority](td::Timestamp deadline, td::Promise<td::BufferSlice> result) mutable {
+            download_block_proof_link_from_public_overlay(
+                block_id, priority, deadline,
+                validated_proof_download(validator_manager_, block_id, true, deadline, std::move(result)));
           });
-      td::actor::send_closure(actor, &FullNodeCustomOverlay::download_block_proof_link, block_id, priority, timeout,
-                              std::move(P));
       return;
     }
   }

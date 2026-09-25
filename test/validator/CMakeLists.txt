@@ -24,3 +24,8 @@ add_executable(test-archive-sync-policy test-archive-sync-policy.cpp)
 target_include_directories(test-archive-sync-policy PRIVATE ${PROJECT_SOURCE_DIR})
 target_link_libraries(test-archive-sync-policy PRIVATE td-test-main tdutils)
 add_test(NAME test-archive-sync-policy COMMAND test-archive-sync-policy)
+
+add_executable(test-download-race test-download-race.cpp)
+target_include_directories(test-download-race PRIVATE ${PROJECT_SOURCE_DIR})
+target_link_libraries(test-download-race PRIVATE td-test-main tdactor tdutils)
+add_test(NAME test-download-race COMMAND test-download-race)
