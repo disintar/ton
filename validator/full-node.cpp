@@ -25,6 +25,7 @@
 #include "td/actor/MultiPromise.h"
 #include "td/actor/coro_utils.h"
 #include "td/utils/Random.h"
+#include "td/utils/port/path.h"
 #include "ton/ton-io.hpp"
 #include "ton/ton-tl.hpp"
 
@@ -166,6 +167,13 @@ void finish_public_archive_fallback_race(std::shared_ptr<PublicArchiveFallbackRa
                    << " shard=" << state->shard_prefix.to_str()
                    << " result=ok";
       promise.set_value(std::move(value));
+    } else {
+      // The other source won; its archive is the only file handed to the importer.
+      auto status = td::unlink(value);
+      if (status.is_error()) {
+        LOG(WARNING) << "[archive-sync] stage=race_loser_cleanup source=" << source
+                     << " result=error reason=" << status;
+      }
     }
     return;
   }

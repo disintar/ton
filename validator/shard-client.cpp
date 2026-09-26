@@ -273,24 +273,39 @@ td::actor::Task<> ShardClient::force_update_shard_client(BlockHandle handle, Ref
   co_await initialize_waiter_.get();
   CHECK(!init_mode_);
   CHECK(masterchain_block_handle_);
-  if (masterchain_block_handle_->id().seqno() >= handle->id().seqno()) {
+  if (processed_masterchain_block_ >= handle->id().seqno()) {
     co_return {};
   }
   LOG(WARNING) << "[archive-sync] stage=shardclient.rebase prev=" << masterchain_block_handle_->id().to_str()
                << " next=" << handle->id().to_str() << " started=" << (started_ ? 1 : 0) << " result=ok";
+  auto previous_handle = masterchain_block_handle_;
+  auto target_id = handle->id();
   masterchain_block_handle_ = std::move(handle);
+  auto target_handle = masterchain_block_handle_;
   auto R = co_await apply_all_shards(state).wrap();
   if (R.is_error()) {
-    LOG(WARNING) << "[archive-sync] stage=shardclient.rebase_apply mc=" << masterchain_block_handle_->id().to_str()
-                 << " result=error reason=" << R.move_as_error().to_string();
+    auto error = R.move_as_error();
+    LOG(WARNING) << "[archive-sync] stage=shardclient.rebase_apply mc=" << target_id.to_str()
+                 << " result=error reason=" << error.to_string();
+    if (masterchain_block_handle_->id() == target_id) {
+      // Nothing advanced while we were applying; leave the previous MC eligible for a retry.
+      masterchain_block_handle_ = previous_handle;
+    }
+    co_return error;
   }
-  (co_await td::actor::ask(manager_, &ValidatorManager::update_shard_client_state, masterchain_block_handle_->id())
-       .wrap())
-      .ensure();
-  processed_masterchain_block_ = masterchain_block_handle_->id().seqno();
-  LOG(WARNING) << "[archive-sync] stage=shardclient.rebase_saved mc=" << masterchain_block_handle_->id().to_str()
+  if (masterchain_block_handle_->id() != target_id) {
+    co_return td::Status::Error(ErrorCode::notready, "shard client rebase superseded");
+  }
+  auto saved = co_await td::actor::ask(manager_, &ValidatorManager::update_shard_client_state, target_id).wrap();
+  if (saved.is_error()) {
+    co_return saved.move_as_error();
+  }
+  if (processed_masterchain_block_ < target_id.seqno()) {
+    processed_masterchain_block_ = target_id.seqno();
+  }
+  LOG(WARNING) << "[archive-sync] stage=shardclient.rebase_saved mc=" << target_id.to_str()
                << " processed=" << processed_masterchain_block_ << " result=ok";
-  td::actor::send_closure(manager_, &ValidatorManager::update_shard_client_block_handle, masterchain_block_handle_,
+  td::actor::send_closure(manager_, &ValidatorManager::update_shard_client_block_handle, target_handle,
                           std::move(state), [](td::Result<>) {});
   notify();
   co_return {};

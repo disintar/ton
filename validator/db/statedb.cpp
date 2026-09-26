@@ -90,6 +90,18 @@ namespace ton {
         void StateDb::update_shard_client_state(BlockIdExt masterchain_block_id, td::Promise<td::Unit> promise) {
             auto key = create_hash_tl_object<ton_api::db_state_key_shardClient>();
 
+            std::string current_value;
+            auto current = kv_->get(key.as_slice(), current_value);
+            current.ensure();
+            if (current.move_as_ok() == td::KeyValue::GetStatus::Ok) {
+                auto parsed = fetch_tl_object<ton_api::db_state_shardClient>(td::BufferSlice{current_value}, true);
+                parsed.ensure();
+                if (create_block_id(parsed.move_as_ok()->block_).seqno() > masterchain_block_id.seqno()) {
+                    promise.set_value(td::Unit());
+                    return;
+                }
+            }
+
             kv_->begin_write_batch().ensure();
             kv_->set(key.as_slice(),
                      create_serialize_tl_object<ton_api::db_state_shardClient>(

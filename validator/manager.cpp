@@ -2430,8 +2430,13 @@ void ValidatorManagerImpl::checked_archive_slice(BlockSeqno new_last_mc_seqno, B
         auto handle = R.move_as_ok();
         auto P = td::PromiseCreator::lambda([SelfId, client, handle](td::Result<td::Ref<ShardState>> R) mutable {
           auto P = td::PromiseCreator::lambda([SelfId](td::Result<td::Unit> R) {
-            R.ensure();
-            td::actor::send_closure(SelfId, &ValidatorManagerImpl::download_next_archive);
+            if (R.is_error()) {
+              LOG(WARNING) << "[archive-sync] stage=shardclient.rebase_retry result=error reason=" << R.move_as_error();
+              delay_action([SelfId]() { td::actor::send_closure(SelfId, &ValidatorManagerImpl::download_next_archive); },
+                           td::Timestamp::in(2.0));
+            } else {
+              td::actor::send_closure(SelfId, &ValidatorManagerImpl::download_next_archive);
+            }
           });
           td::actor::send_closure(client, &ShardClient::force_update_shard_client_ex, std::move(handle),
                                   td::Ref<MasterchainState>{R.move_as_ok()}, std::move(P));
@@ -2746,6 +2751,10 @@ void ValidatorManagerImpl::advance_gc(BlockHandle handle, td::Ref<MasterchainSta
 
 void ValidatorManagerImpl::update_shard_client_block_handle(BlockHandle handle, td::Ref<MasterchainState> state,
                                                             td::Promise<td::Unit> promise) {
+  if (shard_client_handle_ && shard_client_handle_->id().seqno() > handle->id().seqno()) {
+    promise.set_value(td::Unit());
+    return;
+  }
   shard_client_handle_ = std::move(handle);
   auto seqno = shard_client_handle_->id().seqno();
   if (state.not_null()) {
