@@ -878,6 +878,18 @@ void FullNodeImpl::get_next_key_blocks(BlockIdExt block_id, td::Timestamp timeou
 void FullNodeImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
                                     td::Timestamp timeout, bool allow_custom_overlay,
                                     td::Promise<std::string> promise) {
+  std::vector<adnl::AdnlNodeIdShort> archive_hint_peers;
+  for (const auto &[_, custom_overlay] : custom_overlays_) {
+    if (!custom_overlay.params_.send_shard(shard_prefix)) {
+      continue;
+    }
+    for (const auto &peer : custom_overlay.params_.nodes_) {
+      if (peer != adnl_id_ &&
+          std::find(archive_hint_peers.begin(), archive_hint_peers.end(), peer) == archive_hint_peers.end()) {
+        archive_hint_peers.push_back(peer);
+      }
+    }
+  }
   if (!allow_custom_overlay) {
     record_custom_overlay_sync_fallback(CustomOverlaySyncKind::Archive,
                                         CustomOverlaySyncFallbackReason::BadArchiveImport);
@@ -885,7 +897,7 @@ void FullNodeImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFull sh
     LOG(INFO) << "forcing public overlay archive slice #" << masterchain_seqno << " " << shard_prefix.to_str()
               << " after custom archive import failure";
     download_archive_from_public_overlay(masterchain_seqno, shard_prefix, std::move(tmp_dir), timeout,
-                                         std::move(promise), {});
+                                         std::move(promise), std::move(archive_hint_peers));
     return;
   }
   if (client_.empty()) {
@@ -922,7 +934,7 @@ void FullNodeImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFull sh
         td::actor::send_closure(actor, &FullNodeCustomOverlay::download_archive, masterchain_seqno, shard_prefix,
                                 tmp_dir, timeout, std::move(P));
         download_archive_from_public_overlay(masterchain_seqno, shard_prefix, std::move(tmp_dir), timeout,
-                                             std::move(PublicP), {});
+                                             std::move(PublicP), std::move(archive_hint_peers));
         return;
       }
     }
@@ -935,7 +947,7 @@ void FullNodeImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFull sh
   }
   record_public_overlay_sync_download(CustomOverlaySyncKind::Archive, PublicOverlaySyncReason::Direct);
   download_archive_from_public_overlay(masterchain_seqno, shard_prefix, std::move(tmp_dir), timeout,
-                                       std::move(promise), {});
+                                       std::move(promise), std::move(archive_hint_peers));
 }
 
 void FullNodeImpl::download_archive_from_public_overlay(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix,

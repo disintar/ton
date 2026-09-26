@@ -1227,18 +1227,20 @@ void FullNodeShardImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFu
     return left->roundtrip < right->roundtrip;
   });
 
-  std::vector<adnl::AdnlNodeIdShort> ranked_peers;
-  ranked_peers.reserve(candidates.size() + hint_peers.size());
+  std::vector<adnl::AdnlNodeIdShort> public_peers;
+  public_peers.reserve(candidates.size());
   for (const auto *candidate : candidates) {
-    ranked_peers.push_back(candidate->adnl_id);
+    public_peers.push_back(candidate->adnl_id);
   }
-  for (const auto &peer : hint_peers) {
-    if (std::find(ranked_peers.begin(), ranked_peers.end(), peer) == ranked_peers.end()) {
-      ranked_peers.push_back(peer);
+  auto archive_peers = archive_peer_history_.select(public_peers, 5, td::Time::now());
+  std::size_t public_peer_count = archive_peers.size();
+  auto backup_peers = archive_peer_history_.select(hint_peers, 5 - archive_peers.size(), td::Time::now());
+  for (const auto &peer : backup_peers) {
+    if (std::find(archive_peers.begin(), archive_peers.end(), peer) == archive_peers.end()) {
+      archive_peers.push_back(peer);
     }
   }
-  auto archive_peers = archive_peer_history_.select(ranked_peers, 5, td::Time::now());
-  if (!ranked_peers.empty() && archive_peers.empty()) {
+  if ((!public_peers.empty() || !hint_peers.empty()) && archive_peers.empty()) {
     promise.set_error(td::Status::Error(ErrorCode::notready, "archive peers temporarily quarantined"));
     return;
   }
@@ -1253,7 +1255,7 @@ void FullNodeShardImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFu
   LOG(WARNING) << "[archive-sync] stage=public.choose_neighbour seqno=" << masterchain_seqno
                << " shard=" << shard_prefix.to_str() << " local_shard=" << shard_.to_str()
                << " peer=" << first_peer << " peer_count=" << archive_peers.size()
-               << " neighbours=" << neighbours_.size()
+               << " neighbours=" << neighbours_.size() << " public_peers=" << public_peer_count
                << " hints=" << hint_peers.size()
                << " roundtrip=" << first->roundtrip << " unreliability=" << first->unreliability
                << " version=" << first->version_major << "." << first->version_minor
