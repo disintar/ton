@@ -455,8 +455,22 @@ void ArchiveImporter::apply_shard_block_cont1(BlockHandle handle, BlockIdExt mas
 
   auto it = blocks_.find(handle->id());
   if (it == blocks_.end() || !it->second.proof_pkg || !it->second.data_pkg) {
-    promise.set_error(
-        td::Status::Error(ErrorCode::notready, PSTRING() << "no data/proof for shard block " << handle->id()));
+    LOG(WARNING) << "[archive-sync] stage=shard_block_missing block=" << handle->id()
+                 << " seqno=" << start_import_seqno_ << " action=network_fallback";
+    td::actor::send_closure(manager_, &ValidatorManager::wait_block_state_short, handle->id(), 2,
+                            td::Timestamp::in(60.0), true,
+                            [block_id = handle->id(), promise = std::move(promise)](td::Result<td::Ref<ShardState>> R) mutable {
+                              if (R.is_error()) {
+                                auto error = R.move_as_error();
+                                LOG(WARNING) << "[archive-sync] stage=shard_block_missing block=" << block_id
+                                             << " result=error reason=" << error;
+                                promise.set_error(std::move(error));
+                              } else {
+                                LOG(WARNING) << "[archive-sync] stage=shard_block_missing block=" << block_id
+                                             << " result=ok source=network_fallback";
+                                promise.set_value(td::Unit());
+                              }
+                            });
     return;
   }
   TRY_RESULT_PROMISE(promise, proof_data, it->second.proof_pkg->read(it->second.proof_offset));
