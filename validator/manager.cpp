@@ -2479,8 +2479,10 @@ void ValidatorManagerImpl::maybe_recover_archive_sync() {
   auto now = td::Clocks::system();
   auto master_lag = now - last_masterchain_block_handle_->unix_time();
   auto shard_lag = now - shard_client_handle_->unix_time();
-  auto shard_gap = shard_client_handle_->id().seqno() + 16 < last_masterchain_seqno_;
-  if (!live_archive_recovery_needed(master_lag, shard_lag, shard_gap, td::Time::now(),
+  auto shard_gap_blocks = last_masterchain_seqno_ > shard_client_handle_->id().seqno()
+                              ? last_masterchain_seqno_ - shard_client_handle_->id().seqno()
+                              : 0;
+  if (!live_archive_recovery_needed(master_lag, shard_lag, shard_gap_blocks, td::Time::now(),
                                     live_sync_catchup_grace_until_)) {
     return;
   }
@@ -2490,6 +2492,7 @@ void ValidatorManagerImpl::maybe_recover_archive_sync() {
                << " shard_lag=" << td::format::as_time(shard_lag)
                << " master_seqno=" << last_masterchain_seqno_
                << " shard_seqno=" << shard_client_handle_->id().seqno()
+               << " shard_gap=" << shard_gap_blocks
                << " result=start";
   archive_sync_active_ = true;
   download_next_archive();
