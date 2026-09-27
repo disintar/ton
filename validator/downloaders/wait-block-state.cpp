@@ -224,8 +224,11 @@ void WaitBlockState::start() {
       abort_query(td::Status::Error(PSTRING() << "not monitoring shard " << handle_->id().shard_full()));
       return;
     }
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::BufferSlice> R) {
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), id = handle_->id()](td::Result<td::BufferSlice> R) {
       if (R.is_error()) {
+        if (allow_wait_state_log()) {
+          LOG(WARNING) << "[wait-state] block=" << id << " stage=proof_link.error reason=" << R.error();
+        }
         delay_action([SelfId]() { td::actor::send_closure(SelfId, &WaitBlockState::after_get_proof_link); },
                      td::Timestamp::in(0.1));
       } else {

@@ -16,6 +16,7 @@
 */
 #include "toncenter-relay.h"
 #include <algorithm>
+#include <atomic>
 #include <mutex>
 
 #include "auto/tl/ton_api_json.h"
@@ -46,6 +47,22 @@ namespace {
 
 constexpr const char *k_called_from_custom = "custom";
 constexpr td::uint32 k_heavy_request_cost_unit = 1 << 21;
+
+bool allow_proof_error_log() {
+  static std::atomic<td::uint64> bucket{0};
+  auto second = static_cast<td::uint64>(td::Time::now());
+  auto current = bucket.load(std::memory_order_relaxed);
+  while (true) {
+    auto count = (current >> 8) == second ? current & 255 : 0;
+    if (count >= 2) {
+      return false;
+    }
+    auto next = (second << 8) | (count + 1);
+    if (bucket.compare_exchange_weak(current, next, std::memory_order_relaxed)) {
+      return true;
+    }
+  }
+}
 
 size_t heavy_request_cost(td::uint64 requested_max_size) {
   size_t cost = static_cast<size_t>((requested_max_size + k_heavy_request_cost_unit - 1) / k_heavy_request_cost_unit);
@@ -1306,11 +1323,15 @@ void FullNodeCustomOverlay::download_proof_from_custom_peers(BlockIdExt block_id
       auto peer_started_at = block_propagation_trace_now();
       record_custom_overlay_sync_peer_download(CustomOverlaySyncKind::Proof, sender, CustomOverlaySyncResult::Attempt);
       auto result = td::PromiseCreator::lambda(
-          [self, peer, sender, winner, peer_started_at, callback = std::move(callback)](
+          [self, peer, block_id, sender, winner, peer_started_at, callback = std::move(callback)](
               td::Result<td::BufferSlice> R) mutable {
             auto now = block_propagation_trace_now();
             if (R.is_ok()) {
               winner->store(true, std::memory_order_relaxed);
+            } else if (allow_proof_error_log()) {
+              LOG(WARNING) << "[private-proof] block=" << block_id << " peer=" << peer
+                           << " ms=" << static_cast<td::uint64>((now - peer_started_at) * 1000.0)
+                           << " result=error reason=" << R.error();
             }
             td::actor::send_closure(self, &FullNodeCustomOverlay::record_download_peer_result, peer, R.is_ok(), false,
                                     now - peer_started_at);
