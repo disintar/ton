@@ -25,6 +25,8 @@
 
 #include "download-proof.hpp"
 
+#include <algorithm>
+
 namespace ton {
 
 namespace validator {
@@ -37,10 +39,12 @@ DownloadProof::DownloadProof(BlockIdExt block_id, bool allow_partial_proof, bool
                              td::actor::ActorId<ValidatorManagerInterface> validator_manager,
                              td::actor::ActorId<adnl::AdnlSenderInterface> rldp,
                              td::actor::ActorId<overlay::Overlays> overlays, td::actor::ActorId<adnl::Adnl> adnl,
-                             td::actor::ActorId<adnl::AdnlExtClient> client, td::Promise<td::BufferSlice> promise)
+                             td::actor::ActorId<adnl::AdnlExtClient> client, td::Promise<td::BufferSlice> promise,
+                             bool direct_proof_link)
     : block_id_(block_id)
     , allow_partial_proof_(allow_partial_proof)
     , is_key_block_(is_key_block)
+    , direct_proof_link_(direct_proof_link)
     , local_id_(local_id)
     , overlay_id_(overlay_id)
     , download_from_(download_from)
@@ -148,6 +152,10 @@ void DownloadProof::got_download_token(std::unique_ptr<ActionToken> token) {
 void DownloadProof::got_node_to_download(adnl::AdnlNodeIdShort node) {
   download_from_ = node;
   VLOG(FULL_NODE_DEBUG) << "downloading proof for " << block_id_;
+  if (direct_proof_link_) {
+    download_proof_link();
+    return;
+  }
 
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::BufferSlice> R) mutable {
     if (R.is_error()) {
@@ -219,35 +227,34 @@ void DownloadProof::got_block_proof_description(td::BufferSlice proof_descriptio
               abort_query(td::Status::Error(ErrorCode::protoviolation, "received partial proof, though did not allow"));
               return;
             }
-            auto P = td::PromiseCreator::lambda([SelfId = actor_id(self)](td::Result<td::BufferSlice> R) {
-              if (R.is_error()) {
-                td::actor::send_closure(SelfId, &DownloadProof::abort_query, R.move_as_error());
-              } else {
-                td::actor::send_closure(SelfId, &DownloadProof::got_block_partial_proof, R.move_as_ok());
-              }
-            });
-
-            td::BufferSlice query;
-            if (!is_key_block_) {
-              query =
-                  create_serialize_tl_object<ton_api::tonNode_downloadBlockProofLink>(create_tl_block_id(block_id_));
-            } else {
-              query =
-                  create_serialize_tl_object<ton_api::tonNode_downloadKeyBlockProofLink>(create_tl_block_id(block_id_));
-            }
-            if (client_.empty()) {
-              td::actor::send_closure(overlays_, &overlay::Overlays::send_query_via, download_from_, local_id_,
-                                      overlay_id_, "download block proof link", std::move(P), td::Timestamp::in(3.0),
-                                      std::move(query), FullNode::max_proof_size(), rldp_);
-            } else {
-              td::actor::send_closure(client_, &adnl::AdnlExtClient::send_query, "download block proof link",
-                                      create_serialize_tl_object_suffix<ton_api::tonNode_query>(std::move(query)),
-                                      td::Timestamp::in(3.0), std::move(P));
-            }
+            download_proof_link();
           },
           [&](ton_api::tonNode_preparedProofEmpty &obj) {
             abort_query(td::Status::Error(ErrorCode::notready, "proof not found"));
           }));
+}
+
+void DownloadProof::download_proof_link() {
+  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::BufferSlice> R) {
+    if (R.is_error()) {
+      td::actor::send_closure(SelfId, &DownloadProof::abort_query, R.move_as_error());
+    } else {
+      td::actor::send_closure(SelfId, &DownloadProof::got_block_partial_proof, R.move_as_ok());
+    }
+  });
+  auto query = is_key_block_
+                   ? create_serialize_tl_object<ton_api::tonNode_downloadKeyBlockProofLink>(create_tl_block_id(block_id_))
+                   : create_serialize_tl_object<ton_api::tonNode_downloadBlockProofLink>(create_tl_block_id(block_id_));
+  auto deadline = std::min(timeout_, td::Timestamp::in(3.0));
+  if (client_.empty()) {
+    td::actor::send_closure(overlays_, &overlay::Overlays::send_query_via, download_from_, local_id_, overlay_id_,
+                            "download block proof link", std::move(P), deadline, std::move(query),
+                            FullNode::max_proof_size(), rldp_);
+  } else {
+    td::actor::send_closure(client_, &adnl::AdnlExtClient::send_query, "download block proof link",
+                            create_serialize_tl_object_suffix<ton_api::tonNode_query>(std::move(query)), deadline,
+                            std::move(P));
+  }
 }
 
 void DownloadProof::got_block_proof(td::BufferSlice proof) {

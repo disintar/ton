@@ -27,10 +27,29 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <atomic>
 
 namespace ton {
 
 namespace validator {
+
+namespace {
+bool allow_wait_state_log() {
+  static std::atomic<td::uint64> bucket{0};
+  auto second = static_cast<td::uint64>(td::Time::now());
+  auto current = bucket.load(std::memory_order_relaxed);
+  while (true) {
+    auto count = (current >> 8) == second ? current & 255 : 0;
+    if (count >= 4) {
+      return false;
+    }
+    auto next = (second << 8) | (count + 1);
+    if (bucket.compare_exchange_weak(current, next, std::memory_order_relaxed)) {
+      return true;
+    }
+  }
+}
+}  // namespace
 
 void WaitBlockState::note_wait_stage(const char *stage) {
   if (wait_stage_ == stage) {
@@ -48,11 +67,13 @@ void WaitBlockState::report_slow_stage(td::uint64 generation) {
   if (generation != wait_stage_generation_) {
     return;
   }
-  LOG(WARNING) << "[wait-state] block=" << handle_->id() << " stage=" << wait_stage_
-               << " ms=" << static_cast<td::uint64>((td::Time::now() - wait_stage_started_at_) * 1000.0)
-               << " received=" << handle_->received() << " proof=" << handle_->inited_proof()
-               << " proof_link=" << handle_->inited_proof_link() << " prev=" << handle_->inited_prev()
-               << " state=" << handle_->received_state();
+  if (allow_wait_state_log()) {
+    LOG(WARNING) << "[wait-state] block=" << handle_->id() << " stage=" << wait_stage_
+                 << " ms=" << static_cast<td::uint64>((td::Time::now() - wait_stage_started_at_) * 1000.0)
+                 << " received=" << handle_->received() << " proof=" << handle_->inited_proof()
+                 << " proof_link=" << handle_->inited_proof_link() << " prev=" << handle_->inited_prev()
+                 << " state=" << handle_->received_state();
+  }
   delay_action([self = actor_id(this), generation]() {
     td::actor::send_closure(self, &WaitBlockState::report_slow_stage, generation);
   }, td::Timestamp::in(5.0));

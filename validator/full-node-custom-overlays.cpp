@@ -1253,55 +1253,85 @@ void FullNodeCustomOverlay::download_next_blocks(BlockHandle handle, td::uint32 
 
 void FullNodeCustomOverlay::download_block_proof(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
                                                  td::Promise<td::BufferSlice> promise) {
-  if (!inited_) {
-    promise.set_error(td::Status::Error(ErrorCode::notready, "custom overlay is not ready"));
-    return;
-  }
-  if (!custom_overlay_serves_shard(sender_shards_, block_id.shard_full())) {
-    promise.set_error(td::Status::Error(ErrorCode::notready, "custom overlay does not serve shard"));
-    return;
-  }
-  auto peers = custom_download_peers();
-  peers.resize(std::min<std::size_t>(peers.size(), 5));
-  if (peers.empty()) {
-    promise.set_error(td::Status::Error(ErrorCode::notready, "no authorized proof peers"));
-    return;
-  }
-  auto callbacks = download_race_promises<td::BufferSlice>(peers.size(), std::move(promise));
-  for (std::size_t i = 0; i < peers.size(); ++i) {
-    td::actor::create_actor<DownloadProof>(
-        "customdownloadproof", block_id, false, false, local_id_, overlay_id_, peers[i], priority,
-        timeout, validator_manager_, td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_}, overlays_, adnl_,
-        td::actor::ActorId<adnl::AdnlExtClient>{},
-        validated_proof_download(validator_manager_, block_id, false, timeout, std::move(callbacks[i])))
-        .release();
-  }
+  download_proof_from_custom_peers(block_id, false, priority, timeout, std::move(promise));
 }
 
 void FullNodeCustomOverlay::download_block_proof_link(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
                                                       td::Promise<td::BufferSlice> promise) {
+  download_proof_from_custom_peers(block_id, true, priority, timeout, std::move(promise));
+}
+
+void FullNodeCustomOverlay::download_proof_from_custom_peers(BlockIdExt block_id, bool proof_link,
+                                                             td::uint32 priority, td::Timestamp timeout,
+                                                             td::Promise<td::BufferSlice> promise) {
+  auto started_at = block_propagation_trace_now();
+  auto sender = custom_overlay_sync_sender(use_quic_);
+  record_custom_overlay_sync_download(CustomOverlaySyncKind::Proof, sender, CustomOverlaySyncResult::Attempt);
   if (!inited_) {
+    record_custom_overlay_sync_download(CustomOverlaySyncKind::Proof, sender, CustomOverlaySyncResult::NotReady);
     promise.set_error(td::Status::Error(ErrorCode::notready, "custom overlay is not ready"));
     return;
   }
   if (!custom_overlay_serves_shard(sender_shards_, block_id.shard_full())) {
+    record_custom_overlay_sync_download(CustomOverlaySyncKind::Proof, sender, CustomOverlaySyncResult::ShardNotServed);
     promise.set_error(td::Status::Error(ErrorCode::notready, "custom overlay does not serve shard"));
     return;
   }
   auto peers = custom_download_peers();
-  peers.resize(std::min<std::size_t>(peers.size(), 5));
+  peers.resize(std::min<std::size_t>(peers.size(), 2));
   if (peers.empty()) {
+    record_custom_overlay_sync_download(CustomOverlaySyncKind::Proof, sender, CustomOverlaySyncResult::NoPeer);
     promise.set_error(td::Status::Error(ErrorCode::notready, "no authorized proof peers"));
     return;
   }
-  auto callbacks = download_race_promises<td::BufferSlice>(peers.size(), std::move(promise));
+  auto aggregate = td::PromiseCreator::lambda([promise = std::move(promise), sender, started_at](
+                                                  td::Result<td::BufferSlice> R) mutable {
+    record_custom_overlay_sync_download(CustomOverlaySyncKind::Proof, sender,
+                                        R.is_ok() ? CustomOverlaySyncResult::Ok : CustomOverlaySyncResult::Exhausted,
+                                        started_at, block_propagation_trace_now());
+    promise.set_result(std::move(R));
+  });
+  auto callbacks = download_race_promises<td::BufferSlice>(peers.size(), std::move(aggregate));
+  auto winner = std::make_shared<std::atomic<bool>>(false);
   for (std::size_t i = 0; i < peers.size(); ++i) {
-    td::actor::create_actor<DownloadProof>(
-        "customdownloadproof", block_id, true, false, local_id_, overlay_id_, peers[i], priority,
-        timeout, validator_manager_, td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_}, overlays_, adnl_,
-        td::actor::ActorId<adnl::AdnlExtClient>{},
-        validated_proof_download(validator_manager_, block_id, true, timeout, std::move(callbacks[i])))
-        .release();
+    auto peer = peers[i];
+    auto launch = [block_id, proof_link, priority, timeout, peer, sender, winner, self = actor_id(this),
+                   local_id = local_id_, overlay_id = overlay_id_, manager = validator_manager_,
+                   adnl_sender = td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_},
+                   overlays = overlays_, adnl = adnl_, callback = std::move(callbacks[i])]() mutable {
+      if (winner->load(std::memory_order_relaxed)) {
+        callback.set_error(td::Status::Error(ErrorCode::notready, "proof hedge not needed"));
+        return;
+      }
+      auto peer_started_at = block_propagation_trace_now();
+      record_custom_overlay_sync_peer_download(CustomOverlaySyncKind::Proof, sender, CustomOverlaySyncResult::Attempt);
+      auto result = td::PromiseCreator::lambda(
+          [self, peer, sender, winner, peer_started_at, callback = std::move(callback)](
+              td::Result<td::BufferSlice> R) mutable {
+            auto now = block_propagation_trace_now();
+            if (R.is_ok()) {
+              winner->store(true, std::memory_order_relaxed);
+            }
+            td::actor::send_closure(self, &FullNodeCustomOverlay::record_download_peer_result, peer, R.is_ok(), false,
+                                    now - peer_started_at);
+            record_custom_overlay_sync_peer_download(CustomOverlaySyncKind::Proof, sender,
+                                                      R.is_ok() ? CustomOverlaySyncResult::Ok
+                                                                : custom_overlay_sync_result_from_status(R.error()),
+                                                      peer_started_at, now);
+            callback.set_result(std::move(R));
+          });
+      td::actor::create_actor<DownloadProof>(
+          "customdownloadproof", block_id, proof_link, false, local_id, overlay_id, peer, priority,
+          timeout, manager, adnl_sender, overlays, adnl, td::actor::ActorId<adnl::AdnlExtClient>{},
+          validated_proof_download(manager, block_id, proof_link, timeout, std::move(result)),
+          proof_link && !block_id.is_masterchain())
+          .release();
+    };
+    if (i == 0) {
+      launch();
+    } else {
+      delay_action(std::move(launch), td::Timestamp::in(0.1));
+    }
   }
 }
 

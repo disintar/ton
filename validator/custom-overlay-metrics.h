@@ -54,7 +54,7 @@ inline std::uint64_t get_custom_overlay_query_total(std::size_t result) {
   return custom_overlay_queries_total[result].load(std::memory_order_relaxed);
 }
 
-enum class CustomOverlaySyncKind : std::size_t { Block = 0, NextBlock = 1, Archive = 2, Count = 3 };
+enum class CustomOverlaySyncKind : std::size_t { Block = 0, NextBlock = 1, Archive = 2, Proof = 3, Count = 4 };
 enum class CustomOverlaySyncSender : std::size_t { Rldp2 = 0, Quic = 1, Count = 2 };
 enum class CustomOverlaySyncResult : std::size_t {
   Attempt = 0,
@@ -105,7 +105,7 @@ inline constexpr std::size_t public_overlay_sync_reason_count() {
 
 inline const char *custom_overlay_sync_kind_label(std::size_t value) {
   static constexpr std::array<const char *, custom_overlay_sync_kind_count()> labels = {"block", "next_block",
-                                                                                         "archive"};
+                                                                                         "archive", "proof"};
   return labels[value];
 }
 

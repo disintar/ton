@@ -36,7 +36,7 @@ class DownloadProof : public td::actor::Actor {
                 td::Timestamp timeout, td::actor::ActorId<ValidatorManagerInterface> validator_manager,
                 td::actor::ActorId<adnl::AdnlSenderInterface> rldp, td::actor::ActorId<overlay::Overlays> overlays,
                 td::actor::ActorId<adnl::Adnl> adnl, td::actor::ActorId<adnl::AdnlExtClient> client,
-                td::Promise<td::BufferSlice> promise);
+                td::Promise<td::BufferSlice> promise, bool direct_proof_link = false);
 
   void abort_query(td::Status reason);
   void alarm() override;
@@ -51,9 +51,11 @@ class DownloadProof : public td::actor::Actor {
   void got_block_partial_proof(td::BufferSlice data);
 
  private:
+  void download_proof_link();
   BlockIdExt block_id_;
   bool allow_partial_proof_;
   bool is_key_block_;
+  bool direct_proof_link_;
   adnl::AdnlNodeIdShort local_id_;
   overlay::OverlayIdShort overlay_id_;
 

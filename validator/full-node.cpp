@@ -827,6 +827,7 @@ void FullNodeImpl::download_block_proof(BlockIdExt block_id, td::uint32 priority
   for (auto &[name, custom_overlay] : custom_overlays_) {
     if (!custom_overlay.params_.send_shard(block_id.shard_full())) continue;
     for (auto &[local_id, actor] : custom_overlay.actors_) {
+      record_public_overlay_sync_download(CustomOverlaySyncKind::Proof, PublicOverlaySyncReason::Fallback);
       start_download_race<td::BufferSlice>(
           timeout, std::move(promise),
           [actor = actor.get(), block_id, priority](td::Timestamp deadline, td::Promise<td::BufferSlice> result) mutable {
@@ -841,6 +842,7 @@ void FullNodeImpl::download_block_proof(BlockIdExt block_id, td::uint32 priority
       return;
     }
   }
+  record_public_overlay_sync_download(CustomOverlaySyncKind::Proof, PublicOverlaySyncReason::Direct);
   download_block_proof_from_public_overlay(block_id, priority, timeout, std::move(promise));
 }
 
@@ -861,6 +863,7 @@ void FullNodeImpl::download_block_proof_link(BlockIdExt block_id, td::uint32 pri
   for (auto &[name, custom_overlay] : custom_overlays_) {
     if (!custom_overlay.params_.send_shard(block_id.shard_full())) continue;
     for (auto &[local_id, actor] : custom_overlay.actors_) {
+      record_public_overlay_sync_download(CustomOverlaySyncKind::Proof, PublicOverlaySyncReason::Fallback);
       start_download_race<td::BufferSlice>(
           timeout, std::move(promise),
           [actor = actor.get(), block_id, priority](td::Timestamp deadline, td::Promise<td::BufferSlice> result) mutable {
@@ -875,6 +878,7 @@ void FullNodeImpl::download_block_proof_link(BlockIdExt block_id, td::uint32 pri
       return;
     }
   }
+  record_public_overlay_sync_download(CustomOverlaySyncKind::Proof, PublicOverlaySyncReason::Direct);
   download_block_proof_link_from_public_overlay(block_id, priority, timeout, std::move(promise));
 }
 

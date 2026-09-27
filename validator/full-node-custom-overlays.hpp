@@ -180,6 +180,8 @@ class FullNodeCustomOverlay : public td::actor::Actor {
   void download_next_blocks_from_custom_peers(BlockHandle handle, td::uint32 priority, td::Timestamp timeout,
                                               std::vector<adnl::AdnlNodeIdShort> peers, double started_at,
                                               td::Promise<BlockHandle> promise);
+  void download_proof_from_custom_peers(BlockIdExt block_id, bool proof_link, td::uint32 priority,
+                                        td::Timestamp timeout, td::Promise<td::BufferSlice> promise);
 
   void try_init();
   void init();
