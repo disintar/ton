@@ -1171,14 +1171,13 @@ void FullNodeShardImpl::download_block(BlockIdExt id, td::uint32 priority, td::T
     td::Promise<ReceivedBlock> traced_promise = td::PromiseCreator::lambda(
         [id, peer_id, self, started_at, promise = std::move(callbacks[i])](td::Result<ReceivedBlock> result) mutable {
           auto elapsed_ms = static_cast<long long>((td::Time::now() - started_at) * 1000.0);
-          if (result.is_error() && result.error().code() == ErrorCode::notready) {
-            td::actor::send_closure(self, &FullNodeShardImpl::mark_required_data_unavailable, peer_id);
-          }
+          auto cooldown = result.is_ok() ? 0.0 : (result.error().code() == ErrorCode::notready ? 2.0 : 4.0);
+          td::actor::send_closure(self, &FullNodeShardImpl::record_required_data_result, peer_id, result.is_ok(),
+                                  cooldown);
           if (private_sync_trace_should_log(result.is_error(), elapsed_ms)) {
             LOG(WARNING) << "[private-sync] stage=public.block block=" << id << " peer=" << peer_id
                          << " ms=" << elapsed_ms << " result=" << (result.is_ok() ? "ok" : "error")
-                         << " data_cooldown_ms="
-                         << (result.is_error() && result.error().code() == ErrorCode::notready ? 2000 : 0)
+                         << " data_cooldown_ms=" << static_cast<int>(cooldown * 1000)
                          << " reason=" << (result.is_error() ? result.error().to_string() : "-");
           }
           promise.set_result(std::move(result));
@@ -1236,15 +1235,14 @@ void FullNodeShardImpl::download_block_proof_link(BlockIdExt block_id, td::uint3
   td::Promise<td::BufferSlice> traced_promise = td::PromiseCreator::lambda(
       [block_id, peer, self, started_at, promise = std::move(promise)](td::Result<td::BufferSlice> result) mutable {
         auto elapsed_ms = static_cast<long long>((td::Time::now() - started_at) * 1000.0);
-        if (result.is_error() && result.error().code() == ErrorCode::notready) {
-          td::actor::send_closure(self, &FullNodeShardImpl::mark_required_data_unavailable, peer);
-        }
+        auto cooldown = result.is_ok() ? 0.0 : (result.error().code() == ErrorCode::notready ? 2.0 : 4.0);
+        td::actor::send_closure(self, &FullNodeShardImpl::record_required_data_result, peer, result.is_ok(),
+                                cooldown);
         if (private_sync_trace_should_log(result.is_error(), elapsed_ms)) {
           LOG(WARNING) << "[private-sync] stage=public.proof_link block=" << block_id << " peer=" << peer
                        << " ms=" << elapsed_ms << " result=" << (result.is_ok() ? "ok" : "error")
                        << " penalize=" << (result.is_error() && result.error().code() != ErrorCode::cancelled ? 1 : 0)
-                       << " proof_cooldown_ms="
-                       << (result.is_error() && result.error().code() == ErrorCode::notready ? 2000 : 0)
+                       << " proof_cooldown_ms=" << static_cast<int>(cooldown * 1000)
                        << " reason=" << (result.is_error() ? result.error().to_string() : "-");
         }
         promise.set_result(std::move(result));
@@ -1694,10 +1692,14 @@ const Neighbour &FullNodeShardImpl::choose_neighbour(td::uint32 required_version
   if (neighbours_.size() == 0) {
     return Neighbour::zero;
   }
+  auto now = td::Time::now();
   auto is_eligible = [&](const Neighbour &n) {
-    return (!require_data || n.required_data_unavailable_until <= td::Time::now()) &&
+    return (!require_data || n.required_data_unavailable_until <= now) &&
            (n.version_major > required_version_major ||
             (n.version_major == required_version_major && n.version_minor >= required_version_minor));
+  };
+  auto score = [&](const Neighbour &n) {
+    return n.unreliability - (require_data && n.required_data_success_until > now ? 4.0 : 0.0);
   };
 
   double min_unreliability = 1e9;
@@ -1705,7 +1707,7 @@ const Neighbour &FullNodeShardImpl::choose_neighbour(td::uint32 required_version
     if (!is_eligible(x)) {
       continue;
     }
-    min_unreliability = std::min(min_unreliability, x.unreliability);
+    min_unreliability = std::min(min_unreliability, score(x));
   }
   const Neighbour *best = nullptr;
   td::uint32 sum = 0;
@@ -1714,7 +1716,7 @@ const Neighbour &FullNodeShardImpl::choose_neighbour(td::uint32 required_version
     if (!is_eligible(x)) {
       continue;
     }
-    auto unr = static_cast<td::uint32>(x.unreliability - min_unreliability);
+    auto unr = static_cast<td::uint32>(score(x) - min_unreliability);
 
     if (x.version_major < proto_version_major()) {
       unr += 4;
@@ -1741,10 +1743,16 @@ const Neighbour &FullNodeShardImpl::choose_neighbour(td::uint32 required_version
   return Neighbour::zero;
 }
 
-void FullNodeShardImpl::mark_required_data_unavailable(adnl::AdnlNodeIdShort adnl_id) {
+void FullNodeShardImpl::record_required_data_result(adnl::AdnlNodeIdShort adnl_id, bool success, double cooldown) {
   auto it = neighbours_.find(adnl_id);
   if (it != neighbours_.end()) {
-    it->second.required_data_unavailable_until = td::Time::now() + 2.0;
+    if (success) {
+      it->second.required_data_success_until = td::Time::now() + 30.0;
+      it->second.required_data_unavailable_until = 0.0;
+    } else {
+      it->second.required_data_success_until = 0.0;
+      it->second.required_data_unavailable_until = td::Time::now() + cooldown;
+    }
   }
 }
 

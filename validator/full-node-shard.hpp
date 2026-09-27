@@ -46,6 +46,7 @@ struct Neighbour {
   double roundtrip_weight = 0;
   double unreliability = 0;
   double required_data_unavailable_until = 0;
+  double required_data_success_until = 0;
 
   explicit Neighbour(adnl::AdnlNodeIdShort adnl_id) : adnl_id(std::move(adnl_id)) {
   }
@@ -245,7 +246,7 @@ class FullNodeShardImpl : public FullNodeShard {
   void got_neighbours(std::vector<adnl::AdnlNodeIdShort> res);
   void add_public_sync_hints(std::vector<adnl::AdnlNodeIdShort> peers) override;
   void update_neighbour_stats(adnl::AdnlNodeIdShort adnl_id, double t, bool success);
-  void mark_required_data_unavailable(adnl::AdnlNodeIdShort adnl_id);
+  void record_required_data_result(adnl::AdnlNodeIdShort adnl_id, bool success, double cooldown);
   void got_neighbour_capabilities(adnl::AdnlNodeIdShort adnl_id, double t, td::BufferSlice data);
   const Neighbour &choose_neighbour(td::uint32 required_version_major = 0, td::uint32 required_version_minor = 0,
                                     bool require_data = false) const;
