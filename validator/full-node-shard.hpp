@@ -45,6 +45,7 @@ struct Neighbour {
   double roundtrip_relax_at = 0;
   double roundtrip_weight = 0;
   double unreliability = 0;
+  double proof_link_unavailable_until = 0;
 
   explicit Neighbour(adnl::AdnlNodeIdShort adnl_id) : adnl_id(std::move(adnl_id)) {
   }
@@ -244,14 +245,17 @@ class FullNodeShardImpl : public FullNodeShard {
   void got_neighbours(std::vector<adnl::AdnlNodeIdShort> res);
   void add_public_sync_hints(std::vector<adnl::AdnlNodeIdShort> peers) override;
   void update_neighbour_stats(adnl::AdnlNodeIdShort adnl_id, double t, bool success);
+  void mark_proof_link_unavailable(adnl::AdnlNodeIdShort adnl_id);
   void got_neighbour_capabilities(adnl::AdnlNodeIdShort adnl_id, double t, td::BufferSlice data);
-  const Neighbour &choose_neighbour(td::uint32 required_version_major = 0, td::uint32 required_version_minor = 0) const;
+  const Neighbour &choose_neighbour(td::uint32 required_version_major = 0, td::uint32 required_version_minor = 0,
+                                    bool require_proof_link = false) const;
 
   template <typename T>
   td::Promise<T> create_neighbour_promise(const Neighbour &x, td::Promise<T> p, bool require_state = false) {
     return td::PromiseCreator::lambda([id = x.adnl_id, SelfId = actor_id(this), p = std::move(p),
-                                       ts = td::Time::now()](td::Result<T> R) mutable {
-      if (R.is_error() && R.error().code() != ErrorCode::notready && R.error().code() != ErrorCode::cancelled) {
+                                       ts = td::Time::now(), require_state](td::Result<T> R) mutable {
+      if (R.is_error() && (require_state || R.error().code() != ErrorCode::notready) &&
+          R.error().code() != ErrorCode::cancelled) {
         td::actor::send_closure(SelfId, &FullNodeShardImpl::update_neighbour_stats, id, td::Time::now() - ts, false);
       } else {
         td::actor::send_closure(SelfId, &FullNodeShardImpl::update_neighbour_stats, id, td::Time::now() - ts, true);
