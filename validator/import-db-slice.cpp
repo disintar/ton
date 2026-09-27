@@ -347,21 +347,37 @@ void ArchiveImporter::download_shard_archives(td::Ref<MasterchainState> start_st
   }
 }
 
-void ArchiveImporter::download_shard_archive(ShardIdFull shard_prefix) {
+void ArchiveImporter::download_shard_archive(ShardIdFull shard_prefix, unsigned failures) {
   td::actor::send_closure(
       manager_, &ValidatorManager::send_download_archive_request, start_import_seqno_, shard_prefix, db_root_ + "/tmp/",
       td::Timestamp::in(3600.0), allow_custom_overlay_,
-      [SelfId = actor_id(this), seqno = start_import_seqno_, shard_prefix](td::Result<std::string> R) {
+      [SelfId = actor_id(this), seqno = start_import_seqno_, shard_prefix, failures](td::Result<std::string> R) {
         if (R.is_error()) {
-          LOG(WARNING) << "Failed to download archive slice #" << seqno << " for shard " << shard_prefix.to_str() << " error: " << R.move_as_error().to_string();
+          auto error = R.move_as_error();
+          LOG(WARNING) << "Failed to download archive slice #" << seqno << " for shard " << shard_prefix.to_str()
+                       << " attempt=" << (failures + 1) << " error: " << error;
+          if (failures >= 1) {
+            td::actor::send_closure(SelfId, &ArchiveImporter::fail_shard_archive, std::move(error));
+            return;
+          }
           delay_action(
-              [=]() { td::actor::send_closure(SelfId, &ArchiveImporter::download_shard_archive, shard_prefix); },
+              [=]() { td::actor::send_closure(SelfId, &ArchiveImporter::download_shard_archive, shard_prefix,
+                                               failures + 1); },
               td::Timestamp::in(2.0));
         } else {
           LOG(DEBUG) << "Downloaded shard archive #" << seqno << " " << shard_prefix;
           td::actor::send_closure(SelfId, &ArchiveImporter::downloaded_shard_archive, R.move_as_ok());
         }
       });
+}
+
+void ArchiveImporter::fail_shard_archive(td::Status error) {
+  for (const std::string &f : files_to_cleanup_) {
+    td::unlink(f).ignore();
+  }
+  // A verified masterchain package alone cannot advance the shard client.
+  promise_.set_error(std::move(error));
+  stop();
 }
 
 void ArchiveImporter::downloaded_shard_archive(std::string path) {

@@ -49,7 +49,8 @@ class ArchiveImporter : public td::actor::Actor {
 
   void checked_all_masterchain_blocks();
   void download_shard_archives(td::Ref<MasterchainState> start_state);
-  void download_shard_archive(ShardIdFull shard_prefix);
+  void download_shard_archive(ShardIdFull shard_prefix, unsigned failures = 0);
+  void fail_shard_archive(td::Status error);
   void downloaded_shard_archive(std::string path);
 
   void check_next_shard_client_seqno(BlockSeqno seqno);
