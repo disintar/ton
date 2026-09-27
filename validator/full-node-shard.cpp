@@ -1214,7 +1214,7 @@ void FullNodeShardImpl::download_block_proof_link(BlockIdExt block_id, td::uint3
   auto &b = choose_neighbour();
   auto peer = b.adnl_id;
   auto started_at = td::Time::now();
-  auto traced_promise = td::PromiseCreator::lambda(
+  td::Promise<td::BufferSlice> traced_promise = td::PromiseCreator::lambda(
       [block_id, peer, started_at, promise = std::move(promise)](td::Result<td::BufferSlice> result) mutable {
         auto elapsed_ms = static_cast<long long>((td::Time::now() - started_at) * 1000.0);
         if (private_sync_trace_should_log(result.is_error(), elapsed_ms)) {
