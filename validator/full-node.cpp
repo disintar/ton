@@ -646,7 +646,34 @@ void FullNodeImpl::download_block(BlockIdExt id, td::uint32 priority, td::Timest
       record_public_overlay_sync_download(CustomOverlaySyncKind::Block, PublicOverlaySyncReason::Fallback);
       log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::Block, id, "fullnode.public", "public", "fallback",
                                       "race_custom_overlay", name);
-      td::actor::send_closure(actor, &FullNodeCustomOverlay::download_block, id, priority, timeout, std::move(P));
+      auto P_handle = td::PromiseCreator::lambda(
+          [actor, id, priority, timeout, name, P = std::move(P)](td::Result<BlockHandle> R) mutable {
+            if (R.is_ok()) {
+              auto handle = R.move_as_ok();
+              if (handle->inited_prev() && !handle->merge_before()) {
+                auto prev_id = handle->one_prev(true);
+                if (prev_id.shard_full() == id.shard_full() && prev_id.id.seqno + 1 == id.id.seqno) {
+                  log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::Block, id, "fullnode.custom_next",
+                                                  "custom", "attempt", {}, name);
+                  auto P_next = td::PromiseCreator::lambda(
+                      [id, P = std::move(P)](td::Result<ReceivedBlock> next) mutable {
+                        if (next.is_ok() && next.ok().id != id) {
+                          P.set_error(td::Status::Error(ErrorCode::notready,
+                                                        "custom next block does not match requested block"));
+                        } else {
+                          P.set_result(std::move(next));
+                        }
+                      });
+                  td::actor::send_closure(actor, &FullNodeCustomOverlay::download_next_block, prev_id, priority,
+                                          timeout, std::move(P_next));
+                  return;
+                }
+              }
+            }
+            td::actor::send_closure(actor, &FullNodeCustomOverlay::download_block, id, priority, timeout,
+                                    std::move(P));
+          });
+      td::actor::send_closure(validator_manager_, &ValidatorManager::get_block_handle, id, true, std::move(P_handle));
       download_block_from_public_overlay(id, priority, timeout, std::move(PublicP));
       return;
     }
