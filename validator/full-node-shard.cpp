@@ -338,7 +338,7 @@ td::actor::Task<> FullNodeShardImpl::get_next_blocks_loop() {
       return score(a) < score(b);
     });
     if (public_peers.size() > 4) {
-      public_peers.resize(4);
+      public_peers.erase(public_peers.begin() + 4, public_peers.end());
     }
     auto [task, promise] = td::actor::StartedTask<BlockHandle>::make_bridge();
     auto race = std::make_shared<NextBlocksOverlayRaceState>(std::move(promise));
