@@ -3,11 +3,10 @@
 
 namespace ton::validator {
 
-// Archive validation itself can take twenty seconds per hundred blocks.
-// Let the live downloader close the final bounded gap, without allowing an
-// immediate recovery back into archives before it has had time to progress.
-constexpr double kPrestartArchiveSyncTargetLagSeconds = 60.0;
-// Leave room for live block/proof downloads after an archive ends near 60s lag.
+// Keep importing archives until the remaining gap is small enough for live sync.
+// If fresh archive slices are unavailable, the bounded failure fallback takes over.
+constexpr double kPrestartArchiveSyncTargetLagSeconds = 15.0;
+// Leave room for live block/proof downloads after an archive ends near the tip.
 // A smaller recovery threshold makes the node repeatedly re-enter archives.
 constexpr double kLiveArchiveSyncRecoveryLagSeconds = 180.0;
 constexpr double kLiveSyncCatchupGraceSeconds = 60.0;

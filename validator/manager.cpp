@@ -2349,11 +2349,23 @@ bool ValidatorManagerImpl::out_of_sync() {
   if (seqno < opts_->sync_upto()) {
     return true;
   }
+  const auto shard_seqno = shard_client_handle_->id().seqno();
+  const auto shard_gap = last_masterchain_seqno_ > shard_seqno ? last_masterchain_seqno_ - shard_seqno : 0;
+  const auto master_lag = td::Clocks::system() - last_masterchain_block_handle_->unix_time();
+  const auto shard_lag = td::Clocks::system() - shard_client_handle_->unix_time();
   if (archive_sync_near_live(td::Clocks::system(), last_masterchain_block_handle_->unix_time(),
-                             shard_client_handle_->unix_time())) {
+                             shard_client_handle_->unix_time()) && shard_gap <= 16) {
+    if (private_sync_trace_should_log(true, 0)) {
+      LOG(WARNING) << "[private-sync] stage=archive.exit master_lag=" << master_lag
+                   << " shard_lag=" << shard_lag << " mc_gap=" << shard_gap << " result=live";
+    }
     return false;
   }
-  if (shard_client_handle_->id().seqno() + 16 < last_masterchain_seqno_) {
+  if (shard_gap > 16) {
+    if (master_lag < 60.0 && shard_lag < 60.0 && private_sync_trace_should_log(true, 0)) {
+      LOG(WARNING) << "[private-sync] stage=archive.continue master_lag=" << master_lag
+                   << " shard_lag=" << shard_lag << " mc_gap=" << shard_gap << " result=gap";
+    }
     return true;
   }
 
