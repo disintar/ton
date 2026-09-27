@@ -159,6 +159,8 @@ class FullNodeCustomOverlay : public td::actor::Actor {
     unsigned failures = 0;
   };
   std::map<adnl::AdnlNodeIdShort, DownloadPeerHealth> download_peer_health_;
+  size_t proof_peers_inflight_ = 0;
+  void proof_peer_finished();
 
   bool inited_ = false;
   overlay::OverlayIdFull overlay_id_full_;

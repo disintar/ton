@@ -47,6 +47,7 @@ namespace {
 
 constexpr const char *k_called_from_custom = "custom";
 constexpr td::uint32 k_heavy_request_cost_unit = 1 << 21;
+constexpr size_t kMaxPrivateProofPeersInflight = 16;
 
 bool allow_proof_error_log() {
   static std::atomic<td::uint64> bucket{0};
@@ -1278,6 +1279,11 @@ void FullNodeCustomOverlay::download_block_proof_link(BlockIdExt block_id, td::u
   download_proof_from_custom_peers(block_id, true, priority, timeout, std::move(promise));
 }
 
+void FullNodeCustomOverlay::proof_peer_finished() {
+  CHECK(proof_peers_inflight_ > 0);
+  --proof_peers_inflight_;
+}
+
 void FullNodeCustomOverlay::download_proof_from_custom_peers(BlockIdExt block_id, bool proof_link,
                                                              td::uint32 priority, td::Timestamp timeout,
                                                              td::Promise<td::BufferSlice> promise) {
@@ -1295,12 +1301,18 @@ void FullNodeCustomOverlay::download_proof_from_custom_peers(BlockIdExt block_id
     return;
   }
   auto peers = custom_download_peers();
-  peers.resize(std::min<std::size_t>(peers.size(), 2));
+  if (proof_peers_inflight_ >= kMaxPrivateProofPeersInflight) {
+    record_custom_overlay_sync_download(CustomOverlaySyncKind::Proof, sender, CustomOverlaySyncResult::NotReady);
+    promise.set_error(td::Status::Error(ErrorCode::notready, "private proof stream limit reached"));
+    return;
+  }
+  peers.resize(std::min<std::size_t>({peers.size(), 2, kMaxPrivateProofPeersInflight - proof_peers_inflight_}));
   if (peers.empty()) {
     record_custom_overlay_sync_download(CustomOverlaySyncKind::Proof, sender, CustomOverlaySyncResult::NoPeer);
     promise.set_error(td::Status::Error(ErrorCode::notready, "no authorized proof peers"));
     return;
   }
+  proof_peers_inflight_ += peers.size();
   auto aggregate = td::PromiseCreator::lambda([promise = std::move(promise), sender, started_at](
                                                   td::Result<td::BufferSlice> R) mutable {
     record_custom_overlay_sync_download(CustomOverlaySyncKind::Proof, sender,
@@ -1317,6 +1329,7 @@ void FullNodeCustomOverlay::download_proof_from_custom_peers(BlockIdExt block_id
                    adnl_sender = td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_},
                    overlays = overlays_, adnl = adnl_, callback = std::move(callbacks[i])]() mutable {
       if (winner->load(std::memory_order_relaxed)) {
+        td::actor::send_closure(self, &FullNodeCustomOverlay::proof_peer_finished);
         callback.set_error(td::Status::Error(ErrorCode::notready, "proof hedge not needed"));
         return;
       }
@@ -1335,6 +1348,7 @@ void FullNodeCustomOverlay::download_proof_from_custom_peers(BlockIdExt block_id
             }
             td::actor::send_closure(self, &FullNodeCustomOverlay::record_download_peer_result, peer, R.is_ok(), false,
                                     now - peer_started_at);
+            td::actor::send_closure(self, &FullNodeCustomOverlay::proof_peer_finished);
             record_custom_overlay_sync_peer_download(CustomOverlaySyncKind::Proof, sender,
                                                       R.is_ok() ? CustomOverlaySyncResult::Ok
                                                                 : custom_overlay_sync_result_from_status(R.error()),
