@@ -1152,10 +1152,10 @@ void FullNodeShardImpl::send_block_finality_broadcast(BlockFinalityBroadcast fin
 
 void FullNodeShardImpl::download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                        td::Promise<ReceivedBlock> promise) {
-  const Neighbour *peers[2] = {&choose_neighbour(), nullptr};
+  const Neighbour *peers[2] = {&choose_neighbour(0, 0, true), nullptr};
   if (!peers[0]->adnl_id.is_zero()) {
     for (int i = 0; i < 8; ++i) {
-      const auto &candidate = choose_neighbour();
+      const auto &candidate = choose_neighbour(0, 0, true);
       if (!candidate.adnl_id.is_zero() && candidate.adnl_id != peers[0]->adnl_id) {
         peers[1] = &candidate;
         break;
@@ -1165,9 +1165,27 @@ void FullNodeShardImpl::download_block(BlockIdExt id, td::uint32 priority, td::T
   auto callbacks = download_race_promises<ReceivedBlock>(peers[1] ? 2 : 1, std::move(promise));
   for (size_t i = 0; i < callbacks.size(); ++i) {
     const auto &peer = *peers[i];
+    auto peer_id = peer.adnl_id;
+    auto self = actor_id(this);
+    auto started_at = td::Time::now();
+    td::Promise<ReceivedBlock> traced_promise = td::PromiseCreator::lambda(
+        [id, peer_id, self, started_at, promise = std::move(callbacks[i])](td::Result<ReceivedBlock> result) mutable {
+          auto elapsed_ms = static_cast<long long>((td::Time::now() - started_at) * 1000.0);
+          if (result.is_error() && result.error().code() == ErrorCode::notready) {
+            td::actor::send_closure(self, &FullNodeShardImpl::mark_required_data_unavailable, peer_id);
+          }
+          if (private_sync_trace_should_log(result.is_error(), elapsed_ms)) {
+            LOG(WARNING) << "[private-sync] stage=public.block block=" << id << " peer=" << peer_id
+                         << " ms=" << elapsed_ms << " result=" << (result.is_ok() ? "ok" : "error")
+                         << " data_cooldown_ms="
+                         << (result.is_error() && result.error().code() == ErrorCode::notready ? 2000 : 0)
+                         << " reason=" << (result.is_error() ? result.error().to_string() : "-");
+          }
+          promise.set_result(std::move(result));
+        });
     td::actor::create_actor<DownloadBlockNew>(PSTRING() << "downloadreq" << id.id, id, adnl_id_, overlay_id_,
                                               peer.adnl_id, priority, timeout, validator_manager_, rldp2_, overlays_,
-                                              adnl_, client_, create_neighbour_promise(peer, std::move(callbacks[i])))
+                                              adnl_, client_, create_neighbour_promise(peer, std::move(traced_promise), true))
         .release();
   }
 }
@@ -1219,7 +1237,7 @@ void FullNodeShardImpl::download_block_proof_link(BlockIdExt block_id, td::uint3
       [block_id, peer, self, started_at, promise = std::move(promise)](td::Result<td::BufferSlice> result) mutable {
         auto elapsed_ms = static_cast<long long>((td::Time::now() - started_at) * 1000.0);
         if (result.is_error() && result.error().code() == ErrorCode::notready) {
-          td::actor::send_closure(self, &FullNodeShardImpl::mark_proof_link_unavailable, peer);
+          td::actor::send_closure(self, &FullNodeShardImpl::mark_required_data_unavailable, peer);
         }
         if (private_sync_trace_should_log(result.is_error(), elapsed_ms)) {
           LOG(WARNING) << "[private-sync] stage=public.proof_link block=" << block_id << " peer=" << peer
@@ -1672,12 +1690,12 @@ void FullNodeShardImpl::add_public_sync_hints(std::vector<adnl::AdnlNodeIdShort>
 
 const Neighbour &FullNodeShardImpl::choose_neighbour(td::uint32 required_version_major,
                                                      td::uint32 required_version_minor,
-                                                     bool require_proof_link) const {
+                                                     bool require_data) const {
   if (neighbours_.size() == 0) {
     return Neighbour::zero;
   }
   auto is_eligible = [&](const Neighbour &n) {
-    return (!require_proof_link || n.proof_link_unavailable_until <= td::Time::now()) &&
+    return (!require_data || n.required_data_unavailable_until <= td::Time::now()) &&
            (n.version_major > required_version_major ||
             (n.version_major == required_version_major && n.version_minor >= required_version_minor));
   };
@@ -1717,16 +1735,16 @@ const Neighbour &FullNodeShardImpl::choose_neighbour(td::uint32 required_version
   if (best) {
     return *best;
   }
-  if (require_proof_link) {
+  if (require_data) {
     return choose_neighbour(required_version_major, required_version_minor);
   }
   return Neighbour::zero;
 }
 
-void FullNodeShardImpl::mark_proof_link_unavailable(adnl::AdnlNodeIdShort adnl_id) {
+void FullNodeShardImpl::mark_required_data_unavailable(adnl::AdnlNodeIdShort adnl_id) {
   auto it = neighbours_.find(adnl_id);
   if (it != neighbours_.end()) {
-    it->second.proof_link_unavailable_until = td::Time::now() + 2.0;
+    it->second.required_data_unavailable_until = td::Time::now() + 2.0;
   }
 }
 

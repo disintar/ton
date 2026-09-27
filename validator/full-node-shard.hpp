@@ -45,7 +45,7 @@ struct Neighbour {
   double roundtrip_relax_at = 0;
   double roundtrip_weight = 0;
   double unreliability = 0;
-  double proof_link_unavailable_until = 0;
+  double required_data_unavailable_until = 0;
 
   explicit Neighbour(adnl::AdnlNodeIdShort adnl_id) : adnl_id(std::move(adnl_id)) {
   }
@@ -245,10 +245,10 @@ class FullNodeShardImpl : public FullNodeShard {
   void got_neighbours(std::vector<adnl::AdnlNodeIdShort> res);
   void add_public_sync_hints(std::vector<adnl::AdnlNodeIdShort> peers) override;
   void update_neighbour_stats(adnl::AdnlNodeIdShort adnl_id, double t, bool success);
-  void mark_proof_link_unavailable(adnl::AdnlNodeIdShort adnl_id);
+  void mark_required_data_unavailable(adnl::AdnlNodeIdShort adnl_id);
   void got_neighbour_capabilities(adnl::AdnlNodeIdShort adnl_id, double t, td::BufferSlice data);
   const Neighbour &choose_neighbour(td::uint32 required_version_major = 0, td::uint32 required_version_minor = 0,
-                                    bool require_proof_link = false) const;
+                                    bool require_data = false) const;
 
   template <typename T>
   td::Promise<T> create_neighbour_promise(const Neighbour &x, td::Promise<T> p, bool require_state = false) {
