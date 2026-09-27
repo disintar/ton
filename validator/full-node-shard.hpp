@@ -47,6 +47,7 @@ struct Neighbour {
   double unreliability = 0;
   double required_data_unavailable_until = 0;
   double required_data_success_until = 0;
+  td::uint32 required_data_inflight = 0;
 
   explicit Neighbour(adnl::AdnlNodeIdShort adnl_id) : adnl_id(std::move(adnl_id)) {
   }

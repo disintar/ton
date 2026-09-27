@@ -1166,16 +1166,21 @@ void FullNodeShardImpl::download_block(BlockIdExt id, td::uint32 priority, td::T
   for (size_t i = 0; i < callbacks.size(); ++i) {
     const auto &peer = *peers[i];
     auto peer_id = peer.adnl_id;
+    auto peer_inflight = peer.required_data_inflight;
+    if (!peer_id.is_zero()) {
+      ++neighbours_.at(peer_id).required_data_inflight;
+    }
     auto self = actor_id(this);
     auto started_at = td::Time::now();
     td::Promise<ReceivedBlock> traced_promise = td::PromiseCreator::lambda(
-        [id, peer_id, self, started_at, promise = std::move(callbacks[i])](td::Result<ReceivedBlock> result) mutable {
+        [id, peer_id, peer_inflight, self, started_at, promise = std::move(callbacks[i])](td::Result<ReceivedBlock> result) mutable {
           auto elapsed_ms = static_cast<long long>((td::Time::now() - started_at) * 1000.0);
           auto cooldown = result.is_ok() ? 0.0 : (result.error().code() == ErrorCode::notready ? 2.0 : 4.0);
           td::actor::send_closure(self, &FullNodeShardImpl::record_required_data_result, peer_id, result.is_ok(),
                                   cooldown);
           if (private_sync_trace_should_log(result.is_error(), elapsed_ms)) {
             LOG(WARNING) << "[private-sync] stage=public.block block=" << id << " peer=" << peer_id
+                         << " peer_inflight=" << peer_inflight
                          << " ms=" << elapsed_ms << " result=" << (result.is_ok() ? "ok" : "error")
                          << " data_cooldown_ms=" << static_cast<int>(cooldown * 1000)
                          << " reason=" << (result.is_error() ? result.error().to_string() : "-");
@@ -1230,16 +1235,21 @@ void FullNodeShardImpl::download_block_proof_link(BlockIdExt block_id, td::uint3
                                                   td::Promise<td::BufferSlice> promise) {
   auto &b = choose_neighbour(0, 0, true);
   auto peer = b.adnl_id;
+  auto peer_inflight = b.required_data_inflight;
+  if (!peer.is_zero()) {
+    ++neighbours_.at(peer).required_data_inflight;
+  }
   auto started_at = td::Time::now();
   auto self = actor_id(this);
   td::Promise<td::BufferSlice> traced_promise = td::PromiseCreator::lambda(
-      [block_id, peer, self, started_at, promise = std::move(promise)](td::Result<td::BufferSlice> result) mutable {
+      [block_id, peer, peer_inflight, self, started_at, promise = std::move(promise)](td::Result<td::BufferSlice> result) mutable {
         auto elapsed_ms = static_cast<long long>((td::Time::now() - started_at) * 1000.0);
         auto cooldown = result.is_ok() ? 0.0 : (result.error().code() == ErrorCode::notready ? 2.0 : 4.0);
         td::actor::send_closure(self, &FullNodeShardImpl::record_required_data_result, peer, result.is_ok(),
                                 cooldown);
         if (private_sync_trace_should_log(result.is_error(), elapsed_ms)) {
           LOG(WARNING) << "[private-sync] stage=public.proof_link block=" << block_id << " peer=" << peer
+                       << " peer_inflight=" << peer_inflight
                        << " ms=" << elapsed_ms << " result=" << (result.is_ok() ? "ok" : "error")
                        << " penalize=" << (result.is_error() && result.error().code() != ErrorCode::cancelled ? 1 : 0)
                        << " proof_cooldown_ms=" << static_cast<int>(cooldown * 1000)
@@ -1699,7 +1709,8 @@ const Neighbour &FullNodeShardImpl::choose_neighbour(td::uint32 required_version
             (n.version_major == required_version_major && n.version_minor >= required_version_minor));
   };
   auto score = [&](const Neighbour &n) {
-    return n.unreliability - (require_data && n.required_data_success_until > now ? 4.0 : 0.0);
+    return n.unreliability +
+           (require_data ? 2.0 * n.required_data_inflight - (n.required_data_success_until > now ? 4.0 : 0.0) : 0.0);
   };
 
   double min_unreliability = 1e9;
@@ -1746,6 +1757,9 @@ const Neighbour &FullNodeShardImpl::choose_neighbour(td::uint32 required_version
 void FullNodeShardImpl::record_required_data_result(adnl::AdnlNodeIdShort adnl_id, bool success, double cooldown) {
   auto it = neighbours_.find(adnl_id);
   if (it != neighbours_.end()) {
+    if (it->second.required_data_inflight > 0) {
+      --it->second.required_data_inflight;
+    }
     if (success) {
       it->second.required_data_success_until = td::Time::now() + 30.0;
       it->second.required_data_unavailable_until = 0.0;
