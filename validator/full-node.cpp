@@ -647,7 +647,7 @@ void FullNodeImpl::download_block(BlockIdExt id, td::uint32 priority, td::Timest
       log_fullnode_overlay_sync_stage(CustomOverlaySyncKind::Block, id, "fullnode.public", "public", "fallback",
                                       "race_custom_overlay", name);
       auto P_handle = td::PromiseCreator::lambda(
-          [actor, id, priority, timeout, name, P = std::move(P)](td::Result<BlockHandle> R) mutable {
+          [actor = actor.get(), id, priority, timeout, name, P = std::move(P)](td::Result<BlockHandle> R) mutable {
             if (R.is_ok()) {
               auto handle = R.move_as_ok();
               if (handle->inited_prev() && !handle->merge_before()) {
