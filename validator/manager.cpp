@@ -2349,12 +2349,12 @@ bool ValidatorManagerImpl::out_of_sync() {
   if (seqno < opts_->sync_upto()) {
     return true;
   }
-  if (shard_client_handle_->id().seqno() + 16 < last_masterchain_seqno_) {
-    return true;
-  }
   if (archive_sync_near_live(td::Clocks::system(), last_masterchain_block_handle_->unix_time(),
                              shard_client_handle_->unix_time())) {
     return false;
+  }
+  if (shard_client_handle_->id().seqno() + 16 < last_masterchain_seqno_) {
+    return true;
   }
 
   if (last_masterchain_seqno_ < last_known_key_block_handle_->id().seqno()) {
@@ -2395,9 +2395,7 @@ void ValidatorManagerImpl::download_next_archive() {
   }
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::pair<BlockSeqno, BlockSeqno>> R) {
     if (R.is_error()) {
-      LOG(INFO) << "failed to download and import archive slice: " << R.error();
-      delay_action([SelfId]() { td::actor::send_closure(SelfId, &ValidatorManagerImpl::download_next_archive); },
-                   td::Timestamp::in(2.0));
+      td::actor::send_closure(SelfId, &ValidatorManagerImpl::archive_slice_failed, R.move_as_error());
     } else {
       td::actor::send_closure(SelfId, &ValidatorManagerImpl::checked_archive_slice, R.ok().first, R.ok().second);
     }
@@ -2415,7 +2413,29 @@ void ValidatorManagerImpl::download_next_archive() {
   }
 }
 
+void ValidatorManagerImpl::archive_slice_failed(td::Status error) {
+  ++consecutive_archive_failures_;
+  const auto now = td::Clocks::system();
+  const auto master_lag = now - last_masterchain_block_handle_->unix_time();
+  const auto shard_lag = now - shard_client_handle_->unix_time();
+  if (archive_failure_fallback_to_live(consecutive_archive_failures_, master_lag, shard_lag)) {
+    LOG(WARNING) << "[archive-sync] stage=live_fallback failures=" << consecutive_archive_failures_
+                 << " master_lag=" << td::format::as_time(master_lag)
+                 << " shard_lag=" << td::format::as_time(shard_lag)
+                 << " reason=" << error;
+    finish_prestart_sync();
+    archive_live_fallback_active_ = true;
+    live_sync_catchup_grace_until_ = td::Time::now() + kArchiveFailureLiveFallbackGraceSeconds;
+    return;
+  }
+  LOG(INFO) << "failed to download and import archive slice: " << error;
+  delay_action([SelfId = actor_id(this)]() {
+    td::actor::send_closure(SelfId, &ValidatorManagerImpl::download_next_archive);
+  }, td::Timestamp::in(2.0));
+}
+
 void ValidatorManagerImpl::checked_archive_slice(BlockSeqno new_last_mc_seqno, BlockSeqno new_shard_client_seqno) {
+  consecutive_archive_failures_ = 0;
   LOG(INFO) << "checked downloaded archive slice: mc_top_seqno=" << new_last_mc_seqno
             << " shard_top_seqno_=" << new_shard_client_seqno;
   CHECK(new_last_mc_seqno <= last_masterchain_seqno_);
@@ -2449,6 +2469,7 @@ void ValidatorManagerImpl::checked_archive_slice(BlockSeqno new_last_mc_seqno, B
 void ValidatorManagerImpl::finish_prestart_sync() {
   to_import_.clear();
   archive_sync_active_ = false;
+  consecutive_archive_failures_ = 0;
   completed_prestart_sync();
 }
 
@@ -2475,6 +2496,12 @@ void ValidatorManagerImpl::completed_prestart_sync() {
 void ValidatorManagerImpl::maybe_recover_archive_sync() {
   if (!started_ || archive_sync_active_ || !last_masterchain_block_handle_ || !shard_client_handle_) {
     return;
+  }
+  if (archive_live_fallback_active_) {
+    if (td::Time::now() < live_sync_catchup_grace_until_) {
+      return;
+    }
+    archive_live_fallback_active_ = false;
   }
   auto now = td::Clocks::system();
   auto master_lag = now - last_masterchain_block_handle_->unix_time();

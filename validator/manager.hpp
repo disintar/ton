@@ -351,6 +351,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   void applied_hardfork();
   void prestart_sync();
   void download_next_archive();
+  void archive_slice_failed(td::Status error);
   void checked_archive_slice(BlockSeqno new_last_mc_seqno, BlockSeqno new_shard_client_seqno);
   void finish_prestart_sync();
   void completed_prestart_sync();
@@ -750,6 +751,8 @@ class ValidatorManagerImpl : public ValidatorManager {
 
   bool started_ = false;
   bool archive_sync_active_ = false;
+  bool archive_live_fallback_active_ = false;
+  unsigned consecutive_archive_failures_ = 0;
   double live_sync_catchup_grace_until_ = 0.0;
 
  private:

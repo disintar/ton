@@ -36,7 +36,14 @@ TEST(ArchiveSync, NormalRecoveryBoundsResumeAfterGrace) {
   ASSERT_TRUE(!live_archive_recovery_needed(30.0, 30.0, false, 160.0, 160.0));
   ASSERT_TRUE(live_archive_recovery_needed(30.001, 1.0, false, 160.0, 160.0));
   ASSERT_TRUE(live_archive_recovery_needed(1.0, 30.001, false, 160.0, 160.0));
-  ASSERT_TRUE(live_archive_recovery_needed(1.0, 1.0, true, 160.0, 160.0));
+  ASSERT_TRUE(!live_archive_recovery_needed(1.0, 1.0, true, 160.0, 160.0));
   ASSERT_TRUE(live_archive_recovery_needed(44.0, 44.0, false, 100.0, 0.0));
   ASSERT_EQ(kLiveArchiveSyncRecoveryLagSeconds, 30.0);
+}
+
+TEST(ArchiveSync, FailedNearLiveArchiveFallsBackToLive) {
+  ASSERT_TRUE(!archive_failure_fallback_to_live(1, 300.0, 300.0));
+  ASSERT_TRUE(archive_failure_fallback_to_live(2, 300.0, 300.0));
+  ASSERT_TRUE(!archive_failure_fallback_to_live(2, 1801.0, 300.0));
+  ASSERT_TRUE(!archive_failure_fallback_to_live(2, 300.0, 1801.0));
 }

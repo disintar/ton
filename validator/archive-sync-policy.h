@@ -10,6 +10,9 @@ constexpr double kPrestartArchiveSyncTargetLagSeconds = 60.0;
 constexpr double kLiveArchiveSyncRecoveryLagSeconds = 30.0;
 constexpr double kLiveSyncCatchupGraceSeconds = 60.0;
 constexpr double kLiveArchiveEmergencyShardLagSeconds = 10.0;
+constexpr double kArchiveFailureLiveFallbackMaxLagSeconds = 1800.0;
+constexpr double kArchiveFailureLiveFallbackGraceSeconds = 300.0;
+constexpr unsigned kArchiveFailureLiveFallbackAttempts = 2;
 
 inline bool archive_sync_near_live(double now, double masterchain_time, double shard_client_time) {
   return masterchain_time + kPrestartArchiveSyncTargetLagSeconds > now &&
@@ -26,7 +29,13 @@ inline bool live_archive_recovery_needed(double master_lag, double shard_lag, bo
     return false;
   }
   return master_lag > kLiveArchiveSyncRecoveryLagSeconds ||
-         shard_lag > kLiveArchiveSyncRecoveryLagSeconds || shard_gap;
+         shard_lag > kLiveArchiveSyncRecoveryLagSeconds;
+}
+
+inline bool archive_failure_fallback_to_live(unsigned failures, double master_lag, double shard_lag) {
+  return failures >= kArchiveFailureLiveFallbackAttempts &&
+         master_lag <= kArchiveFailureLiveFallbackMaxLagSeconds &&
+         shard_lag <= kArchiveFailureLiveFallbackMaxLagSeconds;
 }
 
 }  // namespace ton::validator
