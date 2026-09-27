@@ -26,6 +26,7 @@
 #include "common/delay.h"
 #include "impl/out-msg-queue-proof.hpp"
 #include "net/download-archive-slice.hpp"
+#include "net/download-race.h"
 #include "net/archive-peer-selection.h"
 #include "net/download-block-new.hpp"
 #include "net/download-next-blocks.hpp"
@@ -1150,11 +1151,24 @@ void FullNodeShardImpl::send_block_finality_broadcast(BlockFinalityBroadcast fin
 
 void FullNodeShardImpl::download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                        td::Promise<ReceivedBlock> promise) {
-  auto &b = choose_neighbour();
-  td::actor::create_actor<DownloadBlockNew>(PSTRING() << "downloadreq" << id.id, id, adnl_id_, overlay_id_, b.adnl_id,
-                                            priority, timeout, validator_manager_, rldp2_, overlays_, adnl_, client_,
-                                            create_neighbour_promise(b, std::move(promise)))
-      .release();
+  const Neighbour *peers[2] = {&choose_neighbour(), nullptr};
+  if (!peers[0]->adnl_id.is_zero()) {
+    for (int i = 0; i < 8; ++i) {
+      const auto &candidate = choose_neighbour();
+      if (!candidate.adnl_id.is_zero() && candidate.adnl_id != peers[0]->adnl_id) {
+        peers[1] = &candidate;
+        break;
+      }
+    }
+  }
+  auto callbacks = download_race_promises<ReceivedBlock>(peers[1] ? 2 : 1, std::move(promise));
+  for (size_t i = 0; i < callbacks.size(); ++i) {
+    const auto &peer = *peers[i];
+    td::actor::create_actor<DownloadBlockNew>(PSTRING() << "downloadreq" << id.id, id, adnl_id_, overlay_id_,
+                                              peer.adnl_id, priority, timeout, validator_manager_, rldp2_, overlays_,
+                                              adnl_, client_, create_neighbour_promise(peer, std::move(callbacks[i])))
+        .release();
+  }
 }
 
 void FullNodeShardImpl::download_next_block(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
