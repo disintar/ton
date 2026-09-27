@@ -190,9 +190,9 @@ void finish_custom_overlay_sync_download(std::shared_ptr<CustomOverlaySyncDownlo
                                          td::Result<ReceivedBlock> R, double peer_started_at) {
   auto now = block_propagation_trace_now();
   if (R.is_ok()) {
-    record_custom_overlay_sync_peer_download(state->kind, state->sender, CustomOverlaySyncResult::Ok, peer_started_at,
-                                             now);
     auto value = R.move_as_ok();
+    auto result = value.from_local_db ? CustomOverlaySyncResult::LocalDb : CustomOverlaySyncResult::Ok;
+    record_custom_overlay_sync_peer_download(state->kind, state->sender, result, peer_started_at, now);
     td::Promise<ReceivedBlock> promise;
     bool should_finish = false;
     {
@@ -204,10 +204,10 @@ void finish_custom_overlay_sync_download(std::shared_ptr<CustomOverlaySyncDownlo
       }
     }
     if (should_finish) {
-      record_custom_overlay_sync_download(state->kind, state->sender, CustomOverlaySyncResult::Ok, state->started_at,
-                                          now);
+      record_custom_overlay_sync_download(state->kind, state->sender, result, state->started_at, now);
       log_custom_overlay_sync_stage(state->kind, state->sender, state->overlay_name, state->local_id, "-",
-                                    state->target, "custom.done", "ok", {}, state->peers_total, state->started_at);
+                                    state->target, "custom.done", custom_overlay_sync_result_label(metric_index(result)),
+                                    {}, state->peers_total, state->started_at);
       promise.set_value(std::move(value));
     }
     return;
@@ -872,7 +872,11 @@ void FullNodeCustomOverlay::send_shard_block_info(BlockIdExt block_id, CatchainS
   }
 }
 
-void FullNodeCustomOverlay::record_download_peer_result(adnl::AdnlNodeIdShort peer, bool success, double elapsed) {
+void FullNodeCustomOverlay::record_download_peer_result(adnl::AdnlNodeIdShort peer, bool success,
+                                                        bool from_local_db, double elapsed) {
+  if (from_local_db) {
+    return;
+  }
   auto &health = download_peer_health_[peer];
   if (success) {
     health.failures = 0;
@@ -977,6 +981,7 @@ void FullNodeCustomOverlay::download_block_from_custom_peers(BlockIdExt id, td::
                                   "peer.attempt", "attempt", {}, peers_total, peer_started_at);
     auto P = td::PromiseCreator::lambda([state, self, peer, id, peer_string, peer_started_at](td::Result<ReceivedBlock> R) mutable {
       td::actor::send_closure(self, &FullNodeCustomOverlay::record_download_peer_result, peer, R.is_ok(),
+                              R.is_ok() && R.ok().from_local_db,
                               block_propagation_trace_now() - peer_started_at);
       if (R.is_error()) {
         VLOG(FULL_NODE_DEBUG) << "failed to download block " << id.to_str() << " from custom overlay peer " << peer
@@ -989,7 +994,8 @@ void FullNodeCustomOverlay::download_block_from_custom_peers(BlockIdExt id, td::
                                       state->peers_total, peer_started_at);
       } else {
         log_custom_overlay_sync_stage(state->kind, state->sender, state->overlay_name, state->local_id, peer_string,
-                                      state->target, "peer.done", "ok", {}, state->peers_total, peer_started_at);
+                                      state->target, "peer.done", R.ok().from_local_db ? "local_db" : "ok", {},
+                                      state->peers_total, peer_started_at);
       }
       finish_custom_overlay_sync_download(std::move(state), std::move(R), peer_started_at);
     });
@@ -1046,6 +1052,7 @@ void FullNodeCustomOverlay::download_next_block_from_custom_peers(BlockIdExt pre
                                   "peer.attempt", "attempt", {}, peers.size(), peer_started_at);
     auto P = td::PromiseCreator::lambda([state, self = actor_id(this), peer, prev_id, peer_string, peer_started_at](td::Result<ReceivedBlock> R) mutable {
       td::actor::send_closure(self, &FullNodeCustomOverlay::record_download_peer_result, peer, R.is_ok(),
+                              R.is_ok() && R.ok().from_local_db,
                               block_propagation_trace_now() - peer_started_at);
       if (R.is_error()) {
         VLOG(FULL_NODE_DEBUG) << "failed to download next block after " << prev_id.to_str()
@@ -1058,7 +1065,8 @@ void FullNodeCustomOverlay::download_next_block_from_custom_peers(BlockIdExt pre
                                       state->peers_total, peer_started_at);
       } else {
         log_custom_overlay_sync_stage(state->kind, state->sender, state->overlay_name, state->local_id, peer_string,
-                                      state->target, "peer.done", "ok", {}, state->peers_total, peer_started_at);
+                                      state->target, "peer.done", R.ok().from_local_db ? "local_db" : "ok", {},
+                                      state->peers_total, peer_started_at);
       }
       finish_custom_overlay_sync_download(std::move(state), std::move(R), peer_started_at);
     });

@@ -65,7 +65,8 @@ enum class CustomOverlaySyncResult : std::size_t {
   NotReady = 5,
   ShardNotServed = 6,
   Exhausted = 7,
-  Count = 8
+  LocalDb = 8,
+  Count = 9
 };
 enum class CustomOverlaySyncFallbackReason : std::size_t {
   CustomError = 0,
@@ -115,7 +116,7 @@ inline const char *custom_overlay_sync_sender_label(std::size_t value) {
 
 inline const char *custom_overlay_sync_result_label(std::size_t value) {
   static constexpr std::array<const char *, custom_overlay_sync_result_count()> labels = {
-      "attempt", "ok", "error", "no_peer", "timeout", "not_ready", "shard_not_served", "exhausted"};
+      "attempt", "ok", "error", "no_peer", "timeout", "not_ready", "shard_not_served", "exhausted", "local_db"};
   return labels[value];
 }
 

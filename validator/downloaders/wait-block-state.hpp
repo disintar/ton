@@ -74,6 +74,7 @@ class WaitBlockState : public td::actor::Actor {
     alarm_timestamp() = timeout_;
     priority_ = priority;
   }
+  void report_slow_stage(td::uint64 generation);
 
   // These two methods can be called from ValidatorManagerImpl::written_handle
   void after_get_proof_link() {
@@ -114,6 +115,11 @@ class WaitBlockState : public td::actor::Actor {
   bool waiting_proof_link_ = false;
   bool waiting_proof_ = false;
   td::Timestamp next_static_file_attempt_;
+  const char *wait_stage_ = "start";
+  double wait_stage_started_at_ = 0.0;
+  td::uint64 wait_stage_generation_ = 0;
+
+  void note_wait_stage(const char *stage);
 
   td::PerfWarningTimer perf_timer_{"waitstate", 1.0};
 

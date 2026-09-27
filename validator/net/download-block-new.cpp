@@ -293,6 +293,7 @@ void DownloadBlockNew::got_ready_to_deserialize(tl_object_ptr<ton_api::tonNode_D
 
 void DownloadBlockNew::got_data_from_db(td::BufferSlice data) {
   block_.data = std::move(data);
+  block_.from_local_db = true;
   finish_query();
 }
 

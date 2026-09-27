@@ -25,9 +25,10 @@ namespace ton::validator {
 struct ReceivedBlock {
   BlockIdExt id;
   td::BufferSlice data;
+  bool from_local_db = false;
 
   ReceivedBlock clone() const {
-    return ReceivedBlock{id, data.clone()};
+    return ReceivedBlock{id, data.clone(), from_local_db};
   }
 };
 
