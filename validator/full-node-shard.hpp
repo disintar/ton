@@ -18,6 +18,8 @@
 */
 #pragma once
 
+#include <atomic>
+#include <memory>
 #include <set>
 
 #include "auto/tl/ton_api.h"
@@ -85,7 +87,7 @@ class FullNodeShardImpl : public FullNodeShard {
     return 2;
   }
   static constexpr td::uint32 max_neighbours() {
-    return 16;
+    return 48;
   }
   static constexpr double stop_unreliability() {
     return 5.0;
@@ -248,6 +250,9 @@ class FullNodeShardImpl : public FullNodeShard {
   void add_public_sync_hints(std::vector<adnl::AdnlNodeIdShort> peers) override;
   void update_neighbour_stats(adnl::AdnlNodeIdShort adnl_id, double t, bool success);
   void record_required_data_result(adnl::AdnlNodeIdShort adnl_id, bool success, double cooldown);
+  void launch_block_download(BlockIdExt id, adnl::AdnlNodeIdShort peer_id, td::uint32 priority,
+                             td::Timestamp timeout, std::shared_ptr<std::atomic<bool>> won,
+                             td::Promise<ReceivedBlock> promise);
   void got_neighbour_capabilities(adnl::AdnlNodeIdShort adnl_id, double t, td::BufferSlice data);
   const Neighbour &choose_neighbour(td::uint32 required_version_major = 0, td::uint32 required_version_minor = 0,
                                     bool require_data = false) const;

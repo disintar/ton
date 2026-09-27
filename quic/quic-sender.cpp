@@ -1,14 +1,47 @@
 #include <utility>
+#include <atomic>
+#include <cstdlib>
+#include <cstring>
 
 #include "auto/tl/ton_api.hpp"
 #include "td/actor/coro_utils.h"
 #include "td/utils/Heap.h"
+#include "td/utils/Time.h"
 #include "td/utils/as.h"
 
 #include "quic-pimpl.h"
 #include "quic-sender.h"
 
 namespace ton::quic {
+
+namespace {
+bool sync_transport_trace_enabled() {
+  static const bool enabled = [] {
+    const char *mode = std::getenv("DTON_TRACE_BLOCK_PROPAGATION");
+    return mode != nullptr && std::strcmp(mode, "sync") == 0;
+  }();
+  return enabled;
+}
+
+bool allow_sync_transport_trace() {
+  if (!sync_transport_trace_enabled()) {
+    return false;
+  }
+  static std::atomic<td::uint64> bucket{0};
+  auto second = static_cast<td::uint64>(td::Time::now());
+  auto current = bucket.load(std::memory_order_relaxed);
+  while (true) {
+    auto count = (current >> 8) == second ? current & 255 : 0;
+    if (count >= 12) {
+      return false;
+    }
+    auto next = (second << 8) | (count + 1);
+    if (bucket.compare_exchange_weak(current, next, std::memory_order_relaxed)) {
+      return true;
+    }
+  }
+}
+}  // namespace
 
 static td::Result<adnl::AdnlNodeIdShort> parse_peer_id(td::Slice peer_public_key) {
   if (peer_public_key.size() != 32) {
@@ -420,6 +453,11 @@ td::actor::Task<td::BufferSlice> QuicSender::send_query_coro(adnl::AdnlNodeIdSho
   auto conn_result = co_await find_or_create_connection({src, dst}).wrap();
   if (conn_result.is_error()) {
     query_roundtrip_.record(magic, dst, timer.elapsed(), false);
+    if (allow_sync_transport_trace()) {
+      LOG(WARNING) << "[quic-sync] stage=query.connect_failed peer=" << dst << " tl=" << metrics::tl_name(magic)
+                   << " ms=" << static_cast<td::uint64>(timer.elapsed() * 1000.0)
+                   << " reason=" << conn_result.error();
+    }
     co_return conn_result.move_as_error();
   }
   auto connection_seconds = timer.elapsed();
@@ -432,6 +470,11 @@ td::actor::Task<td::BufferSlice> QuicSender::send_query_coro(adnl::AdnlNodeIdSho
   }
   if (timeout && timeout.is_in_past()) {
     query_roundtrip_.record(magic, dst, timer.elapsed(), false);
+    if (allow_sync_transport_trace()) {
+      LOG(WARNING) << "[quic-sync] stage=query.deadline peer=" << dst << " tl=" << metrics::tl_name(magic)
+                   << " ms=" << static_cast<td::uint64>(timer.elapsed() * 1000.0)
+                   << " reason=resolve_or_connect";
+    }
     co_return td::Status::Error("QUIC query deadline expired while resolving peer or connecting");
   }
   auto conn = conn_result.move_as_ok();
@@ -442,6 +485,12 @@ td::actor::Task<td::BufferSlice> QuicSender::send_query_coro(adnl::AdnlNodeIdSho
                         .query_magic = magic};
   auto result = co_await send_query_coro_inner(std::move(conn), options, std::move(data)).wrap();
   query_roundtrip_.record(magic, dst, timer.elapsed(), result.is_ok());
+  if ((result.is_error() || timer.elapsed() >= 0.25) && allow_sync_transport_trace()) {
+    LOG(WARNING) << "[quic-sync] stage=query.done peer=" << dst << " tl=" << metrics::tl_name(magic)
+                 << " ms=" << static_cast<td::uint64>(timer.elapsed() * 1000.0)
+                 << " result=" << (result.is_ok() ? "ok" : "error")
+                 << " reason=" << (result.is_error() ? result.error().to_string() : "-");
+  }
   co_return std::move(result);
 }
 
@@ -543,11 +592,18 @@ td::actor::Task<td::Unit> QuicSender::init_connection(AdnlPath path, std::shared
 }
 
 td::actor::Task<td::Unit> QuicSender::init_connection_inner(AdnlPath path, std::shared_ptr<Connection> conn) {
+  auto started_at = td::Time::now();
   auto node = co_await ask(adnl_, &adnl::Adnl::get_peer_node, path.first, path.second).trace("get_peer_node");
 
   auto peer_addr = co_await get_ip_address(node);
   auto peer_host = peer_addr.get_ip_host();
   auto peer_port = peer_addr.get_port();
+  if (allow_sync_transport_trace()) {
+    LOG(WARNING) << "[quic-sync] stage=peer.resolved peer=" << path.second << " host=" << peer_host
+                 << " port=" << peer_port
+                 << " ms=" << static_cast<td::uint64>((td::Time::now() - started_at) * 1000.0)
+                 << " result=ok";
+  }
 
   auto local_key_iter = local_keys_.find(path.first);
   if (local_key_iter == local_keys_.end()) {
@@ -566,6 +622,12 @@ td::actor::Task<td::Unit> QuicSender::init_connection_inner(AdnlPath path, std::
   auto connection_id = co_await ask(server, &QuicServer::connect, peer_host, peer_port, std::move(client_key),
                                     td::Slice("ton"), td::Slice(sni))
                            .trace("connect");
+  if (allow_sync_transport_trace()) {
+    LOG(WARNING) << "[quic-sync] stage=connect.start peer=" << path.second << " host=" << peer_host
+                 << " port=" << peer_port
+                 << " ms_from_resolve=" << static_cast<td::uint64>((td::Time::now() - started_at) * 1000.0)
+                 << " result=ok";
+  }
   conn->cid = connection_id;
   conn->path = path;
   conn->server = server;
@@ -649,6 +711,10 @@ void QuicSender::on_connected(td::actor::ActorId<QuicServer> server, QuicConnect
 
   CHECK(connection);
   connection->is_ready = true;
+  if (allow_sync_transport_trace()) {
+    LOG(WARNING) << "[quic-sync] stage=handshake.done peer=" << peer_id
+                 << " outbound=" << is_outbound << " result=ok";
+  }
   td::actor::send_closure(server, &QuicServer::record_handshake_completed, is_outbound);
   finish_connection_init(connection, td::Unit{});
 }

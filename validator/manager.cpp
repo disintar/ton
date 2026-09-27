@@ -2022,14 +2022,14 @@ void ValidatorManagerImpl::finish_proof_link_network_request(BlockIdExt block_id
                  << " ms=" << elapsed_ms << " result=" << (result.is_ok() ? "ok" : "error")
                  << " reason=" << (result.is_error() ? result.error().to_string() : "-");
   }
-  if (result.is_ok() || block_id.is_masterchain()) {
+  if (result.is_ok() || block_id.is_masterchain() || result.error().code() != ErrorCode::notready) {
     promise.set_result(std::move(result));
     return;
   }
   int count = block_fallback_inflight.load(std::memory_order_relaxed);
-  while (count < 32 && !block_fallback_inflight.compare_exchange_weak(count, count + 1, std::memory_order_relaxed)) {
+  while (count < 4 && !block_fallback_inflight.compare_exchange_weak(count, count + 1, std::memory_order_relaxed)) {
   }
-  if (count >= 32) {
+  if (count >= 4) {
     if (private_sync_trace_should_log(true, 0)) {
       LOG(WARNING) << "[private-sync] stage=proof_link.block_fallback.skip block=" << block_id
                    << " inflight=" << count << " reason=capacity";
@@ -2056,11 +2056,19 @@ void ValidatorManagerImpl::finish_proof_link_network_request(BlockIdExt block_id
         }
         auto received = block.move_as_ok();
         if (received.id != block_id) {
+          if (private_sync_trace_should_log(true, fallback_ms)) {
+            LOG(WARNING) << "[private-sync] stage=proof_link.block_fallback.done block=" << block_id
+                         << " ms=" << fallback_ms << " result=error reason=block_id_mismatch";
+          }
           promise.set_error(td::Status::Error(ErrorCode::protoviolation, "downloaded block ID mismatch"));
           return;
         }
         auto root = vm::std_boc_deserialize(received.data);
         if (root.is_error()) {
+          if (private_sync_trace_should_log(true, fallback_ms)) {
+            LOG(WARNING) << "[private-sync] stage=proof_link.block_fallback.done block=" << block_id
+                         << " ms=" << fallback_ms << " result=error reason=" << root.error();
+          }
           promise.set_error(root.move_as_error_prefix("failed to deserialize downloaded block: "));
           return;
         }

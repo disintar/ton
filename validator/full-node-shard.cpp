@@ -1152,46 +1152,91 @@ void FullNodeShardImpl::send_block_finality_broadcast(BlockFinalityBroadcast fin
 
 void FullNodeShardImpl::download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                        td::Promise<ReceivedBlock> promise) {
-  const Neighbour *peers[2] = {&choose_neighbour(0, 0, true), nullptr};
-  if (!peers[0]->adnl_id.is_zero()) {
-    for (int i = 0; i < 8; ++i) {
-      const auto &candidate = choose_neighbour(0, 0, true);
-      if (!candidate.adnl_id.is_zero() && candidate.adnl_id != peers[0]->adnl_id) {
-        peers[1] = &candidate;
-        break;
-      }
+  std::vector<const Neighbour *> candidates;
+  auto now = td::Time::now();
+  for (const auto &[_, peer] : neighbours_) {
+    if (peer.required_data_unavailable_until <= now) {
+      candidates.push_back(&peer);
     }
   }
-  auto callbacks = download_race_promises<ReceivedBlock>(peers[1] ? 2 : 1, std::move(promise));
-  for (size_t i = 0; i < callbacks.size(); ++i) {
-    const auto &peer = *peers[i];
-    auto peer_id = peer.adnl_id;
-    auto peer_inflight = peer.required_data_inflight;
-    if (!peer_id.is_zero()) {
-      ++neighbours_.at(peer_id).required_data_inflight;
+  if (candidates.empty()) {
+    reload_neighbours_at_ = td::Timestamp::now();
+    for (const auto &[_, peer] : neighbours_) {
+      candidates.push_back(&peer);
     }
-    auto self = actor_id(this);
-    auto started_at = td::Time::now();
-    td::Promise<ReceivedBlock> traced_promise = td::PromiseCreator::lambda(
-        [id, peer_id, peer_inflight, self, started_at, promise = std::move(callbacks[i])](td::Result<ReceivedBlock> result) mutable {
-          auto elapsed_ms = static_cast<long long>((td::Time::now() - started_at) * 1000.0);
-          auto cooldown = result.is_ok() ? 0.0 : (result.error().code() == ErrorCode::notready ? 2.0 : 4.0);
-          td::actor::send_closure(self, &FullNodeShardImpl::record_required_data_result, peer_id, result.is_ok(),
-                                  cooldown);
-          if (private_sync_trace_should_log(result.is_error(), elapsed_ms)) {
-            LOG(WARNING) << "[private-sync] stage=public.block block=" << id << " peer=" << peer_id
-                         << " peer_inflight=" << peer_inflight
-                         << " ms=" << elapsed_ms << " result=" << (result.is_ok() ? "ok" : "error")
-                         << " data_cooldown_ms=" << static_cast<int>(cooldown * 1000)
-                         << " reason=" << (result.is_error() ? result.error().to_string() : "-");
-          }
-          promise.set_result(std::move(result));
-        });
-    td::actor::create_actor<DownloadBlockNew>(PSTRING() << "downloadreq" << id.id, id, adnl_id_, overlay_id_,
-                                              peer.adnl_id, priority, timeout, validator_manager_, rldp2_, overlays_,
-                                              adnl_, client_, create_neighbour_promise(peer, std::move(traced_promise), true))
-        .release();
   }
+  std::sort(candidates.begin(), candidates.end(), [now](const Neighbour *a, const Neighbour *b) {
+    auto score = [now](const Neighbour *p) {
+      return p->unreliability + 2.0 * p->required_data_inflight -
+             (p->required_data_success_until > now ? 4.0 : 0.0) +
+             (p->required_data_unavailable_until > now ? 8.0 : 0.0);
+    };
+    return score(a) < score(b);
+  });
+  if (candidates.empty()) {
+    promise.set_error(td::Status::Error(ErrorCode::notready, "no public overlay peers"));
+    return;
+  }
+  auto count = std::min<std::size_t>(4, candidates.size());
+  auto callbacks = download_race_promises<ReceivedBlock>(count, std::move(promise));
+  auto won = std::make_shared<std::atomic<bool>>(false);
+  for (std::size_t i = 0; i < count; ++i) {
+    auto peer_id = candidates[i]->adnl_id;
+    auto callback = std::make_shared<td::Promise<ReceivedBlock>>(std::move(callbacks[i]));
+    if (private_sync_trace_should_log(false, 0)) {
+      LOG(WARNING) << "[private-sync] stage=public.block.select block=" << id << " peer=" << peer_id
+                   << " rank=" << i << " candidates=" << candidates.size() << " hedge_ms=" << i * 150;
+    }
+    auto launch = [self = actor_id(this), id, peer_id, priority, timeout, won, callback]() mutable {
+      td::actor::send_closure(self, &FullNodeShardImpl::launch_block_download, id, peer_id, priority, timeout, won,
+                              std::move(*callback));
+    };
+    if (i == 0) {
+      launch();
+    } else {
+      delay_action(std::move(launch), td::Timestamp::in(i * 0.15));
+    }
+  }
+}
+
+void FullNodeShardImpl::launch_block_download(BlockIdExt id, adnl::AdnlNodeIdShort peer_id, td::uint32 priority,
+                                               td::Timestamp timeout, std::shared_ptr<std::atomic<bool>> won,
+                                               td::Promise<ReceivedBlock> promise) {
+  if (won->load() || timeout.is_in_past()) {
+    promise.set_error(td::Status::Error(ErrorCode::cancelled, "public block hedge no longer needed"));
+    return;
+  }
+  auto it = neighbours_.find(peer_id);
+  if (it == neighbours_.end()) {
+    promise.set_error(td::Status::Error(ErrorCode::notready, "public peer disappeared"));
+    return;
+  }
+  auto peer_inflight = it->second.required_data_inflight++;
+  auto started_at = td::Time::now();
+  auto self = actor_id(this);
+  td::Promise<ReceivedBlock> traced_promise = td::PromiseCreator::lambda(
+      [id, peer_id, peer_inflight, self, won, started_at, promise = std::move(promise)](
+          td::Result<ReceivedBlock> result) mutable {
+        if (result.is_ok()) {
+          won->store(true);
+        }
+        auto elapsed_ms = static_cast<long long>((td::Time::now() - started_at) * 1000.0);
+        auto cooldown = result.is_ok() ? 0.0 : (result.error().code() == ErrorCode::notready ? 2.0 : 4.0);
+        td::actor::send_closure(self, &FullNodeShardImpl::record_required_data_result, peer_id, result.is_ok(),
+                                cooldown);
+        if (private_sync_trace_should_log(result.is_error(), elapsed_ms)) {
+          LOG(WARNING) << "[private-sync] stage=public.block block=" << id << " peer=" << peer_id
+                       << " peer_inflight=" << peer_inflight << " ms=" << elapsed_ms
+                       << " result=" << (result.is_ok() ? "ok" : "error")
+                       << " data_cooldown_ms=" << static_cast<int>(cooldown * 1000)
+                       << " reason=" << (result.is_error() ? result.error().to_string() : "-");
+        }
+        promise.set_result(std::move(result));
+      });
+  td::actor::create_actor<DownloadBlockNew>(PSTRING() << "downloadreq" << id.id, id, adnl_id_, overlay_id_, peer_id,
+                                            priority, timeout, validator_manager_, rldp2_, overlays_, adnl_, client_,
+                                            create_neighbour_promise(it->second, std::move(traced_promise), true))
+      .release();
 }
 
 void FullNodeShardImpl::download_next_block(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
