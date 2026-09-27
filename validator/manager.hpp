@@ -539,6 +539,8 @@ class ValidatorManagerImpl : public ValidatorManager {
                                     td::Promise<td::BufferSlice> promise) override;
   void send_get_block_proof_link_request(BlockIdExt block_id, td::uint32 priority,
                                          td::Promise<td::BufferSlice> promise) override;
+  void finish_proof_link_network_request(BlockIdExt block_id, td::uint32 priority, double started_at,
+                                         td::Result<td::BufferSlice> result, td::Promise<td::BufferSlice> promise);
   void send_get_next_key_blocks_request(BlockIdExt block_id, td::uint32 priority,
                                         td::Promise<std::vector<BlockIdExt>> promise) override;
   void send_top_shard_block_description(td::Ref<ShardTopBlockDescription> desc) override;

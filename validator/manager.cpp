@@ -17,6 +17,7 @@
     Copyright 2017-2020 Telegram Systems LLP
 */
 #include <fstream>
+#include <atomic>
 
 #include "auto/tl/lite_api.h"
 #include "auto/tl/ton_api_json.h"
@@ -2001,7 +2002,78 @@ void ValidatorManagerImpl::send_get_block_proof_link_request(BlockIdExt block_id
       return;
     }
   }
-  callback_->download_block_proof_link(block_id, priority, td::Timestamp::in(10.0), std::move(promise));
+  auto started_at = td::Time::now();
+  auto network_promise = td::PromiseCreator::lambda(
+      [self = actor_id(this), block_id, priority, started_at,
+       promise = std::move(promise)](td::Result<td::BufferSlice> result) mutable {
+        td::actor::send_closure(self, &ValidatorManagerImpl::finish_proof_link_network_request, block_id, priority,
+                                started_at, std::move(result), std::move(promise));
+      });
+  callback_->download_block_proof_link(block_id, priority, td::Timestamp::in(10.0), std::move(network_promise));
+}
+
+void ValidatorManagerImpl::finish_proof_link_network_request(BlockIdExt block_id, td::uint32 priority,
+                                                             double started_at, td::Result<td::BufferSlice> result,
+                                                             td::Promise<td::BufferSlice> promise) {
+  static std::atomic<int> block_fallback_inflight{0};
+  auto elapsed_ms = static_cast<long long>((td::Time::now() - started_at) * 1000.0);
+  if (private_sync_trace_should_log(result.is_error(), elapsed_ms)) {
+    LOG(WARNING) << "[private-sync] stage=proof_link.network block=" << block_id
+                 << " ms=" << elapsed_ms << " result=" << (result.is_ok() ? "ok" : "error")
+                 << " reason=" << (result.is_error() ? result.error().to_string() : "-");
+  }
+  if (result.is_ok() || block_id.is_masterchain()) {
+    promise.set_result(std::move(result));
+    return;
+  }
+  int count = block_fallback_inflight.load(std::memory_order_relaxed);
+  while (count < 32 && !block_fallback_inflight.compare_exchange_weak(count, count + 1, std::memory_order_relaxed)) {
+  }
+  if (count >= 32) {
+    if (private_sync_trace_should_log(true, 0)) {
+      LOG(WARNING) << "[private-sync] stage=proof_link.block_fallback.skip block=" << block_id
+                   << " inflight=" << count << " reason=capacity";
+    }
+    promise.set_result(std::move(result));
+    return;
+  }
+  if (private_sync_trace_should_log(false, 0)) {
+    LOG(WARNING) << "[private-sync] stage=proof_link.block_fallback.start block=" << block_id
+                 << " inflight=" << count + 1 << " network_error=" << result.error();
+  }
+  auto fallback_started_at = td::Time::now();
+  auto fallback_promise = td::PromiseCreator::lambda(
+      [block_id, fallback_started_at, promise = std::move(promise)](td::Result<ReceivedBlock> block) mutable {
+        block_fallback_inflight.fetch_sub(1, std::memory_order_relaxed);
+        auto fallback_ms = static_cast<long long>((td::Time::now() - fallback_started_at) * 1000.0);
+        if (block.is_error()) {
+          if (private_sync_trace_should_log(true, fallback_ms)) {
+            LOG(WARNING) << "[private-sync] stage=proof_link.block_fallback.done block=" << block_id
+                         << " ms=" << fallback_ms << " result=error reason=" << block.error();
+          }
+          promise.set_error(block.move_as_error());
+          return;
+        }
+        auto received = block.move_as_ok();
+        if (received.id != block_id) {
+          promise.set_error(td::Status::Error(ErrorCode::protoviolation, "downloaded block ID mismatch"));
+          return;
+        }
+        auto root = vm::std_boc_deserialize(received.data);
+        if (root.is_error()) {
+          promise.set_error(root.move_as_error_prefix("failed to deserialize downloaded block: "));
+          return;
+        }
+        auto proof = WaitBlockData::generate_proof_link(block_id, root.move_as_ok());
+        if (private_sync_trace_should_log(proof.is_error(), fallback_ms)) {
+          LOG(WARNING) << "[private-sync] stage=proof_link.block_fallback.done block=" << block_id
+                       << " ms=" << fallback_ms << " bytes=" << received.data.size()
+                       << " result=" << (proof.is_ok() ? "ok" : "error")
+                       << " reason=" << (proof.is_error() ? proof.error().to_string() : "-");
+        }
+        promise.set_result(std::move(proof));
+      });
+  callback_->download_block(block_id, priority, td::Timestamp::in(10.0), std::move(fallback_promise));
 }
 
 void ValidatorManagerImpl::send_get_next_key_blocks_request(BlockIdExt block_id, td::uint32 priority,
