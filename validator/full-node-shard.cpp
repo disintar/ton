@@ -17,6 +17,7 @@
     Copyright 2017-2020 Telegram Systems LLP
 */
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <mutex>
 
@@ -315,23 +316,87 @@ td::actor::Task<> FullNodeShardImpl::get_next_blocks_loop() {
       }
     };
 
-    auto &b = choose_neighbour();
-    bool allow_many = b.version() >= std::make_pair<td::uint32, td::uint32>(3, 2);
+    std::vector<Neighbour> public_peers;
+    auto now = td::Time::now();
+    for (const auto &[_, peer] : neighbours_) {
+      if (peer.required_data_unavailable_until <= now) {
+        public_peers.push_back(peer);
+      }
+    }
+    if (public_peers.empty()) {
+      reload_neighbours_at_ = td::Timestamp::now();
+      for (const auto &[_, peer] : neighbours_) {
+        public_peers.push_back(peer);
+      }
+    }
+    std::sort(public_peers.begin(), public_peers.end(), [now](const Neighbour &a, const Neighbour &b) {
+      auto score = [now](const Neighbour &p) {
+        return p.unreliability + 2.0 * p.required_data_inflight -
+               (p.required_data_success_until > now ? 4.0 : 0.0) +
+               (p.required_data_unavailable_until > now ? 8.0 : 0.0);
+      };
+      return score(a) < score(b);
+    });
+    if (public_peers.size() > 4) {
+      public_peers.resize(4);
+    }
     auto [task, promise] = td::actor::StartedTask<BlockHandle>::make_bridge();
     auto race = std::make_shared<NextBlocksOverlayRaceState>(std::move(promise));
     auto custom_promise = td::PromiseCreator::lambda([race](td::Result<BlockHandle> R) mutable {
       finish_next_blocks_overlay_race(std::move(race), "custom", std::move(R));
     });
-    auto public_promise = td::PromiseCreator::lambda([race](td::Result<BlockHandle> R) mutable {
-      finish_next_blocks_overlay_race(std::move(race), "public", std::move(R));
-    });
     td::actor::send_closure(full_node_, &FullNode::download_next_blocks, handle_, download_next_priority(),
                             td::Timestamp::in(1.0), std::move(custom_promise));
-    td::actor::create_actor<DownloadNextBlocks>(PSTRING() << "downloadnextblocks" << prev_id.id, adnl_id_, overlay_id_,
-                                                handle_, b.adnl_id, download_next_priority(), allow_many,
-                                                validator_manager_, rldp2_, overlays_, client_,
-                                                create_neighbour_promise<BlockHandle>(b, std::move(public_promise)))
-        .release();
+    if (public_peers.empty()) {
+      finish_next_blocks_overlay_race(race, "public",
+                                      td::Status::Error(ErrorCode::notready, "no public overlay peers"));
+    } else {
+      auto launch = std::make_shared<std::function<void(std::size_t)>>();
+      std::weak_ptr<std::function<void(std::size_t)>> weak_launch = launch;
+      *launch = [race, weak_launch, peers = std::move(public_peers), prev_id, handle = handle_, self = actor_id(this),
+                 local = adnl_id_, overlay = overlay_id_, manager = validator_manager_, rldp = rldp2_,
+                 overlays = overlays_, client = client_](std::size_t index) mutable {
+        {
+          std::lock_guard<std::mutex> lock(race->mutex);
+          if (race->done) {
+            return;
+          }
+        }
+        auto peer = peers[index];
+        auto started_at = td::Time::now();
+        if (private_sync_trace_should_log(false, 0)) {
+          LOG(WARNING) << "[private-sync] stage=public.next.select prev=" << prev_id << " peer=" << peer.adnl_id
+                       << " rank=" << index << " candidates=" << peers.size();
+        }
+        auto P = td::PromiseCreator::lambda([race, keep_alive = weak_launch.lock(), index, peers, prev_id, peer, self, started_at](
+                                                td::Result<BlockHandle> R) mutable {
+          auto elapsed = td::Time::now() - started_at;
+          td::actor::send_closure(self, &FullNodeShardImpl::update_neighbour_stats, peer.adnl_id, elapsed,
+                                  R.is_ok());
+          bool success = R.is_ok() && R.ok()->id().id.seqno > prev_id.id.seqno;
+          if (private_sync_trace_should_log(!success, static_cast<long long>(elapsed * 1000.0))) {
+            LOG(WARNING) << "[private-sync] stage=public.next prev=" << prev_id << " peer=" << peer.adnl_id
+                         << " rank=" << index << " ms=" << static_cast<long long>(elapsed * 1000.0)
+                         << " result=" << (success ? "ok" : "error")
+                         << " reason=" << (R.is_error() ? R.error().to_string() : (success ? "-" : "stale_block"));
+          }
+          if (success) {
+            finish_next_blocks_overlay_race(race, "public", std::move(R));
+          } else if (index + 1 < peers.size()) {
+            (*keep_alive)(index + 1);
+          } else {
+            finish_next_blocks_overlay_race(race, "public",
+                                            td::Status::Error(ErrorCode::notready, "public peers exhausted"));
+          }
+        });
+        bool allow_many = peer.version() >= std::make_pair<td::uint32, td::uint32>(3, 2);
+        td::actor::create_actor<DownloadNextBlocks>(PSTRING() << "downloadnextblocks" << prev_id.id, local, overlay,
+                                                    handle, peer.adnl_id, FullNodeShardImpl::download_next_priority(), allow_many, manager,
+                                                    rldp, overlays, client, std::move(P), td::Timestamp::in(2.0))
+            .release();
+      };
+      (*launch)(0);
+    }
     auto R = co_await std::move(task).wrap();
     if (R.is_error()) {
       auto S = R.move_as_error();
