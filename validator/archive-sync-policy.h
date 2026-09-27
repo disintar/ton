@@ -7,7 +7,9 @@ namespace ton::validator {
 // Let the live downloader close the final bounded gap, without allowing an
 // immediate recovery back into archives before it has had time to progress.
 constexpr double kPrestartArchiveSyncTargetLagSeconds = 60.0;
-constexpr double kLiveArchiveSyncRecoveryLagSeconds = 30.0;
+// Leave room for live block/proof downloads after an archive ends near 60s lag.
+// A smaller recovery threshold makes the node repeatedly re-enter archives.
+constexpr double kLiveArchiveSyncRecoveryLagSeconds = 180.0;
 constexpr double kLiveSyncCatchupGraceSeconds = 60.0;
 constexpr double kArchiveFailureLiveFallbackMaxLagSeconds = 1800.0;
 constexpr double kArchiveFailureLiveFallbackGraceSeconds = 300.0;
