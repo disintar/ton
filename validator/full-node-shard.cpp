@@ -1640,6 +1640,16 @@ void FullNodeShardImpl::got_neighbours(std::vector<adnl::AdnlNodeIdShort> vec) {
   }
 }
 
+void FullNodeShardImpl::add_public_sync_hints(std::vector<adnl::AdnlNodeIdShort> peers) {
+  peers.erase(std::remove(peers.begin(), peers.end(), adnl_id_), peers.end());
+  auto before = neighbours_.size();
+  got_neighbours(std::move(peers));
+  if (neighbours_.size() > before && private_sync_trace_should_log(true, 0)) {
+    LOG(WARNING) << "[private-sync] stage=public_hint_seed shard=" << shard_.to_str()
+                 << " added=" << neighbours_.size() - before << " neighbours=" << neighbours_.size();
+  }
+}
+
 const Neighbour &FullNodeShardImpl::choose_neighbour(td::uint32 required_version_major,
                                                      td::uint32 required_version_minor) const {
   if (neighbours_.size() == 0) {

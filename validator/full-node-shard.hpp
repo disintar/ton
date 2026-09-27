@@ -242,6 +242,7 @@ class FullNodeShardImpl : public FullNodeShard {
   void ping_neighbours();
   void reload_neighbours();
   void got_neighbours(std::vector<adnl::AdnlNodeIdShort> res);
+  void add_public_sync_hints(std::vector<adnl::AdnlNodeIdShort> peers) override;
   void update_neighbour_stats(adnl::AdnlNodeIdShort adnl_id, double t, bool success);
   void got_neighbour_capabilities(adnl::AdnlNodeIdShort adnl_id, double t, td::BufferSlice data);
   const Neighbour &choose_neighbour(td::uint32 required_version_major = 0, td::uint32 required_version_minor = 0) const;

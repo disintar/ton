@@ -42,6 +42,7 @@ class FullNodeShard : public td::actor::Actor {
   virtual void set_active(bool active) = 0;
   virtual void set_params(bool active, bool enable_plumtree_broadcast) = 0;
   virtual void set_config(FullNodeConfig config) = 0;
+  virtual void add_public_sync_hints(std::vector<adnl::AdnlNodeIdShort> peers) = 0;
 
   virtual void send_ihr_message(td::BufferSlice data) = 0;
   virtual void send_external_message(td::BufferSlice data) = 0;

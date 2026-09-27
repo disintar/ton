@@ -476,6 +476,19 @@ void FullNodeImpl::update_shard_actor(ShardIdFull shard, bool active, bool enabl
     info.actor = FullNodeShard::create(shard, local_id_, adnl_id_, zero_state_file_hash_, opts_, limiter_, keyring_,
                                        adnl_, rldp2_, quic_, overlays_, validator_manager_, client_, actor_id(this),
                                        active, enable_plumtree_broadcast);
+    std::vector<adnl::AdnlNodeIdShort> sync_hints;
+    for (const auto &[_, custom_overlay] : custom_overlays_) {
+      if (custom_overlay.params_.send_shard(shard)) {
+        for (const auto &peer : custom_overlay.params_.nodes_) {
+          if (peer != adnl_id_ && std::find(sync_hints.begin(), sync_hints.end(), peer) == sync_hints.end()) {
+            sync_hints.push_back(peer);
+          }
+        }
+      }
+    }
+    if (!sync_hints.empty()) {
+      td::actor::send_closure(info.actor, &FullNodeShard::add_public_sync_hints, std::move(sync_hints));
+    }
     if (!all_validators_.empty()) {
       td::actor::send_closure(info.actor, &FullNodeShard::update_validators, all_validators_, sign_cert_by_);
     }
@@ -1353,6 +1366,19 @@ void FullNodeImpl::update_custom_overlay(CustomOverlayInfo &overlay) {
     auto it = current_validators_.find(local_key);
     if (it != current_validators_.end()) {
       try_local_id(it->second);
+    }
+  }
+  std::vector<adnl::AdnlNodeIdShort> sync_hints;
+  for (const auto &peer : params.nodes_) {
+    if (peer != adnl_id_) {
+      sync_hints.push_back(peer);
+    }
+  }
+  if (!sync_hints.empty()) {
+    for (auto &[shard, info] : shards_) {
+      if (!info.actor.empty() && params.send_shard(shard)) {
+        td::actor::send_closure(info.actor, &FullNodeShard::add_public_sync_hints, sync_hints);
+      }
     }
   }
 }
