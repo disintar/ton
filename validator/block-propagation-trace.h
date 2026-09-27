@@ -16,6 +16,8 @@
 */
 #pragma once
 
+#include <atomic>
+#include <cstdint>
 #include <cstdlib>
 #include <string>
 #include <utility>
@@ -32,16 +34,29 @@ inline double block_propagation_trace_now() {
   return td::Clocks::system();
 }
 
-inline bool block_propagation_trace_enabled() {
-  static const bool enabled = [] {
+enum class BlockPropagationTraceMode { Off, Sync, All };
+
+inline BlockPropagationTraceMode block_propagation_trace_mode() {
+  static const auto mode = [] {
     const char *env = std::getenv("DTON_TRACE_BLOCK_PROPAGATION");
     if (env == nullptr || env[0] == '\0') {
-      return false;
+      return BlockPropagationTraceMode::Off;
     }
     std::string value(env);
-    return value != "0" && value != "false" && value != "FALSE" && value != "off" && value != "OFF";
+    if (value == "0" || value == "false" || value == "FALSE" || value == "off" || value == "OFF") {
+      return BlockPropagationTraceMode::Off;
+    }
+    return value == "sync" ? BlockPropagationTraceMode::Sync : BlockPropagationTraceMode::All;
   }();
-  return enabled;
+  return mode;
+}
+
+inline bool block_propagation_trace_enabled() {
+  return block_propagation_trace_mode() == BlockPropagationTraceMode::All;
+}
+
+inline bool private_sync_trace_enabled() {
+  return block_propagation_trace_mode() != BlockPropagationTraceMode::Off;
 }
 
 inline double block_propagation_trace_slow_ms() {
@@ -60,6 +75,39 @@ inline long long block_propagation_trace_ms(double started_at, double now) {
     return -1;
   }
   return static_cast<long long>((now - started_at) * 1000.0);
+}
+
+inline bool private_sync_trace_should_log(bool failed, long long elapsed_ms) {
+  if (!private_sync_trace_enabled()) {
+    return false;
+  }
+  if (block_propagation_trace_mode() == BlockPropagationTraceMode::All) {
+    return true;
+  }
+  if (!failed && elapsed_ms >= 0 && elapsed_ms < block_propagation_trace_slow_ms()) {
+    return false;
+  }
+  static std::atomic<std::uint64_t> bucket{0};
+  static std::atomic<std::uint64_t> suppressed{0};
+  auto second = static_cast<std::uint64_t>(td::Time::now());
+  auto current = bucket.load(std::memory_order_relaxed);
+  while (true) {
+    auto count = (current >> 8) == second ? current & 255 : 0;
+    if (count >= 20) {
+      suppressed.fetch_add(1, std::memory_order_relaxed);
+      return false;
+    }
+    auto next = (second << 8) | (count + 1);
+    if (bucket.compare_exchange_weak(current, next, std::memory_order_relaxed)) {
+      if (count == 0) {
+        auto skipped = suppressed.exchange(0, std::memory_order_relaxed);
+        if (skipped != 0) {
+          LOG(INFO) << "[private-sync] suppressed=" << skipped;
+        }
+      }
+      return true;
+    }
+  }
 }
 
 inline std::string block_propagation_trace_sanitize(std::string value) {

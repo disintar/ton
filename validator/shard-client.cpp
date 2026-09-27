@@ -182,6 +182,11 @@ td::actor::Task<> ShardClient::apply_shard(BlockIdExt block_id) {
                << " block=" << block_id.to_str() << " result=start";
   auto state = co_await td::actor::ask(manager_, &ValidatorManager::wait_block_state_short, block_id,
                                        SHARD_CLIENT_PRIORITY, td::Timestamp::in(1500), true);
+  auto wait_ms = block_propagation_trace_ms(started_at, block_propagation_trace_now());
+  if (private_sync_trace_should_log(false, wait_ms)) {
+    LOG(WARNING) << "[private-sync] stage=shardclient.wait_state mc=" << masterchain_block_handle_->id().to_str()
+                 << " block=" << block_id.to_str() << " ms=" << wait_ms << " result=ok";
+  }
   log_block_propagation_stage(block_id, BlockPropagationTrace{}, "shardclient.wait_state.done", "shardclient",
                               false, false, "ok", {}, started_at, true);
   LOG(WARNING) << "[shardclient-sync] stage=wait_state.done mc=" << masterchain_block_handle_->id().to_str()
@@ -227,12 +232,21 @@ td::actor::Task<Ref<MasterchainState>> ShardClient::wait_mc_state(BlockHandle ha
                  .wrap();
     if (R.is_error()) {
       auto error = R.move_as_error();
+      if (private_sync_trace_should_log(true, block_propagation_trace_ms(started_at, block_propagation_trace_now()))) {
+        LOG(WARNING) << "[private-sync] stage=shardclient.wait_mc_state mc=" << handle->id().to_str()
+                     << " result=error reason=" << error;
+      }
       log_block_propagation_stage(handle->id(), BlockPropagationTrace{}, "shardclient.wait_state.done", "shardclient",
                                   false, false, "error", error.to_string(), started_at, true);
       LOG(WARNING) << "[shardclient-sync] stage=wait_mc_state.done mc=" << handle->id().to_str()
                    << " ms=" << block_propagation_trace_ms(started_at, block_propagation_trace_now())
                    << " result=error reason=" << error.to_string();
       continue;
+    }
+    auto wait_ms = block_propagation_trace_ms(started_at, block_propagation_trace_now());
+    if (private_sync_trace_should_log(false, wait_ms)) {
+      LOG(WARNING) << "[private-sync] stage=shardclient.wait_mc_state mc=" << handle->id().to_str()
+                   << " ms=" << wait_ms << " result=ok";
     }
     log_block_propagation_stage(handle->id(), BlockPropagationTrace{}, "shardclient.wait_state.done", "shardclient",
                                 false, false, "ok", {}, started_at, true);
