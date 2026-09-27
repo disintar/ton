@@ -1329,7 +1329,7 @@ void FullNodeImpl::update_custom_overlay(CustomOverlayInfo &overlay) {
         auto adnl_sender = (params.use_quic_ ? td::actor::ActorId<adnl::AdnlSenderEx>{quic_} : rldp2_);
         overlay.actors_[local_id] = td::actor::create_actor<FullNodeCustomOverlay>(
             "CustomOverlay", local_id, params, zero_state_file_hash_, opts_, keyring_, adnl_, adnl_sender, overlays_,
-            validator_manager_, actor_id(this), limiter_);
+            validator_manager_, actor_id(this), custom_limiter_);
       }
     }
   };
@@ -1433,7 +1433,8 @@ FullNodeImpl::FullNodeImpl(PublicKeyHash local_id, adnl::AdnlNodeIdShort adnl_id
     , db_root_(db_root)
     , started_promise_(std::move(started_promise))
     , opts_(opts)
-    , limiter_(make_limiter(opts)) {
+    , limiter_(make_limiter(opts))
+    , custom_limiter_(make_limiter(opts)) {
 }
 
 td::actor::ActorOwn<FullNode> FullNode::create(

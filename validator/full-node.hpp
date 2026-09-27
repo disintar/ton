@@ -216,6 +216,7 @@ class FullNodeImpl : public FullNode {
       td::actor::create_actor<TokenManager>("tokens", /* max_tokens = */ 1);
 
   std::shared_ptr<RateLimiter<>> limiter_;
+  std::shared_ptr<RateLimiter<>> custom_limiter_;
 
   decltype(limiter_) make_limiter(const FullNodeOptions& opts);
 };

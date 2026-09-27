@@ -247,6 +247,14 @@ namespace ton {
       ss << "# TYPE ton_public_overlay_duplicate_block_candidates_dropped_total counter\n";
       ss << "ton_public_overlay_duplicate_block_candidates_dropped_total "
          << validator::fullnode::get_public_overlay_duplicate_block_candidates_dropped_total() << "\n";
+      ss << "# HELP ton_custom_overlay_queries_total Custom overlay inbound query outcomes\n";
+      ss << "# TYPE ton_custom_overlay_queries_total counter\n";
+      static constexpr const char *query_results[] = {"accepted", "rejected_peer", "rejected_rate", "invalid",
+                                                     "answered", "failed"};
+      for (std::size_t result = 0; result < std::size(query_results); result++) {
+        ss << "ton_custom_overlay_queries_total{result=\"" << query_results[result] << "\"} "
+           << validator::fullnode::get_custom_overlay_query_total(result) << "\n";
+      }
       ss << "# HELP ton_custom_overlay_sync_downloads_total Custom overlay sync download attempts by result\n";
       ss << "# TYPE ton_custom_overlay_sync_downloads_total counter\n";
       for (std::size_t kind = 0; kind < validator::fullnode::custom_overlay_sync_kind_count(); kind++) {

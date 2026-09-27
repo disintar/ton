@@ -416,15 +416,30 @@ td::actor::Task<td::BufferSlice> QuicSender::send_query_coro(adnl::AdnlNodeIdSho
                                                              td::BufferSlice data, std::optional<td::uint64> limit) {
   auto magic = metrics::resolve_tl_magic(data.as_slice());
   app_.record(metrics::Kind::query, metrics::Direction::out, magic, data.size());
-  // Getting a connection is not part of the round trip: a cold handshake, or a peer that does not
-  // speak QUIC at all, would otherwise be timed as query latency. Such a failure is not a round trip.
-  auto conn = co_await find_or_create_connection({src, dst});
+  td::Timer timer;
+  auto conn_result = co_await find_or_create_connection({src, dst}).wrap();
+  if (conn_result.is_error()) {
+    query_roundtrip_.record(magic, dst, timer.elapsed(), false);
+    co_return conn_result.move_as_error();
+  }
+  auto connection_seconds = timer.elapsed();
+  if (connection_seconds >= 0.1) {
+    static metrics::SlowLogThrottle throttle;
+    if (throttle.take()) {
+      LOG(INFO) << "[quic-sync] stage=connect peer=" << dst << " tl=" << metrics::tl_name(magic)
+                << " ms=" << static_cast<td::uint64>(connection_seconds * 1000.0) << " result=ok";
+    }
+  }
+  if (timeout && timeout.is_in_past()) {
+    query_roundtrip_.record(magic, dst, timer.elapsed(), false);
+    co_return td::Status::Error("QUIC query deadline expired while resolving peer or connecting");
+  }
+  auto conn = conn_result.move_as_ok();
   StreamOptions options{.max_size = limit,
                         .timeout = timeout,
                         .timeout_seconds = timeout ? timeout.at() - td::Time::now() : 0.0,
                         .query_size = data.size(),
                         .query_magic = magic};
-  td::Timer timer;
   auto result = co_await send_query_coro_inner(std::move(conn), options, std::move(data)).wrap();
   query_roundtrip_.record(magic, dst, timer.elapsed(), result.is_ok());
   co_return std::move(result);

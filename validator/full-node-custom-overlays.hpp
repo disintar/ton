@@ -101,6 +101,7 @@ class FullNodeCustomOverlay : public td::actor::Actor {
                                  td::Promise<td::BufferSlice> promise);
   void download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
                         td::Timestamp timeout, td::Promise<std::string> promise);
+  void record_download_peer_result(adnl::AdnlNodeIdShort peer, bool success, double elapsed);
 
   void set_config(FullNodeConfig config) {
     opts_.config_ = std::move(config);
@@ -152,6 +153,12 @@ class FullNodeCustomOverlay : public td::actor::Actor {
   td::actor::ActorId<ValidatorManagerInterface> validator_manager_;
   td::actor::ActorId<FullNode> full_node_;
   std::shared_ptr<RateLimiter<>> limiter_;
+  struct DownloadPeerHealth {
+    double cooldown_until = 0.0;
+    double latency = 1.0;
+    unsigned failures = 0;
+  };
+  std::map<adnl::AdnlNodeIdShort, DownloadPeerHealth> download_peer_health_;
 
   bool inited_ = false;
   overlay::OverlayIdFull overlay_id_full_;

@@ -36,6 +36,24 @@ inline std::atomic<std::uint64_t> custom_overlay_duplicate_block_candidates_drop
 inline std::atomic<std::uint64_t> public_overlay_duplicate_block_broadcasts_dropped_total{0};
 inline std::atomic<std::uint64_t> public_overlay_duplicate_block_candidates_dropped_total{0};
 
+enum class CustomOverlayQueryResult : std::size_t {
+  Accepted = 0,
+  RejectedPeer = 1,
+  RejectedRate = 2,
+  Invalid = 3,
+  Answered = 4,
+  Failed = 5,
+  Count = 6
+};
+inline std::array<std::atomic<std::uint64_t>, static_cast<std::size_t>(CustomOverlayQueryResult::Count)>
+    custom_overlay_queries_total{};
+inline void record_custom_overlay_query(CustomOverlayQueryResult result) {
+  custom_overlay_queries_total[static_cast<std::size_t>(result)].fetch_add(1, std::memory_order_relaxed);
+}
+inline std::uint64_t get_custom_overlay_query_total(std::size_t result) {
+  return custom_overlay_queries_total[result].load(std::memory_order_relaxed);
+}
+
 enum class CustomOverlaySyncKind : std::size_t { Block = 0, NextBlock = 1, Archive = 2, Count = 3 };
 enum class CustomOverlaySyncSender : std::size_t { Rldp2 = 0, Quic = 1, Count = 2 };
 enum class CustomOverlaySyncResult : std::size_t {
