@@ -35,8 +35,11 @@ namespace ton {
         if (sanitized == "masterchainblock") {
           return "ton_node_status_last_masterchain_block_seqno";
         }
-        if (sanitized == "masterchainblocktime") {
+        if (sanitized == "shardclientblocktime") {
           return "ton_node_status_shard_client_at";
+        }
+        if (sanitized == "masterchainblocktime") {
+          return "ton_node_status_last_masterchain_block_at";
         }
         return "ton_node_status_" + sanitized;
       }
@@ -157,9 +160,6 @@ namespace ton {
             metric += "_" + unit;
           }
           out << metric << " " << value << "\n";
-          if (key == "masterchainblocktime" && unit.empty()) {
-            out << "ton_node_status_last_masterchain_block_at " << value << "\n";
-          }
           return;
         }
 

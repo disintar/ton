@@ -3061,6 +3061,9 @@ void ValidatorManagerImpl::prepare_stats(td::Promise<std::vector<std::pair<std::
     vec.emplace_back("rotatemasterchainblock", last_rotate_block_id_.to_str());
     //vec.emplace_back("shardclientmasterchainseqno", td::to_string(min_confirmed_masterchain_seqno_));
   }
+  if (shard_client_handle_) {
+    vec.emplace_back("shardclientblocktime", td::to_string(shard_client_handle_->unix_time()));
+  }
 
   td::NamedThreadSafeCounter::get_default().for_each(
       [&](auto key, auto value) { vec.emplace_back("counter." + key, PSTRING() << value); });

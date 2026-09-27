@@ -174,12 +174,12 @@ void DownloadBlockNew::got_node_to_download(adnl::AdnlNodeIdShort node) {
   const char *query_name = request_after_.is_valid() ? "get_next_blocks" : "get_block_full";
   if (client_.empty()) {
     td::actor::send_closure(overlays_, &overlay::Overlays::send_query_via, download_from_, local_id_, overlay_id_,
-                            query_name, std::move(P), td::Timestamp::in(15.0), std::move(q),
+                            query_name, std::move(P), timeout_, std::move(q),
                             FullNode::max_proof_size() + FullNode::max_block_size() + 128, rldp_);
   } else {
     td::actor::send_closure(client_, &adnl::AdnlExtClient::send_query, query_name,
                             create_serialize_tl_object_suffix<ton_api::tonNode_query>(std::move(q)),
-                            td::Timestamp::in(15.0), std::move(P));
+                            timeout_, std::move(P));
   }
 }
 
