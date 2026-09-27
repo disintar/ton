@@ -18,6 +18,7 @@
 */
 #include "common/checksum.h"
 #include "common/delay.h"
+#include "td/utils/Time.h"
 #include "ton/ton-io.hpp"
 #include "validator/downloaders/download-state.hpp"
 #include "validator/fabric.h"
@@ -30,6 +31,32 @@
 namespace ton {
 
 namespace validator {
+
+void WaitBlockState::note_wait_stage(const char *stage) {
+  if (wait_stage_ == stage) {
+    return;
+  }
+  wait_stage_ = stage;
+  wait_stage_started_at_ = td::Time::now();
+  auto generation = ++wait_stage_generation_;
+  delay_action([self = actor_id(this), generation]() {
+    td::actor::send_closure(self, &WaitBlockState::report_slow_stage, generation);
+  }, td::Timestamp::in(2.0));
+}
+
+void WaitBlockState::report_slow_stage(td::uint64 generation) {
+  if (generation != wait_stage_generation_) {
+    return;
+  }
+  LOG(WARNING) << "[wait-state] block=" << handle_->id() << " stage=" << wait_stage_
+               << " ms=" << static_cast<td::uint64>((td::Time::now() - wait_stage_started_at_) * 1000.0)
+               << " received=" << handle_->received() << " proof=" << handle_->inited_proof()
+               << " proof_link=" << handle_->inited_proof_link() << " prev=" << handle_->inited_prev()
+               << " state=" << handle_->received_state();
+  delay_action([self = actor_id(this), generation]() {
+    td::actor::send_closure(self, &WaitBlockState::report_slow_stage, generation);
+  }, td::Timestamp::in(5.0));
+}
 
 void WaitBlockState::alarm() {
   abort_query(td::Status::Error(ErrorCode::timeout, "timeout"));
@@ -80,6 +107,7 @@ void WaitBlockState::start() {
   bool allow_download =
       last_masterchain_state_.is_null() || opts_->need_monitor(handle_->id().shard_full(), last_masterchain_state_);
   if (handle_->received_state() && inited_proof) {
+    note_wait_stage("db_read");
     reading_from_db_ = true;
 
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
@@ -91,6 +119,7 @@ void WaitBlockState::start() {
     });
     td::actor::send_closure(manager_, &ValidatorManager::get_shard_state_from_db, handle_, std::move(P));
   } else if (handle_->id().id.seqno == 0 && next_static_file_attempt_.is_in_past()) {
+    note_wait_stage("zero_state_static");
   static bool tontester_mode = []() -> bool {
     const char* s = std::getenv("TON_TONTESTER");
     return s != nullptr && !strcmp(s, "1");
@@ -126,6 +155,7 @@ void WaitBlockState::start() {
     td::actor::send_closure(manager_, &ValidatorManager::try_get_static_file, handle_->id().file_hash, std::move(P));
   }
   else if (handle_->id().id.seqno == 0) {
+    note_wait_stage("zero_state_network");
 
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::BufferSlice> R) {
       if (R.is_error()) {
@@ -138,6 +168,7 @@ void WaitBlockState::start() {
     td::actor::send_closure(manager_, &ValidatorManager::send_get_zero_state_request, handle_->id(), priority_,
                             std::move(P));
   } else if (check_persistent_state_desc() && !handle_->received_state() && allow_download) {
+    note_wait_stage("persistent_state");
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
       if (R.is_error()) {
         LOG(WARNING) << "failed to get persistent state: " << R.move_as_error();
@@ -167,6 +198,7 @@ void WaitBlockState::start() {
           .release();
     }
   } else if (!handle_->inited_prev() || (!handle_->inited_proof() && !handle_->inited_proof_link())) {
+    note_wait_stage("proof_link");
     if (!allow_download) {
       abort_query(td::Status::Error(PSTRING() << "not monitoring shard " << handle_->id().shard_full()));
       return;
@@ -185,6 +217,7 @@ void WaitBlockState::start() {
                             std::move(P));
   }
   else if (prev_state_.is_null()) {
+    note_wait_stage("predecessor_state");
 
     CHECK(handle_->inited_proof() || handle_->inited_proof_link());
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {
@@ -199,6 +232,7 @@ void WaitBlockState::start() {
     td::actor::send_closure(manager_, &ValidatorManager::wait_prev_block_state, handle_, priority_, timeout_,
                             std::move(P));
   } else if (handle_->id().is_masterchain() && !handle_->inited_proof()) {
+    note_wait_stage("proof");
     if (!allow_download) {
       abort_query(td::Status::Error(PSTRING() << "not monitoring shard " << handle_->id().shard_full()));
       return;
@@ -216,6 +250,7 @@ void WaitBlockState::start() {
     td::actor::send_closure(manager_, &ValidatorManager::send_get_block_proof_request, handle_->id(), priority_,
                             std::move(P));
   } else if (block_.is_null()) {
+    note_wait_stage("block_bytes");
     if (!allow_download && !handle_->received()) {
       abort_query(td::Status::Error(PSTRING() << "not monitoring shard " << handle_->id().shard_full()));
       return;
@@ -232,6 +267,7 @@ void WaitBlockState::start() {
     td::actor::send_closure(manager_, &ValidatorManager::wait_block_data, handle_, priority_, timeout_, std::move(P));
   }
   else {
+    note_wait_stage("apply");
     apply();
   }
 }
