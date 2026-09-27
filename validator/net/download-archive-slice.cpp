@@ -201,7 +201,16 @@ void DownloadArchiveSlice::start_up() {
   tmp_name_ = std::move(r.second);
 
   if (!download_from_list_.empty()) {
-    got_node_to_download(std::move(download_from_list_));
+    if (client_.empty() && !record_archive_sync_metrics_) {
+      auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](
+                                              td::Result<std::vector<adnl::AdnlNodeIdShort>> R) mutable {
+        td::actor::send_closure(SelfId, &DownloadArchiveSlice::got_initial_public_peers, std::move(R));
+      });
+      td::actor::send_closure(overlays_, &overlay::Overlays::get_overlay_random_peers, local_id_, overlay_id_,
+                              kPublicArchivePeerCount, std::move(P));
+    } else {
+      got_node_to_download(std::move(download_from_list_));
+    }
   } else if (download_from_.is_zero() && client_.empty()) {
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::vector<adnl::AdnlNodeIdShort>> R) {
       if (R.is_error()) {
@@ -232,6 +241,25 @@ void DownloadArchiveSlice::start_up() {
     tmp.emplace_back(download_from_);
     got_node_to_download(std::move(tmp));
   }
+}
+
+void DownloadArchiveSlice::got_initial_public_peers(td::Result<std::vector<adnl::AdnlNodeIdShort>> result) {
+  bool discovery_error = result.is_error();
+  std::vector<adnl::AdnlNodeIdShort> peers;
+  if (!discovery_error) {
+    peers = result.move_as_ok();
+  }
+  auto discovered = peers.size();
+  for (const auto &hint : download_from_list_) {
+    if (std::find(peers.begin(), peers.end(), hint) == peers.end()) {
+      peers.push_back(hint);
+    }
+  }
+  LOG(WARNING) << "[archive-sync] stage=public_peer_discovery seqno=" << masterchain_seqno_
+               << " shard=" << shard_prefix_.to_str() << " discovered=" << discovered
+               << " hints=" << download_from_list_.size() << " total=" << peers.size()
+               << " result=" << (discovery_error ? "error" : (discovered == 0 ? "empty" : "ok"));
+  got_node_to_download(std::move(peers));
 }
 
 void DownloadArchiveSlice::got_node_to_download(std::vector<adnl::AdnlNodeIdShort> download_from) {

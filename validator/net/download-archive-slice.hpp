@@ -62,6 +62,7 @@ class DownloadArchiveSlice : public td::actor::Actor {
 
   void start_up() override;
   void got_node_to_download(std::vector<adnl::AdnlNodeIdShort> node);
+  void got_initial_public_peers(td::Result<std::vector<adnl::AdnlNodeIdShort>> result);
   void got_archive_info(td::BufferSlice data);
   void got_archive_info_result(td::uint64 query_id, int index, int total_nodes, td::Result<td::BufferSlice> result);
   void archive_info_timeout(td::uint64 query_id, int index, int total_nodes);
