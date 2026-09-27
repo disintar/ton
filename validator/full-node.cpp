@@ -182,12 +182,18 @@ void finish_public_archive_fallback_race(std::shared_ptr<PublicArchiveFallbackRa
   td::Promise<std::string> promise;
   bool should_finish = false;
   auto error_string = error.to_string();
+  LOG(WARNING) << "[archive-sync] stage=race_source_done source=" << source
+               << " seqno=" << state->masterchain_seqno << " shard=" << state->shard_prefix.to_str()
+               << " result=error reason=" << block_propagation_trace_sanitize(error_string);
   {
     std::lock_guard<std::mutex> lock(state->mutex);
     if (state->done) {
       return;
     }
-    state->last_error = PSTRING() << source << ": " << error_string;
+    if (!state->last_error.empty()) {
+      state->last_error += "; ";
+    }
+    state->last_error += PSTRING() << source << ": " << error_string;
     CHECK(state->pending > 0);
     state->pending--;
     if (state->pending == 0) {
