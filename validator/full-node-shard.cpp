@@ -44,6 +44,7 @@
 #include "ton/ton-tl.hpp"
 
 #include "checksum.h"
+#include "block-propagation-trace.h"
 #include "custom-overlay-metrics.h"
 #include "full-node-serializer.hpp"
 #include "full-node-shard-queries.hpp"
@@ -1229,6 +1230,11 @@ void FullNodeShardImpl::get_next_key_blocks(BlockIdExt block_id, td::Timestamp t
 void FullNodeShardImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
                                          td::Timestamp timeout, td::Promise<std::string> promise,
                                          std::vector<adnl::AdnlNodeIdShort> hint_peers) {
+  if (neighbours_.empty() && !hint_peers.empty()) {
+    got_neighbours(hint_peers);
+    LOG(WARNING) << "[private-sync] stage=public_hint_seed shard=" << shard_.to_str()
+                 << " known=" << hint_peers.size() << " neighbours=" << neighbours_.size();
+  }
   std::vector<const Neighbour *> candidates;
   candidates.reserve(neighbours_.size());
   for (const auto &[_, neighbour] : neighbours_) {
@@ -1573,12 +1579,21 @@ void FullNodeShardImpl::update_validators(std::vector<PublicKeyHash> public_key_
 }
 
 void FullNodeShardImpl::reload_neighbours() {
-  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::vector<adnl::AdnlNodeIdShort>> R) {
+  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), shard = shard_](
+                                          td::Result<std::vector<adnl::AdnlNodeIdShort>> R) {
     if (R.is_error()) {
+      if (private_sync_trace_should_log(true, 0)) {
+        LOG(WARNING) << "[private-sync] stage=public_peers_reload shard=" << shard.to_str()
+                     << " result=error reason=" << R.error();
+      }
       return;
     }
     auto vec = R.move_as_ok();
     if (vec.size() == 0) {
+      if (private_sync_trace_should_log(true, 0)) {
+        LOG(WARNING) << "[private-sync] stage=public_peers_reload shard=" << shard.to_str()
+                     << " result=empty";
+      }
       return;
     } else {
       td::actor::send_closure(SelfId, &FullNodeShardImpl::got_neighbours, std::move(vec));
