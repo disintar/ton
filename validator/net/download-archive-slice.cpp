@@ -40,6 +40,7 @@ constexpr double kArchivePeerResolveTimeout = 2.0;
 constexpr double kArchiveInfoTimeout = 3.0;
 constexpr double kPublicArchiveInfoTimeout = 1.25;
 constexpr double kArchiveSliceChunkTimeout = 15.0;
+constexpr double kPublicArchiveSliceChunkTimeout = 5.0;
 constexpr td::uint32 kPublicArchivePeerCount = 5;
 
 CustomOverlaySyncResult archive_sync_result_from_status(const td::Status &status) {
@@ -698,16 +699,20 @@ void DownloadArchiveSlice::got_archive_info(td::BufferSlice data) {
 void DownloadArchiveSlice::get_archive_slice() {
   auto query_id = ++archive_slice_query_id_;
   archive_slice_started_at_ = block_propagation_trace_now();
+  const double chunk_timeout = client_.empty() && !record_archive_sync_metrics_
+                                   ? kPublicArchiveSliceChunkTimeout
+                                   : kArchiveSliceChunkTimeout;
   LOG(WARNING) << "[archive-sync] stage=slice.chunk.start source=" << archive_source()
                << " transport=" << archive_slice_transport() << " seqno=" << masterchain_seqno_
                << " shard=" << shard_prefix_.to_str()
                << " peer=" << download_from_ << " archive_id=" << archive_id_ << " offset=" << offset_
-               << " bytes=" << slice_size() << " result=start";
+               << " bytes=" << slice_size() << " deadline_ms=" << static_cast<int>(chunk_timeout * 1000)
+               << " result=start";
   delay_action(
       [SelfId = actor_id(this), query_id]() {
         td::actor::send_closure(SelfId, &DownloadArchiveSlice::archive_slice_timeout, query_id);
       },
-      td::Timestamp::in(kArchiveSliceChunkTimeout));
+      td::Timestamp::in(chunk_timeout));
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), query_id](td::Result<td::BufferSlice> R) {
     td::actor::send_closure(SelfId, &DownloadArchiveSlice::got_archive_slice_result, query_id, std::move(R));
   });
@@ -716,16 +721,16 @@ void DownloadArchiveSlice::get_archive_slice() {
   if (client_.empty()) {
     if (use_sender_for_slice_query_) {
       td::actor::send_closure(overlays_, &overlay::Overlays::send_query_via, download_from_, local_id_, overlay_id_,
-                              "get_archive_slice", std::move(P), td::Timestamp::in(15.0), std::move(q),
+                              "get_archive_slice", std::move(P), td::Timestamp::in(chunk_timeout), std::move(q),
                               slice_size() + 1024, rldp_);
     } else {
       td::actor::send_closure(overlays_, &overlay::Overlays::send_query, download_from_, local_id_, overlay_id_,
-                              "get_archive_slice", std::move(P), td::Timestamp::in(15.0), std::move(q));
+                              "get_archive_slice", std::move(P), td::Timestamp::in(chunk_timeout), std::move(q));
     }
   } else {
     td::actor::send_closure(client_, &adnl::AdnlExtClient::send_query, "get_archive_slice",
                             create_serialize_tl_object_suffix<ton_api::tonNode_query>(std::move(q)),
-                            td::Timestamp::in(15.0), std::move(P));
+                            td::Timestamp::in(chunk_timeout), std::move(P));
   }
 }
 
