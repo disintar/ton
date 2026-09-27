@@ -9,7 +9,6 @@ namespace ton::validator {
 constexpr double kPrestartArchiveSyncTargetLagSeconds = 60.0;
 constexpr double kLiveArchiveSyncRecoveryLagSeconds = 30.0;
 constexpr double kLiveSyncCatchupGraceSeconds = 60.0;
-constexpr double kLiveArchiveEmergencyShardLagSeconds = 10.0;
 constexpr double kArchiveFailureLiveFallbackMaxLagSeconds = 1800.0;
 constexpr double kArchiveFailureLiveFallbackGraceSeconds = 300.0;
 constexpr unsigned kArchiveFailureLiveFallbackAttempts = 2;
@@ -20,11 +19,8 @@ inline bool archive_sync_near_live(double now, double masterchain_time, double s
 }
 
 // now and grace_until use the monotonic clock; lag values use block timestamps.
-inline bool live_archive_recovery_needed(double master_lag, double shard_lag, bool shard_gap,
+inline bool live_archive_recovery_needed(double master_lag, double shard_lag, bool /*shard_gap*/,
                                          double now, double grace_until) {
-  if (shard_gap && shard_lag > kLiveArchiveEmergencyShardLagSeconds) {
-    return true;
-  }
   if (now < grace_until) {
     return false;
   }
