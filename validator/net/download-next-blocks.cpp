@@ -26,6 +26,8 @@
 #include "download-next-blocks.hpp"
 #include "full-node-serializer.hpp"
 
+#include <algorithm>
+
 namespace ton {
 
 namespace validator {
@@ -37,7 +39,8 @@ DownloadNextBlocks::DownloadNextBlocks(adnl::AdnlNodeIdShort local_id, overlay::
                                        bool allow_many, td::actor::ActorId<ValidatorManagerInterface> validator_manager,
                                        td::actor::ActorId<adnl::AdnlSenderInterface> rldp,
                                        td::actor::ActorId<overlay::Overlays> overlays,
-                                       td::actor::ActorId<adnl::AdnlExtClient> client, td::Promise<BlockHandle> promise)
+                                       td::actor::ActorId<adnl::AdnlExtClient> client, td::Promise<BlockHandle> promise,
+                                       td::Timestamp timeout)
     : local_id_(local_id)
     , overlay_id_(overlay_id)
     , handle_(handle)
@@ -49,7 +52,8 @@ DownloadNextBlocks::DownloadNextBlocks(adnl::AdnlNodeIdShort local_id, overlay::
     , rldp_(rldp)
     , overlays_(overlays)
     , client_(client)
-    , promise_(std::move(promise)) {
+    , promise_(std::move(promise))
+    , timeout_(timeout) {
 }
 
 void DownloadNextBlocks::start_up() {
@@ -107,8 +111,11 @@ td::actor::Task<> DownloadNextBlocks::run() {
   }
 
   token_ = co_await td::actor::ask(validator_manager_, &ValidatorManagerInterface::get_download_token, 1, priority_,
-                                   td::Timestamp::in(2.0))
+                                   std::min(timeout_, td::Timestamp::in(2.0)))
                .trace("get_download_token");
+  if (timeout_.is_in_past()) {
+    co_return td::Status::Error(ErrorCode::timeout, "next blocks deadline expired before query");
+  }
   if (download_from_.is_zero() && client_.empty()) {
     auto peers =
         co_await td::actor::ask(overlays_, &overlay::Overlays::get_overlay_random_peers, local_id_, overlay_id_, 1);
@@ -118,6 +125,9 @@ td::actor::Task<> DownloadNextBlocks::run() {
     download_from_ = peers[0];
   }
   VLOG(FULL_NODE_DEBUG) << "Download from " << download_from_;
+  if (timeout_.is_in_past()) {
+    co_return td::Status::Error(ErrorCode::timeout, "next blocks deadline expired before query");
+  }
   td::BufferSlice query;
   size_t max_size;
   if (allow_many_) {
@@ -131,12 +141,12 @@ td::actor::Task<> DownloadNextBlocks::run() {
   auto [task, promise] = td::actor::StartedTask<td::BufferSlice>::make_bridge();
   if (client_.empty()) {
     td::actor::send_closure(overlays_, &overlay::Overlays::send_query_via, download_from_, local_id_, overlay_id_,
-                            "get_next_blocks", std::move(promise), td::Timestamp::in(5.0), std::move(query), max_size,
+                            "get_next_blocks", std::move(promise), std::min(timeout_, td::Timestamp::in(5.0)), std::move(query), max_size,
                             rldp_);
   } else {
     td::actor::send_closure(client_, &adnl::AdnlExtClient::send_query, "get_next_blocks",
                             create_serialize_tl_object_suffix<ton_api::tonNode_query>(std::move(query)),
-                            td::Timestamp::in(5.0), std::move(promise));
+                            std::min(timeout_, td::Timestamp::in(5.0)), std::move(promise));
   }
 
   td::BufferSlice response = co_await std::move(task);

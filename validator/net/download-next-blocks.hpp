@@ -35,7 +35,8 @@ class DownloadNextBlocks : public td::actor::Actor {
                      adnl::AdnlNodeIdShort download_from, td::uint32 priority, bool allow_many,
                      td::actor::ActorId<ValidatorManagerInterface> validator_manager,
                      td::actor::ActorId<adnl::AdnlSenderInterface> rldp, td::actor::ActorId<overlay::Overlays> overlays,
-                     td::actor::ActorId<adnl::AdnlExtClient> client, td::Promise<BlockHandle> promise);
+                     td::actor::ActorId<adnl::AdnlExtClient> client, td::Promise<BlockHandle> promise,
+                     td::Timestamp timeout = td::Timestamp::in(5.0));
 
   void start_up() override;
   td::actor::Task<> run();
@@ -57,6 +58,7 @@ class DownloadNextBlocks : public td::actor::Actor {
   td::actor::ActorId<overlay::Overlays> overlays_;
   td::actor::ActorId<adnl::AdnlExtClient> client_;
   td::Promise<BlockHandle> promise_;
+  td::Timestamp timeout_;
 
   bool success_ = false;
   bool success_local_ = false;
