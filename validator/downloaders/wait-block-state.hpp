@@ -65,6 +65,8 @@ class WaitBlockState : public td::actor::Actor {
   void failed_to_get_zero_state();
   void failed_to_get_state_from_net(td::Status reason);
   void got_proof_link(td::BufferSlice data);
+  void failed_to_get_proof_link(td::Status reason);
+  void retry_proof_link(td::uint64 generation);
   void got_proof(td::BufferSlice data);
   void apply();
   void written_state(td::Ref<ShardState> upd_state);
@@ -80,6 +82,10 @@ class WaitBlockState : public td::actor::Actor {
   void after_get_proof_link() {
     if (!waiting_proof_link_) {
       return;
+    }
+    ++proof_link_retry_generation_;
+    if (handle_->inited_proof_link()) {
+      proof_link_failures_ = 0;
     }
     waiting_proof_link_ = false;
     start();
@@ -113,6 +119,8 @@ class WaitBlockState : public td::actor::Actor {
   bool checked_celldb_ = false;
   bool force_reading_from_db_ = false;
   bool waiting_proof_link_ = false;
+  td::uint32 proof_link_failures_ = 0;
+  td::uint64 proof_link_retry_generation_ = 0;
   bool waiting_proof_ = false;
   td::Timestamp next_static_file_attempt_;
   const char *wait_stage_ = "start";

@@ -19,9 +19,11 @@
 #include "common/checksum.h"
 #include "common/delay.h"
 #include "td/utils/Time.h"
+#include "td/utils/Random.h"
 #include "ton/ton-io.hpp"
 #include "validator/downloaders/download-state.hpp"
 #include "validator/fabric.h"
+#include "validator/block-propagation-trace.h"
 
 #include "wait-block-state.hpp"
 
@@ -224,13 +226,9 @@ void WaitBlockState::start() {
       abort_query(td::Status::Error(PSTRING() << "not monitoring shard " << handle_->id().shard_full()));
       return;
     }
-    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), id = handle_->id()](td::Result<td::BufferSlice> R) {
+    auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::BufferSlice> R) {
       if (R.is_error()) {
-        if (allow_wait_state_log()) {
-          LOG(WARNING) << "[wait-state] block=" << id << " stage=proof_link.error reason=" << R.error();
-        }
-        delay_action([SelfId]() { td::actor::send_closure(SelfId, &WaitBlockState::after_get_proof_link); },
-                     td::Timestamp::in(0.1));
+        td::actor::send_closure(SelfId, &WaitBlockState::failed_to_get_proof_link, R.move_as_error());
       } else {
         td::actor::send_closure(SelfId, &WaitBlockState::got_proof_link, R.move_as_ok());
       }
@@ -296,6 +294,33 @@ void WaitBlockState::start() {
   }
 }
 
+void WaitBlockState::failed_to_get_proof_link(td::Status reason) {
+  if (!waiting_proof_link_) {
+    return;
+  }
+  ++proof_link_failures_;
+  auto exponent = std::min(proof_link_failures_ - 1, static_cast<td::uint32>(4));
+  double retry_delay = std::min(2.5, 0.2 * static_cast<double>(1u << exponent)) + td::Random::fast(0.0, 0.1);
+  if (private_sync_trace_enabled() &&
+      (proof_link_failures_ == 1 || proof_link_failures_ % 8 == 0) &&
+      private_sync_trace_should_log(true, 0)) {
+    LOG(WARNING) << "[private-sync] stage=proof_link.retry block=" << handle_->id()
+                 << " failures=" << proof_link_failures_ << " delay_ms=" << static_cast<int>(retry_delay * 1000)
+                 << " reason=" << reason;
+  }
+  auto generation = ++proof_link_retry_generation_;
+  delay_action([SelfId = actor_id(this), generation]() {
+    td::actor::send_closure(SelfId, &WaitBlockState::retry_proof_link, generation);
+  },
+               td::Timestamp::in(retry_delay));
+}
+
+void WaitBlockState::retry_proof_link(td::uint64 generation) {
+  if (generation == proof_link_retry_generation_) {
+    after_get_proof_link();
+  }
+}
+
 void WaitBlockState::failed_to_get_prev_state(td::Status reason) {
   if (reason.code() == ErrorCode::notready) {
     start();
@@ -335,8 +360,7 @@ void WaitBlockState::got_proof_link(td::BufferSlice data) {
   }
   auto R = create_proof_link(handle_->id(), std::move(data));
   if (R.is_error()) {
-    LOG(INFO) << "received bad proof link: " << R.move_as_error();
-    start();
+    failed_to_get_proof_link(R.move_as_error());
     return;
   }
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<BlockHandle> R) {
@@ -345,9 +369,7 @@ void WaitBlockState::got_proof_link(td::BufferSlice data) {
       CHECK(h->inited_prev());
       td::actor::send_closure(SelfId, &WaitBlockState::after_get_proof_link);
     } else {
-      LOG(INFO) << "received bad proof link: " << R.move_as_error();
-      delay_action([SelfId]() { td::actor::send_closure(SelfId, &WaitBlockState::after_get_proof_link); },
-                   td::Timestamp::in(0.1));
+      td::actor::send_closure(SelfId, &WaitBlockState::failed_to_get_proof_link, R.move_as_error());
     }
   });
   run_check_proof_link_query(handle_->id(), R.move_as_ok(), manager_, timeout_, std::move(P));
