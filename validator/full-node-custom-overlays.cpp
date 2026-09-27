@@ -866,7 +866,7 @@ std::vector<adnl::AdnlNodeIdShort> FullNodeCustomOverlay::custom_download_peers(
 }
 
 td::Timestamp custom_overlay_peer_download_timeout(td::Timestamp timeout) {
-  auto peer_timeout = td::Timestamp::in(2.0);
+  auto peer_timeout = td::Timestamp::in(4.0);
   return timeout < peer_timeout ? timeout : peer_timeout;
 }
 
