@@ -43,6 +43,7 @@
 #include "validator/stats-merger.h"
 
 #include "archive-sync-policy.h"
+#include "block-propagation-trace.h"
 #include "checksum.h"
 #include "fabric.h"
 #include "get-next-key-blocks.h"
