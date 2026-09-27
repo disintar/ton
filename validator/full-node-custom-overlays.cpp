@@ -1284,6 +1284,16 @@ void FullNodeCustomOverlay::proof_peer_finished() {
   --proof_peers_inflight_;
 }
 
+void FullNodeCustomOverlay::record_proof_request_result(bool success) {
+  if (success) {
+    consecutive_proof_failures_ = 0;
+    proof_cooldown_until_ = 0.0;
+  } else if (++consecutive_proof_failures_ >= 4) {
+    consecutive_proof_failures_ = 0;
+    proof_cooldown_until_ = std::max(proof_cooldown_until_, block_propagation_trace_now() + 30.0);
+  }
+}
+
 void FullNodeCustomOverlay::download_proof_from_custom_peers(BlockIdExt block_id, bool proof_link,
                                                              td::uint32 priority, td::Timestamp timeout,
                                                              td::Promise<td::BufferSlice> promise) {
@@ -1301,9 +1311,10 @@ void FullNodeCustomOverlay::download_proof_from_custom_peers(BlockIdExt block_id
     return;
   }
   auto peers = custom_download_peers();
-  if (proof_peers_inflight_ >= kMaxPrivateProofPeersInflight) {
+  if (proof_peers_inflight_ >= kMaxPrivateProofPeersInflight ||
+      proof_cooldown_until_ > block_propagation_trace_now()) {
     record_custom_overlay_sync_download(CustomOverlaySyncKind::Proof, sender, CustomOverlaySyncResult::NotReady);
-    promise.set_error(td::Status::Error(ErrorCode::notready, "private proof stream limit reached"));
+    promise.set_error(td::Status::Error(ErrorCode::notready, "private proof capacity or peer cooldown"));
     return;
   }
   peers.resize(std::min<std::size_t>({peers.size(), 2, kMaxPrivateProofPeersInflight - proof_peers_inflight_}));
@@ -1313,8 +1324,9 @@ void FullNodeCustomOverlay::download_proof_from_custom_peers(BlockIdExt block_id
     return;
   }
   proof_peers_inflight_ += peers.size();
-  auto aggregate = td::PromiseCreator::lambda([promise = std::move(promise), sender, started_at](
+  auto aggregate = td::PromiseCreator::lambda([self = actor_id(this), promise = std::move(promise), sender, started_at](
                                                   td::Result<td::BufferSlice> R) mutable {
+    td::actor::send_closure(self, &FullNodeCustomOverlay::record_proof_request_result, R.is_ok());
     record_custom_overlay_sync_download(CustomOverlaySyncKind::Proof, sender,
                                         R.is_ok() ? CustomOverlaySyncResult::Ok : CustomOverlaySyncResult::Exhausted,
                                         started_at, block_propagation_trace_now());
