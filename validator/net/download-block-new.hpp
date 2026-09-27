@@ -36,7 +36,7 @@ class DownloadBlockNew : public td::actor::Actor {
                    td::actor::ActorId<ValidatorManagerInterface> validator_manager,
                    td::actor::ActorId<adnl::AdnlSenderInterface> rldp, td::actor::ActorId<overlay::Overlays> overlays,
                    td::actor::ActorId<adnl::Adnl> adnl, td::actor::ActorId<adnl::AdnlExtClient> client,
-                   td::Promise<ReceivedBlock> promise);
+                   td::Promise<ReceivedBlock> promise, BlockIdExt request_after = {});
 
   void abort_query(td::Status reason);
   void alarm() override;
@@ -54,6 +54,7 @@ class DownloadBlockNew : public td::actor::Actor {
 
  private:
   BlockIdExt block_id_;
+  BlockIdExt request_after_;
   adnl::AdnlNodeIdShort local_id_;
   overlay::OverlayIdShort overlay_id_;
 

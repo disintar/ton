@@ -664,7 +664,7 @@ void FullNodeImpl::download_block(BlockIdExt id, td::uint32 priority, td::Timest
                           P.set_result(std::move(next));
                         }
                       });
-                  td::actor::send_closure(actor, &FullNodeCustomOverlay::download_next_block, prev_id, priority,
+                  td::actor::send_closure(actor, &FullNodeCustomOverlay::download_block_after, id, prev_id, priority,
                                           timeout, std::move(P_next));
                   return;
                 }

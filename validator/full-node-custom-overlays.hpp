@@ -89,6 +89,8 @@ class FullNodeCustomOverlay : public td::actor::Actor {
   void send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data);
   void download_block(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                       td::Promise<ReceivedBlock> promise);
+  void download_block_after(BlockIdExt id, BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
+                            td::Promise<ReceivedBlock> promise);
   void download_next_block(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
                            td::Promise<ReceivedBlock> promise);
   void download_next_blocks(BlockHandle handle, td::uint32 priority, td::Timestamp timeout,
@@ -164,7 +166,7 @@ class FullNodeCustomOverlay : public td::actor::Actor {
   void prewarm_archive_peers();
   void download_block_from_custom_peers(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                         std::vector<adnl::AdnlNodeIdShort> peers, double started_at,
-                                        td::Promise<ReceivedBlock> promise);
+                                        td::Promise<ReceivedBlock> promise, BlockIdExt request_after = {});
   void download_next_block_from_custom_peers(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
                                              std::vector<adnl::AdnlNodeIdShort> peers, double started_at,
                                              td::Promise<ReceivedBlock> promise);
