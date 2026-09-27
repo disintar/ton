@@ -72,6 +72,8 @@ void WaitBlockState::report_slow_stage(td::uint64 generation) {
   if (allow_wait_state_log()) {
     LOG(WARNING) << "[wait-state] block=" << handle_->id() << " stage=" << wait_stage_
                  << " ms=" << static_cast<td::uint64>((td::Time::now() - wait_stage_started_at_) * 1000.0)
+                 << " prev_id=" << (handle_->inited_prev() ? handle_->one_prev(true).to_str() : "-")
+                 << " merge=" << (handle_->inited_prev() && handle_->merge_before() ? 1 : 0)
                  << " received=" << handle_->received() << " proof=" << handle_->inited_proof()
                  << " proof_link=" << handle_->inited_proof_link() << " prev=" << handle_->inited_prev()
                  << " state=" << handle_->received_state();
@@ -322,6 +324,12 @@ void WaitBlockState::retry_proof_link(td::uint64 generation) {
 }
 
 void WaitBlockState::failed_to_get_prev_state(td::Status reason) {
+  if (private_sync_trace_should_log(true, 0)) {
+    LOG(WARNING) << "[private-sync] stage=predecessor.wait_done block=" << handle_->id()
+                 << " prev_id=" << (handle_->inited_prev() ? handle_->one_prev(true).to_str() : "-")
+                 << " ms=" << static_cast<long long>((td::Time::now() - wait_stage_started_at_) * 1000.0)
+                 << " result=error reason=" << reason;
+  }
   if (reason.code() == ErrorCode::notready) {
     start();
   } else {
@@ -330,6 +338,12 @@ void WaitBlockState::failed_to_get_prev_state(td::Status reason) {
 }
 
 void WaitBlockState::got_prev_state(td::Ref<ShardState> state) {
+  auto elapsed_ms = static_cast<long long>((td::Time::now() - wait_stage_started_at_) * 1000.0);
+  if (private_sync_trace_should_log(false, elapsed_ms)) {
+    LOG(WARNING) << "[private-sync] stage=predecessor.wait_done block=" << handle_->id()
+                 << " prev_id=" << (handle_->inited_prev() ? handle_->one_prev(true).to_str() : "-")
+                 << " ms=" << elapsed_ms << " result=ok";
+  }
   prev_state_ = std::move(state);
 
   if (handle_->merge_before() && prev_state_2_.is_null()) {
@@ -350,6 +364,11 @@ void WaitBlockState::got_prev_state(td::Ref<ShardState> state) {
 }
 
 void WaitBlockState::got_prev_state_2(td::Ref<ShardState> state) {
+  auto elapsed_ms = static_cast<long long>((td::Time::now() - wait_stage_started_at_) * 1000.0);
+  if (private_sync_trace_should_log(false, elapsed_ms)) {
+    LOG(WARNING) << "[private-sync] stage=predecessor.wait_second_done block=" << handle_->id()
+                 << " prev_id=" << handle_->one_prev(false) << " ms=" << elapsed_ms << " result=ok";
+  }
   prev_state_2_ = std::move(state);
   start();
 }
