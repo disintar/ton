@@ -2072,6 +2072,20 @@ void ValidatorManagerImpl::finish_proof_link_request(BlockIdExt block_id, td::Re
 
 void ValidatorManagerImpl::start_proof_link_block_fallback(BlockIdExt block_id, td::uint32 priority,
                                                            td::Promise<td::BufferSlice> promise) {
+  if (auto cached = cached_block_data_.get_if_exists(block_id, false)) {
+    auto root = vm::std_boc_deserialize(*cached);
+    if (root.is_ok()) {
+      auto proof = WaitBlockData::generate_proof_link(block_id, root.move_as_ok());
+      if (proof.is_ok()) {
+        if (private_sync_trace_should_log(false, 0)) {
+          LOG(WARNING) << "[private-sync] stage=proof_link.block_fallback.cache block=" << block_id
+                       << " result=ok";
+        }
+        promise.set_result(std::move(proof));
+        return;
+      }
+    }
+  }
   static std::atomic<int> block_fallback_inflight{0};
   int count = block_fallback_inflight.load(std::memory_order_relaxed);
   while (count < 4 && !block_fallback_inflight.compare_exchange_weak(count, count + 1, std::memory_order_relaxed)) {

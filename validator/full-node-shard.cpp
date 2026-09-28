@@ -1417,7 +1417,7 @@ void FullNodeShardImpl::launch_proof_link_download(BlockIdExt block_id, adnl::Ad
           won->store(true, std::memory_order_relaxed);
         }
         auto elapsed_ms = static_cast<long long>((td::Time::now() - started_at) * 1000.0);
-        auto cooldown = result.is_ok() ? 0.0 : (result.error().code() == ErrorCode::notready ? 0.25 : 4.0);
+        auto cooldown = result.is_ok() ? 0.0 : (result.error().code() == ErrorCode::notready ? 2.0 : 4.0);
         td::actor::send_closure(self, &FullNodeShardImpl::record_required_data_result, peer, result.is_ok(), cooldown);
         if (private_sync_trace_should_log(result.is_error(), elapsed_ms)) {
           LOG(WARNING) << "[private-sync] stage=public.proof_link block=" << block_id << " peer=" << peer
