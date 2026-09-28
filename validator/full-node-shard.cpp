@@ -1232,15 +1232,12 @@ void FullNodeShardImpl::download_block(BlockIdExt id, td::uint32 priority, td::T
   std::vector<const Neighbour *> candidates;
   auto now = td::Time::now();
   for (const auto &[_, peer] : neighbours_) {
-    if (peer.required_data_unavailable_until <= now) {
-      candidates.push_back(&peer);
-    }
+    candidates.push_back(&peer);
   }
-  if (candidates.empty()) {
+  if (std::none_of(candidates.begin(), candidates.end(), [now](const Neighbour *peer) {
+        return peer->required_data_unavailable_until <= now;
+      })) {
     reload_neighbours_at_ = td::Timestamp::now();
-    for (const auto &[_, peer] : neighbours_) {
-      candidates.push_back(&peer);
-    }
   }
   std::sort(candidates.begin(), candidates.end(), [now](const Neighbour *a, const Neighbour *b) {
     auto score = [now](const Neighbour *p) {
@@ -1248,30 +1245,35 @@ void FullNodeShardImpl::download_block(BlockIdExt id, td::uint32 priority, td::T
              (p->required_data_success_until > now ? 4.0 : 0.0) +
              (p->required_data_unavailable_until > now ? 8.0 : 0.0);
     };
-    return score(a) < score(b);
+    bool a_available = a->required_data_unavailable_until <= now;
+    bool b_available = b->required_data_unavailable_until <= now;
+    return a_available != b_available ? a_available : score(a) < score(b);
   });
   if (candidates.empty()) {
     promise.set_error(td::Status::Error(ErrorCode::notready, "no public overlay peers"));
     return;
   }
-  auto count = std::min<std::size_t>(4, candidates.size());
+  constexpr std::size_t initial_peers = 4;
+  auto count = std::min<std::size_t>(8, candidates.size());
   auto callbacks = download_race_promises<ReceivedBlock>(count, std::move(promise));
   auto won = std::make_shared<std::atomic<bool>>(false);
   for (std::size_t i = 0; i < count; ++i) {
     auto peer_id = candidates[i]->adnl_id;
+    auto hedge_ms = i < initial_peers ? 0 : 100;
     auto callback = std::make_shared<td::Promise<ReceivedBlock>>(std::move(callbacks[i]));
     if (private_sync_trace_should_log(false, 0)) {
       LOG(WARNING) << "[private-sync] stage=public.block.select block=" << id << " peer=" << peer_id
-                   << " rank=" << i << " candidates=" << candidates.size() << " hedge_ms=" << i * 150;
+                   << " rank=" << i << " candidates=" << candidates.size() << " hedge_ms=" << hedge_ms
+                   << " cooldown=" << (candidates[i]->required_data_unavailable_until > now);
     }
     auto launch = [self = actor_id(this), id, peer_id, priority, timeout, won, callback]() mutable {
       td::actor::send_closure(self, &FullNodeShardImpl::launch_block_download, id, peer_id, priority, timeout, won,
                               std::move(*callback));
     };
-    if (i == 0) {
+    if (hedge_ms == 0) {
       launch();
     } else {
-      delay_action(std::move(launch), td::Timestamp::in(i * 0.15));
+      delay_action(std::move(launch), td::Timestamp::in(0.1));
     }
   }
 }
