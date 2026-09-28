@@ -4,6 +4,8 @@
 #include <cstring>
 
 #include "auto/tl/ton_api.hpp"
+#include "common/errorcode.h"
+#include "td/actor/SharedFuture.h"
 #include "td/actor/coro_utils.h"
 #include "td/utils/Heap.h"
 #include "td/utils/Time.h"
@@ -450,13 +452,18 @@ td::actor::Task<td::BufferSlice> QuicSender::send_query_coro(adnl::AdnlNodeIdSho
   auto magic = metrics::resolve_tl_magic(data.as_slice());
   app_.record(metrics::Kind::query, metrics::Direction::out, magic, data.size());
   td::Timer timer;
-  auto conn_result = co_await find_or_create_connection({src, dst}).wrap();
+  auto conn_result = timeout
+                         ? co_await td::actor::await_with_timeout(find_or_create_connection({src, dst}), timeout).wrap()
+                         : co_await find_or_create_connection({src, dst}).wrap();
   if (conn_result.is_error()) {
     query_roundtrip_.record(magic, dst, timer.elapsed(), false);
     if (allow_sync_transport_trace()) {
       LOG(WARNING) << "[quic-sync] stage=query.connect_failed peer=" << dst << " tl=" << metrics::tl_name(magic)
                    << " ms=" << static_cast<td::uint64>(timer.elapsed() * 1000.0)
                    << " reason=" << conn_result.error();
+    }
+    if (conn_result.error().code() == td::actor::AWAIT_TIMEOUT_CODE) {
+      co_return td::Status::Error(ErrorCode::timeout, "QUIC query deadline expired while resolving peer or connecting");
     }
     co_return conn_result.move_as_error();
   }

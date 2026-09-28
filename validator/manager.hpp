@@ -294,6 +294,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   std::map<BlockIdExt, td::Ref<OutMsgQueueProof>> cached_msg_queue_to_masterchain_;
 
   td::LRUCache<BlockIdExt, td::BufferSlice> cached_block_data_{/* max_size = */ 128};
+  std::map<BlockIdExt, std::vector<td::Promise<td::BufferSlice>>> proof_link_requests_;
   td::LRUCache<BlockIdExt, td::BufferSlice> cached_masterchain_block_candidates_{/* max_size = */ 128};
   td::LRUCache<BlockIdExt, td::Unit> cached_checked_shard_block_descriptions_{/* max_size = */ 1024};
 
@@ -539,8 +540,9 @@ class ValidatorManagerImpl : public ValidatorManager {
                                     td::Promise<td::BufferSlice> promise) override;
   void send_get_block_proof_link_request(BlockIdExt block_id, td::uint32 priority,
                                          td::Promise<td::BufferSlice> promise) override;
-  void finish_proof_link_network_request(BlockIdExt block_id, td::uint32 priority, double started_at,
-                                         td::Result<td::BufferSlice> result, td::Promise<td::BufferSlice> promise);
+  void start_proof_link_block_fallback(BlockIdExt block_id, td::uint32 priority,
+                                       td::Promise<td::BufferSlice> promise);
+  void finish_proof_link_request(BlockIdExt block_id, td::Result<td::BufferSlice> result);
   void send_get_next_key_blocks_request(BlockIdExt block_id, td::uint32 priority,
                                         td::Promise<std::vector<BlockIdExt>> promise) override;
   void send_top_shard_block_description(td::Ref<ShardTopBlockDescription> desc) override;

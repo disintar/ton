@@ -302,7 +302,7 @@ void WaitBlockState::failed_to_get_proof_link(td::Status reason) {
   }
   ++proof_link_failures_;
   auto exponent = std::min(proof_link_failures_ - 1, static_cast<td::uint32>(4));
-  double retry_delay = std::min(2.5, 0.2 * static_cast<double>(1u << exponent)) + td::Random::fast(0.0, 0.1);
+  double retry_delay = std::min(0.75, 0.15 * static_cast<double>(1u << exponent)) + td::Random::fast(0.0, 0.05);
   if (private_sync_trace_enabled() &&
       (proof_link_failures_ == 1 || proof_link_failures_ % 8 == 0) &&
       private_sync_trace_should_log(true, 0)) {

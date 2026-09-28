@@ -52,6 +52,8 @@
 #include "import-db-slice.hpp"
 #include "manager.h"
 #include "manager.hpp"
+#include "net/download-race.h"
+#include "net/proof-download-validation.h"
 #include "shard.hpp"
 #include "state-serializer.hpp"
 #include "validate-broadcast.hpp"
@@ -2002,30 +2004,75 @@ void ValidatorManagerImpl::send_get_block_proof_link_request(BlockIdExt block_id
       return;
     }
   }
-  auto started_at = td::Time::now();
-  auto network_promise = td::PromiseCreator::lambda(
-      [self = actor_id(this), block_id, priority, started_at,
-       promise = std::move(promise)](td::Result<td::BufferSlice> result) mutable {
-        td::actor::send_closure(self, &ValidatorManagerImpl::finish_proof_link_network_request, block_id, priority,
-                                started_at, std::move(result), std::move(promise));
-      });
-  callback_->download_block_proof_link(block_id, priority, td::Timestamp::in(10.0), std::move(network_promise));
-}
-
-void ValidatorManagerImpl::finish_proof_link_network_request(BlockIdExt block_id, td::uint32 priority,
-                                                             double started_at, td::Result<td::BufferSlice> result,
-                                                             td::Promise<td::BufferSlice> promise) {
-  static std::atomic<int> block_fallback_inflight{0};
-  auto elapsed_ms = static_cast<long long>((td::Time::now() - started_at) * 1000.0);
-  if (private_sync_trace_should_log(result.is_error(), elapsed_ms)) {
-    LOG(WARNING) << "[private-sync] stage=proof_link.network block=" << block_id
-                 << " ms=" << elapsed_ms << " result=" << (result.is_ok() ? "ok" : "error")
-                 << " reason=" << (result.is_error() ? result.error().to_string() : "-");
-  }
-  if (result.is_ok() || block_id.is_masterchain() || result.error().code() != ErrorCode::notready) {
-    promise.set_result(std::move(result));
+  auto pending = proof_link_requests_.find(block_id);
+  if (pending != proof_link_requests_.end()) {
+    pending->second.push_back(std::move(promise));
     return;
   }
+  if (proof_link_requests_.size() >= 64) {
+    promise.set_error(td::Status::Error(ErrorCode::notready, "proof link request capacity exhausted"));
+    return;
+  }
+  proof_link_requests_[block_id].push_back(std::move(promise));
+  auto self = actor_id(this);
+  auto complete = td::PromiseCreator::lambda([self, block_id](td::Result<td::BufferSlice> result) mutable {
+    td::actor::send_closure(self, &ValidatorManagerImpl::finish_proof_link_request, block_id, std::move(result));
+  });
+  auto callbacks = fullnode::download_race_promises<td::BufferSlice>(2, std::move(complete));
+  auto network_callback = std::move(callbacks[0]);
+  auto block_callback = std::make_shared<td::Promise<td::BufferSlice>>(std::move(callbacks[1]));
+  auto network_succeeded = std::make_shared<std::atomic<bool>>(false);
+  auto started_at = td::Time::now();
+  auto network_promise = td::PromiseCreator::lambda(
+      [block_id, started_at, network_succeeded, network_callback = std::move(network_callback)](
+          td::Result<td::BufferSlice> result) mutable {
+        if (result.is_ok()) {
+          network_succeeded->store(true, std::memory_order_relaxed);
+        }
+        auto elapsed_ms = static_cast<long long>((td::Time::now() - started_at) * 1000.0);
+        if (private_sync_trace_should_log(result.is_error(), elapsed_ms)) {
+          LOG(WARNING) << "[private-sync] stage=proof_link.network block=" << block_id
+                       << " ms=" << elapsed_ms << " result=" << (result.is_ok() ? "ok" : "error")
+                       << " reason=" << (result.is_error() ? result.error().to_string() : "-");
+        }
+        network_callback.set_result(std::move(result));
+      });
+  callback_->download_block_proof_link(block_id, priority, td::Timestamp::in(2.0), std::move(network_promise));
+  delay_action([self, block_id, priority, network_succeeded, block_callback]() mutable {
+    if (network_succeeded->load(std::memory_order_relaxed)) {
+      block_callback->set_error(td::Status::Error(ErrorCode::cancelled, "proof link network request completed"));
+      return;
+    }
+    td::actor::send_closure(self, &ValidatorManagerImpl::start_proof_link_block_fallback,
+                            block_id, priority, std::move(*block_callback));
+  }, td::Timestamp::in(0.25));
+}
+
+void ValidatorManagerImpl::finish_proof_link_request(BlockIdExt block_id, td::Result<td::BufferSlice> result) {
+  auto it = proof_link_requests_.find(block_id);
+  if (it == proof_link_requests_.end()) {
+    return;
+  }
+  auto promises = std::move(it->second);
+  proof_link_requests_.erase(it);
+  if (result.is_ok()) {
+    auto data = result.move_as_ok();
+    for (std::size_t i = 0; i + 1 < promises.size(); ++i) {
+      promises[i].set_value(data.clone());
+    }
+    promises.back().set_value(std::move(data));
+  } else {
+    auto error = result.move_as_error();
+    for (std::size_t i = 0; i + 1 < promises.size(); ++i) {
+      promises[i].set_error(error.clone());
+    }
+    promises.back().set_error(std::move(error));
+  }
+}
+
+void ValidatorManagerImpl::start_proof_link_block_fallback(BlockIdExt block_id, td::uint32 priority,
+                                                           td::Promise<td::BufferSlice> promise) {
+  static std::atomic<int> block_fallback_inflight{0};
   int count = block_fallback_inflight.load(std::memory_order_relaxed);
   while (count < 4 && !block_fallback_inflight.compare_exchange_weak(count, count + 1, std::memory_order_relaxed)) {
   }
@@ -2034,16 +2081,18 @@ void ValidatorManagerImpl::finish_proof_link_network_request(BlockIdExt block_id
       LOG(WARNING) << "[private-sync] stage=proof_link.block_fallback.skip block=" << block_id
                    << " inflight=" << count << " reason=capacity";
     }
-    promise.set_result(std::move(result));
+    promise.set_error(td::Status::Error(ErrorCode::notready, "proof link block fallback capacity exhausted"));
     return;
   }
   if (private_sync_trace_should_log(false, 0)) {
     LOG(WARNING) << "[private-sync] stage=proof_link.block_fallback.start block=" << block_id
-                 << " inflight=" << count + 1 << " network_error=" << result.error();
+                 << " inflight=" << count + 1;
   }
   auto fallback_started_at = td::Time::now();
+  auto validated = fullnode::validated_proof_download(actor_id(this), block_id, true,
+                                                       td::Timestamp::in(4.0), std::move(promise));
   auto fallback_promise = td::PromiseCreator::lambda(
-      [block_id, fallback_started_at, promise = std::move(promise)](td::Result<ReceivedBlock> block) mutable {
+      [block_id, fallback_started_at, promise = std::move(validated)](td::Result<ReceivedBlock> block) mutable {
         block_fallback_inflight.fetch_sub(1, std::memory_order_relaxed);
         auto fallback_ms = static_cast<long long>((td::Time::now() - fallback_started_at) * 1000.0);
         if (block.is_error()) {
@@ -2081,7 +2130,7 @@ void ValidatorManagerImpl::finish_proof_link_network_request(BlockIdExt block_id
         }
         promise.set_result(std::move(proof));
       });
-  callback_->download_block(block_id, priority, td::Timestamp::in(10.0), std::move(fallback_promise));
+  callback_->download_block(block_id, priority, td::Timestamp::in(4.0), std::move(fallback_promise));
 }
 
 void ValidatorManagerImpl::send_get_next_key_blocks_request(BlockIdExt block_id, td::uint32 priority,

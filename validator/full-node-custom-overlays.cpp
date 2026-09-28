@@ -834,9 +834,14 @@ void FullNodeCustomOverlay::receive_query(adnl::AdnlNodeIdShort src, td::BufferS
       [&](const ton_api::tonNode_downloadBlockFull &obj) { target = create_block_id(obj.block_).to_str(); },
       [&](const ton_api::tonNode_downloadNextBlockFull &obj) { target = create_block_id(obj.prev_block_).to_str(); },
       [&](const ton_api::tonNode_downloadNextBlocksFull &obj) { target = create_block_id(obj.prev_block_).to_str(); },
+      [&](const ton_api::tonNode_downloadBlockProofLink &obj) { target = create_block_id(obj.block_).to_str(); },
       [&](const auto &) {}));
   auto started_at = block_propagation_trace_now();
   auto query_id = fun_ptr->get_id();
+  if (query_id == ton_api::tonNode_downloadBlockProofLink::ID && private_sync_trace_should_log(true, 0)) {
+    LOG(WARNING) << "[custom-overlay-query] stage=recv peer=" << src << " query=" << query_id
+                 << " block=" << target;
+  }
   auto traced_promise = td::PromiseCreator::lambda(
       [src, target = std::move(target), query_id, started_at, promise = std::move(promise)](
           td::Result<td::BufferSlice> R) mutable {
@@ -1164,8 +1169,8 @@ void FullNodeCustomOverlay::download_next_blocks_from_custom_peers(BlockHandle h
     promise.set_error(td::Status::Error(ErrorCode::timeout, "custom overlay next blocks download timeout"));
     return;
   }
-  if (peers.size() > 2) {
-    peers.resize(2);
+  if (peers.size() > 1) {
+    peers.resize(1);
   }
 
   log_custom_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, sender, name_, local, "-", target,
@@ -1385,7 +1390,8 @@ void FullNodeCustomOverlay::download_proof_from_custom_peers(BlockIdExt block_id
     promise.set_error(td::Status::Error(ErrorCode::notready, "private proof capacity or peer cooldown"));
     return;
   }
-  peers.resize(std::min<std::size_t>({peers.size(), 2, kMaxPrivateProofPeersInflight - proof_peers_inflight_}));
+  // The public overlay races two peers in parallel; keep the combined proof fanout at three.
+  peers.resize(std::min<std::size_t>({peers.size(), 1, kMaxPrivateProofPeersInflight - proof_peers_inflight_}));
   if (peers.empty()) {
     record_custom_overlay_sync_download(CustomOverlaySyncKind::Proof, sender, CustomOverlaySyncResult::NoPeer);
     promise.set_error(td::Status::Error(ErrorCode::notready, "no authorized proof peers"));

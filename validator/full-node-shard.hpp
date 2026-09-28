@@ -253,6 +253,9 @@ class FullNodeShardImpl : public FullNodeShard {
   void launch_block_download(BlockIdExt id, adnl::AdnlNodeIdShort peer_id, td::uint32 priority,
                              td::Timestamp timeout, std::shared_ptr<std::atomic<bool>> won,
                              td::Promise<ReceivedBlock> promise);
+  void launch_proof_link_download(BlockIdExt id, adnl::AdnlNodeIdShort peer_id, td::uint32 priority,
+                                  td::Timestamp timeout, std::shared_ptr<std::atomic<bool>> won,
+                                  td::Promise<td::BufferSlice> promise);
   void got_neighbour_capabilities(adnl::AdnlNodeIdShort adnl_id, double t, td::BufferSlice data);
   const Neighbour &choose_neighbour(td::uint32 required_version_major = 0, td::uint32 required_version_minor = 0,
                                     bool require_data = false) const;
