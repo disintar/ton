@@ -1373,7 +1373,9 @@ void FullNodeShardImpl::download_block_proof_link(BlockIdExt block_id, td::uint3
     promise.set_error(td::Status::Error(ErrorCode::notready, "no healthy public proof peers"));
     return;
   }
-  peers.resize(std::min<std::size_t>(peers.size(), 2));
+  if (peers.size() > 2) {
+    peers.erase(peers.begin() + 2, peers.end());
+  }
   auto callbacks = download_race_promises<td::BufferSlice>(peers.size(), std::move(promise));
   auto won = std::make_shared<std::atomic<bool>>(false);
   auto self = actor_id(this);
@@ -1408,7 +1410,7 @@ void FullNodeShardImpl::launch_proof_link_download(BlockIdExt block_id, adnl::Ad
   auto peer_inflight = it->second.required_data_inflight++;
   auto started_at = td::Time::now();
   auto self = actor_id(this);
-  auto traced = td::PromiseCreator::lambda(
+  td::Promise<td::BufferSlice> traced = td::PromiseCreator::lambda(
       [block_id, peer, peer_inflight, self, won, started_at, promise = std::move(promise)](
           td::Result<td::BufferSlice> result) mutable {
         if (result.is_ok()) {
