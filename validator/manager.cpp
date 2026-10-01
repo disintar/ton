@@ -2505,6 +2505,14 @@ bool ValidatorManagerImpl::out_of_sync() {
     }
     return false;
   }
+  if (shard_gap > 16 && master_lag < kArchiveLiveProbeMasterLagSeconds &&
+      shard_lag < kArchiveLiveProbeShardLagSeconds && shard_gap <= kArchiveLiveProbeMaxMasterchainGap &&
+      last_masterchain_seqno_ >= last_known_key_block_handle_->id().seqno()) {
+    LOG(WARNING) << "[archive-sync] stage=live_probe master_lag_ms=" << static_cast<td::int64>(master_lag * 1000)
+                 << " shard_lag_ms=" << static_cast<td::int64>(shard_lag * 1000)
+                 << " mc_gap=" << shard_gap << " result=live";
+    return false;
+  }
   if (shard_gap > 16) {
     if (master_lag < 60.0 && shard_lag < 60.0 && private_sync_trace_should_log(true, 0)) {
       LOG(WARNING) << "[private-sync] stage=archive.continue master_lag=" << master_lag
