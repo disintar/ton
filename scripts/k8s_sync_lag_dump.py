@@ -6,9 +6,11 @@ from __future__ import annotations
 import argparse
 import collections
 import datetime as dt
+import fcntl
 import json
 import os
 import pathlib
+import signal
 import subprocess
 import threading
 import time
@@ -44,10 +46,16 @@ def current_pod(namespace: str, node: str) -> tuple[str, str]:
 
 
 def scrape(namespace: str, pod: str, port: int) -> tuple[dict[str, float], str]:
-    raw = kubectl(
-        "-n", namespace, "get", "--raw",
-        f"/api/v1/namespaces/{namespace}/pods/{pod}:{port}/proxy/metrics",
-    )
+    try:
+        raw = kubectl(
+            "-n", namespace, "get", "--raw",
+            f"/api/v1/namespaces/{namespace}/pods/{pod}:{port}/proxy/metrics",
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        raw = kubectl(
+            "-n", namespace, "exec", f"pod/{pod}", "--", "curl", "-fsS", "--max-time", "5",
+            f"http://127.0.0.1:{port}/metrics",
+        )
     values = {}
     for line in raw.splitlines():
         name, _, value = line.partition(" ")
@@ -208,15 +216,27 @@ def main() -> None:
     parser.add_argument("--duration", type=float, default=0.0)
     args = parser.parse_args()
     os.umask(0o077)
+    args.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    lock = (args.directory / "collector.lock").open("a+")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        raise SystemExit(f"collector already running for {args.directory}")
+    lock.seek(0)
+    lock.truncate()
+    lock.write(f"{os.getpid()}\n")
+    lock.flush()
     dump = Dump(args.directory, args.pre_seconds, args.post_seconds,
                 args.max_seconds, args.cooldown_seconds)
     stop = threading.Event()
+    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    signal.signal(signal.SIGHUP, lambda *_: stop.set())
     follower = threading.Thread(target=follow_logs, args=(args.namespace, args.node, dump, stop), daemon=True)
     follower.start()
     deadline = time.monotonic() + args.duration if args.duration else float("inf")
     consecutive = 0
     try:
-        while time.monotonic() < deadline:
+        while not stop.is_set() and time.monotonic() < deadline:
             try:
                 pod, _ = current_pod(args.namespace, args.node)
                 values, raw = scrape(args.namespace, pod, args.port)
@@ -231,7 +251,9 @@ def main() -> None:
         pass
     finally:
         stop.set()
+        follower.join(timeout=3)
         dump.close()
+        lock.close()
 
 
 if __name__ == "__main__":
