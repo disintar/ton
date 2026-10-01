@@ -758,6 +758,11 @@ class ValidatorManagerImpl : public ValidatorManager {
   bool archive_live_fallback_active_ = false;
   unsigned consecutive_archive_failures_ = 0;
   double live_sync_catchup_grace_until_ = 0.0;
+  double sync_lag_sample_at_ = 0.0;
+  double sync_lag_sample_shard_lag_ = 0.0;
+  BlockSeqno sync_lag_sample_shard_seqno_ = 0;
+  double sync_lag_last_report_at_ = 0.0;
+  bool shard_client_catching_up_ = false;
 
  private:
   double state_ttl() const {

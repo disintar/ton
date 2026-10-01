@@ -2650,21 +2650,62 @@ void ValidatorManagerImpl::completed_prestart_sync() {
 }
 
 void ValidatorManagerImpl::maybe_recover_archive_sync() {
-  if (!started_ || archive_sync_active_ || !last_masterchain_block_handle_ || !shard_client_handle_) {
+  if (!started_ || !last_masterchain_block_handle_ || !shard_client_handle_) {
     return;
-  }
-  if (archive_live_fallback_active_) {
-    if (td::Time::now() < live_sync_catchup_grace_until_) {
-      return;
-    }
-    archive_live_fallback_active_ = false;
   }
   auto now = td::Clocks::system();
   auto master_lag = now - last_masterchain_block_handle_->unix_time();
   auto shard_lag = now - shard_client_handle_->unix_time();
   auto shard_gap = shard_client_handle_->id().seqno() + 16 < last_masterchain_seqno_;
+  auto monotonic_now = td::Time::now();
+  if (sync_lag_sample_at_ == 0.0) {
+    sync_lag_sample_at_ = monotonic_now;
+    sync_lag_sample_shard_lag_ = shard_lag;
+    sync_lag_sample_shard_seqno_ = shard_client_handle_->id().seqno();
+  }
+  if (monotonic_now - sync_lag_sample_at_ >= 10.0) {
+    auto elapsed = monotonic_now - sync_lag_sample_at_;
+    auto shard_progress = shard_client_handle_->id().seqno() >= sync_lag_sample_shard_seqno_
+                              ? shard_client_handle_->id().seqno() - sync_lag_sample_shard_seqno_
+                              : 0;
+    shard_client_catching_up_ = shard_progress > 0 &&
+                                shard_lag + 2.0 < sync_lag_sample_shard_lag_;
+    if (master_lag >= 2.0 || shard_lag >= 2.0) {
+      LOG(WARNING) << "[sync-lag] master_lag_ms=" << static_cast<td::int64>(master_lag * 1000)
+                   << " shard_lag_ms=" << static_cast<td::int64>(shard_lag * 1000)
+                   << " master_seqno=" << last_masterchain_seqno_
+                   << " shard_seqno=" << shard_client_handle_->id().seqno()
+                   << " shard_progress=" << shard_progress
+                   << " sample_ms=" << static_cast<td::int64>(elapsed * 1000)
+                   << " archive_active=" << archive_sync_active_
+                   << " catching_up=" << shard_client_catching_up_;
+    }
+    sync_lag_sample_at_ = monotonic_now;
+    sync_lag_sample_shard_lag_ = shard_lag;
+    sync_lag_sample_shard_seqno_ = shard_client_handle_->id().seqno();
+  }
+  if (archive_sync_active_) {
+    return;
+  }
+  if (archive_live_fallback_active_) {
+    if (monotonic_now < live_sync_catchup_grace_until_) {
+      return;
+    }
+    archive_live_fallback_active_ = false;
+  }
   if (!live_archive_recovery_needed(master_lag, shard_lag, shard_gap, td::Time::now(),
                                     live_sync_catchup_grace_until_)) {
+    return;
+  }
+  if (master_lag < 30.0 && shard_client_catching_up_) {
+    if (monotonic_now - sync_lag_last_report_at_ >= 10.0) {
+      LOG(WARNING) << "[archive-sync] stage=recover_deferred reason=shard_catching_up"
+                   << " master_lag_ms=" << static_cast<td::int64>(master_lag * 1000)
+                   << " shard_lag_ms=" << static_cast<td::int64>(shard_lag * 1000)
+                   << " master_seqno=" << last_masterchain_seqno_
+                   << " shard_seqno=" << shard_client_handle_->id().seqno();
+      sync_lag_last_report_at_ = monotonic_now;
+    }
     return;
   }
   LOG(WARNING) << "[archive-sync] stage=recover_start mc=" << last_masterchain_block_handle_->id()
