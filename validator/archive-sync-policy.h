@@ -6,10 +6,6 @@ namespace ton::validator {
 // Keep importing archives until the remaining gap is small enough for live sync.
 // If fresh archive slices are unavailable, the bounded failure fallback takes over.
 constexpr double kPrestartArchiveSyncTargetLagSeconds = 15.0;
-// Probe live sync before importing another large archive once the remaining gap is bounded.
-constexpr double kArchiveLiveProbeMasterLagSeconds = 180.0;
-constexpr double kArchiveLiveProbeShardLagSeconds = 240.0;
-constexpr unsigned kArchiveLiveProbeMaxMasterchainGap = 512;
 // Leave room for live block/proof downloads after an archive ends near the tip.
 // A smaller recovery threshold makes the node repeatedly re-enter archives.
 constexpr double kLiveArchiveSyncRecoveryLagSeconds = 180.0;
