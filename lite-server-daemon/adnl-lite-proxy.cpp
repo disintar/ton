@@ -1855,12 +1855,11 @@ namespace ton::liteserver {
                       uptodate_private_ls[td::Random::fast(0, td::narrow_cast<td::uint32>(
                               uptodate_private_ls.size() - 1))];
               server = private_servers_[adnl].get();
-            } else {
+            } else if (!private_servers_.empty()) {
               auto s = td::Random::fast(0, td::narrow_cast<td::uint32>(private_servers_.size() - 1));
               int a{0};
               for (auto &x: private_servers_) {
-                a += 1;
-                if (a == s) {
+                if (a++ == s) {
                   server = x.second.get();
                   adnl = x.first;
                   break;
@@ -1885,8 +1884,12 @@ namespace ton::liteserver {
               td::actor::send_closure(server, &LiteServerClient::send_raw, std::move(data),
                                       std::move(mP), live_timeout);
             } else {
-              td::actor::send_closure(actor_id(this), &LiteProxy::check_ext_query, src, dst, std::move(data),
-                                      std::move(promise), 0);
+              LOG(ERROR) << "No upstream lite servers available for: " << dst.bits256_value().to_hex();
+              auto res = create_serialize_tl_object<lite_api::liteServer_error>(503, "No upstream lite servers available");
+              query_statuses_.push_back({false, 0.0, query_compiled});
+              complete_usage_request(dst, data, 0.0, false, false, "No upstream lite servers available");
+              process_cache(std::move(data), res.clone(), query_compiled);
+              promise.set_value(std::move(res));
             }
           } else {
             auto usage_promise = track_usage_duration(dst, data, std::move(promise));
@@ -1943,7 +1946,7 @@ namespace ton::liteserver {
             if (!last_response.empty()) {
               promise.set_value(std::move(last_response));
             } else {
-              promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(228, "Too deep refire"));
+              promise.set_value(create_serialize_tl_object<lite_api::liteServer_error>(231, "Too deep refire"));
             }
             return;
           }
@@ -1954,6 +1957,7 @@ namespace ton::liteserver {
             long long limit = 0;
             if (refire == 0) {
               usage[dst]++;
+              rps++;
               auto k = limits[dst];
               if (std::get<1>(k) == -1) {
                 LOG(INFO) << "Got ADMIN connection from: " << dst;
@@ -1984,7 +1988,6 @@ namespace ton::liteserver {
               }
               limit = std::get<1>(k);
             }
-            rps++;
             LOG(INFO)
             << "Accept to: " << dst.bits256_value().to_hex() << ", usage: " << usage[dst] << " limit: "
             << limit << " refire: " << refire;
