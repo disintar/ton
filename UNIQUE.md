@@ -653,6 +653,11 @@ message changes:
   `validator/shard-client.cpp`: `[sync-lag]` progress samples and deferral of
   archive re-entry while shard-client is demonstrably catching up. Preserve
   the master/shard freshness gates and avoid a restart loop at the live handoff.
+- `validator/manager.cpp`: the validator download limiter is explicitly sized
+  to 32 ordinary plus 32 priority tokens, logged once as `[download-tokens]`.
+  This increases download concurrency only; it does not cancel losing hedges
+  or change proof validation, peer fanout, or deadlines. Initially canary on
+  London under a separate image tag; other deployed images retain 16+16.
 - `validator/toncenter-relay.*`, `validator/toncenter-relay-metrics.h`,
   `validator/full-node.cpp`, and `doc/toncenter-relay.md`: optional bounded,
   asynchronous external-message relay from authorized private overlays and

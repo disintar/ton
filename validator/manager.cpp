@@ -2327,7 +2327,10 @@ void ValidatorManagerImpl::start_up() {
   db_ = create_db_actor(actor_id(this), db_root_, opts_);
   actor_stats_ = td::actor::create_actor<td::actor::ActorStats>("actor_stats");
   lite_server_cache_ = create_liteserver_cache_actor(actor_id(this), db_root_);
-  token_manager_ = td::actor::create_actor<TokenManager>("tokenmanager");
+  constexpr td::uint32 download_tokens_per_pool = 32;
+  token_manager_ = td::actor::create_actor<TokenManager>("tokenmanager", download_tokens_per_pool);
+  LOG(WARNING) << "[download-tokens] normal=" << download_tokens_per_pool
+               << " priority=" << download_tokens_per_pool;
   storage_stat_cache_ = td::actor::create_actor<StorageStatCache>("storagestatcache");
   ext_message_pool_ = td::actor::create_actor<ExtMessagePool>("extmessages", opts_, actor_id(this));
   applied_ext_message_cleanup_actor_ = td::actor::create_actor<AppliedExtMessageCleanupActor>(
