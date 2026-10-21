@@ -1326,16 +1326,6 @@ void FullNodeImpl::update_validator_telemetry_collector() {
 void FullNodeImpl::start_up() {
   toncenter::submit(td::Slice());
   update_shard_actor(ShardIdFull{masterchainId}, true, true);
-  if (local_id_.is_zero()) {
-    if (adnl_id_.is_zero()) {
-      auto pk = ton::PrivateKey{ton::privkeys::Ed25519::random()};
-      local_id_ = pk.compute_short_id();
-
-      td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key, std::move(pk), true, [](td::Result<>) {});
-    } else {
-      local_id_ = adnl_id_.pubkey_hash();
-    }
-  }
   class Callback : public ValidatorManagerInterface::Callback {
    public:
     void initial_read_complete(BlockHandle handle) override {
@@ -1453,7 +1443,7 @@ void FullNodeImpl::update_custom_overlay(CustomOverlayInfo &overlay) {
         old_actors.erase(it);
       } else {
         overlay.actors_[local_id] = td::actor::create_actor<FullNodeCustomOverlay>(
-            "CustomOverlay", local_id, params, zero_state_file_hash_, opts_, keyring_, adnl_, adnl_sender, overlays_,
+            "CustomOverlay", local_id, params, zero_state_file_hash_, opts_, keyring_, adnl_, quic_, rldp2_, overlays_,
             validator_manager_, actor_id(this), custom_limiter_);
       }
     }
@@ -1569,6 +1559,7 @@ FullNodeImpl::FullNodeImpl(adnl::AdnlNodeIdShort adnl_id, FileHash zero_state_fi
     , db_root_(db_root)
     , started_promise_(std::move(started_promise))
     , opts_(opts)
+    , fast_sync_overlays_(opts.config_)
     , limiter_(make_limiter(opts))
     , custom_limiter_(make_limiter(opts)) {
 }
