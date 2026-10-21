@@ -121,12 +121,14 @@ class FullNodeImpl : public FullNode {
                           << cert.issued_by().compute_short_id() << " expires in "
                           << (double)cert.expire_at() - td::Clocks::system();
     fast_sync_overlays_.add_member_certificate(local_id, std::move(cert));
+    update_fast_sync_and_public_overlays();
   }
+  void initial_config_loaded() override;
 
   void start_up() override;
 
-  FullNodeImpl(PublicKeyHash local_id, adnl::AdnlNodeIdShort adnl_id, FileHash zero_state_file_hash,
-               FullNodeOptions opts, td::actor::ActorId<keyring::Keyring> keyring, td::actor::ActorId<adnl::Adnl> adnl,
+  FullNodeImpl(adnl::AdnlNodeIdShort adnl_id, FileHash zero_state_file_hash, FullNodeOptions opts,
+               td::actor::ActorId<keyring::Keyring> keyring, td::actor::ActorId<adnl::Adnl> adnl,
                td::actor::ActorId<rldp2::Rldp> rldp2, td::actor::ActorId<quic::QuicSender> quic,
                td::actor::ActorId<dht::Dht> dht, td::actor::ActorId<overlay::Overlays> overlays,
                td::actor::ActorId<ValidatorManagerInterface> validator_manager,
@@ -136,6 +138,7 @@ class FullNodeImpl : public FullNode {
  private:
   struct ShardInfo {
     td::actor::ActorOwn<FullNodeShard> actor;
+    PublicKeyHash local_id = PublicKeyHash::zero();
     bool active = false;
     bool enable_plumtree_broadcast = false;
     td::Timestamp delete_at = td::Timestamp::never();
@@ -145,7 +148,6 @@ class FullNodeImpl : public FullNode {
   void download_next_block_now(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
                                td::Promise<ReceivedBlock> promise);
 
-  PublicKeyHash local_id_;
   adnl::AdnlNodeIdShort adnl_id_;
   FileHash zero_state_file_hash_;
 
@@ -165,6 +167,11 @@ class FullNodeImpl : public FullNode {
                                             std::vector<adnl::AdnlNodeIdShort> hint_peers = {});
   std::map<ShardIdFull, ShardInfo> shards_;
   int wc_monitor_min_split_ = 0;
+  bool public_overlays_enabled_ = false;
+  bool initial_config_loaded_ = false;
+  td::Ref<MasterchainState> last_masterchain_state_;
+  std::set<ShardIdFull> last_monitoring_shards_;
+  td::Timestamp enable_public_overlays_at_ = td::Timestamp::never();
 
   td::actor::ActorId<keyring::Keyring> keyring_;
   td::actor::ActorId<adnl::Adnl> adnl_;

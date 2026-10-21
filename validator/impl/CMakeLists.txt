@@ -24,6 +24,7 @@ set(TON_VALIDATOR_SOURCE
   shard.cpp
   top-shard-descr.cpp
   validate-query.cpp
+  ../downloaders/wait-block-data-proof.cpp
 
   accept-block.hpp
   block.hpp

@@ -414,6 +414,15 @@ struct SizeLimitsConfig {
   // enabled in global version 15
   td::uint32 max_total_msg_bits = (1 << 21) * 5 / 2;
   td::uint32 max_total_msg_cells = (1 << 13) * 5 / 2;
+
+  // enabled in global version 16, see GlobalVersions.md for details
+  td::uint32 out_msg_queue_size_hard_limit = 18000;
+  td::uint32 out_msg_queue_size_soft_limit = 12000;
+};
+
+struct ValidatorRegistryConfig {
+  ton::StdSmcAddress contract_address;
+  td::uint32 max_collators_per_validator;
 };
 
 struct CatchainValidatorsConfig {
@@ -672,6 +681,7 @@ class Config {
     return cur_validators_;
   }
   std::pair<ton::UnixTime, ton::UnixTime> get_validator_set_start_stop(int next = 0) const;
+  td::Result<td::uint32> get_validator_elections_end_before() const;
   ton::NewConsensusConfig get_new_consensus_config(ton::WorkchainId wc) const;
   bool foreach_config_param(std::function<bool(int, Ref<vm::Cell>)> scan_func) const;
   Ref<WorkchainInfo> get_workchain_info(ton::WorkchainId workchain_id) const;
@@ -681,6 +691,7 @@ class Config {
   std::vector<ton::ValidatorDescr> compute_total_validator_set(int next) const;
   td::Result<SizeLimitsConfig> get_size_limits_config() const;
   static td::Result<SizeLimitsConfig> do_get_size_limits_config(td::Ref<vm::CellSlice> cs);
+  td::Result<ValidatorRegistryConfig> get_validator_registry_config() const;
   std::unique_ptr<vm::Dictionary> get_suspended_addresses(ton::UnixTime now) const;
   BurningConfig get_burning_config() const;
   td::Ref<vm::Tuple> get_unpacked_config_tuple(ton::UnixTime now) const;

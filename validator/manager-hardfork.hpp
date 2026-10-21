@@ -197,6 +197,9 @@ class ValidatorManagerImpl : public ValidatorManager {
     UNREACHABLE();
   }
   void get_cell_db_reader(td::Promise<std::shared_ptr<vm::CellDbReader>> promise) override;
+  void get_cell_from_cell_db(td::Bits256 hash, td::Promise<td::Ref<vm::DataCell>> promise) override {
+    td::actor::send_closure(db_, &Db::get_cell_from_cell_db, hash, std::move(promise));
+  }
   void store_persistent_state_file(BlockIdExt block_id, BlockIdExt masterchain_block_id, PersistentStateType type,
                                    td::BufferSlice state, td::Promise<td::Unit> promise) override {
     UNREACHABLE();
@@ -269,9 +272,6 @@ class ValidatorManagerImpl : public ValidatorManager {
   }
   void get_shard_blocks_for_collator(BlockIdExt masterchain_block_id,
                                      td::Promise<std::vector<td::Ref<ShardTopBlockDescription>>> promise) override;
-  void complete_external_messages(std::vector<ExtMessage::Hash> to_delay,
-                                  std::vector<ExtMessage::Hash> to_delete) override {
-  }
   void cleanup_applied_external_messages(BlockHandle handle, td::Ref<BlockData> block) override {
   }
   void complete_ihr_messages(std::vector<IhrMessage::Hash> to_delay, std::vector<IhrMessage::Hash> to_delete) override {

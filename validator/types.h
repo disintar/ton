@@ -68,4 +68,11 @@ enum class BroadcastSource {
   custom_overlay,
 };
 
+class GarbageCollectorBlocker {
+ public:
+  virtual ~GarbageCollectorBlocker() {
+  }
+  virtual void set_seqno(BlockSeqno mc_seqno) = 0;
+};
+
 }  // namespace ton::validator

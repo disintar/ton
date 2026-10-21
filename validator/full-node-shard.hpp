@@ -191,7 +191,6 @@ class FullNodeShardImpl : public FullNodeShard {
 
   void send_ihr_message(td::BufferSlice data) override;
   void send_external_message(td::BufferSlice data) override;
-  void send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) override;
   void send_block_candidate(BlockIdExt block_id, CatchainSeqno cc_seqno, td::uint32 validator_set_hash,
                             td::BufferSlice data) override;
   void send_broadcast(BlockBroadcast broadcast) override;
@@ -229,10 +228,8 @@ class FullNodeShardImpl : public FullNodeShard {
   void tear_down() override;
   void alarm() override;
 
-  void update_validators(std::vector<PublicKeyHash> public_key_hashes, PublicKeyHash local_hash) override;
+  void update_validators(std::vector<PublicKeyHash> public_key_hashes) override;
 
-  void sign_overlay_certificate(PublicKeyHash signed_key, td::uint32 expiry_at, td::uint32 max_size,
-                                td::Promise<td::BufferSlice> promise) override;
   void import_overlay_certificate(PublicKeyHash signed_key, std::shared_ptr<ton::overlay::Certificate> cert,
                                   td::Promise<td::Unit> promise) override;
 
@@ -297,7 +294,6 @@ class FullNodeShardImpl : public FullNodeShard {
   adnl::AdnlNodeIdShort adnl_id_;
   FileHash zero_state_file_hash_;
 
-  td::actor::ActorId<keyring::Keyring> keyring_;
   td::actor::ActorId<adnl::Adnl> adnl_;
   td::actor::ActorId<rldp2::Rldp> rldp2_;
   td::actor::ActorId<quic::QuicSender> quic_;
@@ -326,7 +322,6 @@ class FullNodeShardImpl : public FullNodeShard {
 
   bool active_;
   bool enable_plumtree_broadcast_;
-  bool is_original_sender_ = false;
 
   FullNodeOptions opts_;
 

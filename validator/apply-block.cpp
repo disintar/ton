@@ -49,6 +49,7 @@ void ApplyBlock::abort_query(td::Status reason) {
 void ApplyBlock::finish_query() {
   VLOG(VALIDATOR_DEBUG) << "successfully finishing apply block query in " << perf_timer_.elapsed() << " s";
   handle_->set_processed();
+  handle_->set_applied_stored();
   ValidatorInvariants::check_post_apply(handle_);
 
   if (promise_) {
@@ -87,7 +88,7 @@ void ApplyBlock::got_block_handle(BlockHandle handle) {
   VLOG(VALIDATOR_DEBUG) << "got_block_handle";
   handle_ = std::move(handle);
 
-  if (handle_->is_applied() && (!handle_->id().is_masterchain() || handle_->processed())) {
+  if (handle_->is_applied() && handle_->applied_stored() && (!handle_->id().is_masterchain() || handle_->processed())) {
     finish_query();
     return;
   }
@@ -179,7 +180,7 @@ void ApplyBlock::written_block_data() {
     CHECK(handle_->inited_state_root_hash());
     CHECK(handle_->inited_logical_time());
   }
-  if (handle_->is_applied() && handle_->processed()) {
+  if (handle_->is_applied() && handle_->applied_stored() && handle_->processed()) {
     finish_query();
   } else {
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Ref<ShardState>> R) {

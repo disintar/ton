@@ -14,13 +14,15 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      # Downloads require successful builds with available artifacts for this commit; they do not wait for builds.
       - name: Download Linux arm64 artifacts
         uses: dawidd6/action-download-artifact@bf251b5aa9c2f7eeb574a96ee720e24f801b7c11 # v6
         with:
           workflow: build-ton-linux-arm64-appimage.yml
           path: artifacts
           workflow_conclusion: success
-          branch: master
+          commit: ${{ github.sha }}
+          check_artifacts: true
           skip_unpack: true
 
       - name: Download and unzip Linux arm64 artifacts
@@ -29,7 +31,8 @@ jobs:
           workflow: build-ton-linux-arm64-appimage.yml
           path: artifacts
           workflow_conclusion: success
-          branch: master
+          commit: ${{ github.sha }}
+          check_artifacts: true
           skip_unpack: false
 
       - name: Download Linux x86-64 artifacts
@@ -38,7 +41,8 @@ jobs:
           workflow: build-ton-linux-x86-64-appimage.yml
           path: artifacts
           workflow_conclusion: success
-          branch: master
+          commit: ${{ github.sha }}
+          check_artifacts: true
           skip_unpack: true
 
       - name: Download and unzip Linux x86-64 artifacts
@@ -47,7 +51,8 @@ jobs:
           workflow: build-ton-linux-x86-64-appimage.yml
           path: artifacts
           workflow_conclusion: success
-          branch: master
+          commit: ${{ github.sha }}
+          check_artifacts: true
           skip_unpack: false
 
       - name: Download Mac x86-64 artifacts
@@ -56,16 +61,18 @@ jobs:
           workflow: build-ton-macos-15-x86-64-portable.yml
           path: artifacts
           workflow_conclusion: success
-          branch: master
+          commit: ${{ github.sha }}
+          check_artifacts: true
           skip_unpack: true
 
       - name: Download Mac arm64 artifacts
         uses: dawidd6/action-download-artifact@bf251b5aa9c2f7eeb574a96ee720e24f801b7c11 # v6
         with:
-          workflow: build-ton-macos-14-arm64-portable.yml
+          workflow: build-ton-macos-15-arm64-portable.yml
           path: artifacts
           workflow_conclusion: success
-          branch: master
+          commit: ${{ github.sha }}
+          check_artifacts: true
           skip_unpack: true
 
       - name: Download and unzip Mac x86-64 artifacts
@@ -74,16 +81,18 @@ jobs:
           workflow: build-ton-macos-15-x86-64-portable.yml
           path: artifacts
           workflow_conclusion: success
-          branch: master
+          commit: ${{ github.sha }}
+          check_artifacts: true
           skip_unpack: false
 
       - name: Download and unzip arm64 artifacts
         uses: dawidd6/action-download-artifact@bf251b5aa9c2f7eeb574a96ee720e24f801b7c11 # v6
         with:
-          workflow: build-ton-macos-14-arm64-portable.yml
+          workflow: build-ton-macos-15-arm64-portable.yml
           path: artifacts
           workflow_conclusion: success
-          branch: master
+          commit: ${{ github.sha }}
+          check_artifacts: true
           skip_unpack: false
 
       - name: Download Windows artifacts
@@ -92,7 +101,8 @@ jobs:
           workflow: ton-x86-64-windows.yml
           path: artifacts
           workflow_conclusion: success
-          branch: master
+          commit: ${{ github.sha }}
+          check_artifacts: true
           skip_unpack: true
 
       - name: Download and unzip Windows artifacts
@@ -101,7 +111,8 @@ jobs:
           workflow: ton-x86-64-windows.yml
           path: artifacts
           workflow_conclusion: success
-          branch: master
+          commit: ${{ github.sha }}
+          check_artifacts: true
           skip_unpack: false
 
       - name: Download WASM artifacts
@@ -110,16 +121,8 @@ jobs:
           workflow: build-ton-wasm-emscripten.yml
           path: artifacts
           workflow_conclusion: success
-          branch: master
-          skip_unpack: true
-
-      - name: Download Android Tonlib artifacts
-        uses: dawidd6/action-download-artifact@bf251b5aa9c2f7eeb574a96ee720e24f801b7c11 # v6
-        with:
-          workflow: build-ton-linux-android-tonlib.yml
-          path: artifacts
-          workflow_conclusion: success
-          branch: master
+          commit: ${{ github.sha }}
+          check_artifacts: true
           skip_unpack: true
 
       - name: Show all artifacts
@@ -158,7 +161,7 @@ jobs:
 
       - name: Create release
         id: create_release
-        uses: actions/create-release@0cb9c9b65d5d1901c1f53e5e66eaf4afd303e70e # v1.1.4
+        shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:

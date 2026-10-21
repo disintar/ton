@@ -261,7 +261,7 @@ class TestOverlayNode : public td::actor::SpawnsWith<Bus>, public td::actor::Con
   }
 
   td::actor::Task<td::BufferSlice> receive_query(PeerValidator src, td::BufferSlice query) {
-    auto request = std::make_shared<IncomingOverlayRequest>(src.idx, src.adnl_id, std::move(query));
+    auto request = std::make_shared<IncomingCandidateRequest>(src.idx, src.adnl_id, std::move(query));
     auto response = co_await owning_bus().publish(std::move(request)).wrap();
     if (response.is_ok()) {
       co_return std::move(response.move_as_ok().data);
@@ -428,7 +428,7 @@ class TestManagerFacade : public ManagerFacade {
         params.creator,
         BlockIdExt(BlockId(params.shard, prev_seqno + 1), block_root->get_hash().bits(), td::sha256_bits256(data)),
         td::sha256_bits256(collated_data), data.clone(), collated_data.clone());
-    co_return GeneratedCandidate{.candidate = std::move(candidate), .is_cached = false, .self_collated = true};
+    co_return GeneratedCandidate{.candidate = std::move(candidate)};
   }
 
   td::actor::Task<ValidateCandidateResult> validate_block_candidate(BlockCandidate candidate, ValidateParams params,
@@ -451,6 +451,10 @@ class TestManagerFacade : public ManagerFacade {
 
   td::actor::Task<td::Ref<vm::Cell>> wait_block_state_root(BlockIdExt block_id, td::Timestamp timeout) override;
   td::actor::Task<td::Ref<BlockData>> wait_block_data(BlockIdExt block_id, td::Timestamp timeout) override;
+
+  td::actor::Task<double> get_sync_delay() override {
+    co_return 0.0;
+  }
 
  private:
   size_t node_idx_;
@@ -686,7 +690,7 @@ class TestConsensus : public td::actor::Actor {
     bus->shard = SHARD;
     bus->manager = inst.manager_facade.get();
     bus->keyring = keyring_.get();
-    bus->validator_opts = ValidatorManagerOptions::create(BlockIdExt{}, BlockIdExt{});
+    bus->validator_opts.store(ValidatorManagerOptions::create(BlockIdExt{}, BlockIdExt{}));
     bus->validator_set = validators_;
     bus->total_weight = total_weight_;
     bus->local_id = validators_[node_idx];

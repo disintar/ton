@@ -34,6 +34,7 @@ class FullNodeFastSyncOverlay : public td::actor::Actor {
   void process_block_broadcast_with_state(PublicKeyHash src, ton_api::tonNode_blockBroadcastCompressedV2 query,
                                           td::Ref<ShardState> state);
 
+  void process_broadcast(PublicKeyHash src, ton_api::tonNode_externalMessageBroadcast& query);
   void process_broadcast(PublicKeyHash src, ton_api::tonNode_newShardBlockBroadcast& query);
 
   void process_broadcast(PublicKeyHash src, ton_api::tonNode_newBlockCandidateBroadcast& query);
@@ -50,6 +51,7 @@ class FullNodeFastSyncOverlay : public td::actor::Actor {
   }
   void receive_broadcast(PublicKeyHash src, td::BufferSlice query);
 
+  void send_external_message(td::BufferSlice data);
   void send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data);
   void send_broadcast(BlockBroadcast broadcast);
   void send_block_candidate(BlockIdExt block_id, CatchainSeqno cc_seqno, td::uint32 validator_set_hash,
@@ -68,6 +70,9 @@ class FullNodeFastSyncOverlay : public td::actor::Actor {
   void set_receive_broadcasts(bool value);
   void set_params(bool receive_broadcasts, bool send_twostep_broadcasts,
                   td::actor::ActorId<adnl::AdnlSenderEx> adnl_sender);
+  void set_config(FullNodeConfig config) {
+    config_ = std::move(config);
+  }
 
   FullNodeFastSyncOverlay(adnl::AdnlNodeIdShort local_id, ShardIdFull shard, FileHash zero_state_file_hash,
                           std::vector<PublicKeyHash> root_public_keys,
@@ -84,7 +89,7 @@ class FullNodeFastSyncOverlay : public td::actor::Actor {
       , root_public_keys_(std::move(root_public_keys))
       , current_validators_adnl_(std::move(current_validators_adnl))
       , member_certificate_(std::move(member_certificate))
-      , receive_broadcasts_(receive_broadcasts)
+      , receive_plumtree_broadcasts_(receive_plumtree_broadcasts)
       , send_twostep_broadcasts_(send_twostep_broadcasts)
       , broadcast_speed_multiplier_(broadcast_speed_multiplier)
       , zero_state_file_hash_(zero_state_file_hash)
@@ -103,7 +108,7 @@ class FullNodeFastSyncOverlay : public td::actor::Actor {
   std::vector<PublicKeyHash> root_public_keys_;
   std::vector<adnl::AdnlNodeIdShort> current_validators_adnl_;
   overlay::OverlayMemberCertificate member_certificate_;
-  bool receive_broadcasts_;
+  bool receive_plumtree_broadcasts_;
   bool send_twostep_broadcasts_;
   double broadcast_speed_multiplier_;
   FileHash zero_state_file_hash_;
@@ -149,14 +154,18 @@ class FullNodeFastSyncOverlays {
     std::map<ShardIdFull, td::actor::ActorOwn<FullNodeFastSyncOverlay>> overlays_;
     overlay::OverlayMemberCertificate current_certificate_;
     bool is_validator_{false};
+    bool is_collator_{false};
   };
 
   std::map<adnl::AdnlNodeIdShort, Overlays> id_to_overlays_;  // local_id -> overlays
   std::map<adnl::AdnlNodeIdShort, std::vector<overlay::OverlayMemberCertificate>> member_certificates_;
+  FullNodeConfig config_;
 
   td::optional<BlockSeqno> last_key_block_seqno_;
   std::vector<PublicKeyHash> root_public_keys_;
   std::vector<adnl::AdnlNodeIdShort> current_validators_adnl_;
+  std::multimap<PublicKeyHash, adnl::AdnlNodeIdShort> validator_key_to_adnl_ids_;
+  std::map<PublicKeyHash, UnixTime> validator_authority_until_;
 };
 
 }  // namespace ton::validator::fullnode

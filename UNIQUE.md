@@ -4,7 +4,7 @@ This file is a merge guard for local dTON functionality. It is not upstream TON
 documentation. When merging fresh `ton-blockchain/ton` changes, preserve the
 features below even if upstream moved, deleted, or rewrote nearby code.
 
-Snapshot used for this document:
+Original snapshot used for this document:
 
 - Local branch before merge: `dev`, `HEAD=de69678d7` (`Improve overlay live sync diagnostics and dedupe`)
 - Current merge worktree: `codex/merge-testnet-pr2417`
@@ -13,6 +13,10 @@ Snapshot used for this document:
 - Working tree includes live archive-resync changes for validator-manager,
   coroutine shard-client, fullnode rebase handling, and parallel custom/public
   next-block batch sync as of 2026-06-05.
+
+Merge update (2026-10-21): `codex/ton-mainnet-2026-10-merge` integrates upstream
+`ton-blockchain/ton` `v2026.10` (`857b8a57`) on top of dTON `b9182843`.
+The sections below also cover fork changes made after the original snapshot.
 
 ## Merge rules
 
@@ -633,6 +637,39 @@ Targets that still depend on them include:
 
 Merge invariant: remove this stack only after all fork targets are migrated away
 from those libraries.
+
+## Post-snapshot dTON features (September-October 2026)
+
+The original inventory predates several production sync and relay fixes. Keep
+these paths when merging upstream's v2026.10 public overlay, QUIC, and external
+message changes:
+
+- `validator/full-node-shard.cpp`, `validator/manager.cpp`, and
+  `validator/net/*`: bounded hedges across more healthy public peers for block,
+  proof, proof-link, next-block, and archive-slice downloads. A slow or missing
+  private peer must not serialize the public fallback; late valid broadcasts
+  and already available local data should satisfy pending downloads.
+- `validator/manager.cpp`, `validator/manager.hpp`, and
+  `validator/shard-client.cpp`: `[sync-lag]` progress samples and deferral of
+  archive re-entry while shard-client is demonstrably catching up. Preserve
+  the master/shard freshness gates and avoid a restart loop at the live handoff.
+- `validator/toncenter-relay.*`, `validator/toncenter-relay-metrics.h`,
+  `validator/full-node.cpp`, and `doc/toncenter-relay.md`: optional bounded,
+  asynchronous external-message relay from authorized private overlays and
+  liteserver to Toncenter, controlled by `DTON_TONCENTER_RELAY`,
+  `DTON_TONCENTER_API_KEY`, and `DTON_TONCENTER_RPS`. It must not block local
+  processing or weaken validation of block data.
+- `quic/quic-sender.cpp`: query deadlines include connection setup; rejected
+  inbound queries reset their streams promptly. Preserve the `[quic-sync]`
+  stage trace while using upstream's peer-trust metrics and connection API.
+- `lite-server-daemon/adnl-lite-proxy.cpp`: archive proxy upstream selection
+  works even with an empty healthy list, returns an explicit 503 when no
+  upstream exists, and increments client RPS only for the first request, not
+  internal refires. Internal refire depth uses 231, not the client rate-limit
+  error 228.
+- `scripts/k8s_sync_lag_dump.py`: reconnecting, singleton log collector that
+  retains pre-event context for master/shard lag spikes. Keep this diagnostic
+  tool alongside the propagation monitor.
 
 ## Quick post-merge checks
 

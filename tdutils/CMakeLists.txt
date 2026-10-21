@@ -15,9 +15,13 @@ if (NOT DEFINED CMAKE_INSTALL_LIBDIR)
   set(CMAKE_INSTALL_LIBDIR "lib")
 endif()
 
-find_package(PkgConfig REQUIRED)
+find_package(PkgConfig QUIET)
 if (NOT ZLIB_FOUND)
-  pkg_check_modules(ZLIB zlib)
+  if (PkgConfig_FOUND)
+    pkg_check_modules(ZLIB zlib)
+  else()
+    find_package(ZLIB QUIET)
+  endif()
 endif()
 if (ZLIB_FOUND)
   set(TD_HAVE_ZLIB 1)
@@ -117,6 +121,7 @@ set(TDUTILS_SOURCE
   td/utils/PathView.cpp
   td/utils/Random.cpp
   td/utils/SharedSlice.cpp
+  td/utils/SipHash.cpp
   td/utils/Slice.cpp
   td/utils/StackAllocator.cpp
   td/utils/Status.cpp
@@ -246,6 +251,7 @@ set(TDUTILS_SOURCE
   td/utils/ScopeGuard.h
   td/utils/SharedObjectPool.h
   td/utils/SharedSlice.h
+  td/utils/SipHash.h
   td/utils/Slice-decl.h
   td/utils/Slice.h
   td/utils/Span.h
@@ -290,7 +296,11 @@ if (TDUTILS_MIME_TYPE)
 endif()
 
 if (NOT LZ4_FOUND)
-  pkg_check_modules(LZ4 REQUIRED liblz4)
+  if (PkgConfig_FOUND)
+    pkg_check_modules(LZ4 REQUIRED liblz4)
+  else()
+    find_package(lz4 REQUIRED)
+  endif()
 endif()
 
 if (LZ4_FOUND)

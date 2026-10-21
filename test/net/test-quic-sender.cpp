@@ -17,7 +17,6 @@
 #include <atomic>
 #include <mutex>
 #include <optional>
-#include <unordered_set>
 
 #include "adnl/adnl-network-manager.h"
 #include "adnl/adnl-node-id.hpp"
@@ -32,6 +31,7 @@
 #include "quic/quic-server.h"
 #include "td/actor/coro_task.h"
 #include "td/actor/coro_utils.h"
+#include "td/utils/HashSet.h"
 #include "td/utils/OptionParser.h"
 #include "td/utils/Random.h"
 #include "td/utils/Time.h"
@@ -41,6 +41,52 @@
 #include "td/utils/port/signals.h"
 #include "td/utils/tests.h"
 #include "tl-utils/common-utils.hpp"
+
+namespace ton::quic {
+
+struct QuicSenderTest : QuicSender {
+  QuicSenderTest() : QuicSender({}, {}) {
+  }
+
+  td::actor::Task<> expired_waiter_ownership() {
+    auto& sender = *this;
+    for (bool started : {false, true}) {
+      auto connection = sender.get_or_create_connection({});
+      connection->init_started = started;
+      // Model a deadline crossing after the query's first check and connection lookup.
+      auto result = co_await sender.wait_connection_ready(connection, td::Timestamp::in(-1)).wrap();
+      ASSERT_TRUE(result.is_error());
+      ASSERT_EQ(ErrorCode::timeout, result.error().code());
+      ASSERT_EQ(started ? 1u : 0u, sender.outbound_.size());
+      ASSERT_TRUE(sender.waiter_timeouts_.empty());
+      ASSERT_TRUE(connection->waiting_ready.empty());
+      if (started) {
+        ASSERT_TRUE(sender.outbound_.begin()->second == connection);
+      }
+    }
+
+    sender.outbound_.clear();
+    bool expired = false;
+    Waiter::Queue waiting;
+    auto waiter = waiting.emplace(waiting.end(), waiting, td::make_promise([&](td::Result<td::Unit> result) {
+                                    ASSERT_TRUE(result.is_error());
+                                    // Callbacks must finish before a new, unstarted connection is published.
+                                    ASSERT_TRUE(sender.outbound_.empty());
+                                    expired = true;
+                                  }));
+    waiter->position = waiter;
+    sender.waiter_timeouts_.insert(td::Timestamp::in(-1), &*waiter);
+    auto connection = sender.get_or_create_connection({});
+    ASSERT_TRUE(expired);
+    ASSERT_TRUE(waiting.empty());
+    auto result = co_await sender.wait_connection_ready(connection, td::Timestamp::in(-1)).wrap();
+    ASSERT_TRUE(result.is_error());
+    ASSERT_TRUE(sender.outbound_.empty());
+    co_return {};
+  }
+};
+
+}  // namespace ton::quic
 
 namespace {
 
@@ -83,18 +129,39 @@ ton::quic::QuicServer::Options quic_test_options() {
   return options;
 }
 
+class ReceivedMessages {
+ public:
+  void push(td::BufferSlice message) {
+    std::lock_guard guard(mutex_);
+    messages_.push_back(std::move(message));
+  }
+
+  size_t size() const {
+    std::lock_guard guard(mutex_);
+    return messages_.size();
+  }
+
+  td::BufferSlice get(size_t index) const {
+    std::lock_guard guard(mutex_);
+    return messages_.at(index).clone();
+  }
+
+ private:
+  mutable std::mutex mutex_;
+  std::vector<td::BufferSlice> messages_;
+};
+
 class EchoCallback : public ton::adnl::Adnl::Callback {
  public:
-  std::shared_ptr<std::vector<td::BufferSlice>> received_messages;
+  std::shared_ptr<ReceivedMessages> received_messages;
 
-  explicit EchoCallback(std::shared_ptr<std::vector<td::BufferSlice>> msgs = nullptr)
-      : received_messages(std::move(msgs)) {
+  explicit EchoCallback(std::shared_ptr<ReceivedMessages> msgs = nullptr) : received_messages(std::move(msgs)) {
   }
 
   void receive_message(ton::adnl::AdnlNodeIdShort, ton::adnl::AdnlNodeIdShort, td::BufferSlice data) override {
     LOG(ERROR) << "receive message message";
     if (received_messages) {
-      received_messages->push_back(std::move(data));
+      received_messages->push(std::move(data));
     }
   }
 
@@ -201,7 +268,7 @@ struct TestNode {
   td::actor::ActorOwn<ton::adnl::AdnlNetworkManager> network_manager;
   td::actor::ActorOwn<ton::adnl::Adnl> adnl;
   td::actor::ActorOwn<ton::quic::QuicSender> quic_sender;
-  std::shared_ptr<std::vector<td::BufferSlice>> received_messages;
+  std::shared_ptr<ReceivedMessages> received_messages;
 
   TestNode() = default;
   TestNode(TestNode&&) = default;
@@ -233,7 +300,8 @@ class TestRunner : public td::actor::Actor {
   }
 
   td::actor::Task<TestNode> create_node(std::string name, int port, std::optional<ton::PrivateKey> key = std::nullopt,
-                                        std::string ip = "127.0.0.1") {
+                                        std::string ip = "127.0.0.1",
+                                        ton::quic::QuicServer::Options options = quic_test_options()) {
     TestNode node;
     node.ip = ip;
     node.port = port;
@@ -245,7 +313,7 @@ class TestRunner : public td::actor::Actor {
     td::mkdir(db).ensure();
 
     node.keyring = ton::keyring::Keyring::create(db);
-    node.network_manager = ton::adnl::AdnlNetworkManager::create(static_cast<td::uint16>(port));
+    node.network_manager = ton::adnl::AdnlNetworkManager::create();
     node.adnl = ton::adnl::Adnl::create(db, node.keyring.get());
 
     td::actor::send_closure(node.adnl, &ton::adnl::Adnl::register_network_manager, node.network_manager.get());
@@ -265,17 +333,15 @@ class TestRunner : public td::actor::Actor {
 
     td::actor::send_closure(node.adnl, &ton::adnl::Adnl::subscribe, node.id, "Q", std::make_unique<EchoCallback>());
 
-    node.received_messages = std::make_shared<std::vector<td::BufferSlice>>();
+    node.received_messages = std::make_shared<ReceivedMessages>();
     td::actor::send_closure(node.adnl, &ton::adnl::Adnl::subscribe, node.id, "M",
                             std::make_unique<EchoCallback>(node.received_messages));
 
     node.quic_sender = td::actor::create_actor<ton::quic::QuicSender>(
         "quic-" + name, td::actor::actor_dynamic_cast<ton::adnl::AdnlPeerTable>(node.adnl.get()), node.keyring.get(),
-        quic_test_options());
+        options);
 
-    td::actor::send_closure(node.quic_sender, &ton::quic::QuicSender::add_id, node.id);
-
-    co_await td::actor::Yield{};
+    co_await td::actor::ask(node.quic_sender, &ton::quic::QuicSender::add_id_and_wait, node.id);
     co_return std::move(node);
   }
 
@@ -366,6 +432,13 @@ class TestRunner : public td::actor::Actor {
     td::actor::send_closure(from.quic_sender, &ton::quic::QuicSender::send_message, from.id, to.id, std::move(msg));
   }
 
+  td::actor::Task<std::string> collect_quic_metrics(TestNode& node) {
+    ton::metrics::Sink sink;
+    auto ctx = ton::metrics::Context{sink}.with_name("ton");
+    co_await td::actor::ask(node.quic_sender, &ton::quic::QuicSender::collect, ctx);
+    co_return std::move(sink).build().render();
+  }
+
   template <class Predicate>
   td::actor::Task<td::Unit> wait_until(Predicate&& predicate, double timeout) {
     auto deadline = td::Timestamp::in(timeout);
@@ -374,6 +447,12 @@ class TestRunner : public td::actor::Actor {
       co_await td::actor::yield_on_current();
     }
     co_return td::Unit{};
+  }
+
+  td::actor::Task<std::string> quic_metrics(const TestNode& node) {
+    ton::metrics::Sink sink;
+    co_await td::actor::ask(node.quic_sender.get(), &ton::quic::QuicSender::collect, ton::metrics::Context{sink});
+    co_return std::move(sink).build().render();
   }
 
  private:
@@ -393,6 +472,11 @@ void run_test(TestRunner::TestFunc test) {
   scheduler.run();
 
   td::rmrf(db_root).ignore();
+}
+
+void assert_timeout(const td::Result<td::BufferSlice>& result) {
+  ASSERT_TRUE(result.is_error());
+  ASSERT_EQ(ton::ErrorCode::timeout, result.error().code());
 }
 
 td::Ed25519::PrivateKey make_quic_key(int seed) {
@@ -452,12 +536,13 @@ struct RawQuicEndpointState {
     return locally_opened_streams.contains(sid);
   }
 
-  void remember_closed_stream(ton::quic::QuicStreamID sid) {
+  void remember_closed_stream(ton::quic::StreamCloseEvent event) {
     std::lock_guard guard(mutex);
-    auto was_local = locally_opened_streams.erase(sid) > 0;
-    closed_streams.insert(sid);
+    locally_opened_streams.erase(event.sid);
+    closed_streams.insert(event.sid);
+    closed_stream_events_[event.sid] = event;
     closed_stream_count++;
-    if (was_local) {
+    if (event.initiator == ton::quic::StreamInitiator::Local) {
       local_closed_stream_count++;
     }
   }
@@ -472,9 +557,85 @@ struct RawQuicEndpointState {
     return local_closed_stream_count;
   }
 
+  std::optional<ton::quic::StreamCloseEvent> get_close_event(ton::quic::QuicStreamID sid) const {
+    std::lock_guard guard(mutex);
+    auto it = closed_stream_events_.find(sid);
+    if (it == closed_stream_events_.end()) {
+      return std::nullopt;
+    }
+    return it->second;
+  }
+
   bool has_closed_connection(ton::quic::QuicConnectionId cid) const {
     std::lock_guard guard(mutex);
     return closed_connections.contains(cid);
+  }
+
+  // Stands in for an upper layer that is slow to dispatch what arrived: closed peer streams pile up
+  // here instead of having their credit released, and the test drains them when it chooses to.
+  void hold_peer_streams() {
+    std::lock_guard guard(mutex);
+    hold_peer_streams_ = true;
+  }
+
+  bool hold_stream(ton::quic::QuicConnectionId cid) {
+    std::lock_guard guard(mutex);
+    if (!hold_peer_streams_) {
+      return false;
+    }
+    held_streams_.push_back(cid);
+    return true;
+  }
+
+  std::vector<ton::quic::QuicConnectionId> take_held_streams() {
+    std::lock_guard guard(mutex);
+    hold_peer_streams_ = false;
+    return std::move(held_streams_);
+  }
+
+  size_t get_held_stream_count() const {
+    std::lock_guard guard(mutex);
+    return held_streams_.size();
+  }
+
+  void remember_stream_data(ton::quic::QuicStreamID sid) {
+    std::lock_guard guard(mutex);
+    streams_with_data_.insert(sid);
+  }
+
+  bool has_stream_data(ton::quic::QuicStreamID sid) const {
+    std::lock_guard guard(mutex);
+    return streams_with_data_.contains(sid);
+  }
+
+  void reject_next_stream_chunk() {
+    std::lock_guard guard(mutex);
+    reject_next_stream_chunk_ = true;
+  }
+
+  bool take_stream_rejection() {
+    std::lock_guard guard(mutex);
+    if (!reject_next_stream_chunk_) {
+      return false;
+    }
+    reject_next_stream_chunk_ = false;
+    rejected_stream_chunks_++;
+    return true;
+  }
+
+  size_t get_rejected_stream_chunks() const {
+    std::lock_guard guard(mutex);
+    return rejected_stream_chunks_;
+  }
+
+  void remember_stream_payload() {
+    std::lock_guard guard(mutex);
+    delivered_payloads_++;
+  }
+
+  size_t get_delivered_payloads() const {
+    std::lock_guard guard(mutex);
+    return delivered_payloads_;
   }
 
   std::optional<ton::quic::QuicConnectionId> get_outbound_cid() const {
@@ -492,11 +653,20 @@ struct RawQuicEndpointState {
   std::optional<ton::quic::QuicConnectionId> inbound_cid;
   std::optional<std::string> outbound_local_public_key;
   std::optional<std::string> inbound_local_public_key;
-  std::unordered_set<ton::quic::QuicConnectionId> closed_connections;
-  std::unordered_set<ton::quic::QuicStreamID> locally_opened_streams;
-  std::unordered_set<ton::quic::QuicStreamID> closed_streams;
+  td::HashSet<ton::quic::QuicConnectionId> closed_connections;
+  td::HashSet<ton::quic::QuicStreamID> locally_opened_streams;
+  td::HashSet<ton::quic::QuicStreamID> closed_streams;
   size_t closed_stream_count = 0;
   size_t local_closed_stream_count = 0;
+
+ private:
+  bool hold_peer_streams_ = false;
+  std::vector<ton::quic::QuicConnectionId> held_streams_;
+  std::map<ton::quic::QuicStreamID, ton::quic::StreamCloseEvent> closed_stream_events_;
+  td::HashSet<ton::quic::QuicStreamID> streams_with_data_;
+  size_t delivered_payloads_ = 0;
+  bool reject_next_stream_chunk_ = false;
+  size_t rejected_stream_chunks_ = 0;
 };
 
 class RawQuicCallback final : public ton::quic::QuicServer::Callback {
@@ -514,9 +684,21 @@ class RawQuicCallback final : public ton::quic::QuicServer::Callback {
     return td::Status::OK();
   }
 
-  td::Status on_stream(ton::quic::QuicConnectionId cid, ton::quic::QuicStreamID sid, td::BufferSlice,
+  td::Status on_stream(ton::quic::QuicConnectionId cid, ton::quic::QuicStreamID sid, td::BufferSlice data,
                        bool is_end) override {
-    if (is_end && !state_->is_local_stream(sid)) {
+    if (state_->take_stream_rejection()) {
+      return td::Status::Error("test stream rejection");
+    }
+    if (!data.empty()) {
+      state_->remember_stream_data(sid);
+    }
+    if (!is_end || state_->is_local_stream(sid)) {
+      return td::Status::OK();
+    }
+    state_->remember_stream_payload();
+    // Nothing can be written back on a stream the peer opened one-way; its credit comes back through
+    // release_peer_uni_stream_credit() instead, from on_stream_closed below.
+    if (ngtcp2_is_bidi_stream(sid)) {
       td::actor::send_closure(server_, &ton::quic::QuicServer::send_stream_end, cid, sid);
     }
     return td::Status::OK();
@@ -526,8 +708,12 @@ class RawQuicCallback final : public ton::quic::QuicServer::Callback {
     state_->remember_closed_connection(cid);
   }
 
-  void on_stream_closed(ton::quic::QuicConnectionId, ton::quic::QuicStreamID sid) override {
-    state_->remember_closed_stream(sid);
+  void on_stream_closed(ton::quic::QuicConnectionId cid, ton::quic::StreamCloseEvent event) override {
+    state_->remember_closed_stream(event);
+    if (event.initiator == ton::quic::StreamInitiator::Peer &&
+        event.direction == ton::quic::StreamDirection::Unidirectional && !state_->hold_stream(cid)) {
+      td::actor::send_closure(server_, &ton::quic::QuicServer::release_peer_uni_stream_credit, cid);
+    }
   }
 
   void set_peer_mtu_callback(
@@ -569,7 +755,7 @@ class RawQuicTestRunner final : public td::actor::Actor {
     LOG(FATAL) << "Test timeout after " << timeout_ << "s";
   }
 
-  td::actor::Task<RawQuicEndpoint> create_endpoint(ton::quic::QuicServer::Options options) {
+  static td::actor::Task<RawQuicEndpoint> create_endpoint(ton::quic::QuicServer::Options options) {
     auto port = next_port();
     auto key = make_quic_key(port);
     auto state = std::make_shared<RawQuicEndpointState>();
@@ -608,14 +794,15 @@ class RawQuicTestRunner final : public td::actor::Actor {
     co_return std::pair{outbound_cid, server.state->get_inbound_cid().value()};
   }
 
-  td::actor::Task<ton::quic::QuicStreamID> open_stream_with_retry(RawQuicEndpoint& endpoint,
-                                                                  ton::quic::QuicConnectionId cid,
-                                                                  double timeout = 5.0) {
+  td::actor::Task<ton::quic::QuicStreamID> open_stream_with_retry(
+      RawQuicEndpoint& endpoint, ton::quic::QuicConnectionId cid,
+      ton::quic::StreamDirection direction = ton::quic::StreamDirection::Bidirectional, double timeout = 5.0) {
     auto deadline = td::Timestamp::in(timeout);
     while (true) {
+      ton::quic::StreamOptions options;
+      options.direction = direction;
       auto sid_result =
-          co_await td::actor::ask(endpoint.server, &ton::quic::QuicServer::open_stream, cid, ton::quic::StreamOptions{})
-              .wrap();
+          co_await td::actor::ask(endpoint.server, &ton::quic::QuicServer::open_stream, cid, options).wrap();
       if (sid_result.is_ok()) {
         auto sid = sid_result.move_as_ok();
         endpoint.state->remember_local_stream(sid);
@@ -629,9 +816,10 @@ class RawQuicTestRunner final : public td::actor::Actor {
     }
   }
 
-  td::actor::Task<ton::quic::QuicStreamID> send_and_fin_stream(RawQuicEndpoint& endpoint,
-                                                               ton::quic::QuicConnectionId cid, char byte) {
-    auto sid = co_await open_stream_with_retry(endpoint, cid);
+  td::actor::Task<ton::quic::QuicStreamID> send_and_fin_stream(
+      RawQuicEndpoint& endpoint, ton::quic::QuicConnectionId cid, char byte,
+      ton::quic::StreamDirection direction = ton::quic::StreamDirection::Bidirectional) {
+    auto sid = co_await open_stream_with_retry(endpoint, cid, direction);
 
     td::BufferSlice data(1);
     data.as_slice()[0] = byte;
@@ -652,13 +840,15 @@ class RawQuicTestRunner final : public td::actor::Actor {
     co_return sid;
   }
 
-  td::actor::Task<size_t> open_streams_until_blocked(RawQuicEndpoint& endpoint, ton::quic::QuicConnectionId cid,
-                                                     size_t max_attempts) {
+  td::actor::Task<size_t> open_streams_until_blocked(
+      RawQuicEndpoint& endpoint, ton::quic::QuicConnectionId cid, size_t max_attempts,
+      ton::quic::StreamDirection direction = ton::quic::StreamDirection::Bidirectional) {
     size_t opened = 0;
     for (size_t i = 0; i < max_attempts; i++) {
+      ton::quic::StreamOptions options;
+      options.direction = direction;
       auto sid_result =
-          co_await td::actor::ask(endpoint.server, &ton::quic::QuicServer::open_stream, cid, ton::quic::StreamOptions{})
-              .wrap();
+          co_await td::actor::ask(endpoint.server, &ton::quic::QuicServer::open_stream, cid, options).wrap();
       if (sid_result.is_error()) {
         break;
       }
@@ -681,7 +871,6 @@ class RawQuicTestRunner final : public td::actor::Actor {
     co_return td::Unit{};
   }
 
- private:
   template <class Predicate>
   td::actor::Task<td::Unit> wait_until(Predicate&& predicate, double timeout) {
     auto deadline = td::Timestamp::in(timeout);
@@ -692,6 +881,7 @@ class RawQuicTestRunner final : public td::actor::Actor {
     co_return td::Unit{};
   }
 
+ private:
   double timeout_;
   TestFunc test_;
 };
@@ -712,6 +902,21 @@ void jump_time_by(double dt) {
   jump_time_to(td::Time::now() + dt);
 }
 
+void assert_ready_connections(const std::string& metrics, td::Slice direction, td::Slice trust, td::uint64 value) {
+  auto line = PSTRING() << "ton_quic_transport_connections_ready{direction=\"" << direction << "\",trust=\"" << trust
+                        << "\"} " << static_cast<double>(value) << '\n';
+  ASSERT_TRUE(metrics.find(line) != std::string::npos);
+}
+
+bool has_metric(const std::string& metrics, td::Slice sample, td::uint64 value) {
+  auto line = PSTRING() << sample << ' ' << static_cast<double>(value) << '\n';
+  return metrics.find(line) != std::string::npos;
+}
+
+void assert_metric(const std::string& metrics, td::Slice sample, td::uint64 value) {
+  ASSERT_TRUE(has_metric(metrics, sample, value));
+}
+
 }  // namespace
 
 TEST(QuicSender, BasicQuery) {
@@ -728,6 +933,124 @@ TEST(QuicSender, BasicQuery) {
     auto resp2 = co_await t.send_query(b, a, "b-to-a");
     ASSERT_EQ(resp2.as_slice(), td::Slice("Qb-to-a"));
 
+    co_return td::Unit{};
+  });
+}
+
+TEST(QuicSender, ReadyMetricsByDirectionAndTrust) {
+  run_test([](TestRunner& t) -> td::actor::Task<td::Unit> {
+    auto a = co_await t.create_node("metrics-a", next_port());
+    auto b = co_await t.create_node("metrics-b", next_port());
+    // QuicSender::add_id completes asynchronously.
+    co_await td::actor::coro_sleep(td::Timestamp::in(0.1));
+    t.add_peer(a, b);
+    t.add_peer(b, a);
+
+    co_await t.send_query(a, b, "outbound");
+    co_await t.send_query(b, a, "inbound");
+    t.send_message(a, b, "outbound");
+    t.send_message(b, a, "inbound");
+    co_await t.wait_until([&] { return a.received_messages->size() == 1 && b.received_messages->size() == 1; }, 2.0);
+
+    auto metrics = co_await t.collect_quic_metrics(a);
+    assert_ready_connections(metrics, "in", "trusted", 0);
+    assert_ready_connections(metrics, "in", "untrusted", 1);
+    assert_ready_connections(metrics, "out", "trusted", 0);
+    assert_ready_connections(metrics, "out", "untrusted", 1);
+
+    constexpr td::uint64 mtu = 4'096;
+    co_await td::actor::ask(a.quic_sender, &ton::adnl::AdnlSenderEx::add_peer_mtu, a.id, b.id, mtu, true);
+    co_await t.send_query(a, b, "trusted-outbound");
+    co_await t.send_query(b, a, "trusted-inbound");
+    t.send_message(a, b, "trusted-outbound");
+    t.send_message(b, a, "trusted-inbound");
+    co_await t.wait_until([&] { return a.received_messages->size() == 2 && b.received_messages->size() == 2; }, 2.0);
+    auto deadline = td::Timestamp::in(2.0);
+    while (true) {
+      metrics = co_await t.collect_quic_metrics(a);
+      if (has_metric(metrics, "ton_quic_message_confirmation_seconds_count{trust=\"trusted\",tl=\"unknown\"}", 1) &&
+          has_metric(metrics, "ton_quic_message_confirmation_seconds_count{trust=\"untrusted\",tl=\"unknown\"}", 1)) {
+        break;
+      }
+      ASSERT_TRUE(!deadline.is_in_past());
+      co_await td::actor::yield_on_current();
+    }
+    assert_ready_connections(metrics, "in", "trusted", 1);
+    assert_ready_connections(metrics, "in", "untrusted", 0);
+    assert_ready_connections(metrics, "out", "trusted", 1);
+    assert_ready_connections(metrics, "out", "untrusted", 0);
+    for (auto trust : {td::Slice("trusted"), td::Slice("untrusted")}) {
+      assert_metric(metrics,
+                    PSTRING() << "ton_quic_app_messages_total{trust=\"" << trust
+                              << "\",kind=\"query\",direction=\"out\",tl=\"unknown\"}",
+                    1);
+      assert_metric(metrics,
+                    PSTRING() << "ton_quic_app_messages_total{trust=\"" << trust
+                              << "\",kind=\"query\",direction=\"in\",tl=\"unknown\"}",
+                    1);
+      assert_metric(metrics,
+                    PSTRING() << "ton_quic_app_messages_total{trust=\"" << trust
+                              << "\",kind=\"answer\",direction=\"out\",tl=\"unknown\"}",
+                    1);
+      assert_metric(metrics,
+                    PSTRING() << "ton_quic_app_messages_total{trust=\"" << trust
+                              << "\",kind=\"answer\",direction=\"in\",tl=\"unknown\"}",
+                    1);
+      assert_metric(metrics,
+                    PSTRING() << "ton_quic_query_roundtrip_seconds_count{trust=\"" << trust << "\",tl=\"unknown\"}", 1);
+      assert_metric(metrics,
+                    PSTRING() << "ton_quic_app_messages_total{trust=\"" << trust
+                              << "\",kind=\"message\",direction=\"out\",tl=\"unknown\"}",
+                    1);
+      assert_metric(metrics,
+                    PSTRING() << "ton_quic_app_messages_total{trust=\"" << trust
+                              << "\",kind=\"message\",direction=\"in\",tl=\"unknown\"}",
+                    1);
+      assert_metric(
+          metrics, PSTRING() << "ton_quic_message_confirmation_seconds_count{trust=\"" << trust << "\",tl=\"unknown\"}",
+          1);
+    }
+
+    co_await td::actor::ask(a.quic_sender, &ton::adnl::AdnlSenderEx::remove_peer_mtu, a.id, b.id, mtu, true);
+    metrics = co_await t.collect_quic_metrics(a);
+    assert_ready_connections(metrics, "in", "trusted", 0);
+    assert_ready_connections(metrics, "in", "untrusted", 1);
+    assert_ready_connections(metrics, "out", "trusted", 0);
+    assert_ready_connections(metrics, "out", "untrusted", 1);
+    co_return td::Unit{};
+  });
+}
+
+TEST(QuicSender, QueryMetricsKeepStartingTrust) {
+  run_test([](TestRunner& t) -> td::actor::Task<td::Unit> {
+    auto a = co_await t.create_node("snapshot-a", next_port());
+    auto b = co_await t.create_node("snapshot-b", next_port());
+    t.add_peer(a, b);
+    t.add_peer(b, a);
+    t.set_slow_echo(b, 0.05);
+    // QuicSender::add_id and Adnl::subscribe complete asynchronously.
+    co_await td::actor::coro_sleep(td::Timestamp::in(0.1));
+
+    constexpr td::uint64 mtu = 4'096;
+    co_await td::actor::ask(a.quic_sender, &ton::adnl::AdnlSenderEx::add_peer_mtu, a.id, b.id, mtu, true);
+    auto pending = t.send_slow_query_ex(a, b, "snapshot", 2.0, 1 << 20).start_immediate();
+    co_await td::actor::ask(a.quic_sender, &ton::adnl::AdnlSenderEx::remove_peer_mtu, a.id, b.id, mtu, true);
+
+    auto response = co_await std::move(pending);
+    ASSERT_EQ(response.as_slice(), td::Slice("Ssnapshot"));
+    auto metrics = co_await t.collect_quic_metrics(a);
+    assert_metric(metrics,
+                  "ton_quic_app_messages_total{trust=\"trusted\",kind=\"query\",direction=\"out\",tl=\"unknown\"}", 1);
+    assert_metric(metrics,
+                  "ton_quic_app_messages_total{trust=\"trusted\",kind=\"answer\",direction=\"in\",tl=\"unknown\"}", 1);
+    assert_metric(metrics, "ton_quic_query_roundtrip_seconds_count{trust=\"trusted\",tl=\"unknown\"}", 1);
+    assert_metric(
+        metrics, "ton_quic_app_messages_total{trust=\"untrusted\",kind=\"query\",direction=\"out\",tl=\"unknown\"}", 0);
+    assert_metric(
+        metrics, "ton_quic_app_messages_total{trust=\"untrusted\",kind=\"answer\",direction=\"in\",tl=\"unknown\"}", 0);
+    assert_metric(metrics, "ton_quic_query_roundtrip_seconds_count{trust=\"untrusted\",tl=\"unknown\"}", 0);
+    assert_ready_connections(metrics, "out", "trusted", 0);
+    assert_ready_connections(metrics, "out", "untrusted", 1);
     co_return td::Unit{};
   });
 }
@@ -1035,6 +1358,113 @@ TEST(QuicStreamLimits, LocalStreamCloseDoesNotExtendPeerCredit) {
 
     auto opened = co_await t.open_streams_until_blocked(server, server_cid, 4);
     ASSERT_EQ(opened, static_cast<size_t>(1));
+    co_return td::Unit{};
+  });
+}
+
+TEST(QuicStreamLimits, PeerBidiCreditReturnsIndividually) {
+  run_raw_quic_test([](RawQuicTestRunner& t) -> td::actor::Task<td::Unit> {
+    constexpr size_t limit = 4;
+    auto options = small_stream_limit_options(limit);
+    auto client = co_await t.create_endpoint(options);
+    auto server = co_await t.create_endpoint(options);
+    auto [client_cid, server_cid] = co_await t.connect(client, server);
+    static_cast<void>(server_cid);
+
+    std::vector<ton::quic::QuicStreamID> streams;
+    for (size_t i = 0; i < limit; ++i) {
+      streams.push_back(co_await t.open_stream_with_retry(client, client_cid));
+    }
+    ASSERT_EQ(static_cast<size_t>(0), co_await t.open_streams_until_blocked(client, client_cid, 1));
+
+    td::BufferSlice data(1);
+    data.as_slice()[0] = 'x';
+    auto sent = co_await td::actor::ask(client.server, &ton::quic::QuicServer::send_stream, client_cid, streams.front(),
+                                        std::move(data), true);
+    ASSERT_EQ(streams.front(), sent);
+    co_await t.wait_for_stream_close(client, streams.front());
+
+    static_cast<void>(co_await t.open_stream_with_retry(client, client_cid));
+    ASSERT_EQ(static_cast<size_t>(0), co_await t.open_streams_until_blocked(client, client_cid, 1));
+    co_return td::Unit{};
+  });
+}
+
+TEST(QuicStreams, LocalUniResetIsNotClean) {
+  run_raw_quic_test([](RawQuicTestRunner& t) -> td::actor::Task<td::Unit> {
+    auto options = small_stream_limit_options(1);
+    options.max_streams_uni = 1;
+    auto client = co_await t.create_endpoint(options);
+    auto server = co_await t.create_endpoint(options);
+    auto [client_cid, server_cid] = co_await t.connect(client, server);
+
+    auto sid = co_await t.open_stream_with_retry(client, client_cid, ton::quic::StreamDirection::Unidirectional);
+    td::BufferSlice data(1);
+    data.as_slice()[0] = 'x';
+    ASSERT_EQ(sid, co_await td::actor::ask(client.server, &ton::quic::QuicServer::send_stream, client_cid, sid,
+                                           std::move(data), false));
+    co_await t.wait_until([&] { return server.state->has_stream_data(sid); }, 5.0);
+
+    td::actor::send_closure(server.server, &ton::quic::QuicServer::shutdown_stream, server_cid, sid);
+    co_await t.wait_for_stream_close(client, sid);
+    auto event = client.state->get_close_event(sid);
+    ASSERT_TRUE(event.has_value());
+    ASSERT_EQ(ton::quic::StreamInitiator::Local, event->initiator);
+    ASSERT_EQ(event->direction, ton::quic::StreamDirection::Unidirectional);
+    ASSERT_TRUE(!event->clean);
+    co_return td::Unit{};
+  });
+}
+
+// A peer's unidirectional stream closes before the upper layer dispatches its payload. Its credit is
+// held until that dispatch point, then returned immediately: ngtcp2 coalesces cumulative extensions
+// when it builds the next MAX_STREAMS frame, so withholding a second upper-layer batch would
+// only reduce usable concurrency and could strand a partial batch forever.
+TEST(QuicStreamLimits, PeerUniCreditWaitsForDispatchAndReturnsIndividually) {
+  run_raw_quic_test([](RawQuicTestRunner& t) -> td::actor::Task<td::Unit> {
+    constexpr size_t limit = 4;
+
+    auto options = small_stream_limit_options(1);
+    options.max_streams_uni = limit;
+    auto client = co_await t.create_endpoint(options);
+    auto server = co_await t.create_endpoint(options);
+    server.state->hold_peer_streams();
+    auto [client_cid, server_cid] = co_await t.connect(client, server);
+    static_cast<void>(server_cid);
+
+    // Spend the whole budget, and let every stream run to completion: delivered, finished, closed on
+    // both ends. Nothing is left for the transport to wait for.
+    for (size_t i = 0; i < limit; i++) {
+      auto sid = co_await t.send_and_fin_stream(client, client_cid, static_cast<char>('a' + i),
+                                                ton::quic::StreamDirection::Unidirectional);
+      co_await t.wait_for_stream_close(client, sid);
+    }
+    co_await t.wait_until([&] { return server.state->get_held_stream_count() == limit; }, 5.0);
+
+    // The upper layer has not released anything, so no credit may have come back.
+    auto opened = co_await t.open_streams_until_blocked(client, client_cid, limit + 4,
+                                                        ton::quic::StreamDirection::Unidirectional);
+    ASSERT_EQ(static_cast<size_t>(0), opened);
+
+    auto held = server.state->take_held_streams();
+    ASSERT_EQ(limit, held.size());
+
+    // One returned credit must make exactly one slot usable; waiting for a second close here was the
+    // liveness bug in the removed batch-of-two implementation.
+    td::actor::send_closure(server.server.get(), &ton::quic::QuicServer::release_peer_uni_stream_credit, held.front());
+    static_cast<void>(
+        co_await t.open_stream_with_retry(client, client_cid, ton::quic::StreamDirection::Unidirectional));
+    opened = co_await t.open_streams_until_blocked(client, client_cid, 1, ton::quic::StreamDirection::Unidirectional);
+    ASSERT_EQ(static_cast<size_t>(0), opened);
+
+    for (size_t i = 1; i < held.size(); ++i) {
+      td::actor::send_closure(server.server.get(), &ton::quic::QuicServer::release_peer_uni_stream_credit, held[i]);
+    }
+
+    for (size_t i = 1; i < limit; ++i) {
+      static_cast<void>(
+          co_await t.open_stream_with_retry(client, client_cid, ton::quic::StreamDirection::Unidirectional));
+    }
     co_return td::Unit{};
   });
 }
@@ -1509,6 +1939,36 @@ TEST(QuicSender, ResponseSizeLimitDoesNotWaitForTimeout) {
   });
 }
 
+TEST(QuicSender, SinglePacketResponseSizeLimitRemovesTimeout) {
+  run_test([](TestRunner& t) -> td::actor::Task<td::Unit> {
+    auto a = co_await t.create_node("lim-whole-a", next_port());
+    auto b = co_await t.create_node("lim-whole-b", next_port());
+
+    t.add_peer(a, b);
+    t.add_peer(b, a);
+
+    auto warmup = co_await t.send_query(a, b, "warmup");
+    ASSERT_EQ(warmup.as_slice(), td::Slice("Qwarmup"));
+
+    std::string data = "one-packet";
+    td::BufferSlice answer_data(1 + data.size());
+    answer_data.as_slice()[0] = 'Q';
+    answer_data.as_slice().substr(1).copy_from(data);
+    auto wire_answer = ton::create_serialize_tl_object<ton::ton_api::quic_answer>(std::move(answer_data));
+
+    auto result = co_await t.send_query_ex(a, b, data, 1.0, wire_answer.size() - 1).wrap();
+    ASSERT_TRUE(result.is_error());
+    ASSERT_TRUE(result.error().message().str().find("stream size limit exceeded") != std::string::npos);
+
+    // The whole-stream path erased an armed timeout together with the stream state. Let its old
+    // deadline pass to catch a stale heap pointer, then verify that the connection still works.
+    co_await td::actor::coro_sleep(td::Timestamp::in(1.1));
+    auto response = co_await t.send_query(a, b, "after");
+    ASSERT_EQ(response.as_slice(), td::Slice("Qafter"));
+    co_return td::Unit{};
+  });
+}
+
 TEST(QuicSender, ResponseSizeLimitByOneDoesNotWaitForTimeout) {
   run_test([](TestRunner& t) -> td::actor::Task<td::Unit> {
     auto a = co_await t.create_node("lim-plus-one-a", next_port());
@@ -1656,6 +2116,111 @@ TEST(QuicSender, NoResponseTimeout) {
     }
 
     LOG(INFO) << "Connection still works after no-response timeout";
+    co_return td::Unit{};
+  });
+}
+
+TEST(QuicSender, QueryExpiredDeadline) {
+  run_test([](TestRunner& t) -> td::actor::Task<td::Unit> {
+    auto a = co_await t.create_node("qed-a", next_port());
+    auto b = co_await t.create_node("qed-b", next_port());
+
+    td::Timer timer;
+    auto cold = co_await t.send_query_ex(a, b, "cold", -0.1, 1 << 20).wrap();
+    assert_timeout(cold);
+    ASSERT_TRUE(timer.elapsed() < 1.0);
+
+    t.add_peer(a, b);
+    t.add_peer(b, a);
+    auto resp = co_await t.send_query(a, b, "warm");
+    ASSERT_EQ(resp.as_slice(), td::Slice("Qwarm"));
+
+    auto warm = co_await t.send_query_ex(a, b, "warm", -0.1, 1 << 20).wrap();
+    assert_timeout(warm);
+    co_return td::Unit{};
+  });
+}
+
+TEST(QuicSender, ExpiredWaiterReleasesOnlyUnstartedConnection) {
+  run_test([](TestRunner&) -> td::actor::Task<> {
+    auto sender = td::actor::create_actor<ton::quic::QuicSenderTest>("waiter-ownership");
+    co_await td::actor::ask(sender, &ton::quic::QuicSenderTest::expired_waiter_ownership);
+    co_return {};
+  });
+}
+
+TEST(QuicSender, ConnectionWaiterDeadlines) {
+  run_test([](TestRunner& t) -> td::actor::Task<td::Unit> {
+    auto a = co_await t.create_node("qwd-a", next_port());
+    TestNode peer;
+    peer.port = next_port();
+    peer.key = make_key(peer.port);
+    peer.id = ton::adnl::AdnlNodeIdShort{peer.key.compute_public_key().compute_short_id()};
+    t.add_peer(a, peer);
+
+    auto after_late_deadline = td::Timestamp::in(4.7);
+    auto late = t.send_query_ex(a, peer, "late", 4.5, 1 << 20).start_immediate();
+    auto middle = t.send_query_ex(a, peer, "middle", 0.8, 1 << 20).start_immediate();
+    auto early = co_await t.send_query_ex(a, peer, "early", 0.3, 1 << 20).wrap();
+    assert_timeout(early);
+
+    auto middle_result = co_await std::move(middle).wrap();
+    assert_timeout(middle_result);
+
+    auto b = co_await t.create_node("qwd-b", peer.port);
+    t.add_peer(a, b);
+    t.add_peer(b, a);
+    auto late_result = co_await std::move(late);
+    ASSERT_EQ(late_result.as_slice(), td::Slice("Qlate"));
+
+    co_await td::actor::coro_sleep(after_late_deadline);
+    auto after = co_await t.send_query(a, b, "after");
+    ASSERT_EQ(after.as_slice(), td::Slice("Qafter"));
+    co_return td::Unit{};
+  });
+}
+
+TEST(QuicSender, ConnectionWaiterLimitCountsLiveCallers) {
+  run_test([](TestRunner& t) -> td::actor::Task<td::Unit> {
+    auto a = co_await t.create_node("qwl-a", next_port());
+    TestNode peer;
+    peer.port = next_port();
+    peer.key = make_key(peer.port);
+    peer.id = ton::adnl::AdnlNodeIdShort{peer.key.compute_public_key().compute_short_id()};
+    t.add_peer(a, peer);
+
+    auto oldest = t.send_query_ex(a, peer, "oldest", 30.0, 1 << 20).start_immediate();
+    std::vector<td::actor::StartedTask<td::BufferSlice>> crowd;
+    crowd.reserve(1023);
+    for (size_t i = 0; i < 1023; i++) {
+      crowd.push_back(t.send_query_ex(a, peer, "crowd", 2.0, 1 << 20).start_immediate());
+    }
+    co_await t.collect_quic_metrics(a);  // Sender mailbox barrier.
+    ASSERT_TRUE(!oldest.await_ready());
+    for (auto& task : crowd) {
+      ASSERT_TRUE(!task.await_ready());
+    }
+
+    auto replacement = t.send_query_ex(a, peer, "replacement", 30.0, 1 << 20).start_immediate();
+    auto evicted = co_await std::move(oldest).wrap();
+    ASSERT_TRUE(evicted.is_error());
+    ASSERT_EQ(evicted.error().message(), td::Slice("dropped waiting for a connection"));
+
+    for (auto& task : crowd) {
+      assert_timeout(co_await std::move(task).wrap());
+    }
+    auto late = t.send_query_ex(a, peer, "late", 30.0, 1 << 20).start_immediate();
+    co_await t.collect_quic_metrics(a);  // Expired slots must have been reclaimed.
+    ASSERT_TRUE(!replacement.await_ready());
+    ASSERT_TRUE(!late.await_ready());
+
+    auto b = co_await t.create_node("qwl-b", peer.port);
+    t.add_peer(a, b);
+    t.add_peer(b, a);
+    auto replacement_result = co_await std::move(replacement);
+    ASSERT_EQ(replacement_result.as_slice(), td::Slice("Qreplacement"));
+    auto late_result = co_await std::move(late);
+    ASSERT_EQ(late_result.as_slice(), td::Slice("Qlate"));
     co_return td::Unit{};
   });
 }

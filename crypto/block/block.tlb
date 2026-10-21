@@ -257,9 +257,13 @@ ihr_pending$_ import_lt:uint64 = IhrPendingSince;
 _ (HashmapE 320 IhrPendingSince) = IhrPendingInfo;
 
 // key - created_lt
-_ messages:(HashmapE 64 EnqueuedMsg) count:uint48 = AccountDispatchQueue;
-// key - sender address, aug - min created_lt
-_ (HashmapAugE 256 AccountDispatchQueue uint64) = DispatchQueue;
+account_dispatch_queue_old$1 messages:^(Hashmap 64 EnqueuedMsg) count:uint48 = AccountDispatchQueue;
+account_dispatch_queue$000 messages:^(Hashmap 64 EnqueuedMsg) count:uint48 total_balance:CurrencyCollection = AccountDispatchQueue;
+
+dispatch_queue_aug_old$0 min_created_lt:uint63 = DispatchQueueAugData;
+dispatch_queue_aug$10 min_created_lt:uint64 total_balance:CurrencyCollection = DispatchQueueAugData;
+// key - sender address
+_ (HashmapAugE 256 AccountDispatchQueue DispatchQueueAugData) = DispatchQueue;
 
 out_msg_queue_extra#0 dispatch_queue:DispatchQueue out_queue_size:(Maybe uint48) = OutMsgQueueExtra;
 
@@ -809,11 +813,8 @@ _ NewConsensusConfigAll = ConfigParam 30;
 
 _ fundamental_smc_addr:(HashmapE 256 True) = ConfigParam 31;
 _ prev_validators:ValidatorSet = ConfigParam 32;
-_ prev_temp_validators:ValidatorSet = ConfigParam 33;
 _ cur_validators:ValidatorSet = ConfigParam 34;
-_ cur_temp_validators:ValidatorSet = ConfigParam 35;
 _ next_validators:ValidatorSet = ConfigParam 36;
-_ next_temp_validators:ValidatorSet = ConfigParam 37;
 
 validator_temp_key#3 adnl_addr:bits256 temp_public_key:SigPubKey seqno:# valid_until:uint32 = ValidatorTempKey;
 signed_temp_key#4 key:^ValidatorTempKey signature:CryptoSignature = ValidatorSignedTempKey;
@@ -840,7 +841,8 @@ size_limits_config_v3#03 max_msg_bits:uint32 max_msg_cells:uint32 max_library_ce
   max_acc_public_libraries:uint32 defer_out_queue_size_limit:uint32 max_msg_extra_currencies:uint32
   max_acc_fixed_prefix_length:uint8 acc_state_cells_for_storage_dict:uint32
   max_transaction_library_loads:(Maybe uint32)
-  max_total_msg_bits:uint32 max_total_msg_cells:uint32 = SizeLimitsConfig;
+  max_total_msg_bits:uint32 max_total_msg_cells:uint32
+  out_msg_queue_size_hard_limit:uint32 out_msg_queue_size_soft_limit:uint32 = SizeLimitsConfig;
 _ SizeLimitsConfig = ConfigParam 43;
 
 // key is [ wc:int32 addr:uint256 ]
@@ -850,6 +852,8 @@ _ SuspendedAddressList = ConfigParam 44;
 precompiled_smc#b0 gas_usage:uint64 = PrecompiledSmc;
 precompiled_contracts_config#c0 list:(HashmapE 256 PrecompiledSmc) = PrecompiledContractsConfig;
 _ PrecompiledContractsConfig = ConfigParam 45;
+
+_ ValRegistryConfig = ConfigParam 46;
 
 oracle_bridge_params#_ bridge_address:bits256 oracle_mutlisig_address:bits256 oracles:(HashmapE 256 uint256) external_chain_address:bits256 = OracleBridgeParams;
 _ OracleBridgeParams = ConfigParam 71; // Ethereum bridge
@@ -894,6 +898,9 @@ top_block_descr#d5 proof_for:BlockIdExt signatures:(Maybe ^BlockSignatures)
 top_block_descr_set#4ac789f3 collection:(HashmapE 96 ^TopBlockDescr) = TopBlockDescrSet;
 account_storage_dict_proof#37c1e3fc proof:^Cell = AccountStorageDictProof;
 consensus_extra_data#638eb292 flags:# gen_utime_ms:uint64 = ConsensusExtraData;
+collated_data_root_state#4b2f36ec hash:bits256 = CollatedDataRootState;
+collated_data_root_storage_dict#796eaeb6 hash:bits256 = CollatedDataRootStorageDict;
+collated_data_separator#fa8b2b92 = CollatedDataSeparator;
 
 //
 //  VALIDATOR MISBEHAVIOR COMPLAINTS
@@ -1005,3 +1012,24 @@ chan_op_cmd#912838d1 msg:ChanSignedMsg = ChanOp;
 
 
 chan_data$_ config:^ChanConfig state:^ChanState = ChanData;
+
+//
+// VALIDATOR REGISTRY
+//
+val_registry_config#3601163e contract_address:bits256 max_collators_per_validator:uint32 new_code_hash:(Maybe uint256) = ValRegistryConfig;
+
+_ x:(## 1) = BitsPow2 0;
+_ {n:#} l:(BitsPow2 n) r:(BitsPow2 n) = BitsPow2 (n + 1);
+val_registry_shard_set$_ n:(#<= 8) mask:(BitsPow2 n) = ValRegistryShardSet;
+
+val_registry_storage#9bc722a8 registry:(HashmapE 256 ValRegistryValidator) last_cleanup_key_block_seqno:uint32 = ValRegistryStorage;
+val_registry_validator#57766eec allow_update_at:uint32 entry:(Maybe ^ValRegistryEntry) = ValRegistryValidator;
+val_registry_entry#eae0b274 collators:(HashmapE 256 ValRegistryCollator) monitoring_shards:ValRegistryShardSet = ValRegistryEntry;
+val_registry_collator#10364494 monitoring_shards:ValRegistryShardSet = ValRegistryCollator;
+
+val_registry_message_request#cdb9d286 signature:(512 * Bit) request:ValRegistryRequest = ValRegistryMessageRequest;
+val_registry_request_update#fbd82b02 last_key_block_seqno:uint32 val_set:uint8 val_idx:uint16 valid_until:uint32
+    new_entry:(Maybe ^ValRegistryEntry) = ValRegistryRequest;
+
+val_registry_message_cleanup#32b85a9b = ValRegistryMessageCleanup;
+val_registry_message_update_code#34bdaa6c new_code:^Cell = ValRegistryMessageUpdateCode;

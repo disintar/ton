@@ -28,50 +28,20 @@ namespace ton {
 namespace validator {
 
 td::Status CollatorsList::unpack(const ton_api::engine_validator_collatorsList& obj) {
-  shards.clear();
-  self_collate = false;
-  for (const auto& shard_obj : obj.shards_) {
-    ShardIdFull shard_id = create_shard_id(shard_obj->shard_id_);
-    if (shard_id.is_masterchain()) {
-      return td::Status::Error("masterchain shard in collators list");
-    }
-    if (!shard_id.is_valid_ext()) {
-      return td::Status::Error(PSTRING() << "invalid shard " << shard_id);
-    }
-    shards.emplace_back();
-    Shard& shard = shards.back();
-    shard.shard_id = shard_id;
-    shard.self_collate = shard_obj->self_collate_;
-    if (shard.self_collate) {
-      self_collate = true;
-    }
-    if (shard_obj->select_mode_.empty() || shard_obj->select_mode_ == "random") {
-      shard.select_mode = mode_random;
-    } else if (shard_obj->select_mode_ == "ordered") {
-      shard.select_mode = mode_ordered;
-    } else if (shard_obj->select_mode_ == "round_robin") {
-      shard.select_mode = mode_round_robin;
-    } else {
-      return td::Status::Error(PSTRING() << "invalid select mode '" << shard_obj->select_mode_
-                                         << "' (allowed: 'random', 'ordered', 'round_robin')");
-    }
-    for (const auto& collator : shard_obj->collators_) {
-      shard.collators.push_back(adnl::AdnlNodeIdShort{collator->adnl_id_});
-    }
+  collators.clear();
+  register_collators.clear();
+  for (const auto& collator : obj.collators_) {
+    collators.push_back(adnl::AdnlNodeIdShort{collator->adnl_id_});
   }
+  for (const auto& collator : obj.register_collators_) {
+    register_collators.push_back(adnl::AdnlNodeIdShort{collator->adnl_id_});
+  }
+  disable_self_collate = obj.disable_self_collate_;
   return td::Status::OK();
 }
 
 CollatorsList CollatorsList::default_list() {
-  CollatorsList list;
-  list.shards.push_back({
-      .shard_id = ShardIdFull{basechainId, shardIdAll},
-      .select_mode = mode_random,
-      .collators = {},
-      .self_collate = true,
-  });
-  list.self_collate = true;
-  return list;
+  return CollatorsList{};
 }
 
 td::Status ShardBlockVerifierConfig::unpack(const ton_api::engine_validator_shardBlockVerifierConfig& obj) {
@@ -101,14 +71,52 @@ td::Status ShardBlockVerifierConfig::unpack(const ton_api::engine_validator_shar
   return td::Status::OK();
 }
 
+td::Result<td::Ref<ExtMessagePoolOptions>> ExtMessagePoolOptions::unpack(
+    const ton_api::engine_validator_extMessagePoolConfig& f) {
+  ExtMessagePoolOptions options;
+  if (f.max_mempool_messages_ >= 0) {
+    options.max_mempool_messages = f.max_mempool_messages_;
+  }
+  if (f.num_regular_checkers_ >= 0) {
+    if (f.num_regular_checkers_ > 128) {
+      return td::Status::Error("too many regular checkers (max 128)");
+    }
+    options.num_regular_checkers = f.num_regular_checkers_;
+  }
+  if (f.num_priority_checkers_ >= 0) {
+    if (f.num_priority_checkers_ > 128) {
+      return td::Status::Error("too many priority checkers (max 128)");
+    }
+    options.num_priority_checkers = f.num_priority_checkers_;
+  }
+  if (f.max_admission_waiters_ >= 0) {
+    options.max_admission_waiters = f.max_admission_waiters_;
+  }
+  if (f.max_ext_msg_per_addr_ >= 0) {
+    if (f.max_ext_msg_per_addr_ == 0) {
+      return td::Status::Error("max_ext_msg_per_addr is zero");
+    }
+    options.max_ext_msg_per_addr = f.max_ext_msg_per_addr_;
+  }
+  if (f.max_ext_msg_per_addr_time_window_ >= 0.0) {
+    if (f.max_ext_msg_per_addr_time_window_ == 0.0) {
+      return td::Status::Error("max_ext_msg_per_addr_time_window is zero");
+    }
+    options.max_ext_msg_per_addr_time_window = f.max_ext_msg_per_addr_time_window_;
+  }
+  if (f.local_ls_message_priority_ >= 0) {
+    options.local_ls_message_priority = f.local_ls_message_priority_;
+  }
+  return td::Ref<ExtMessagePoolOptions>{true, std::move(options)};
+}
+
 td::Ref<ValidatorManagerOptions> ValidatorManagerOptions::create(BlockIdExt zero_block_id, BlockIdExt init_block_id,
                                                                  bool allow_blockchain_init, double sync_blocks_before,
                                                                  double block_ttl, double state_ttl, double archive_ttl,
-                                                                 double key_proof_ttl, size_t max_mempool_num,
-                                                                 bool initial_sync_disabled) {
+                                                                 double key_proof_ttl, bool initial_sync_disabled) {
   return td::make_ref<ValidatorManagerOptionsImpl>(zero_block_id, init_block_id, allow_blockchain_init,
-                                                   sync_blocks_before, block_ttl, state_ttl, max_mempool_num,
-                                                   archive_ttl, key_proof_ttl, initial_sync_disabled);
+                                                   sync_blocks_before, block_ttl, state_ttl, archive_ttl, key_proof_ttl,
+                                                   initial_sync_disabled);
 }
 
 }  // namespace validator
