@@ -388,7 +388,6 @@ void FullNodeImpl::set_config(FullNodeConfig config) {
       td::actor::send_closure(actor.second, &FullNodeCustomOverlay::set_config, config);
     }
   }
-  fast_sync_overlays_.set_config(std::move(config));
 }
 
 void FullNodeImpl::add_custom_overlay(CustomOverlayParams params, td::Promise<td::Unit> promise) {
@@ -615,10 +614,9 @@ void FullNodeImpl::update_fast_sync_and_public_overlays() {
       my_adnl_ids.insert(adnl_id);
       local_collator_adnl_ids.insert(adnl_id);
     }
-    authority_until = fast_sync_overlays_.update_overlays(
-        last_masterchain_state_, local_keys_, std::move(my_adnl_ids), local_collator_adnl_ids, last_monitoring_shards_,
-        zero_state_file_hash_, opts_.fast_sync_broadcast_speed_multiplier_, keyring_, adnl_, quic_, overlays_,
-        validator_manager_, actor_id(this));
+    fast_sync_overlays_.update_overlays(last_masterchain_state_, std::move(my_adnl_ids), last_monitoring_shards_,
+                                        zero_state_file_hash_, opts_.fast_sync_broadcast_speed_multiplier_, keyring_,
+                                        adnl_, rldp2_, quic_, overlays_, validator_manager_, actor_id(this));
   }
   update_public_overlay_mode(authority_until);
 }
@@ -1559,7 +1557,6 @@ FullNodeImpl::FullNodeImpl(adnl::AdnlNodeIdShort adnl_id, FileHash zero_state_fi
     , db_root_(db_root)
     , started_promise_(std::move(started_promise))
     , opts_(opts)
-    , fast_sync_overlays_(opts.config_)
     , limiter_(make_limiter(opts))
     , custom_limiter_(make_limiter(opts)) {
 }

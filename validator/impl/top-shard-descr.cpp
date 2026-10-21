@@ -48,7 +48,7 @@ static td::Result<td::Ref<vm::Cell>> generate_block_proof_root_for_top_descr(Blo
                                        << block_root_hash.to_hex());
   }
 
-  auto usage_tree = std::make_shared<vm::CellUsageTree>();
+  auto usage_tree = std::make_shared<vm::CellUsageTree>(block_root);
   auto usage_cell = vm::UsageCell::create(block_root, usage_tree->root_ptr());
   block::gen::Block::Record blk;
   block::gen::BlockInfo::Record info;
