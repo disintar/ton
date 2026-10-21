@@ -662,6 +662,8 @@ engine.liteserver.config ip:int out_port:int adnl:(vector engine.adnl)
         fullnodeslaves:(vector engine.validator.fullNodeSlave) overlay_prefix:string
         liteslaves:(vector liteserver.desc) = engine.liteserver.Config;
 
+engine.validator.collatorOptions.paramLimits underload:int soft_limit:int hard_limit:int = engine.validator.collatorOptions.ParamLimits;
+
 engine.validator.collatorOptions
   deferring_enabled:Bool defer_messages_after:int defer_out_queue_size_limit:long
   dispatch_phase_2_max_total:int dispatch_phase_3_max_total:int

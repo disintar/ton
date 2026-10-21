@@ -564,16 +564,11 @@ td::Result<bool> Config::config_add_collator(ton::adnl::AdnlNodeIdShort addr) {
   return false;
 }
 
-td::Result<bool> Config::config_del_collator(ton::adnl::AdnlNodeIdShort addr, ton::ShardIdFull shard) {
-  if (!shard.is_valid_ext()) {
-    return td::Status::Error(PSTRING() << "invalid shard: " << shard);
-  }
-  auto &shards = collators[addr];
-  auto it = std::find(shards.begin(), shards.end(), shard);
-  if (it == shards.end()) {
+td::Result<bool> Config::config_del_collator(ton::adnl::AdnlNodeIdShort addr) {
+  if (collators.erase(addr) == 0) {
     return false;
   }
-  shards.erase(it);
+  decref(addr.pubkey_hash());
   return true;
 }
 
@@ -2462,7 +2457,7 @@ void ValidatorEngine::start_validator() {
   load_collator_options();
 
   validator_manager_ = ton::validator::ValidatorManagerFactory::create(
-      validator_options_, db_root_, keyring_.get(), adnl_.get(), rldp2_.get(), quic_.get(), overlay_manager_.get());
+      validator_options_, db_root_, keyring_.get(), adnl_.get(), quic_.get(), overlay_manager_.get());
 
   for (auto &v: config_.validators) {
     td::actor::send_closure(validator_manager_, &ton::validator::ValidatorManagerInterface::add_permanent_key, v.first,
@@ -2490,12 +2485,6 @@ void ValidatorEngine::start_validator() {
       LOG(ERROR) << "Cannot start shard block retainer: no adnl id " << shard_block_retainer_adnl_id_;
     }
   }
-
-  // The last collector any configuration registers is the one above: start_adnl -> ... ->
-  // start_validator runs unconditionally in one turn, and the start-up steps after it register
-  // none. They can also wait on the full node coming up, so sealing at the end of the chain would
-  // keep /metrics answering 503 for the whole database warm-up instead of just for start-up.
-  td::actor::send_closure(exporter_.get(), &ton::PrometheusExporter::ready);
 
   started_validator();
 }
@@ -6123,9 +6112,8 @@ int main(int argc, char *argv[]) {
                                    [&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_state_ttl, v); });
                            return td::Status::OK();
                        });
-  p.add_checked_option('m', "mempool-num", "Maximal number of mempool external message", [&](td::Slice s) {
-    TRY_RESULT(v, td::to_integer_safe<size_t>(s));
-    acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_max_mempool_num, v); });
+  p.add_checked_option('m', "mempool-num", "deprecated (use set-ext-message-pool-options-json instead)", [&](td::Slice s) {
+    TRY_RESULT(_, td::to_integer_safe<size_t>(s));
     return td::Status::OK();
   });
   p.add_checked_option('b', "block-ttl", "deprecated",
