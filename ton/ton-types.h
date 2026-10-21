@@ -458,8 +458,12 @@ struct BlockCandidate {
   td::BufferSlice data;
   td::BufferSlice collated_data;
 
+  // Locally generated proofs are sent alongside the collated candidate.
+  std::vector<td::Ref<OutMsgQueueProofBroadcast>> out_msg_queue_proof_broadcasts = {};
+
   BlockCandidate clone() const {
-    return BlockCandidate{pubkey, id, collated_file_hash, data.clone(), collated_data.clone()};
+    return BlockCandidate{pubkey, id, collated_file_hash, data.clone(), collated_data.clone(),
+                          out_msg_queue_proof_broadcasts};
   }
 };
 

@@ -233,8 +233,6 @@ class FullNodeShardImpl : public FullNodeShard {
   void import_overlay_certificate(PublicKeyHash signed_key, std::shared_ptr<ton::overlay::Certificate> cert,
                                   td::Promise<td::Unit> promise) override;
 
-  void sign_new_certificate(PublicKeyHash sign_by);
-  void signed_new_certificate(overlay::Certificate cert, PublicKeyHash local_id);
   PublicKeyHash choose_outbound_source(td::uint32 payload_size, bool is_fec) const;
   bool has_valid_certificate_for_source(const PublicKeyHash &source,
                                         const std::shared_ptr<ton::overlay::Certificate> &cert, td::uint32 payload_size,
@@ -306,8 +304,6 @@ class FullNodeShardImpl : public FullNodeShard {
   overlay::OverlayIdShort overlay_id_;
   td::LRUCache<BlockIdExt, td::uint32> received_block_broadcasts_{512};
   td::LRUCache<BlockIdExt, td::Unit> received_block_candidates_{512};
-  PublicKeyHash sign_cert_by_ = PublicKeyHash::zero();
-  td::Timestamp update_certificate_at_;
   td::Timestamp sync_completed_at_;
 
   std::shared_ptr<ton::overlay::Certificate> cert_;

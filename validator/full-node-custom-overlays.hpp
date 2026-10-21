@@ -130,11 +130,11 @@ class FullNodeCustomOverlay : public td::actor::Actor {
       , adnl_(adnl)
       , quic_(quic)
       , rldp2_(rldp2)
-      , use_quic_(params.use_quic_)
       , overlays_(overlays)
       , validator_manager_(validator_manager)
       , full_node_(full_node)
       , limiter_(std::move(limiter)) {
+    adnl_sender_ = (use_quic_ ? td::actor::ActorId<adnl::AdnlSenderEx>{quic_} : rldp2_);
   }
 
  private:
@@ -152,12 +152,12 @@ class FullNodeCustomOverlay : public td::actor::Actor {
   td::actor::ActorId<adnl::Adnl> adnl_;
   td::actor::ActorId<quic::QuicSender> quic_;
   td::actor::ActorId<rldp2::Rldp> rldp2_;
-  bool use_quic_;
   td::actor::ActorId<adnl::AdnlSenderEx> adnl_sender_;
   td::actor::ActorId<overlay::Overlays> overlays_;
   td::actor::ActorId<ValidatorManagerInterface> validator_manager_;
   td::actor::ActorId<FullNode> full_node_;
   std::shared_ptr<RateLimiter<>> limiter_;
+  adnl::PeersMtuGuard peers_mtu_guard_;
   struct DownloadPeerHealth {
     double cooldown_until = 0.0;
     double latency = 1.0;

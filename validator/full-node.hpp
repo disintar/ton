@@ -145,6 +145,9 @@ class FullNodeImpl : public FullNode {
   };
 
   void update_shard_actor(ShardIdFull shard, bool active, bool enable_plumtree_broadcast);
+  void set_public_overlays_enabled(bool enabled);
+  void update_public_overlay_mode(double fast_sync_authority_until);
+  void update_fast_sync_and_public_overlays();
   void download_next_block_now(BlockIdExt prev_id, td::uint32 priority, td::Timestamp timeout,
                                td::Promise<ReceivedBlock> promise);
 

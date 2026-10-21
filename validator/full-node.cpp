@@ -57,7 +57,7 @@ bool write_jsonl(std::ofstream &file, const T &value, const char *name) {
   file << s << "\n";
   file.flush();
   if (file.fail()) {
-    VLOG(full_node, WARNING) << "Failed to write " << name << " to file";
+    VLOG(FULL_NODE_WARNING) << "Failed to write " << name << " to file";
     return false;
   }
   return true;
@@ -513,7 +513,13 @@ void FullNodeImpl::update_shard_actor(ShardIdFull shard, bool active, bool enabl
     return;
   }
   if (info.actor.empty()) {
-    info.actor = FullNodeShard::create(shard, local_id_, adnl_id_, zero_state_file_hash_, opts_, limiter_, keyring_,
+    if (info.local_id.is_zero()) {
+      auto private_key = ton::PrivateKey{ton::privkeys::Ed25519::random()};
+      info.local_id = private_key.compute_short_id();
+      td::actor::send_closure(keyring_, &ton::keyring::Keyring::add_key, std::move(private_key), true,
+                              [](td::Result<>) {});
+    }
+    info.actor = FullNodeShard::create(shard, info.local_id, adnl_id_, zero_state_file_hash_, opts_, limiter_, keyring_,
                                        adnl_, rldp2_, quic_, overlays_, validator_manager_, client_, actor_id(this),
                                        active, enable_plumtree_broadcast);
     std::vector<adnl::AdnlNodeIdShort> sync_hints;

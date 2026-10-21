@@ -144,24 +144,21 @@ namespace ton::validator {
 
             out_q->get_minmax_key(last_key);
             vm::CellSlice out_data = out_q->lookup_delete(last_key)->clone();
-            block::gen::AccountDispatchQueue::Record aq;
-
-            if (tlb::unpack(out_data, aq)) {
-              dispatch_queue_size[last_key.to_hex()] = aq.count;
+            if (out_data.prefetch_ulong(1) == 1) {
+              out_data.skip_first(1);  // account_dispatch_queue_old
+            } else if (out_data.prefetch_ulong(3) == 0) {
+              out_data.skip_first(3);  // account_dispatch_queue
             } else {
-              LOG(ERROR) << "QUEUE unpack failed";
-            };
+              LOG(ERROR) << "Unknown AccountDispatchQueue variant";
+              continue;
+            }
+            if (!out_data.have(48, 1)) {
+              LOG(ERROR) << "Truncated AccountDispatchQueue";
+              continue;
+            }
+            out_data.fetch_ref();
+            dispatch_queue_size[last_key.to_hex()] = out_data.fetch_ulong(48);
           }
-
-          out_q->check_for_each([&dispatch_queue_size](Ref<vm::CellSlice> cs_ref, td::ConstBitPtr key, int n) {
-              if (cs_ref.not_null()) {
-                auto cs = cs_ref.write();
-                cs.skip_first(1); // hashmapE
-                dispatch_queue_size[key.to_hex(256)] = cs.fetch_ulong(48);
-              }
-
-              return true;
-          });
         }
 
         answer = {{"type",                 "shard_state"},
