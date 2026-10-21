@@ -88,7 +88,7 @@ class FullNodeShardImpl : public FullNodeShard {
     return 3;
   }
   static constexpr td::uint32 max_neighbours() {
-    return 48;
+    return 64;
   }
   static constexpr double stop_unreliability() {
     return 5.0;

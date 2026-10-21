@@ -198,6 +198,9 @@ void FullNodeShardImpl::create_overlay() {
   overlay::OverlayOptions opts;
   opts.name_ = "shard" + shard_.to_str();
   opts.announce_self_ = active_;
+  opts.max_neighbours_ = 32;
+  LOG(WARNING) << "[public-peers] shard=" << shard_.to_str() << " gossip_target=" << opts.max_neighbours_
+               << " download_candidates_limit=" << max_neighbours();
   opts.broadcast_speed_multiplier_ = opts_.public_broadcast_speed_multiplier_;
   opts.enable_plumtree_broadcast_ = enable_plumtree_broadcast_;
   opts.plumtree_broadcast_sender_ = enable_plumtree_broadcast_ ? td::actor::ActorId<adnl::AdnlSenderEx>{quic_}

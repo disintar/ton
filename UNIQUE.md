@@ -658,6 +658,12 @@ message changes:
   This increases download concurrency only; it does not cancel losing hedges
   or change proof validation, peer fanout, or deadlines. Initially canary on
   London under a separate image tag; other deployed images retain 16+16.
+- `validator/full-node-shard.*`: London concurrency canary also increases
+  public gossip neighbours from 10 to 32 and the download candidate pool from
+  48 to 64 for each master/shard overlay. Keep per-block public download fanout
+  bounded at 8; the larger peer pool is not a request to download from all 64.
+  Startup logs `[public-peers]` record both limits. Private overlay membership
+  and broadcast propagation fanout are unchanged.
 - `validator/toncenter-relay.*`, `validator/toncenter-relay-metrics.h`,
   `validator/full-node.cpp`, and `doc/toncenter-relay.md`: optional bounded,
   asynchronous external-message relay from authorized private overlays and
