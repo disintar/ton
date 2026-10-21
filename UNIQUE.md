@@ -659,6 +659,9 @@ message changes:
   liteserver to Toncenter, controlled by `DTON_TONCENTER_RELAY`,
   `DTON_TONCENTER_API_KEY`, and `DTON_TONCENTER_RPS`. It must not block local
   processing or weaken validation of block data.
+- `tl/generate/scheme/ton_api.tl`, `validator/collation-manager.*`, and
+  `validator/validator.h`: retain the fork's collation-manager statistics TL
+  types and control query when upstream edits collator configuration schemas.
 - `quic/quic-sender.cpp`: query deadlines include connection setup; rejected
   inbound queries reset their streams promptly. Preserve the `[quic-sync]`
   stage trace while using upstream's peer-trust metrics and connection API.

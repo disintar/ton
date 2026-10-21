@@ -749,6 +749,12 @@ engine.validator.shardOutQueueSize size:long = engine.validator.ShardOutQueueSiz
 
 engine.validator.exportedPrivateKeys encrypted_data:bytes = engine.validator.ExportedPrivateKeys;
 
+engine.validator.collationManagerStats.shard shard_id:tonNode.shardId self_collate:Bool select_mode:string active:Bool collators:(vector int256) = engine.validator.collationManagerStats.Shard;
+engine.validator.collationManagerStats.collator adnl_id:int256 active:Bool alive:Bool ping_in:double last_ping_ago:double last_ping_status:string banned_for:double = engine.validator.collationManagerStats.Collator;
+engine.validator.collationManagerStats.localId adnl_id:int256 shards:(vector engine.validator.collationManagerStats.shard)
+    collators:(vector engine.validator.collationManagerStats.collator) = engine.validator.collationManagerStats.LocalId;
+engine.validator.collationManagerStats local_ids:(vector engine.validator.collationManagerStats.localId) = engine.validator.CollationManagerStats;
+
 ---functions---
 
 engine.validator.getTime = engine.validator.Time;
@@ -808,6 +814,7 @@ engine.validator.importShardOverlayCertificate workchain:int shard:long signed_k
 
 engine.validator.getPerfTimerStats name:string = engine.validator.PerfTimerStats;
 engine.validator.getShardOutQueueSize flags:# block_id:tonNode.blockId dest_wc:flags.0?int dest_shard:flags.0?long = engine.validator.ShardOutQueueSize;
+engine.validator.getCollationManagerStats = engine.validator.CollationManagerStats;
 engine.validator.setExtMessagesBroadcastDisabled disabled:Bool = engine.validator.Success;
 
 engine.validator.addCustomOverlay overlay:engine.validator.customOverlay = engine.validator.Success;
