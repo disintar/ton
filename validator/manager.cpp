@@ -3934,6 +3934,12 @@ td::actor::Task<> ValidatorManagerImpl::collect(metrics::Context ctx) {
   co_return {};
 }
 
+void ValidatorManagerImpl::get_collation_manager_stats(
+    td::Promise<tl_object_ptr<ton_api::engine_validator_collationManagerStats>> promise) {
+  promise.set_value(create_tl_object<ton_api::engine_validator_collationManagerStats>(
+      std::vector<tl_object_ptr<ton_api::engine_validator_collationManagerStats_localId>>{}));
+}
+
 void ValidatorManagerImpl::update_block_receive_stats(BlockIdExt block_id, BlockSource type) {
   auto &stats = block_receive_stats_.get(block_id);
   auto idx = static_cast<int>(type);

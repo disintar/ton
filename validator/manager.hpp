@@ -367,6 +367,9 @@ class ValidatorManagerImpl : public ValidatorManager {
   void maybe_recover_archive_sync();
 
  public:
+  void get_collation_manager_stats(
+      td::Promise<tl_object_ptr<ton_api::engine_validator_collationManagerStats>> promise) override;
+
   void install_callback(std::unique_ptr<Callback> new_callback, td::Promise<td::Unit> promise) override {
     callback_ = std::move(new_callback);
     promise.set_value(td::Unit());
