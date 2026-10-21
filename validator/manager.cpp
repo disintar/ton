@@ -48,6 +48,7 @@
 #include "block-propagation-trace.h"
 #include "checksum.h"
 #include "fabric.h"
+#include "external-message-relay.h"
 #include "get-next-key-blocks.h"
 #include "git.h"
 #include "import-db-slice-local.hpp"
@@ -512,23 +513,48 @@ td::actor::Task<> ValidatorManagerImpl::check_external_message_broadcast(td::Buf
 }
 
 td::actor::Task<> ValidatorManagerImpl::new_external_message_query(td::BufferSlice data) {
-  auto [message, wait_allow_broadcast] =
+  const bool trace = fullnode::trace_external_message_relay();
+  const auto started_at = td::Time::now();
+  const auto bytes = data.size();
+  const auto hash = trace ? td::sha256_bits256(data).to_hex() : std::string{};
+  auto admission =
       co_await td::actor::ask(ext_message_pool_, &ExtMessagePool::check_add_external_message, std::move(data),
                               opts_->get_ext_message_pool_options()->local_ls_message_priority,
-                              /* add_to_mempool = */ is_validator() || is_collator());
+                              /* add_to_mempool = */ is_validator() || is_collator()).wrap();
+  if (trace) {
+    LOG(WARNING) << "[ext-message-relay] stage=liteserver.admission boc_hash=" << hash << " bytes=" << bytes
+                 << " ms=" << static_cast<long long>((td::Time::now() - started_at) * 1000.0)
+                 << " result=" << (admission.is_ok() ? "ok" : "error");
+  }
+  if (admission.is_error()) {
+    if (trace) {
+      LOG(WARNING) << "[ext-message-relay] stage=liteserver.reject boc_hash=" << hash
+                   << " reason=" << admission.error();
+    }
+    co_return admission.move_as_error();
+  }
+  auto [message, wait_allow_broadcast] = admission.move_as_ok();
   new_external_message_query_cont(std::move(message), std::move(wait_allow_broadcast)).start().detach();
   co_return td::Unit{};
 }
 
 td::actor::Task<> ValidatorManagerImpl::new_external_message_query_cont(td::Ref<ExtMessage> message,
                                                                         td::actor::StartedTask<> wait_allow_broadcast) {
+  const auto started_at = td::Time::now();
   auto result = co_await std::move(wait_allow_broadcast).wrap();
+  auto data = message->serialize();
+  if (fullnode::trace_external_message_relay()) {
+    LOG(WARNING) << "[ext-message-relay] stage=liteserver.broadcast_ready boc_hash="
+                 << td::sha256_bits256(data).to_hex()
+                 << " ms=" << static_cast<long long>((td::Time::now() - started_at) * 1000.0)
+                 << " result=" << (result.is_ok() ? "ok" : "error");
+  }
   if (result.is_error()) {
     LOG(INFO) << "Cannot send external message to " << message->wc() << ":" << message->addr().to_hex() << " : "
               << result.error();
   } else {
     LOG(INFO) << "Sending external message to " << message->wc() << ":" << message->addr().to_hex();
-    callback_->send_ext_message(message->shard(), message->serialize());
+    callback_->send_ext_message(message->shard(), std::move(data));
   }
   co_return td::Unit{};
 }

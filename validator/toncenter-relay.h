@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: LGPL-2.0-or-later
 #pragma once
+#include <cstdlib>
+#include <cstring>
 #include <string>
 #include "td/utils/Slice.h"
+#include "td/utils/logging.h"
 namespace ton::validator::toncenter {
 enum class Source { LiteServer, PrivateOverlay };
 struct Response {
@@ -16,6 +19,15 @@ Response post_message(const std::string &endpoint, const std::string &api_key, t
 #if defined(TON_WITH_TONCENTER_RELAY)
 void submit(td::Slice boc, Source source = Source::LiteServer);
 #else
-inline void submit(td::Slice, Source = Source::LiteServer) {}
+inline void submit(td::Slice, Source = Source::LiteServer) {
+  static const bool warned = [] {
+    const char *enabled = std::getenv("DTON_TONCENTER_RELAY");
+    if (enabled && std::strcmp(enabled, "1") == 0) {
+      LOG(ERROR) << "[toncenter-relay] result=disabled reason=compiled_without_TON_USE_TONCENTER_RELAY";
+    }
+    return true;
+  }();
+  (void)warned;
+}
 #endif
 }

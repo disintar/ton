@@ -658,7 +658,15 @@ message changes:
   asynchronous external-message relay from authorized private overlays and
   liteserver to Toncenter, controlled by `DTON_TONCENTER_RELAY`,
   `DTON_TONCENTER_API_KEY`, and `DTON_TONCENTER_RPS`. It must not block local
-  processing or weaken validation of block data.
+  processing or weaken validation of block data. Production builders must also
+  pass `-DTON_USE_TONCENTER_RELAY=ON`; runtime env alone cannot enable a
+  compiled-out relay. Missing build support now emits a startup error instead
+  of silently ignoring the enabled env. Check `ton_node_toncenter_enabled`.
+- `validator/manager.cpp`: `DTON_TRACE_EXT_MESSAGE_RELAY=1` traces liteserver
+  admission and asynchronous broadcast readiness by BOC hash, including errors
+  and elapsed time. Admission is not confirmation of network delivery or
+  transaction inclusion. Keep upstream's `BroadcastFlagFixedNeighbours` for
+  large external-message FEC broadcasts in `validator/full-node-shard.cpp`.
 - `tl/generate/scheme/ton_api.tl`, `validator/collation-manager.*`, and
   `validator/validator.h`: retain the fork's collation-manager statistics TL
   types and control query when upstream edits collator configuration schemas.
