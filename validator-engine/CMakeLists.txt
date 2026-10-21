@@ -23,6 +23,9 @@ set(VALIDATOR_ENGINE_SOURCE
         BlockRequestReceiverKafka.cpp)
 
 add_executable(validator-engine ${VALIDATOR_ENGINE_SOURCE})
+if (TARGET mhd)
+  add_dependencies(validator-engine mhd)
+endif()
 target_link_libraries(validator-engine metrics overlay tdutils tdactor adnl tl_api dht
   rldp2 quic full-node validator ton_validator validator
   fift-lib memprof git ${JEMALLOC_LIBRARIES} ${MHD_LIBRARY} ${MHD_STATIC_LIBRARIES})
