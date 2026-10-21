@@ -121,6 +121,9 @@ const char *DownloadArchiveSlice::archive_slice_transport() const {
   if (!client_.empty()) {
     return "client";
   }
+  if (!record_archive_sync_metrics_ && use_sender_for_slice_query_) {
+    return "negotiated";
+  }
   return use_sender_for_slice_query_ ? archive_sender_label(archive_sync_sender_) : "overlay";
 }
 

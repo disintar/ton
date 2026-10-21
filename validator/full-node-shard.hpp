@@ -30,6 +30,7 @@
 #include "full-node-shard.h"
 #include "rate-limiter.h"
 #include "net/archive-peer-selection.h"
+#include "public-overlay-transport.h"
 #include "td/utils/Time.h"
 
 namespace ton {
@@ -84,7 +85,7 @@ class FullNodeShardImpl : public FullNodeShard {
     return 3;
   }
   static constexpr td::uint32 proto_version_minor() {
-    return 2;
+    return 3;
   }
   static constexpr td::uint32 max_neighbours() {
     return 48;
@@ -295,6 +296,7 @@ class FullNodeShardImpl : public FullNodeShard {
   td::actor::ActorId<adnl::Adnl> adnl_;
   td::actor::ActorId<rldp2::Rldp> rldp2_;
   td::actor::ActorId<quic::QuicSender> quic_;
+  td::actor::ActorOwn<PublicOverlayTransport> public_transport_;
   td::actor::ActorId<overlay::Overlays> overlays_;
   td::actor::ActorId<ValidatorManagerInterface> validator_manager_;
   td::actor::ActorId<adnl::AdnlExtClient> client_;

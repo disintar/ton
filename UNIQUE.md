@@ -676,6 +676,24 @@ message changes:
 
 ## Quick post-merge checks
 
+### TON v2026.10 public QUIC compatibility
+
+The public Plumtree broadcast mode follows the on-chain consensus configuration.
+Public download requests select QUIC for peers advertising protocol 3.3 or newer,
+matching upstream, and keep RLDP2 for older or unknown peers. The fork advertises
+3.3 and registers its fullnode ADNL ID with both transports. Preserve this
+negotiation in every retained download path, including hedged next-block, proof,
+state, archive and message-queue requests. `PublicOverlayTransport` selects the
+transport per destination, including archive retries; its capability set is
+bounded by the shard's current neighbours and entries are removed on eviction.
+`[public-transport]` records the actual selected transport and query result.
+Archive-level `transport=negotiated` is refined by these per-query trace lines.
+
+The Kubernetes image uses ton-k8s `init_ton.py`: `QUIC_PORT` defaults to
+`PUBLIC_PORT + 1000`, and `engine.quicAddr` is ensured before validator startup.
+Service UDP port, targetPort and the published address must agree. This is
+required for public communication as well as custom overlays.
+
 Useful grep check:
 
 ```bash
