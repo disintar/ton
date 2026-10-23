@@ -21,6 +21,30 @@ This is a fork merge repair, not an upstream feature request. Rollout starts
 on London only. Other old members can continue to inject looping traffic;
 do not declare the entire overlay fixed from a single canary's incoming rate.
 
+London canary validation on 2026-10-23:
+
+- Image `mainnet-v4-dev-ton2026-10-stormguard-421347bc`, source
+  `421347bc31a5bb966365a9dfc22c267b5ca0c280`, registry digest
+  `sha256:7fb4dc057e17224c3797018d6dcd475ec5d443c6ac3828d7b9595210414586d1`.
+- Restart recovered master and shard sync; three consecutive samples had both
+  lags at most 1 second. The new pod had zero restarts during observation.
+- A subsequent 90-second capture measured about 660 received shard
+  descriptions/s, matched by 660 suppressed/s; sent remained zero. Normal
+  custom block broadcasts continued to arrive. This proves the forwarding
+  guard, not disappearance of the storm from other members.
+- Total pod TX did not decrease: about 15.8 MB/s before versus 17.1 MB/s after;
+  RX was about 13.2 versus 22.2 MB/s. These include all pod traffic, not only
+  custom overlay traffic, and are not evidence of a cluster-wide improvement.
+- The 90-second window had master p95/max 1/2 seconds and shard p95/max 10/15
+  seconds; its last 30 seconds were around 0-1 seconds. Do not claim all sync
+  spikes resolved. Remaining old members must stop re-originating the storm.
+- File and runtime console inventories on all four K8s nodes showed the same
+  six members, still including `R43cwaCI...`; no replacement archive ADNLs
+  were present. Membership was not guessed or silently changed.
+- Diagnostics are saved under `/tmp/ton-storm-before` and
+  `/tmp/ton-storm-after` on the operator workstation. Temporary London
+  verbosity was restored to 2.
+
 The previously recorded deployment status below is historical, not the
 current image inventory.
 
