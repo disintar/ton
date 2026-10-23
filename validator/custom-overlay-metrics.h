@@ -30,6 +30,10 @@ namespace validator {
 namespace fullnode {
 
 inline std::atomic<std::uint64_t> custom_overlay_block_broadcasts_received_total{0};
+inline std::atomic<std::uint64_t> custom_overlay_shard_descriptions_received_total{0};
+inline std::atomic<std::uint64_t> custom_overlay_shard_descriptions_sent_total{0};
+inline std::atomic<std::uint64_t> custom_overlay_shard_descriptions_rebroadcast_suppressed_total{0};
+inline std::atomic<std::uint64_t> custom_overlay_shard_descriptions_deduplicated_total{0};
 inline std::atomic<std::uint64_t> custom_overlay_block_broadcasts_applied_total{0};
 inline std::atomic<std::uint64_t> custom_overlay_duplicate_block_broadcasts_dropped_total{0};
 inline std::atomic<std::uint64_t> custom_overlay_duplicate_block_candidates_dropped_total{0};

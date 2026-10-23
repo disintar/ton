@@ -4,7 +4,27 @@ This document summarizes the current state of the private-overlay sync work and
 the pieces that should be split into clean pull requests for
 `ton-blockchain/ton`.
 
-## Current Status
+## 2026-10-23 Merge Regression Repair
+
+The v2026.10 integration lost upstream `9c07336d`'s custom-overlay
+`send_to_custom` guard and retained 256-entry forwarding caches. Custom
+receipts could be re-originated as fresh twostep broadcasts before validator
+rejection of stale shard descriptions, amplifying stale traffic indefinitely.
+
+Restore the upstream block-sender guard for blocks, candidates, and shard
+descriptions, plus bounded 10000-entry LRUs. Keep public/fast-sync forwarding
+and normal validation/download fallback intact. New aggregate Prometheus
+counters distinguish received, re-originated, suppressed, and deduplicated
+shard descriptions; logs are capped to one summary per 10 seconds.
+
+This is a fork merge repair, not an upstream feature request. Rollout starts
+on London only. Other old members can continue to inject looping traffic;
+do not declare the entire overlay fixed from a single canary's incoming rate.
+
+The previously recorded deployment status below is historical, not the
+current image inventory.
+
+## Historical Sync Validation
 
 The production test image `mainnet-v4-dev` now contains the final tested state
 from commit `f7275ed4a1e650e9e6a79a19327157c11dc1c02b`.

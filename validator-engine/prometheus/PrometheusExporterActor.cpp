@@ -227,6 +227,18 @@ namespace ton {
       ss << "# TYPE ton_custom_overlay_block_broadcasts_received_total counter\n";
       ss << "ton_custom_overlay_block_broadcasts_received_total "
          << validator::fullnode::get_custom_overlay_block_broadcasts_received_total() << "\n";
+      ss << "# TYPE ton_custom_overlay_shard_descriptions_received_total counter\n"
+         << "ton_custom_overlay_shard_descriptions_received_total "
+         << validator::fullnode::custom_overlay_shard_descriptions_received_total.load(std::memory_order_relaxed) << "\n"
+         << "# TYPE ton_custom_overlay_shard_descriptions_sent_total counter\n"
+         << "ton_custom_overlay_shard_descriptions_sent_total "
+         << validator::fullnode::custom_overlay_shard_descriptions_sent_total.load(std::memory_order_relaxed) << "\n"
+         << "# TYPE ton_custom_overlay_shard_descriptions_rebroadcast_suppressed_total counter\n"
+         << "ton_custom_overlay_shard_descriptions_rebroadcast_suppressed_total "
+         << validator::fullnode::custom_overlay_shard_descriptions_rebroadcast_suppressed_total.load(std::memory_order_relaxed) << "\n"
+         << "# TYPE ton_custom_overlay_shard_descriptions_deduplicated_total counter\n"
+         << "ton_custom_overlay_shard_descriptions_deduplicated_total "
+         << validator::fullnode::custom_overlay_shard_descriptions_deduplicated_total.load(std::memory_order_relaxed) << "\n";
       ss << "# HELP ton_custom_overlay_block_broadcasts_applied_total Total custom overlay block broadcasts applied locally\n";
       ss << "# TYPE ton_custom_overlay_block_broadcasts_applied_total counter\n";
       ss << "ton_custom_overlay_block_broadcasts_applied_total "

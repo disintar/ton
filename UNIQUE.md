@@ -4,6 +4,25 @@ This file is a merge guard for local dTON functionality. It is not upstream TON
 documentation. When merging fresh `ton-blockchain/ton` changes, preserve the
 features below even if upstream moved, deleted, or rewrote nearby code.
 
+## 2026-10-23 Custom Overlay Loop Guard
+
+The v2026.10 merge accidentally discarded upstream `9c07336d`'s
+`send_to_custom` guard. A custom-overlay block sender re-originated received
+shard descriptions as new twostep broadcasts. The fork's 256-entry forwarding
+LRU could be churned by old descriptions, sustaining a broadcast storm.
+
+Preserve `!block_senders_.contains(local_id_)` on custom-overlay receipts of
+block broadcasts, candidates, and shard descriptions. Public and fast-sync
+receipts still pass `send_to_custom=true`; validation and private/public
+download fallback remain unchanged. Finality receipts already do not forward
+in this fork. Keep all three forwarding LRUs bounded at 10000 entries.
+
+`ton_custom_overlay_shard_descriptions_{received,sent,rebroadcast_suppressed,deduplicated}_total`
+have no per-block labels. `[custom-overlay-loop-guard]` logs aggregate counts
+at most once per 10 seconds. A fixed node can still receive storms from old
+members; suppression, not immediate zero incoming traffic, proves the guard.
+This restores upstream behavior and is not a new feature to propose upstream.
+
 Original snapshot used for this document:
 
 - Local branch before merge: `dev`, `HEAD=de69678d7` (`Improve overlay live sync diagnostics and dedupe`)

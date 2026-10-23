@@ -1240,7 +1240,8 @@ void FullNodeImpl::new_key_block(BlockHandle handle) {
   }
 }
 
-void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast, bool signatures_checked, bool from_custom_overlay) {
+void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast, bool signatures_checked, bool from_custom_overlay,
+                                           bool send_to_custom) {
   const auto block_id = broadcast.block_id;
   const auto trace = broadcast.trace;
   const bool final_known = !broadcast.sig_set.is_null();
@@ -1252,7 +1253,9 @@ void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast, bool signat
   if (from_custom_overlay) {
     record_custom_overlay_block_broadcast_received();
   }
-  send_block_broadcast_to_custom_overlays(broadcast);
+  if (send_to_custom) {
+    send_block_broadcast_to_custom_overlays(broadcast);
+  }
   auto new_block_broadcast = static_cast<void (ValidatorManagerInterface::*)(
       BlockBroadcast, bool, td::Promise<td::Unit>, bool)>(&ValidatorManagerInterface::new_block_broadcast);
   td::actor::send_closure(validator_manager_, new_block_broadcast, std::move(broadcast),
@@ -1273,8 +1276,11 @@ void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast, bool signat
 }
 
 void FullNodeImpl::process_block_candidate_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno,
-                                                     td::uint32 validator_set_hash, td::BufferSlice data) {
-  send_block_candidate_broadcast_to_custom_overlays(block_id, cc_seqno, validator_set_hash, data);
+                                                     td::uint32 validator_set_hash, td::BufferSlice data,
+                                                     bool send_to_custom) {
+  if (send_to_custom) {
+    send_block_candidate_broadcast_to_custom_overlays(block_id, cc_seqno, validator_set_hash, data);
+  }
   auto new_block_candidate_broadcast = static_cast<td::actor::Task<> (ValidatorManagerInterface::*)(
       BlockIdExt, CatchainSeqno, td::BufferSlice)>(&ValidatorManagerInterface::new_block_candidate_broadcast);
   td::actor::ask(validator_manager_, new_block_candidate_broadcast, block_id, cc_seqno,
@@ -1289,8 +1295,20 @@ void FullNodeImpl::process_block_finality_broadcast(BlockFinalityBroadcast final
 }
 
 void FullNodeImpl::process_shard_block_info_broadcast(BlockIdExt block_id, CatchainSeqno cc_seqno,
-                                                      td::BufferSlice data) {
-  send_shard_block_info_to_custom_overlays(block_id, cc_seqno, data);
+                                                      td::BufferSlice data, bool send_to_custom) {
+  if (send_to_custom) {
+    send_shard_block_info_to_custom_overlays(block_id, cc_seqno, data);
+  } else {
+    custom_overlay_shard_descriptions_rebroadcast_suppressed_total.fetch_add(1, std::memory_order_relaxed);
+    auto now = td::Time::now();
+    if (now >= custom_overlay_shard_guard_log_at_) {
+      custom_overlay_shard_guard_log_at_ = now + 10.0;
+      LOG(WARNING) << "[custom-overlay-loop-guard] stage=shard_description.rebroadcast_suppressed block=" << block_id
+                   << " received=" << custom_overlay_shard_descriptions_received_total.load(std::memory_order_relaxed)
+                   << " suppressed=" << custom_overlay_shard_descriptions_rebroadcast_suppressed_total.load(std::memory_order_relaxed)
+                   << " sent=" << custom_overlay_shard_descriptions_sent_total.load(std::memory_order_relaxed);
+    }
+  }
   td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_shard_block_description_broadcast,
                           block_id, cc_seqno, std::move(data));
 }
@@ -1522,6 +1540,7 @@ void FullNodeImpl::send_block_candidate_broadcast_to_custom_overlays(const Block
 void FullNodeImpl::send_shard_block_info_to_custom_overlays(BlockIdExt block_id, CatchainSeqno cc_seqno,
                                                             const td::BufferSlice &data) {
   if (custom_overlays_sent_shard_block_desc_.contains(block_id)) {
+    custom_overlay_shard_descriptions_deduplicated_total.fetch_add(1, std::memory_order_relaxed);
     return;
   }
   custom_overlays_sent_shard_block_desc_.put(block_id, {});
@@ -1529,6 +1548,7 @@ void FullNodeImpl::send_shard_block_info_to_custom_overlays(BlockIdExt block_id,
     if (private_overlay.params_.send_shard(block_id.shard_full())) {
       for (auto &[local_id, actor] : private_overlay.actors_) {
         if (private_overlay.params_.block_senders_.contains(local_id)) {
+          custom_overlay_shard_descriptions_sent_total.fetch_add(1, std::memory_order_relaxed);
           td::actor::send_closure(actor, &FullNodeCustomOverlay::send_shard_block_info, block_id, cc_seqno,
                                   data.clone());
         }
