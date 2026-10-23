@@ -45,6 +45,29 @@ London canary validation on 2026-10-23:
   `/tmp/ton-storm-after` on the operator workstation. Temporary London
   verbosity was restored to 2.
 
+Cluster rollout completed later on 2026-10-23 after user approval:
+
+- Updated Solana, then worm, then echo to the same stormguard image/digest.
+  Each next deployment waited for three fresh, advancing samples with both
+  master and shard lag at most 1 second. London was not restarted again.
+- Worm recovered through archive to live; its logs showed private QUIC
+  archive fetches from echo, which stayed online until worm caught up.
+- All four running pods had zero restarts and matching image digests at the
+  final check. Master/shard lag was London 0/0, Solana 1/1, worm 0/0, echo 1/1.
+- A simultaneous 10-second sample on all four nodes showed zero increments
+  of received, sent, suppressed, and deduplicated shard-description counters.
+  This is short-window evidence that the observed stale-description loop
+  stopped, not a guarantee that all future sync spikes are eliminated.
+- Fixed-London baseline immediately before the remaining rollout was about
+  989 stale descriptions/s, RX 17.76 MB/s and TX 14.80 MB/s. After completing
+  the cluster rollout, London measured RX 3.12 MB/s and TX 5.25 MB/s, with
+  zero description-counter increments. These are total pod traffic rates.
+- Existing QUIC stream-size-limit and Plumtree repair-cap warnings were still
+  visible during echo startup; this repair does not claim to fix those
+  distinct transport issues. Membership and environment were unchanged.
+- Final evidence: `/tmp/ton-storm-cluster-rollout-final.json`; deployment
+  baseline: `/tmp/ton-storm-remaining-before.yaml` on the operator workstation.
+
 The previously recorded deployment status below is historical, not the
 current image inventory.
 
