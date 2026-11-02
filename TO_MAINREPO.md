@@ -4,6 +4,31 @@ This document summarizes the current state of the private-overlay sync work and
 the pieces that should be split into clean pull requests for
 `ton-blockchain/ton`.
 
+## 2026-11-02 Next-Block Source Rotation Canary
+
+Prometheus recorded master/shard stalls approaching 180 seconds. Worm and echo
+stopped at the same masterchain predecessor while London and Solana advanced.
+A short trace also showed repeated empty replies from the same two public
+sources, despite successful private downloads from Solana.
+
+The canary patch keeps a single bounded negative-cache entry per peer, scoped
+to the exact masterchain predecessor. Empty replies rotate that predecessor
+for 500 ms without penalizing the peer's other blocks/shards or its general
+reliability. Transport failures rotate for 1 second. Late public responses for
+an obsolete predecessor do not affect the current choice.
+
+Private next-block requests hedge a second eligible peer after 100 ms and now
+feed failures back to source selection. Local DB success is not credited as a
+network RTT. Public source selection expands from 2 to 4 after 1 second without
+progress, then to at most 8 after 5 seconds, with staggered starts and existing
+deadlines/token limits. Slow rounds log predecessor, block age, stalled time,
+candidate count and selected peer IDs at most once per 2 seconds.
+
+Hash/proof/state verification, public fallback, archive recovery thresholds,
+QUIC MTU limits and request admission limits are unchanged. Build remotely on
+Solana at a pinned SHA and deploy only to echo under a separate canary tag.
+This is a source-selection repair, not a claim that all lag causes are solved.
+
 ## 2026-10-23 Merge Regression Repair
 
 The v2026.10 integration lost upstream `9c07336d`'s custom-overlay

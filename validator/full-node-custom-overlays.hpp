@@ -102,6 +102,8 @@ class FullNodeCustomOverlay : public td::actor::Actor {
   void download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
                         td::Timestamp timeout, td::Promise<std::string> promise);
   void record_download_peer_result(adnl::AdnlNodeIdShort peer, bool success, bool from_local_db, double elapsed);
+  void record_next_blocks_peer_result(adnl::AdnlNodeIdShort peer, BlockIdExt prev_id, bool success, bool not_ready,
+                                      double elapsed);
 
   void set_config(FullNodeConfig config) {
     opts_.config_ = std::move(config);
@@ -162,6 +164,8 @@ class FullNodeCustomOverlay : public td::actor::Actor {
     double cooldown_until = 0.0;
     double latency = 1.0;
     unsigned failures = 0;
+    BlockIdExt next_unavailable_after;
+    double next_unavailable_until = 0.0;
   };
   std::map<adnl::AdnlNodeIdShort, DownloadPeerHealth> download_peer_health_;
   size_t proof_peers_inflight_ = 0;
@@ -177,7 +181,7 @@ class FullNodeCustomOverlay : public td::actor::Actor {
   td::LRUCache<BlockIdExt, td::Unit> received_block_candidates_{512};
 
   ArchivePeerHistory<adnl::AdnlNodeIdShort> archive_peer_history_;
-  std::vector<adnl::AdnlNodeIdShort> custom_download_peers() const;
+  std::vector<adnl::AdnlNodeIdShort> custom_download_peers(BlockIdExt next_after = {}) const;
   bool mark_block_broadcast_received(BlockIdExt block_id, bool final);
   bool mark_block_candidate_received(BlockIdExt block_id);
   void prewarm_archive_peers();

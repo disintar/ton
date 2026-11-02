@@ -933,7 +933,20 @@ void FullNodeCustomOverlay::record_download_peer_result(adnl::AdnlNodeIdShort pe
   }
 }
 
-std::vector<adnl::AdnlNodeIdShort> FullNodeCustomOverlay::custom_download_peers() const {
+void FullNodeCustomOverlay::record_next_blocks_peer_result(adnl::AdnlNodeIdShort peer, BlockIdExt prev_id,
+                                                          bool success, bool not_ready, double elapsed) {
+  auto &health = download_peer_health_[peer];
+  if (!health.next_unavailable_after.is_valid() || health.next_unavailable_after.seqno() <= prev_id.seqno()) {
+    health.next_unavailable_after = prev_id;
+    health.next_unavailable_until = success ? 0 : block_propagation_trace_now() + (not_ready ? 0.5 : 1.0);
+  }
+  // Success may have come from the local DB; do not credit it as measured network latency.
+  if (!success && !not_ready) {
+    record_download_peer_result(peer, false, false, elapsed);
+  }
+}
+
+std::vector<adnl::AdnlNodeIdShort> FullNodeCustomOverlay::custom_download_peers(BlockIdExt next_after) const {
   std::vector<adnl::AdnlNodeIdShort> peers;
   auto add_peer = [&](adnl::AdnlNodeIdShort peer) {
     if (peer.is_zero() || peer == local_id_) {
@@ -953,7 +966,10 @@ std::vector<adnl::AdnlNodeIdShort> FullNodeCustomOverlay::custom_download_peers(
   auto available = peers;
   available.erase(std::remove_if(available.begin(), available.end(), [&](auto peer) {
                     auto it = download_peer_health_.find(peer);
-                    return it != download_peer_health_.end() && it->second.cooldown_until > now;
+                    return it != download_peer_health_.end() &&
+                           (it->second.cooldown_until > now ||
+                            (next_after.is_valid() && it->second.next_unavailable_after == next_after &&
+                             it->second.next_unavailable_until > now));
                   }), available.end());
   peers = std::move(available);
   std::stable_sort(peers.begin(), peers.end(), [&](auto lhs, auto rhs) {
@@ -1172,8 +1188,8 @@ void FullNodeCustomOverlay::download_next_blocks_from_custom_peers(BlockHandle h
     promise.set_error(td::Status::Error(ErrorCode::timeout, "custom overlay next blocks download timeout"));
     return;
   }
-  if (peers.size() > 1) {
-    peers.resize(1);
+  if (peers.size() > 2) {
+    peers.resize(2);
   }
 
   log_custom_overlay_sync_stage(CustomOverlaySyncKind::NextBlock, sender, name_, local, "-", target,
@@ -1184,7 +1200,8 @@ void FullNodeCustomOverlay::download_next_blocks_from_custom_peers(BlockHandle h
     auto peer = peers[i];
     auto launch = [state, peer, handle, priority, timeout, sender, local, target, peers_total = peers.size(),
                    local_id = local_id_, overlay_id = overlay_id_, manager = validator_manager_,
-                   adnl_sender = td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_}, overlays = overlays_]() mutable {
+                   adnl_sender = td::actor::ActorId<adnl::AdnlSenderInterface>{adnl_sender_}, overlays = overlays_,
+                   self = actor_id(this)]() mutable {
       {
         std::lock_guard<std::mutex> lock(state->mutex);
         if (state->done) {
@@ -1204,9 +1221,14 @@ void FullNodeCustomOverlay::download_next_blocks_from_custom_peers(BlockHandle h
                                     target, "peer.attempt", "attempt", "parallel_next_blocks", peers_total,
                                     peer_started_at);
       auto P = td::PromiseCreator::lambda(
-          [state, peer, prev_id = handle->id(), peer_string, peer_started_at,
+          [state, self, peer, prev_id = handle->id(), peer_string, peer_started_at,
            reservation = std::move(reservation)](td::Result<BlockHandle> R) mutable {
             reservation.reset();
+            if (R.is_ok() || R.error().code() != ErrorCode::cancelled) {
+              td::actor::send_closure(self, &FullNodeCustomOverlay::record_next_blocks_peer_result, peer, prev_id,
+                                      R.is_ok(), R.is_error() && R.error().code() == ErrorCode::notready,
+                                      block_propagation_trace_now() - peer_started_at);
+            }
             if (R.is_error()) {
               VLOG(FULL_NODE_DEBUG) << "failed to download next blocks after " << prev_id.to_str()
                                     << " from custom overlay peer " << peer << ": " << R.error();
@@ -1338,7 +1360,7 @@ void FullNodeCustomOverlay::download_next_blocks(BlockHandle handle, td::uint32 
     promise.set_error(td::Status::Error(ErrorCode::notready, "custom overlay does not serve shard"));
     return;
   }
-  auto peers = custom_download_peers();
+  auto peers = custom_download_peers(handle->id());
   VLOG(FULL_NODE_DEBUG) << "Trying custom overlay \"" << name_ << "\" next blocks after " << handle->id().to_str()
                         << " from " << peers.size() << " peers";
   download_next_blocks_from_custom_peers(std::move(handle), priority, timeout, std::move(peers), started_at,

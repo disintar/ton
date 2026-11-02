@@ -294,6 +294,8 @@ td::actor::Task<> FullNodeShardImpl::get_next_blocks_loop() {
   CHECK(handle_);
   td::uint32 attempt = 0;
   bool logged_progress = false;
+  double progress_at = td::Time::now();
+  double next_report_at = 0;
   LOG(WARNING) << "[live-sync] stage=download_loop_start mc=" << handle_->id();
   while (true) {
     ++attempt;
@@ -305,6 +307,7 @@ td::actor::Task<> FullNodeShardImpl::get_next_blocks_loop() {
         return;
       }
       handle_ = std::move(next_handle);
+      progress_at = td::Time::now();
       if (!logged_progress) {
         logged_progress = true;
         LOG(WARNING) << "[live-sync] stage=first_progress prev=" << prev_id << " mc=" << handle_->id()
@@ -333,16 +336,32 @@ td::actor::Task<> FullNodeShardImpl::get_next_blocks_loop() {
         public_peers.push_back(peer);
       }
     }
-    std::sort(public_peers.begin(), public_peers.end(), [now](const Neighbour &a, const Neighbour &b) {
-      auto score = [now](const Neighbour &p) {
+    std::sort(public_peers.begin(), public_peers.end(), [now, prev_id](const Neighbour &a, const Neighbour &b) {
+      auto score = [now, prev_id](const Neighbour &p) {
         return p.unreliability + 2.0 * p.required_data_inflight -
                (p.required_data_success_until > now ? 4.0 : 0.0) +
-               (p.required_data_unavailable_until > now ? 8.0 : 0.0);
+               (p.required_data_unavailable_until > now ? 8.0 : 0.0) +
+               (p.next_unavailable_after == prev_id && p.next_unavailable_until > now ? 100.0 : 0.0);
       };
       return score(a) < score(b);
     });
-    if (public_peers.size() > 2) {
-      public_peers.erase(public_peers.begin() + 2, public_peers.end());
+    auto stalled_for = now - progress_at;
+    std::size_t public_limit = stalled_for >= 5.0 ? 8 : (stalled_for >= 1.0 ? 4 : 2);
+    auto public_candidates = public_peers.size();
+    if (public_peers.size() > public_limit) {
+      public_peers.erase(public_peers.begin() + public_limit, public_peers.end());
+    }
+    if (stalled_for >= 2.0 && now >= next_report_at) {
+      std::string selected_peers;
+      for (const auto &peer : public_peers) {
+        selected_peers += PSTRING() << (selected_peers.empty() ? "" : ",") << peer.adnl_id;
+      }
+      LOG(WARNING) << "[next-sync] stage=round prev=" << prev_id
+                   << " stalled_ms=" << static_cast<long long>(stalled_for * 1000)
+                   << " public_candidates=" << public_candidates << " public_selected=" << public_peers.size()
+                   << " block_age_ms=" << static_cast<long long>((td::Clocks::system() - handle_->unix_time()) * 1000)
+                   << " peers=" << selected_peers;
+      next_report_at = now + 2.0;
     }
     auto [task, promise] = td::actor::StartedTask<BlockHandle>::make_bridge();
     auto race = std::make_shared<NextBlocksOverlayRaceState>(std::move(promise));
@@ -384,6 +403,10 @@ td::actor::Task<> FullNodeShardImpl::get_next_blocks_loop() {
                                                   td::Result<BlockHandle> R) mutable {
             auto elapsed = td::Time::now() - started_at;
             bool success = R.is_ok() && R.ok()->id().id.seqno > prev_id.id.seqno;
+            if (R.is_ok() || R.error().code() != ErrorCode::cancelled) {
+              td::actor::send_closure(self, &FullNodeShardImpl::record_next_blocks_result, peer.adnl_id, prev_id,
+                                      success, R.is_ok() || R.error().code() == ErrorCode::notready);
+            }
             if (success || (R.is_error() && R.error().code() != ErrorCode::notready)) {
               td::actor::send_closure(self, &FullNodeShardImpl::update_neighbour_stats, peer.adnl_id, elapsed,
                                       success);
@@ -410,7 +433,7 @@ td::actor::Task<> FullNodeShardImpl::get_next_blocks_loop() {
         if (index == 0) {
           launch();
         } else {
-          delay_action(std::move(launch), td::Timestamp::in(0.15));
+          delay_action(std::move(launch), td::Timestamp::in(0.1 * index));
         }
       }
     }
@@ -1843,6 +1866,17 @@ void FullNodeShardImpl::update_neighbour_stats(adnl::AdnlNodeIdShort adnl_id, do
       it->second.query_failed();
     }
   }
+}
+
+void FullNodeShardImpl::record_next_blocks_result(adnl::AdnlNodeIdShort peer, BlockIdExt prev_id, bool success,
+                                                 bool not_ready) {
+  auto it = neighbours_.find(peer);
+  if (it == neighbours_.end() || !handle_ || handle_->id() != prev_id) {
+    return;
+  }
+  // Empty replies at the tip are normal: rotate only this predecessor, not the peer's other downloads.
+  it->second.next_unavailable_after = prev_id;
+  it->second.next_unavailable_until = success ? 0 : td::Time::now() + (not_ready ? 0.5 : 1.0);
 }
 
 void FullNodeShardImpl::got_neighbour_capabilities(adnl::AdnlNodeIdShort adnl_id, double t, td::BufferSlice data) {
