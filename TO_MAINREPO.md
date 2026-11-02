@@ -29,6 +29,31 @@ QUIC MTU limits and request admission limits are unchanged. Build remotely on
 Solana at a pinned SHA and deploy only to echo under a separate canary tag.
 This is a source-selection repair, not a claim that all lag causes are solved.
 
+Deployment validation on 2026-11-02:
+
+- Source `6f3a3efd255db5f1b42098531a9b31e4002851dc`, built on Solana through
+  `/root/ton-k8s/build-for-k8s.sh` using build/ccache; no local compilation.
+- Image `mainnet-v4-dev-nextsync-6f3a3efd`, digest
+  `sha256:19bd423282cac19da0860e00b21ac48e18f64f8e501ad0c7db0a41999a7c503f`.
+- Echo canary: 939 seconds, 61 metric collection attempts, 44 valid samples;
+  unavailable Kubernetes exec responses were excluded, never treated as zero.
+  Sampled master lag mean 1.09 seconds, p95 2, maximum 2; shard-client mean
+  1.32 seconds, p95 2, maximum 4. No container restarts during the canary.
+- Traces confirmed successful private next-block requests to worm, London and
+  Solana, plus successful public fallback after source expansion. A stalled
+  request after MC 102888819 recovered through public sources in 1.1-1.2 seconds;
+  one after 102888780 recovered through London private sync.
+- After echo, deployed strictly London -> Solana -> worm. For each database,
+  stopped and removed the old pod before starting its replacement. Advanced to
+  the next node only after three fresh, advancing master/shard samples with
+  both timestamp lags at most 1 second. All replacement containers had zero
+  restarts at the end of rollout, and all four used the verified digest.
+- Short 3-4 second stalls still occur. This validation does not establish a
+  permanent 1-second lag ceiling or zero inter-node block propagation spread.
+
+Diagnostic captures: `/tmp/echo-nextsync-6f3a3efd/` and
+`/tmp/nextsync-cluster-rollout-20261102-131633/` on the operator workstation.
+
 ## 2026-10-23 Merge Regression Repair
 
 The v2026.10 integration lost upstream `9c07336d`'s custom-overlay
