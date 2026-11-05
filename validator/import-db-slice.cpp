@@ -439,6 +439,8 @@ void ArchiveImporter::download_shard_archive(ShardIdFull shard_prefix, unsigned 
 }
 
 void ArchiveImporter::fail_shard_archive(td::Status error) {
+  LOG(WARNING) << "[archive-import] stage=shard_download.error seqno=" << start_import_seqno_
+               << " reason=" << error;
   for (const std::string &f : files_to_cleanup_) {
     td::unlink(f).ignore();
   }
@@ -634,6 +636,9 @@ void ArchiveImporter::check_shard_block_applied(BlockIdExt block_id, td::Promise
 }
 
 void ArchiveImporter::abort_query(td::Status error) {
+  LOG(WARNING) << "[archive-import] stage=abort seqno=" << start_import_seqno_
+               << " elapsed_ms=" << static_cast<td::int64>((td::Time::now() - import_started_at_) * 1000)
+               << " reason=" << error;
   if (!imported_any_) {
     for (const std::string &f : files_to_cleanup_) {
       td::unlink(f).ignore();

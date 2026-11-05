@@ -2996,7 +2996,7 @@ void ValidatorManagerImpl::remove_gc_blocker(td::uint64 idx) {
 void ValidatorManagerImpl::allow_block_state_gc(BlockIdExt block_id, td::Promise<bool> promise) {
   auto complete = [this, promise = std::move(promise)](bool allowed) mutable {
     if (!allowed || !archive_sync_active_) {
-      promise.set_value(allowed);
+      promise.set_result(allowed);
       return;
     }
     // Keep GC running, but let archive writes use the DB between eligible deletions.
