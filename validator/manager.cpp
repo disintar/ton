@@ -2994,27 +2994,41 @@ void ValidatorManagerImpl::remove_gc_blocker(td::uint64 idx) {
 }
 
 void ValidatorManagerImpl::allow_block_state_gc(BlockIdExt block_id, td::Promise<bool> promise) {
+  auto complete = [this, promise = std::move(promise)](bool allowed) mutable {
+    if (!allowed || !archive_sync_active_) {
+      promise.set_value(allowed);
+      return;
+    }
+    // Keep GC running, but let archive writes use the DB between eligible deletions.
+    ++archive_gc_yields_;
+    auto now = td::Time::now();
+    if (now >= archive_gc_report_at_) {
+      LOG(WARNING) << "[archive-import] stage=gc.yield pause_ms=100 yields=" << archive_gc_yields_;
+      archive_gc_report_at_ = now + 10.0;
+    }
+    delay_action([promise = std::move(promise)]() mutable { promise.set_value(true); }, td::Timestamp::in(0.1));
+  };
   if (!gc_masterchain_handle_) {
-    promise.set_result(false);
+    complete(false);
     return;
   }
   if (block_id.is_masterchain()) {
-    promise.set_result(block_id.id.seqno < gc_masterchain_handle_->id().id.seqno);
+    complete(block_id.id.seqno < gc_masterchain_handle_->id().id.seqno);
     return;
   }
   if (!gc_masterchain_state_->workchain_is_active(block_id.id.workchain)) {
-    promise.set_result(false);
+    complete(false);
     return;
   }
   auto S = gc_masterchain_state_->get_shard_from_config(block_id.shard_full());
   if (S.not_null()) {
-    promise.set_result(block_id.id.seqno < S->top_block_id().id.seqno);
+    complete(block_id.id.seqno < S->top_block_id().id.seqno);
     return;
   }
   auto shards = gc_masterchain_state_->get_shards();
   for (const auto &shard : shards) {
     if (shard_intersects(shard->shard(), block_id.shard_full())) {
-      promise.set_result(block_id.id.seqno < shard->top_block_id().id.seqno);
+      complete(block_id.id.seqno < shard->top_block_id().id.seqno);
       return;
     }
   }

@@ -19,6 +19,7 @@
 #pragma once
 
 #include "td/actor/actor.h"
+#include "td/actor/coro_task.h"
 #include "td/utils/port/path.h"
 #include "validator/db/package.hpp"
 #include "validator/interfaces/validator-manager.h"
@@ -40,6 +41,9 @@ class ArchiveImporter : public td::actor::Actor {
 
   void downloaded_mc_archive(std::string path);
   td::Status process_package(std::string path, bool with_masterchain);
+  td::actor::Task<> prepare_archive_data(bool masterchain);
+  td::actor::Task<> prestore_archive_data(bool masterchain);
+  td::actor::Task<> prestore_block_data(td::Ref<BlockData> block);
 
   void processed_mc_archive();
   void check_masterchain_block(BlockSeqno seqno);
@@ -83,6 +87,7 @@ class ArchiveImporter : public td::actor::Actor {
   struct BlockInfo {
     std::shared_ptr<Package> data_pkg;
     td::uint64 data_offset = 0;
+    size_t data_size = 0;
     std::shared_ptr<Package> proof_pkg;
     td::uint64 proof_offset = 0;
   };
@@ -94,6 +99,16 @@ class ArchiveImporter : public td::actor::Actor {
   bool imported_any_ = false;
   bool have_shard_blocks_ = false;
   std::vector<std::string> files_to_cleanup_;
+
+  double import_started_at_ = 0;
+  double mc_apply_started_at_ = 0;
+  double mc_apply_seconds_ = 0;
+  double shard_apply_started_at_ = 0;
+  double prestore_seconds_ = 0;
+  BlockSeqno initial_mc_seqno_ = 0;
+  BlockSeqno initial_shard_seqno_ = 0;
+  size_t prestored_blocks_ = 0;
+  td::uint64 prestored_bytes_ = 0;
 
   td::PerfWarningTimer perf_timer_;
 };

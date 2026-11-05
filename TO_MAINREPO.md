@@ -4,6 +4,29 @@ This document summarizes the current state of the private-overlay sync work and
 the pieces that should be split into clean pull requests for
 `ton-blockchain/ton`.
 
+## 2026-11-05 Bounded Archive Import Canary
+
+Echo's archive downloads completed over private QUIC in 50-135 ms, but its
+master timestamp lag shrank only 42 seconds over 10 minutes and shard lag only
+14 seconds. Application/storage, rather than transport, limited catch-up.
+
+The network archive importer now prestores file-hash-checked block bytes in
+bounded windows (at most 8 outstanding writes and 32 MiB of block payload).
+This exposes independent archive writes to existing async/group-commit paths
+before the unchanged sequential proof/state application. Oversized entries
+keep the original on-demand path. No fsync, proof, predecessor or state check
+is removed, and prestoring bytes does not mark blocks applied.
+
+Eligible state-GC requests yield for 100 ms only while archive recovery is
+active. Eligibility checks remain intact and GC continues; live mode restores
+the normal cadence. Import summaries expose prestore, master/shard application,
+overall elapsed time and MC blocks/s; GC yield summaries are limited to one
+per 10 seconds. No unbounded prefetch or whole-archive payload cache is added.
+
+Build on Solana at a pinned commit and compare only echo before/after. Do not
+deploy this canary to the other TON nodes. This patch is separate from the
+persistent-state serializer's full-preload memory issue.
+
 ## 2026-11-02 Next-Block Source Rotation Canary
 
 Prometheus recorded master/shard stalls approaching 180 seconds. Worm and echo

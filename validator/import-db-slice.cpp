@@ -21,6 +21,7 @@
 #include "common/checksum.h"
 #include "downloaders/download-state.hpp"
 #include "td/actor/MultiPromise.h"
+#include "td/actor/coro_utils.h"
 #include "td/utils/overloaded.h"
 #include "td/utils/port/path.h"
 #include "ton/ton-io.hpp"
@@ -54,6 +55,9 @@ ArchiveImporter::ArchiveImporter(std::string db_root, td::Ref<MasterchainState> 
 }
 
 void ArchiveImporter::start_up() {
+  import_started_at_ = td::Time::now();
+  initial_mc_seqno_ = last_masterchain_state_->get_seqno();
+  initial_shard_seqno_ = shard_client_seqno_;
   if (use_imported_files_) {
     LOG(INFO) << "Importing archive for masterchain seqno #" << start_import_seqno_ << " from disk";
     for (const std::string &path : to_import_files_) {
@@ -64,7 +68,7 @@ void ArchiveImporter::start_up() {
       }
     }
     files_to_cleanup_.clear();
-    processed_mc_archive();
+    prepare_archive_data(true).start().detach();
     return;
   }
   LOG(INFO) << "Importing archive for masterchain seqno #" << start_import_seqno_ << " from net";
@@ -85,7 +89,68 @@ void ArchiveImporter::downloaded_mc_archive(std::string path) {
     abort_query(std::move(S));
     return;
   }
-  processed_mc_archive();
+  prepare_archive_data(true).start().detach();
+}
+
+td::actor::Task<> ArchiveImporter::prestore_block_data(td::Ref<BlockData> block) {
+  auto handle = co_await td::actor::ask(manager_, &ValidatorManager::get_block_handle, block->block_id(), true);
+  if (!handle->received()) {
+    co_await td::actor::ask(manager_, &ValidatorManager::set_block_data, handle, std::move(block));
+  }
+  co_return {};
+}
+
+td::actor::Task<> ArchiveImporter::prestore_archive_data(bool masterchain) {
+  constexpr size_t max_inflight = 8;
+  constexpr size_t max_bytes = 32 << 20;
+  std::vector<td::actor::StartedTask<td::Unit>> tasks;
+  size_t bytes = 0;
+  for (const auto &[id, info] : blocks_) {
+    if (id.is_masterchain() != masterchain || !info.data_pkg || !info.proof_pkg || info.data_size > max_bytes) {
+      continue;
+    }
+    if (masterchain ? id.seqno() <= initial_mc_seqno_ : !opts_->need_monitor(id.shard_full(), last_masterchain_state_)) {
+      continue;
+    }
+    if (!tasks.empty() && (tasks.size() >= max_inflight || bytes + info.data_size > max_bytes)) {
+      co_await td::actor::all(std::move(tasks));
+      tasks.clear();
+      bytes = 0;
+    }
+    auto data = CO_TRY(info.data_pkg->read(info.data_offset));
+    if (sha256_bits256(data.second.as_slice()) != id.file_hash) {
+      co_return td::Status::Error(ErrorCode::protoviolation, "bad block file hash during archive prestore");
+    }
+    auto block = CO_TRY(create_block(ReceivedBlock{id, std::move(data.second)}));
+    bytes += info.data_size;
+    ++prestored_blocks_;
+    prestored_bytes_ += info.data_size;
+    tasks.push_back(prestore_block_data(std::move(block)).start());
+  }
+  co_await td::actor::all(std::move(tasks));
+  co_return {};
+}
+
+td::actor::Task<> ArchiveImporter::prepare_archive_data(bool masterchain) {
+  auto started_at = td::Time::now();
+  auto result = co_await prestore_archive_data(masterchain).start().wrap();
+  prestore_seconds_ += td::Time::now() - started_at;
+  if (result.is_error()) {
+    abort_query(result.move_as_error());
+    co_return {};
+  }
+  LOG(WARNING) << "[archive-import] stage=prestore.done seqno=" << start_import_seqno_
+               << " chain=" << (masterchain ? "master" : "shard")
+               << " blocks=" << prestored_blocks_ << " bytes=" << prestored_bytes_
+               << " ms=" << static_cast<td::int64>((td::Time::now() - started_at) * 1000);
+  if (masterchain) {
+    mc_apply_started_at_ = td::Time::now();
+    processed_mc_archive();
+  } else {
+    shard_apply_started_at_ = td::Time::now();
+    check_next_shard_client_seqno(shard_client_seqno_ + 1);
+  }
+  co_return {};
 }
 
 void ArchiveImporter::processed_mc_archive() {
@@ -113,7 +178,7 @@ td::Status ArchiveImporter::process_package(std::string path, bool with_masterch
   auto package = std::make_shared<Package>(std::move(p));
 
   td::Status S = td::Status::OK();
-  td::Status package_status = package->iterate([&](std::string filename, td::BufferSlice, td::uint64 offset) -> bool {
+  td::Status package_status = package->iterate([&](std::string filename, td::BufferSlice data, td::uint64 offset) -> bool {
     auto F = FileReference::create(filename);
     if (F.is_error()) {
       S = F.move_as_error();
@@ -150,6 +215,7 @@ td::Status ArchiveImporter::process_package(std::string path, bool with_masterch
       } else {
         blocks_[b].data_pkg = package;
         blocks_[b].data_offset = offset;
+        blocks_[b].data_size = data.size();
       }
       if (b.is_masterchain()) {
         masterchain_blocks_[b.seqno()] = b;
@@ -289,6 +355,7 @@ void ArchiveImporter::got_new_masterchain_state(td::Ref<MasterchainState> state)
 }
 
 void ArchiveImporter::checked_all_masterchain_blocks() {
+  mc_apply_seconds_ = td::Time::now() - mc_apply_started_at_;
   LOG(DEBUG) << "Done importing masterchain blocks. Last block seqno = " << last_masterchain_seqno_;
   if (start_import_seqno_ > last_masterchain_state_->get_seqno()) {
     abort_query(td::Status::Error("no new masterchain blocks were imported"));
@@ -343,7 +410,7 @@ void ArchiveImporter::download_shard_archives(td::Ref<MasterchainState> start_st
     LOG(INFO) << "Skip downloading shard archives";
   }
   if (pending_shard_archives_ == 0) {
-    check_next_shard_client_seqno(shard_client_seqno_ + 1);
+    prepare_archive_data(false).start().detach();
   }
 }
 
@@ -387,7 +454,7 @@ void ArchiveImporter::downloaded_shard_archive(std::string path) {
   }
   --pending_shard_archives_;
   if (pending_shard_archives_ == 0) {
-    check_next_shard_client_seqno(shard_client_seqno_ + 1);
+    prepare_archive_data(false).start().detach();
   }
 }
 
@@ -580,6 +647,17 @@ void ArchiveImporter::abort_query(td::Status error) {
 }
 
 void ArchiveImporter::finish_query() {
+  auto elapsed = td::Time::now() - import_started_at_;
+  LOG(WARNING) << "[archive-import] stage=done seqno=" << start_import_seqno_
+               << " mc=" << last_masterchain_state_->get_seqno() << " shard_client=" << shard_client_seqno_
+               << " mc_blocks=" << last_masterchain_state_->get_seqno() - initial_mc_seqno_
+               << " shard_mc_blocks=" << shard_client_seqno_ - initial_shard_seqno_
+               << " total_ms=" << static_cast<td::int64>(elapsed * 1000)
+               << " prestore_ms=" << static_cast<td::int64>(prestore_seconds_ * 1000)
+               << " mc_apply_ms=" << static_cast<td::int64>(mc_apply_seconds_ * 1000)
+               << " shard_apply_ms=" << (shard_apply_started_at_ > 0
+                    ? static_cast<td::int64>((td::Time::now() - shard_apply_started_at_) * 1000) : 0)
+               << " mc_blocks_per_s=" << (elapsed > 0 ? (last_masterchain_state_->get_seqno() - initial_mc_seqno_) / elapsed : 0);
   for (const std::string &f : files_to_cleanup_) {
     td::unlink(f).ignore();
   }

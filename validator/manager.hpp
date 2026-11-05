@@ -785,6 +785,8 @@ class ValidatorManagerImpl : public ValidatorManager {
 
   bool started_ = false;
   bool archive_sync_active_ = false;
+  td::uint64 archive_gc_yields_ = 0;
+  double archive_gc_report_at_ = 0;
   bool archive_live_fallback_active_ = false;
   unsigned consecutive_archive_failures_ = 0;
   double live_sync_catchup_grace_until_ = 0.0;
